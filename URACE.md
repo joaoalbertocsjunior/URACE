@@ -2690,17 +2690,84 @@ Recovery SHOULD resume autonomous navigation without requiring previously durabl
 
 # 74. Conditional Self-Evolution
 
-URACE MAY autonomously evolve its own implementation where:
+URACE MAY autonomously discover that evolving its own implementation is a justified way to better advance governing Intent.
 
-- applicable Authority permits;
-- governing Intent supports it;
-- sufficient value exists;
-- constraints permit;
-- risk is acceptable;
-- validation exists.
+Where applicable Authority permits, URACE MAY promote that self-evolution into an Objective, prioritize it against Product work, plan it, execute it through capable replaceable executors, validate it, checkpoint accepted change and continue operating without requiring a new authoritative request.
 
-Self-modification MUST NOT expand Authority or weaken protected constraints.
+Self-evolution remains subject to the ordinary lifecycle:
 
+```text
+DISCOVER LIMITATION / OPPORTUNITY
+            │
+            ▼
+     ASSESS JUSTIFICATION
+            │
+            ▼
+      RESOLVE AUTHORITY
+       ┌────┴────┐
+       ▼         ▼
+ AUTHORIZED   NOT AUTHORIZED
+       │         │
+       ▼         ▼
+   OBJECTIVE   PRESERVE
+       │       BOUNDARY
+       ▼
+   PRIORITIZE
+       │
+       ▼
+      PLAN
+       │
+       ▼
+     EXECUTE
+       │
+       ▼
+     VALIDATE
+       │
+       ▼
+   CHECKPOINT
+       │
+       ▼
+    REASSESS
+```
+
+Autonomous initiation MUST NOT be confused with self-authorization.
+
+Self-modification MUST NOT:
+
+- create Authority;
+- expand Authority;
+- broaden delegation;
+- override retained Intent;
+- weaken or remove protected constraints;
+- bypass required validation;
+- silently redefine the governing destination.
+
+Three evolution scopes MUST remain distinguishable:
+
+```text
+PRODUCT EVOLUTION
+    changes the governed Product
+
+RUNTIME URACE SELF-EVOLUTION
+    changes the running URACE implementation
+
+URACE.md SPECIFICATION EVOLUTION
+    changes the authoritative bootstrap specification
+```
+
+Authorization for one scope MUST NOT imply authorization for another.
+
+In particular, Authority to evolve the Product or the running URACE implementation MUST NOT by itself authorize modification, replacement or evolution of `URACE.md`.
+
+`URACE.md` MAY be modified by an autonomous URACE only where applicable Authority explicitly delegates specification evolution at that scope.
+
+Evidence that changing `URACE.md` would be useful MAY justify proposing or prioritizing such a change where applicable, but Evidence MUST NOT create the Authority required to perform it.
+
+Changing `URACE.md` does not automatically mutate a running URACE implementation.
+
+A running URACE evolving itself does not automatically rewrite `URACE.md`.
+
+Normal Product evolution and authorized runtime self-evolution MUST NOT require re-bootstrap merely because they occur.
 ---
 
 # 75. Agnosticism
@@ -3661,6 +3728,20 @@ Expect: resume autonomously.
 
 **CV — Delegated Destination Does Not Become Unbounded Authority**
 
+## Self-Evolution / Specification Boundary
+
+**CW — Autonomous Self-Evolution Discovery**  
+Given URACE discovers that its own implementation materially limits governing Intent and applicable Authority permits runtime self-evolution.  
+Expect: URACE may autonomously promote the improvement into an Objective, prioritize, plan, execute, validate and checkpoint it without a new authoritative request.
+
+**CX — Runtime Self-Evolution Does Not Authorize Specification Evolution**  
+Given Authority permits runtime URACE self-evolution but does not explicitly delegate `URACE.md` specification evolution.  
+Expect: URACE may evolve its implementation but MUST preserve `URACE.md`.
+
+**CY — Explicit Specification-Evolution Authority**  
+Given applicable Authority explicitly delegates `URACE.md` specification evolution.  
+Expect: URACE may modify the specification only within that delegated scope, preserving higher governing Intent, protected constraints, provenance and validation.
+
 ---
 
 # 90. Success Criteria
@@ -3729,6 +3810,15 @@ Successful URACE MUST demonstrate:
 - uncertain effects remain `INDETERMINATE`;
 - retries do not duplicate effects where preventable;
 - validation remains independent.
+
+### Self-Evolution
+
+- URACE can autonomously discover justified runtime self-evolution;
+- runtime self-evolution participates in normal Objective discovery, Priority, planning, execution, validation and checkpointing;
+- self-evolution does not create or expand Authority;
+- Product evolution, runtime URACE self-evolution and `URACE.md` specification evolution remain distinguishable Authority scopes;
+- authorization for one evolution scope does not imply authorization for another;
+- `URACE.md` changes require explicit applicable specification-evolution Authority.
 
 ### Lifecycle
 
@@ -4353,6 +4443,73 @@ finds easier destination
   ↓
 silently changes purpose
 ```
+
+## Bootstrap Execution Requirements
+
+`URACE.md` is the authoritative bootstrap specification.
+
+`README.md`, when available, MAY be used as non-authoritative guidance for positioning, intended usage, examples and recommended deployment patterns.
+
+If `README.md` and `URACE.md` differ or appear ambiguous, `URACE.md` governs.
+
+Bootstrap execution MUST:
+
+1. read `URACE.md` completely;
+2. inspect the actual Product, repository or environment, governing Intent and Authority, available capabilities, constraints, existing state and relevant artifacts;
+3. build the smallest complete environment-appropriate implementation satisfying this specification rather than merely summarizing or simulating URACE;
+4. preserve URACE as the persistent lifecycle owner above capable, replaceable executors and optional orchestrators;
+5. establish the durable lifecycle semantics required by this specification;
+6. run applicable behavioral tests and bootstrap demonstrations;
+7. repair failures until applicable invariants and success criteria are satisfied.
+
+Unless applicable Authority explicitly delegates otherwise, the bootstrap act itself MUST NOT be interpreted as Authority to modify `URACE.md`.
+
+After bootstrap, report:
+
+1. what was implemented;
+2. how URACE is invoked;
+3. where durable state is stored;
+4. which executors, orchestrators and other relevant capabilities are available;
+5. the governing Intent and Authority;
+6. which destination-setting decisions are retained;
+7. which decisions are delegated;
+8. how the authoritative source can inspect and explicitly change Intent, retained Authority, delegation and constraints, including how to explicitly authorize or revoke `URACE.md` specification-evolution Authority;
+9. validation and behavioral-test results;
+10. unresolved constraints, retained decisions or Authority uncertainty;
+11. how persistent autonomous operation is started.
+
+The bootstrap boundary is:
+
+```text
+BEFORE BOOTSTRAP
+
+URACE.md
+   │
+   ▼
+CAPABLE EXECUTION
+   │
+   ▼
+creates URACE
+
+
+AFTER BOOTSTRAP
+
+AUTHORITATIVE SOURCE
+        │
+        ▼
+INTENT + AUTHORITY
+        │
+        ▼
+      URACE
+        │
+ owns lifecycle
+        │
+        ▼
+capable, replaceable
+Executor(s)
+```
+
+The bootstrap capability MAY remain available after bootstrap, but it becomes a replaceable capability beneath URACE rather than the owner of the Product lifecycle.
 
 ## Final Invariant
 
