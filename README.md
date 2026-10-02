@@ -4,21 +4,11 @@
 
 > **It drives the boat. You pick the destination.**
 
-More precisely: **you retain whatever destination-setting Authority you choose. URACE autonomously drives everything you delegate—including subordinate destination evolution and its own evolution where already authorized.**
-
----
-
-## What Is URACE?
-
 URACE is an **executor-agnostic persistent autonomous Product-evolution control plane**.
 
-At its core, URACE is an **open-source and editable idea as blueprint**: a specification and bootstrap architecture for making autonomous Product evolution persistent, evidence-aware, authority-bounded, validated, recoverable, and independent of any particular AI or executor.
+It turns bounded and replaceable AI/executor sessions into a **continuous autonomous Product lifecycle** governed by authoritative Intent, bounded Authority, Evidence, independent validation, durable state, and recovery.
 
-The idea can be inspected, adapted, extended, and evolved while preserving or deliberately revising its lifecycle invariants.
-
-The idea is open and editable; a Product, its accumulated intelligence, and its implementation can remain proprietary.
-
-URACE turns bounded and replaceable AI/executor sessions into a **continuous autonomous Product lifecycle**.
+At its core, URACE is also an **open and editable idea expressed as an open-source blueprint** through `URACE.md`. This is deliberate: the lifecycle architecture can be inspected, adapted, extended, and evolved independently of any particular AI, executor, implementation, or Product-specific intelligence.
 
 ```text
                  AUTHORITATIVE SOURCE
@@ -36,42 +26,19 @@ Evidence / Reality ─►  URACE  │
               ┌──────────┴──────────┐
               ▼                     ▼
            PRODUCT              URACE ITSELF
-              │                 if justified
-              │                 + authorized
-              ▼                     │
-       evolve Product               ▼
-                            evolve running URACE
+                                 if justified
+                                 + authorized
 ```
 
-URACE preserves the durable layer that individual AI sessions generally do not own:
+You retain whatever destination-setting Authority you choose.
 
-```text
-Intent
-Authority
-State
-Evidence
-Triggers
-Objectives
-Priority
-Plans
-Decisions
-Operations
-Validation
-Checkpoints
-Recovery
-Dormancy
-Reactivation
-```
-
-Within delegated Authority, URACE independently determines what should happen next—and why—while delegating bounded intelligence and execution to replaceable systems.
-
-> **The authoritative source chooses the destination it wishes to retain. URACE drives the Product toward it.**
+**URACE drives what you delegate.**
 
 ---
 
-# Why URACE?
+## Why URACE?
 
-AI systems can research, reason, plan, code, test, analyze, and repair.
+AI systems can research, reason, plan, code, test, analyze, and execute.
 
 But individual executions are bounded.
 
@@ -93,100 +60,109 @@ USER
  └── choose what happens next ──↺
 ```
 
-Sessions end.
-
-Context disappears.
-
-Models change.
-
-Providers fail.
-
-Executors and orchestrators are replaced.
+Sessions end. Context disappears. Models change. Executors fail or are replaced.
 
 Without a persistent lifecycle owner, the user remains the actual orchestrator of Product evolution.
 
 URACE changes that boundary:
 
 ```text
-               URACE
-                 │
-     ┌───────────┼───────────┐
-     ▼           ▼           ▼
-  discover     decide     prioritize
-     │           │           │
-     └───────────┼───────────┘
-                 ▼
-                plan
-                 │
-                 ▼
-        select capability
-                 │
-                 ▼
-              execute
-                 │
-                 ▼
-              observe
-                 │
-                 ▼
-              validate
-                 │
-                 ▼
-             checkpoint
-                 │
-                 ▼
-              reassess
-                 │
-                 └────────────↺
+discover
+   │
+   ▼
+decide
+   │
+   ▼
+prioritize
+   │
+   ▼
+plan
+   │
+   ▼
+select capability
+   │
+   ▼
+execute
+   │
+   ▼
+observe
+   │
+   ▼
+validate
+   │
+   ▼
+checkpoint
+   │
+   ▼
+reassess ──────────────↺
 ```
 
 The user does not have to continuously provide the next task, route, executor, or ordinary course correction.
 
-Models may change.
-
-Agents may disappear.
-
-The **Product lifecycle remains**.
+**Models improve. Agents change. Orchestrators come and go. The autonomous Product lifecycle remains.**
 
 ---
 
-# The Core Model
+## Minimum Intelligent Setup
 
-URACE separates five responsibilities that are easy to conflate:
+URACE does not require a multi-agent stack.
+
+At its simplest:
+
+```text
+Idea / Product Intent
+        +
+  1 capable AI
+        │
+        ▼
+     URACE.md
+        │
+     bootstrap
+        │
+        ▼
+      URACE
+        │
+        ▼
+      Product
+```
+
+> **One idea + one capable AI is enough to start.**
+
+The **idea** is the initial Product seed or authoritative Intent. It may instead be an existing Product, problem, mandate, desired outcome, or other sufficiently defined starting point.
+
+The **capable AI** fulfills the initial Executor role for the Operations required by the applicable bootstrap and lifecycle.
+
+This is the minimum, not the ceiling.
+
+A richer setup can introduce an optional Orchestrator and multiple complementary Executors without changing who owns the Product lifecycle.
+
+---
+
+## Core Model
+
+URACE separates responsibilities that are easy to conflate:
 
 ```text
 INTENT
-  │
-  └──► Where are we going?
+  └──► destination
 
 AUTHORITY
-  │
-  └──► Which decisions may URACE make?
+  └──► legitimate autonomous decision space
 
 EVIDENCE
-  │
-  └──► What is reality telling us?
+  └──► reality
 
 URACE
-  │
-  └──► How should we navigate from here?
+  └──► navigation
 
 EXECUTORS
-  │
-  └──► Provide bounded intelligence and execution.
+  └──► capabilities
+
+VALIDATION
+  └──► acceptance
 ```
 
-In shorthand:
-
-```text
-Intent     → destination
-Authority  → legitimate autonomy
-Evidence   → reality
-URACE      → navigation
-Executors  → capabilities
-Validation → acceptance
-```
-
-This separation is fundamental.
+These distinctions are fundamental.
 
 Evidence can justify changing an authorized route.
 
@@ -194,15 +170,71 @@ Evidence can justify changing a destination whose evolution has been delegated.
 
 Evidence does **not** independently create Authority to change a retained destination.
 
+Executor capability does **not** create Authority.
+
+Executor output does **not** automatically become accepted Product state.
+
+> **URACE owns persistent autonomous Product navigation. Replaceable Executors supply whatever intelligence or execution is required to advance it.**
+
 ---
 
-# You Decide What You Retain
+## Core Design Choices
 
-URACE is autonomous without requiring unlimited Authority.
+URACE deliberately separates:
+
+```text
+Persistent lifecycle ownership
+        │
+        └──► URACE, not executor sessions
+
+Retained Authority
+        │
+        └──► authoritative source decides
+
+Delegated Authority
+        │
+        └──► URACE decides
+
+Evidence
+        │
+        └──► constrains beliefs about reality,
+             not Authority
+
+Execution
+        │
+        └──► does not imply acceptance
+
+Runtime activity
+        │
+        └──► does not define lifecycle persistence
+
+Self-evolution
+        │
+        └──► does not imply self-authorization
+
+Blueprint
+        │
+        └──► open/editable independently of
+             Product-specific intelligence
+```
+
+The governing principle is:
+
+> **Maximum justified autonomy inside applicable Authority; zero intentional autonomy outside it.**
+
+URACE is intended to preserve these lifecycle invariants without prescribing one implementation, model, runtime, provider, repository structure, or orchestration stack.
+
+---
+
+## You Decide What You Retain
+
+Autonomy does not require unlimited Authority.
 
 The authoritative source determines what remains retained and what is delegated.
 
-## Retained Destination
+### Retained Destination
+
+For example:
 
 ```text
 YOU
@@ -220,7 +252,7 @@ URACE
  ├── choose architecture
  ├── choose experiments
  ├── choose implementation
- ├── choose executors
+ ├── choose Executors
  └── correct course
           │
           ▼
@@ -231,7 +263,7 @@ URACE may autonomously change the route.
 
 It does not silently replace retained destination X with Y.
 
-## Delegated Product Direction
+### Delegated Product Direction
 
 The authoritative source may delegate more:
 
@@ -247,140 +279,104 @@ realization when justified."
  ▼
 URACE
  │
- ├──── Product A
- ├──── Product B
- └──── Product C
-          │
-          ▼
-   Evidence + Assessment
-          │
-          ▼
- autonomously select/evolve
-      Product direction
+ ▼
+Evidence + Assessment
+ │
+ ▼
+autonomously choose
+and evolve direction
 ```
 
 Here the higher-order Intent remains authoritative while subordinate Product direction has been delegated.
 
 ```text
-RETAINED DECISION
-      │
-      └──► authoritative source decides
+RETAINED DECISION  ──► authoritative source decides
 
-
-DELEGATED DECISION
-      │
-      └──► URACE decides
+DELEGATED DECISION ──► URACE decides
 ```
-
-> **You control what you retain. URACE controls what you delegate.**
 
 Once a decision is validly delegated, URACE should not turn that delegation into a repeated approval loop.
 
 ---
 
-# Autonomous Product Evolution
+## Autonomous Product Evolution
 
-URACE continuously evaluates the Product against governing Intent and observed reality.
+URACE is not limited to executing a prewritten task list.
 
-```text
-               INTENT
-                 │
-                 ▼
-              PRODUCT
-                 │
-                 ▼
-              REALITY
-                 │
-                 ▼
-              EVIDENCE
-                 │
-                 ▼
-               ASSESS
-                 │
-       ┌─────────┴─────────┐
-       ▼                   ▼
-continue route       change justified
-       │                   │
-       │                   ▼
-       │              correct course
-       │                   │
-       └─────────┬─────────┘
-                 ▼
-               EXECUTE
-                 │
-                 ▼
-               OBSERVE
-                 │
-                 ▼
-              VALIDATE
-                 │
-                 ▼
-             CHECKPOINT
-                 │
-                 ▼
-              REASSESS
-                 │
-                 └────────────↺
-```
-
-Depending on applicable Authority, evolution may include:
+Within applicable Authority, it can independently discover justified work and navigate the Product lifecycle.
 
 ```text
-Objectives
-    │
-Priority
-    │
-Plans
-    │
-Experiments
-    │
-Implementation
-    │
-Architecture
-    │
-Processes
-    │
-Executor selection
-    │
-Strategy
-    │
-Product direction
-    │
-    └── where its evolution is delegated
+              INTENT
+                │
+                ▼
+             PRODUCT
+                │
+                ▼
+             REALITY
+                │
+                ▼
+             EVIDENCE
+                │
+                ▼
+              ASSESS
+                │
+                ▼
+       discover Objectives
+                │
+                ▼
+            prioritize
+                │
+                ▼
+               plan
+                │
+                ▼
+             execute
+                │
+                ▼
+             observe
+                │
+                ▼
+             validate
+                │
+                ▼
+            checkpoint
+                │
+                ▼
+             reassess
+                │
+                └────────────↺
 ```
 
-URACE is therefore not limited to executing a prewritten task list.
+Depending on Authority, evolution may include Objectives, Priority, Plans, experiments, implementation, architecture, processes, Executor selection, strategy, and Product direction.
 
-It can discover justified work itself.
+A previously selected route is not automatically permanent.
+
+When a route fails, URACE can change the route.
+
+When a delegated destination should change, URACE may change it when sufficiently justified.
+
+When a retained destination appears infeasible, URACE preserves both reality and the authoritative boundary rather than silently redefining either.
 
 ---
 
-# Evidence-Driven, Not Mutation-Driven
-
-Autonomous evolution does not mean continuously changing everything.
+## Evidence-Driven Evolution
 
 URACE uses Evidence to constrain what it may defensibly conclude about reality.
 
 ```text
-                   EVIDENCE
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-       Product      Users       Market
-       behavior    Customers   Environment
-          │           │           │
-          └───────────┼───────────┘
-                      ▼
-                   ASSESS
-                      │
-                      ▼
-              justified change?
-                 ┌────┴────┐
-                 ▼         ▼
-                YES        NO
-                 │         │
-                 ▼         ▼
-               evolve    preserve
+Product / Users / Market / Environment
+                  │
+                  ▼
+               EVIDENCE
+                  │
+                  ▼
+                ASSESS
+                  │
+                  ▼
+          justified change
+                  │
+                  ▼
+          preserve / evolve
 ```
 
 Evidence may come from Product behavior, users, customers, prospects, research, analytics, transactions, adoption, retention, experiments, external systems, deterministic measurement, executor research, authoritative input, or other relevant sources.
@@ -391,148 +387,83 @@ But:
 Evidence ≠ Intent
 Evidence ≠ Authority
 Evidence ≠ automatic truth
+
 Executor claim ≠ Evidence by default
-More Evidence ≠ automatically better Evidence
+
+Quantity ≠ quality
 ```
 
-URACE should preserve uncertainty and conflicting Evidence rather than manufacture certainty.
+Material uncertainty and conflicting Evidence should be preserved rather than converted into artificial certainty.
 
 ---
 
-# Recursive Self-Evolution
+## Recursive Self-Evolution
 
 URACE itself can participate in the lifecycle it governs.
 
 This is the **recursive** part of URACE.
 
-A user does not necessarily have to notice a URACE limitation and explicitly request that URACE be improved.
+A user does not necessarily have to notice a limitation in URACE and explicitly request its improvement.
 
-URACE may autonomously discover that improving its own implementation is a justified way to better advance governing Intent.
-
-```text
-                    GOVERNING INTENT
-                          │
-                          ▼
-                        URACE
-                          │
-                   continuously assesses
-                          │
-              ┌───────────┴───────────┐
-              ▼                       ▼
-         PRODUCT GAP               URACE GAP
-              │                       │
-              ▼                       ▼
-      Product Objective      Self-Evolution Objective
-              │                       │
-              └───────────┬───────────┘
-                          ▼
-                      PRIORITIZE
-                          │
-                          ▼
-                         PLAN
-                          │
-                          ▼
-                       EXECUTE
-                          │
-                          ▼
-                       VALIDATE
-                          │
-                          ▼
-                      CHECKPOINT
-                          │
-                          ▼
-                       REASSESS
-                          │
-                          └────────────↺
-```
-
-A self-evolution Objective competes with other justified Product work through the same lifecycle.
-
-For example:
+URACE may discover that evolving its own implementation is a justified way to better advance governing Intent.
 
 ```text
-URACE observes:
-"my current recovery mechanism
-is limiting reliable evolution"
-              │
-              ▼
-        assess limitation
-              │
-              ▼
-    improvement justified?
-              │
-              ▼
-       resolve Authority
-         ┌────┴────┐
-         ▼         ▼
-   AUTHORIZED   NOT AUTHORIZED
-         │         │
-         ▼         ▼
-promote own      preserve
-evolution        boundary
-as Objective        │
-         │          └──► surface retained
-         ▼               decision if needed
-     prioritize
-         │
-         ▼
-        plan
-         │
-         ▼
-       evolve
-         │
-         ▼
-      validate
-         │
-         ▼
-     checkpoint
-         │
-         ▼
-continue as improved URACE
+                   GOVERNING INTENT
+                         │
+                         ▼
+                       URACE
+                         │
+                      assess
+                         │
+             ┌───────────┴───────────┐
+             ▼                       ▼
+        PRODUCT GAP               URACE GAP
+             │                       │
+             ▼                       ▼
+     Product Objective      Self-Evolution Objective
+             │                       │
+             └───────────┬───────────┘
+                         ▼
+                     PRIORITIZE
+                         │
+                         ▼
+                        PLAN
+                         │
+                         ▼
+                      EXECUTE
+                         │
+                         ▼
+                      VALIDATE
+                         │
+                         ▼
+                     CHECKPOINT
+                         │
+                         ▼
+                      REASSESS
+                         │
+                         └────────────↺
 ```
 
-The authoritative source did not have to explicitly request:
+Self-evolution competes with Product work through the normal Objective and Priority lifecycle.
+
+Where existing Authority permits, URACE may autonomously discover the need for its own evolution, promote it into an Objective, prioritize it, plan it, execute it through replaceable capabilities, validate it, checkpoint it, and continue operating.
+
+### Self-Evolution Is Not Self-Authorization
+
+Autonomous initiation and Authority remain separate:
 
 ```text
-"Improve URACE's recovery mechanism."
+URACE discovers justified self-evolution
+                 │
+                 ▼
+          resolve Authority
+            ┌────┴────┐
+            ▼         ▼
+      AUTHORIZED   NOT AUTHORIZED
+            │         │
+            ▼         ▼
+          evolve    preserve boundary
 ```
-
-URACE discovered the need itself.
-
----
-
-## Autonomous Self-Evolution ≠ Self-Authorization
-
-Autonomous initiation and Authority are separate questions.
-
-```text
-CAN URACE DISCOVER
-THAT IT SHOULD EVOLVE ITSELF?
-              │
-              ▼
-             YES
-              │
-              ▼
-CAN IT PROMOTE THAT
-INTO AN OBJECTIVE?
-              │
-              ▼
-             YES
-              │
-              ▼
-CAN IT COMMIT THE CHANGE?
-              │
-              ▼
-      RESOLVE AUTHORITY
-          ┌───┴───┐
-          ▼       ▼
-         YES      NO
-          │        │
-          ▼        ▼
-        evolve   preserve boundary
-```
-
-So:
 
 ```text
 Self-discovery       ✓
@@ -545,34 +476,18 @@ Self-checkpointing   ✓
 Self-authorization   ✗
 ```
 
-URACE may autonomously determine that its own evolution is necessary or sufficiently valuable, promote that evolution into an Objective, prioritize it against other Product work, plan it, execute it, validate it, and checkpoint it **without a new user request where existing Authority permits**.
-
-```text
-SELF-EVOLUTION
-      │
-      ├──► improve implementation       ✓
-      ├──► replace internal mechanisms  ✓
-      ├──► improve lifecycle machinery  ✓
-      ├──► improve persistence/recovery ✓
-      ├──► replace executors            ✓
-      │
-      ├──► create Authority             ✗
-      ├──► broaden delegation           ✗
-      ├──► override retained Intent     ✗
-      ├──► remove protected constraints ✗
-      └──► bypass validation            ✗
-```
+URACE may not use self-evolution to create Authority, broaden delegation, override retained Intent, remove protected constraints, or bypass validation.
 
 > **URACE may autonomously initiate its own evolution. It may not autonomously expand the Authority under which that evolution occurs.**
 
 ---
 
-# Three Kinds of Evolution
+## Three Kinds of Evolution
 
-Three related mechanisms should remain distinct.
+Three related mechanisms remain distinct:
 
 ```text
-1. PRODUCT EVOLUTION
+PRODUCT EVOLUTION
 
 URACE
   │
@@ -583,7 +498,7 @@ Product
 Better Product
 
 
-2. RUNTIME SELF-EVOLUTION
+RUNTIME SELF-EVOLUTION
 
 Running URACE
       │
@@ -597,7 +512,7 @@ authorized self-evolution
 Improved URACE
 
 
-3. SPECIFICATION EVOLUTION
+SPECIFICATION EVOLUTION
 
 URACE.md
    │
@@ -608,140 +523,39 @@ open/editable development
 Evolved URACE.md
 ```
 
-Their relationship is:
-
-```text
-┌─────────────────────────────┐
-│ URACE.md                    │
-│                             │
-│ open/editable specification│
-└──────────────┬──────────────┘
-               │ bootstrap
-               ▼
-┌─────────────────────────────┐
-│ RUNNING URACE               │
-│                             │
-│ persistent implementation   │
-│ capable of authorized       │
-│ autonomous self-evolution   │
-└──────────────┬──────────────┘
-               │ governs
-               ▼
-┌─────────────────────────────┐
-│ PRODUCT                     │
-│                             │
-│ continuously evolved        │
-└─────────────────────────────┘
-```
-
 Changing `URACE.md` does not automatically mutate a running URACE.
 
 A running URACE evolving itself does not automatically rewrite the upstream specification.
 
 ---
 
-# Not an Executor Replacement
+## Execution Roles
 
-URACE does not replace AI models, coding agents, tools, APIs, or orchestrators.
+URACE depends on **roles and capabilities**, not particular products.
 
-It uses them as replaceable capabilities.
+### Executor
 
-The architecture deliberately distinguishes the **minimum viable configuration** from a **suggested richer multi-executor configuration**.
+An **Executor** is a replaceable system through which URACE delegates a bounded Operation requiring intelligence and/or execution.
 
-## Minimum Viable Setup
+An Executor may be an AI, agent, tool, API, script, deterministic system, orchestrator-mediated capability, human-approved mechanism, or future system.
 
-Only one capable AI/executor is required.
+### Capable Executor
 
-```text
-          URACE
-            │
-            ▼
-     1 CAPABLE AI
-```
+An Executor is **capable for a particular Operation** when it can accept the required bounded context, perform that Operation under applicable constraints, and return enough observable result information for URACE to evaluate and validate the outcome.
 
-For example:
+Capability is contextual, not a permanent label attached to a particular product.
 
-```text
-URACE ──► Codex
-```
+A **capable AI** is therefore an AI able to fulfill the Executor role for the Operations required by the applicable lifecycle.
 
-or:
+### Orchestrator
 
-```text
-URACE ──► Claude Code
-```
+An **Orchestrator** is an optional replaceable execution-layer system that coordinates one or more Executors.
 
-or:
+It may provide routing, sessions, continuation, status/results, failure handling, cancellation, context coordination, or related execution services.
 
-```text
-URACE ──► Gemini CLI
-```
+### Capable Orchestrator
 
-The particular executor is not architectural.
-
-The requirement is that the available capability can perform the bounded work URACE delegates to it.
-
-This keeps the core architecture valid even when only one suitable AI is available.
-
-## Suggested Multi-Executor Setup
-
-Where multiple capable systems are available, a useful richer topology is:
-
-```text
-                    URACE
-                      │
-                      ▼
-               ORCHESTRATOR
-              e.g. OpenHands
-                      │
-          ┌───────────┼───────────┐
-          ▼           ▼           ▼
-        Codex     Claude Code   Gemini CLI
-          │           │           │
-          └───────────┼───────────┘
-                      │
-             bounded capabilities
-```
-
-Conceptually:
-
-```text
-URACE
-  │
-  │ owns Product lifecycle
-  │ navigation and delegation
-  ▼
-ORCHESTRATOR
-  │
-  │ coordinates execution
-  ▼
-MULTIPLE CAPABLE AIs
-```
-
-For example:
-
-```text
-               URACE
-                 │
-                 ▼
-             OpenHands
-                 │
-        ┌────────┼────────┐
-        ▼        ▼        ▼
-      Codex   Claude Code Gemini CLI
-```
-
-The three AIs are examples, not requirements.
-
-Other capable models, agents, tools, or future executors may be substituted.
-
-The value of the richer topology is that URACE can select among complementary capabilities while remaining independent of any one of them.
-
-The orchestrator coordinates execution.
-
-The AIs provide intelligence and execution.
-
-**URACE remains the persistent Product-lifecycle owner above both.**
+An Orchestrator is **capable for a deployment** when it provides enough execution control and observability for URACE to delegate and supervise the required bounded Operations through it while preserving URACE's lifecycle ownership and Executor replaceability.
 
 ```text
                  URACE
@@ -750,41 +564,67 @@ The AIs provide intelligence and execution.
                    │
                    ▼
              ORCHESTRATOR
-                   │
-         execution coordination
+               optional
                    │
        ┌───────────┼───────────┐
        ▼           ▼           ▼
-      AI A        AI B        AI C
-       │           │           │
-       └──── replaceable ──────┘
+   EXECUTOR    EXECUTOR    EXECUTOR
 ```
 
-This is a **suggested topology**, not an architectural dependency.
-
-URACE remains valid with:
-
-```text
-URACE + 1 capable AI
-```
-
-and can take advantage of:
-
-```text
-URACE
-  +
-orchestrator
-  +
-multiple complementary capable AIs
-```
-
-when available.
+> **Executors provide capabilities. Orchestrators coordinate execution. URACE owns the Product lifecycle.**
 
 ---
 
-# Replaceable Intelligence
+## Execution Topologies
 
-URACE should not require the conversational history of a particular executor to preserve Product continuity.
+### Minimum
+
+One capable Executor is sufficient for a lifecycle whose required Operations that Executor can perform.
+
+A capable AI may fulfill that role:
+
+```text
+URACE ──► CAPABLE AI EXECUTOR
+```
+
+Examples may include Codex, Claude Code, Gemini CLI, or another suitable system.
+
+These are examples, not architectural dependencies.
+
+### Suggested Richer Setup
+
+Where multiple complementary capabilities are useful:
+
+```text
+                    URACE
+                      │
+                      ▼
+             CAPABLE ORCHESTRATOR
+              e.g. OpenHands
+                      │
+          ┌───────────┼───────────┐
+          ▼           ▼           ▼
+        Codex     Claude Code   Gemini CLI
+```
+
+Other capable models, agents, tools, APIs, deterministic systems, local models, or future Executors may be substituted.
+
+```text
+OpenHands        ≠ requirement
+Three AIs        ≠ requirement
+These AIs        ≠ requirement
+Multi-AI         ≠ requirement
+```
+
+The topology is richer, not more authoritative.
+
+URACE remains the lifecycle owner above both Orchestrator and Executors.
+
+---
+
+## Replaceable Intelligence
+
+URACE should not require the conversational history of a particular Executor to preserve Product continuity.
 
 ```text
 URACE
@@ -796,7 +636,7 @@ Executor A
 bounded result
  │
  ▼
-URACE observes + validates
+observe + validate
  │
  ▼
 checkpoint
@@ -805,173 +645,70 @@ checkpoint
 Executor A disappears
  │
  ▼
-URACE
- │
- ▼
 Executor B
  │
  ▼
 continue
 ```
 
-The durable lifecycle belongs to URACE, not Executor A.
+The durable lifecycle belongs to URACE.
 
-Executor B receives the bounded context required for its work rather than requiring Executor A's complete prior conversation.
+A replacement Executor receives the bounded context required for its work rather than requiring the previous Executor's complete conversation.
 
-```text
-MODEL / AGENT / ORCHESTRATOR
-            │
-         replace
-            │
-            ▼
-        NEW SYSTEM
-            │
-            ▼
-URACE STATE + INTENT + AUTHORITY
-+ EVIDENCE + CURRENT OBJECTIVE
-            │
-            ▼
-         CONTINUE
-```
-
-Replaceability applies to capability.
-
-It does **not** imply that different executors are equivalent in privacy, security, cost, reliability, specialization, context capacity, or data handling.
+Replaceability does not imply equivalence in capability, privacy, security, cost, reliability, specialization, context capacity, or data handling.
 
 ---
 
-# Universal by Design
+## Universal by Design
 
-URACE is designed for:
+URACE is designed to remain:
 
-**AI · executor · orchestrator · programming-language · file-format · Product-type · platform · repository · version-control · build-system · cloud-provider agnosticism.**
+**AI · Executor · Orchestrator · programming-language · file-format · Product-type · platform · repository · version-control · build-system · runtime · persistence · cloud-provider agnostic.**
 
-Its lifecycle is generic:
+Its generic lifecycle is:
 
-```text
-Authoritative Source
-        │
-        ▼
-Intent + Authority
-        │
-        ▼
-Product + Evidence
-        │
-        ▼
-Assessment
-        │
-        ▼
-Objective
-        │
-        ▼
-Priority
-        │
-        ▼
-Plan
-        │
-        ▼
-Operation
-        │
-        ▼
-Executor
-        │
-        ▼
-Observation
-        │
-        ▼
-Validation
-        │
-        ▼
-Checkpoint
-        │
-        ▼
-Reassessment
-        │
-        └──────────────↺
-```
+> **Authoritative Source → Intent + Authority → Assessment → Objective → Priority → Plan → Operation → Executor → Observation → Validation → Checkpoint → Reassessment**
 
-Software is only one possible Product type.
+Software is only one possible Product form.
 
-URACE can govern evolution of software, services, research, content, business processes, operational systems, mixed Products, or initially unknown Product forms.
-
-It does not require a particular methodology, market model, repository structure, programming language, runtime, scheduler, persistence technology, cloud provider, orchestrator, or AI provider.
+The implementation can be environment-specific while the lifecycle semantics remain independent of that implementation.
 
 ---
 
 # Bootstrap
 
-URACE uses **`URACE.md` as a prompt-as-bootstrap-file**.
-
-The critical distinction is:
+URACE currently uses **`URACE.md` as a prompt-as-bootstrap-file**.
 
 ```text
 URACE.md
    │
    │ specification
    ▼
-BOOTSTRAP EXECUTOR
+BOOTSTRAP CAPABILITY
    │
    │ creates
    ▼
 RUNNING URACE
 ```
 
-`URACE.md` is **not** the running URACE system.
+`URACE.md` is **not** the running system.
 
 It defines the architecture, invariants, lifecycle semantics, implementation constraints, behavioral tests, and bootstrap requirements.
 
-A capable executor consumes that specification, inspects the actual Product environment, and creates an environment-appropriate persistent implementation.
+A capable Executor consumes that specification, inspects the actual Product environment, and creates an environment-appropriate persistent implementation.
 
 ---
 
-## The Bootstrap Role Reversal
+## Bootstrap Technique
 
-Before bootstrap:
+### 1. Provide the Starting Context
 
-```text
-              BOOTSTRAP
-
-              URACE.md
-                  │
-                  ▼
-          AI / ORCHESTRATOR
-                  │
-                  ▼
-            creates URACE
-```
-
-After bootstrap:
-
-```text
-          NORMAL OPERATION
-
-          AUTHORITATIVE SOURCE
-                  │
-                  ▼
-          INTENT + AUTHORITY
-                  │
-                  ▼
-               URACE
-                  │
-                  ▼
-          chooses/delegates
-                  │
-                  ▼
-          AI / ORCHESTRATOR
-          AGENTS / TOOLS / APIs
-```
-
-> **The bootstrap executor creates URACE. Once bootstrapped, URACE becomes the persistent lifecycle owner and executors become replaceable capabilities beneath it.**
-
----
-
-# Bootstrap Technique
-
-## 1. Place `URACE.md` in the Target Context
+Provide `URACE.md` together with the relevant starting context:
 
 ```text
 TARGET PRODUCT / ENVIRONMENT
            │
+           ├── idea / Product Intent
            ├── Product artifacts
            ├── existing state
            ├── constraints
@@ -981,92 +718,33 @@ TARGET PRODUCT / ENVIRONMENT
 
 The target does not have to be software.
 
-Git is not an architectural requirement.
+Git, a particular programming language, or a particular framework is not an architectural requirement.
 
-A particular programming language or framework is not required.
+### 2. Choose a Bootstrap Capability
 
----
+The minimum intelligent setup can use one capable AI Executor.
 
-## 2. Choose the Bootstrap Capability
+A richer setup can use an Orchestrator coordinating multiple complementary Executors.
 
-The minimum bootstrap configuration is one sufficiently capable executor:
-
-```text
-URACE.md
-   │
-   ▼
-CAPABLE AI
-   │
-   ▼
-BOOTSTRAP URACE
-```
-
-Examples include:
-
-```text
-              URACE.md
-                  │
-       ┌──────────┼───────────┐
-       ▼          ▼           ▼
-     Codex   Claude Code   Gemini CLI
-       │          │           │
-       └── choose one or more ┘
-```
-
-### Suggested Bootstrap Setup
-
-Where available, the suggested richer bootstrap topology is an orchestrator with multiple complementary capable AIs:
+For example:
 
 ```text
                     URACE.md
                        │
                        ▼
-                 ORCHESTRATOR
-                e.g. OpenHands
+                    OpenHands
                        │
            ┌───────────┼───────────┐
            ▼           ▼           ▼
          Codex     Claude Code   Gemini CLI
-           │           │           │
-           └───────────┼───────────┘
+                       │
                        ▼
                 BOOTSTRAP URACE
 ```
 
-This provides a bootstrap environment capable of coordinating multiple complementary executors while keeping the resulting URACE implementation independent of that particular combination.
+This is an example topology, not a dependency.
 
-The suggested example is:
-
-```text
-URACE.md
-   │
-   ▼
-OpenHands
-   │
-   ├── Codex
-   ├── Claude Code
-   └── Gemini CLI
-   │
-   ▼
-BOOTSTRAP URACE
-```
-
-But:
-
-```text
-OpenHands        ≠ requirement
-Three AIs        ≠ requirement
-These AIs        ≠ requirement
-Multi-AI         ≠ requirement
-```
-
-They are a suggested starting topology.
-
-The architecture must remain functional with one capable executor and must remain capable of replacing or extending the execution layer later.
-
----
-
-## 3. Bootstrap from the Specification
+### 3. Bootstrap from the Specification
 
 A suitable bootstrap instruction is:
 
@@ -1131,13 +809,13 @@ Then report:
 8. how persistent autonomous operation is started.
 ```
 
-The technique is:
+The technique is intentionally implementation-agnostic:
 
 ```text
 URACE.md
    │
    ▼
-UNDERSTAND ACTUAL ENVIRONMENT
+UNDERSTAND ENVIRONMENT
    │
    ▼
 BUILD SMALLEST VALID IMPLEMENTATION
@@ -1152,85 +830,66 @@ REPAIR FAILURES
 VALIDATED RUNNING URACE
 ```
 
-Not:
-
-```text
-URACE.md
-   │
-   ▼
-COPY ONE UNIVERSAL
-FIXED IMPLEMENTATION
-EVERYWHERE
-```
-
-The specification is universal.
-
-The implementation may be environment-specific.
-
 ---
 
-# Validate the Bootstrap
+## Validate the Bootstrap
 
 Generating files is not sufficient.
 
-```text
-FILES CREATED
-     │
-     ▼
-TEST LIFECYCLE
-     │
-     ▼
-INVARIANTS PASS?
-   ┌─┴─┐
-   ▼   ▼
-  NO   YES
-   │    │
-repair  ▼
-   │  BOOTSTRAP
-   └──► COMPLETE
-```
+The implementation should demonstrate the applicable URACE invariants, including:
 
-Applicable validation includes:
-
-```text
-Single capable executor                 ✓
-Fresh-session continuity                ✓
-Executor replacement                    ✓
-Multi-executor operation where present  ✓
-Orchestrator replacement where present  ✓
-Persistent lifecycle state              ✓
-Authoritative Intent                    ✓
-Authority / delegation                  ✓
-Retained destination preservation       ✓
-Delegated destination evolution         ✓
-Autonomous Objective discovery          ✓
-Prioritization                          ✓
-Planning / replanning                   ✓
-Autonomous executor selection           ✓
-Course correction                       ✓
-Evidence / Trigger handling             ✓
-Independent validation                  ✓
-Checkpoint / recovery                   ✓
-Interruption recovery                   ✓
-Effect reconciliation                   ✓
-Dormancy / wakeability                  ✓
-Multi-cycle Product evolution           ✓
-Autonomous self-evolution discovery     ✓
-Authorized self-evolution               ✓
-No self-authorization                   ✓
-```
+- single capable Executor operation and Executor replacement;
+- durable lifecycle continuity across fresh sessions and interruptions;
+- authoritative Intent, retained/delegated Authority, and destination preservation;
+- autonomous Objective discovery, prioritization, planning, replanning, and Executor selection;
+- Evidence and Trigger handling, course correction, validation, checkpointing, recovery, and effect reconciliation;
+- dormancy, wakeability, and multi-cycle Product evolution;
+- autonomous discovery of justified self-evolution, authorized self-evolution, and absence of self-authorization;
+- multi-executor and Orchestrator replacement behavior where those layers are present.
 
 A system that merely repeatedly calls an AI is not necessarily URACE.
 
-A system that requires the user to continually choose Objectives, Plans, routes, executors, ordinary course corrections, or necessary already-authorized self-improvements has not implemented URACE's intended autonomous boundary.
+A system that requires the user to continually choose Objectives, Plans, routes, Executors, ordinary course corrections, or necessary already-authorized self-improvements has not implemented URACE's intended autonomous boundary.
 
 ---
 
-# Using URACE After Bootstrap
+## Bootstrap Role Reversal
 
-After bootstrap, stop treating `URACE.md` as the operational loop.
+This distinction is fundamental.
 
-Use the generated persistent implementation.
+```text
+BOOTSTRAP
+
+URACE.md
+   │
+   ▼
+AI / ORCHESTRATOR
+   │
+   ▼
+creates URACE
+
+
+NORMAL OPERATION
+
+AUTHORITATIVE SOURCE
+        │
+        ▼
+      URACE
+        │
+        ▼
+AI / ORCHESTRATOR
+AGENTS / TOOLS / APIs
+```
+
+> **The bootstrap capability creates URACE. Once bootstrapped, URACE becomes the persistent lifecycle owner and those systems become replaceable capabilities beneath it.**
+
+URACE does not become a thin wrapper around the bootstrap system.
+
+---
+
+# Using URACE
+
+After bootstrap, use the generated persistent implementation rather than treating `URACE.md` as the operational loop.
 
 Conceptually:
 
@@ -1254,103 +913,7 @@ The lifecycle semantics are not.
 
 ---
 
-## Suggested Operating Topology
-
-The same suggested multi-executor topology can continue after bootstrap, but the ownership direction changes.
-
-During bootstrap:
-
-```text
-URACE.md
-   │
-   ▼
-OpenHands
-   │
-   ├── Codex
-   ├── Claude Code
-   └── Gemini CLI
-   │
-   ▼
-creates URACE
-```
-
-After bootstrap:
-
-```text
-AUTHORITATIVE SOURCE
-        │
-        ▼
- INTENT + AUTHORITY
-        │
-        ▼
-      URACE
-        │
-        │ selects and delegates
-        ▼
-    OpenHands
-        │
-   ┌────┼──────────┐
-   ▼    ▼          ▼
- Codex Claude   Gemini
-       Code      CLI
-```
-
-The distinction is essential:
-
-```text
-BOOTSTRAP
-
-orchestrator / AI
-        │
-        ▼
-   creates URACE
-
-
-NORMAL OPERATION
-
-      URACE
-        │
-        ▼
-uses orchestrator / AI
-as replaceable capabilities
-```
-
-URACE does not become a thin wrapper around OpenHands or any particular model.
-
-OpenHands does not become the owner of Product Intent, Authority, Evidence, Objectives, validation, checkpoints, or lifecycle continuity.
-
-The three example AIs do not need to operate on every Objective.
-
-URACE can select the capability appropriate to the work:
-
-```text
-                    URACE
-                      │
-                required work
-                      │
-                      ▼
-             SELECT CAPABILITY
-                      │
-       ┌──────────────┼──────────────┐
-       ▼              ▼              ▼
-     Codex        Claude Code    Gemini CLI
-       │              │              │
-       ▼              ▼              ▼
- suitable task    suitable task   suitable task
-       │              │              │
-       └──────────────┼──────────────┘
-                      ▼
-                   RESULT
-                      │
-                      ▼
-                 URACE VALIDATES
-```
-
-The executor selection is contextual rather than permanently assigning universal roles to particular AI products.
-
----
-
-## 1. Establish Destination and Authority
+## Establish Intent and Authority
 
 A narrow delegation might be:
 
@@ -1360,7 +923,7 @@ Build Product X.
 Preserve properties A and B.
 
 You may autonomously change architecture, implementation,
-Objectives, Plans, experiments, tools, and executors.
+Objectives, Plans, experiments, tools, and Executors.
 
 Do not change Product purpose X.
 ```
@@ -1376,45 +939,27 @@ when credible Evidence supports a better direction.
 Preserve constraints A and B.
 ```
 
-Authority can also govern disclosure:
+Authority can also constrain disclosure:
 
 ```text
 Do not disclose proprietary source code to external AI services.
 
 Executor A may receive Product requirements but not customer data.
 
-Only locally hosted executors may receive confidential Evidence.
+Only locally hosted Executors may receive confidential Evidence.
 ```
 
-URACE should resolve those boundaries before committing dependent actions.
+URACE resolves those boundaries before dependent commitment.
 
 ---
 
-## 2. Inspect
+## Inspect
 
 ```text
 urace --check
 ```
 
-A useful inspection can expose:
-
-```text
-Governing Intent
-Authority / delegation
-Lifecycle state
-Current Objective
-Current Plan
-Evidence
-Uncertainty
-Pending Operations
-Unresolved effects
-Validation state
-Current checkpoint
-Capacity
-Dormancy / wake state
-Retained decisions
-Blockers
-```
+A useful inspection can expose governing Intent, Authority/delegation, lifecycle state, current Objective and Plan, Evidence, uncertainty, pending Operations, unresolved effects, validation state, checkpoint, capacity, dormancy/wake state, retained decisions, and blockers.
 
 Inspection provides observability.
 
@@ -1422,7 +967,7 @@ It does not transfer navigation responsibility back to the user.
 
 ---
 
-## 3. Plan Without Product Mutation
+## Plan
 
 ```text
 urace --plan
@@ -1454,17 +999,15 @@ PLAN
 
 A Plan is the current accepted strategy.
 
-It is replaceable when reality changes.
+It can be replaced when reality changes.
 
 ---
 
-## 4. Run Autonomous Product Evolution
+## Run Autonomous Product Evolution
 
 ```text
 urace --autonomous
 ```
-
-Conceptually:
 
 ```text
                          ┌─────────────────┐
@@ -1503,125 +1046,32 @@ The authoritative source does not need to provide a new prompt for every cycle.
 
 ---
 
-## 5. Let URACE Delegate Execution
+## Autonomous Executor Selection
 
-Normal operation is:
+When multiple capabilities are available, URACE may select among them according to the required Operation and applicable Authority, capability, constraints, reliability, cost, latency, context, specialization, availability, privacy, and policy.
 
-```text
-URACE identifies work
-        │
-        ▼
-identify required capability
-        │
-        ▼
-resolve Authority + disclosure constraints
-        │
-        ▼
-select executor
-        │
-        ▼
-provide bounded context
-        │
-        ▼
-executor performs work
-        │
-        ▼
-URACE observes result/effect
-        │
-        ▼
-URACE validates
-        │
-        ▼
-update durable lifecycle state
-```
-
-Not:
-
-```text
-User chooses next task
-        │
-User chooses executor
-        │
-User writes prompt
-        │
-User evaluates result
-        │
-User decides what happens next
-        │
-        └────────────↺
-```
+No particular Executor needs a permanent universal role, and every Objective does not need every available Executor.
 
 ---
 
-## 6. Replace Executors Freely
-
-```text
-Executor A
-    │
-    ▼
-bounded work
-    │
-    ▼
-URACE validates
-    │
-    ▼
-checkpoint
-    │
-    ▼
-Executor A disappears
-    │
-    ▼
-Executor B
-    │
-    ▼
-continue from URACE state
-```
-
-A new executor should not require the full chat history of the previous executor.
-
-Replacement also must not silently expand disclosure Authority.
-
----
-
-## 7. Intervene Without Becoming the Pilot
+## Intervene Without Becoming the Pilot
 
 The authoritative source can still:
 
-```text
-change retained destination
-change a HARD constraint
-revoke delegation
-grant new delegation
-restrict an executor
-change disclosure policy
-pause operation
-resume operation
-stop operation
-```
+- change a retained destination;
+- grant, narrow, or revoke delegation;
+- introduce or modify HARD constraints;
+- restrict Executors or disclosure;
+- pause or resume operation;
+- explicitly terminate the lifecycle.
 
-For example:
+URACE then reassesses and continues within the resulting boundary.
 
-```text
-AUTHORITATIVE CHANGE
-        │
-        ▼
-      URACE
-        │
-        ▼
-    REASSESS
-        │
-        ▼
-continue autonomous navigation
-inside the new boundary
-```
-
-Intervention changes the governing boundary.
-
-It does not require the authoritative source to manually navigate every subsequent decision.
+Intervention does not require returning ordinary navigation to the authoritative source.
 
 ---
 
-# Persistent Autonomy and Dormancy
+# Persistent Autonomy
 
 Persistent autonomy does not mean permanent activity.
 
@@ -1640,11 +1090,8 @@ Persistent autonomy does not mean permanent activity.
           ▼             ▼
        EXECUTE       DORMANT
           │             │
-          │      ┌──────┼──────┐
-          │      ▼      ▼      ▼
-          │   Evidence Time  Discovery
-          │      │      │      │
-          │      └──────┼──────┘
+          │      meaningful change
+          │             │
           │             ▼
           │           TRIGGER
           │             │
@@ -1659,83 +1106,41 @@ Persistent autonomy means **persistent lifecycle ownership**, not an infinite bu
 
 ---
 
-# Validation Before Acceptance
+# Integrity and Recovery
+
+## Validation Before Acceptance
 
 Executor output is not automatically accepted Product state.
 
 ```text
-EXECUTOR
+EXECUTE
    │
    ▼
-RESULT
+OBSERVE
    │
    ▼
-OBSERVATION
-   │
-   ▼
-EVIDENCE
-   │
-   ▼
-VALIDATION
-  ┌┴┐
-  ▼ ▼
-FAIL PASS
- │    │
- ▼    ▼
-repair CHECKPOINT
+VALIDATE
+  ┌┴─────────┐
+  ▼          ▼
+FAIL        PASS
+ │            │
+ ▼            ▼
+repair    CHECKPOINT
 ```
 
 Validation may consider correctness, observed effect, governing Intent, Authority, Evidence quality, constraints, unintended effects, and material uncertainty.
 
-> **“The executor said it was done” is not itself a checkpoint.**
+> **“The Executor said it was done” is not itself a checkpoint.**
 
----
+## Effect Integrity
 
-# Effect Integrity
+URACE keeps these states distinct:
 
-URACE distinguishes between intending an action and knowing what actually happened.
+> **Intent → attempt → external effect → observation → validation → acceptance**
 
-```text
-INTENDED ACTION
-      │
-      ▼
-ATTEMPTED ACTION
-      │
-      ▼
-EXTERNAL EFFECT
-      │
-      ▼
-OBSERVED RESULT
-      │
-      ▼
-VALIDATED RESULT
-      │
-      ▼
-ACCEPTED PRODUCT STATE
-```
+If an external effect is uncertain, URACE preserves that uncertainty and reconciles where practical rather than silently assuming success, failure, or retry safety.
 
-If an external effect is uncertain:
-
-```text
-request sent
-    │
-connection lost
-    │
-    ▼
-did it happen?
-    │
-    ▼
-UNKNOWN
-    │
-    ▼
-RECONCILE
-```
-
-URACE should preserve uncertainty and reconcile where practical rather than silently assuming success, failure, or retry safety.
-
----
-
-# Recovery Instead of Starting Over
+## Recovery
 
 ```text
 CRASH / STOP / RESTART
@@ -1765,41 +1170,9 @@ The lifecycle should not depend on reconstructing Product state from previous AI
 
 # Executor Data and Privacy
 
-URACE being open and executor-agnostic does **not** determine what an external AI executor does with information sent to it.
+URACE being open and executor-agnostic does **not** determine what an external AI Executor does with information sent to it.
 
-An AI executor **may** transmit, retain, log, review, process, or use submitted information for service operation or model improvement/training.
-
-**“May” is intentional.**
-
-Data handling is not universal.
-
-It can depend on:
-
-```text
-Provider
-   +
-Product / service
-   +
-Consumer / API / business / enterprise tier
-   +
-Account configuration
-   +
-Privacy settings
-   +
-Opt-in / opt-out choices
-   +
-Contractual terms
-   +
-Retention policy
-   +
-Deployment mode
-   +
-Self-hosted vs. externally hosted
-   +
-Organizational controls
-   +
-Provider policy at that time
-```
+An external service may transmit, retain, log, review, or otherwise process submitted information according to its provider, service, configuration, contractual terms, retention policy, deployment mode, organizational controls, and current policies.
 
 Therefore:
 
@@ -1810,7 +1183,7 @@ PROPRIETARY PRODUCT STATE
          URACE
            │
            ▼
-"May this executor receive it?"
+"May this Executor receive it?"
            │
        ┌───┴───┐
        ▼       ▼
@@ -1818,80 +1191,55 @@ PROPRIETARY PRODUCT STATE
        │       │
        ▼       ▼
  minimize   choose another
- context    capability /
-       │    mechanism
-       ▼
-   EXECUTOR
+ context    capability
 ```
 
-Executor capability does not create disclosure Authority:
+Capability does not create disclosure Authority.
 
-```text
-CAN EXECUTOR DO IT?
-        │
-       YES
-        │
-        ▼
-IS IT AUTHORIZED TO
-RECEIVE THIS DATA?
-     ┌──┴──┐
-     ▼     ▼
-    YES    NO
-     │     │
-     ▼     ▼
-delegate  don't disclose
-```
+Before providing proprietary, confidential, personal, regulated, security-sensitive, or otherwise restricted information to an Executor, verify the data practices and configuration applicable to the actual service being used.
 
-Before providing proprietary, confidential, personal, regulated, security-sensitive, or otherwise restricted information to an executor, verify the data practices and configuration applicable to the actual service being used.
+Deployments may instead use appropriate API or enterprise configurations, local or self-hosted models, isolated environments, deterministic tools, data minimization, or other suitable mechanisms.
 
-Deployments may instead use appropriate API or enterprise configurations, local or self-hosted models, isolated execution environments, deterministic tools, data minimization, or other mechanisms suitable to their requirements.
-
-URACE does not guarantee the independent confidentiality, retention, security, or training practices of third-party executors.
+URACE does not guarantee the independent confidentiality, retention, security, or data practices of third-party Executors.
 
 ---
 
-# Open Idea, Proprietary Product Intelligence
+# Open Blueprint, Independent Product Intelligence
 
-The **URACE idea and lifecycle architecture can remain open and editable** while Product-specific intelligence remains independently controlled.
+URACE deliberately keeps the blueprint separable from Product-specific intelligence:
 
 ```text
-             OPEN / EDITABLE
-                   │
-                   ▼
-              URACE IDEA
-              URACE.md
-          lifecycle architecture
+OPEN / EDITABLE BLUEPRINT
 
+URACE idea
+URACE.md
+Lifecycle architecture
+        │
+        │ bootstrap / govern
+        ▼
+PRODUCT-SPECIFIC
 
-                SEPARATE
-
-
-            PRODUCT-SPECIFIC
-                   │
-                   ▼
-           Product context
-              Evidence
-                Data
-             Decisions
-             Objectives
-         Validation history
-          Implementation
-          Business logic
-         Specialized models
-           Integrations
+Context
+Evidence
+Data
+Decisions
+Implementation
+Business logic
+Integrations
+Accumulated intelligence
 ```
 
-This separation allows the lifecycle architecture to be inspected, adapted, extended, and evolved without requiring every Product built around it to expose its own implementation or accumulated intelligence.
+This allows the URACE idea and specification to be inspected, adapted, extended, and evolved without requiring Products built from it to expose their implementation or accumulated intelligence.
 
-It is an architectural separation, not a guarantee about third-party data handling.
+> **An open blueprint does not require open Product intelligence.**
 
-> **Open URACE does not require open Product intelligence—but preserving proprietary intelligence also requires controlling which executors and systems are authorized to receive it.**
+This is an architectural separation, not a guarantee about third-party data handling.
 
 ---
 
 # Re-Bootstrap vs. Self-Evolve
 
-These are different operations.
+These operations remain distinct:
 
 ```text
 PRODUCT EVOLUTION
@@ -1899,16 +1247,10 @@ PRODUCT EVOLUTION
 Running URACE
       │
       ▼
-Product Objective
-      │
-      ▼
 evolve Product
       │
       ▼
-validate
-      │
-      ▼
-checkpoint
+validate + checkpoint
 
 
 SELF-EVOLUTION
@@ -1916,19 +1258,13 @@ SELF-EVOLUTION
 Running URACE
       │
       ▼
-discovers URACE gap
+discover own limitation
       │
       ▼
-Self-Evolution Objective
+authorized self-evolution
       │
       ▼
-evolve URACE
-      │
-      ▼
-validate
-      │
-      ▼
-checkpoint
+validate + checkpoint
       │
       ▼
 continue as improved URACE
@@ -1939,22 +1275,21 @@ RE-BOOTSTRAP
 URACE.md
    │
    ▼
-Bootstrap Executor
+Bootstrap capability
    │
    ▼
-new / rebuilt
-URACE implementation
+new / rebuilt URACE
 ```
 
 Normal Product evolution does not require re-bootstrap.
 
-Normal authorized URACE self-evolution does not require re-bootstrap.
+Normal authorized self-evolution does not require re-bootstrap.
 
-Re-bootstrap may make sense when deliberately creating a new implementation, migrating to a fundamentally different host environment, recovering from loss of the implementation itself, or intentionally rebuilding from the specification.
+Re-bootstrap deliberately creates or rebuilds an implementation from the specification.
 
 ---
 
-# The Complete Model
+# Complete Model
 
 ```text
                          AUTHORITATIVE SOURCE
@@ -2009,58 +1344,18 @@ Re-bootstrap may make sense when deliberately creating a new implementation, mig
                      EXECUTION DELEGATION
                               │
                               ▼
-                         ORCHESTRATOR
-                           optional
+                    optional ORCHESTRATOR
                               │
                     ┌─────────┼─────────┐
                     ▼         ▼         ▼
-                   AI A      AI B      AI C
-                    │         │         │
-                    └─────────┼─────────┘
-                              │
-                              ▼
-                       OTHER CAPABILITIES
-                       Agents / Tools
-                       APIs / Local models
-                       Future executors
+                EXECUTOR  EXECUTOR  EXECUTOR
 ```
 
-A suggested current topology is:
+The architectural boundary remains:
 
-```text
-                  AUTHORITATIVE SOURCE
-                           │
-                           ▼
-                   INTENT + AUTHORITY
-                           │
-                           ▼
-                         URACE
-                           │
-                           ▼
-                       OpenHands
-                           │
-                ┌──────────┼──────────┐
-                ▼          ▼          ▼
-              Codex    Claude Code  Gemini CLI
-```
+> **URACE persistently drives Product evolution toward the highest non-delegated authoritative Intent, autonomously owning navigation and every delegated destination decision while preserving attributable Authority, reality-constrained Evidence, independent validation, recoverable continuity, and replaceability of the intelligence and execution systems beneath it.**
 
-But the architecture remains valid as simply:
-
-```text
-AUTHORITATIVE SOURCE
-        │
-        ▼
-      URACE
-        │
-        ▼
-  1 CAPABLE AI
-```
-
-The architectural boundary is:
-
-> **URACE owns persistent autonomous Product navigation under authoritative Intent and bounded Authority. This includes autonomously discovering and promoting justified evolution of the Product and, where already authorized, its own implementation, while replaceable systems provide bounded intelligence and execution.**
-
-URACE does **not** need to own the model, executor, orchestrator, scheduler, database, cloud, repository, identity system, or external Evidence source.
+URACE does not need to own the model, Executor, Orchestrator, scheduler, database, cloud, repository, identity system, or external Evidence source.
 
 It owns the **durable lifecycle semantics connecting them**.
 
@@ -2068,39 +1363,7 @@ It owns the **durable lifecycle semantics connecting them**.
 
 # In One Sentence
 
-> **You choose the destination you want to retain; bootstrap URACE from `URACE.md` with a suitable executor—or, as a richer suggested setup, an orchestrator such as OpenHands coordinating complementary capable AIs such as Codex, Claude Code, and Gemini CLI—then URACE persistently drives and evolves the Product toward that destination, autonomously discovers what should happen next including when its own evolution is justified, executes that self-evolution where already authorized, learns from Evidence, validates results, recovers across interruptions, sleeps and reactivates when appropriate, preserves retained Authority, and keeps the intelligence and execution underneath it replaceable.**
-
-```text
-YOU
- │
- ▼
-DESTINATION
- │
- ▼
-AUTHORITY
- │
- ▼
-URACE ◄──────────────── REALITY
- │  ▲                       │
- │  │                       │
- │  └── self-evolve         │
- │      when justified      │
- │      + authorized        │
- │                          │
- ▼                          │
-PRODUCT ────────────────────┘
- │
- ▼
-EVOLVE
- │
- ▼
-VALIDATE
- │
- ▼
-CHECKPOINT
- │
- └──────────────────────↺
-```
+> **Starting from as little as an idea and one capable AI, bootstrap URACE from `URACE.md`; you retain whatever destination-setting Authority you choose, while URACE persistently drives and evolves the Product through replaceable capabilities, autonomously discovers what should happen next—including when its own evolution is justified—learns from Evidence, validates results, recovers across interruptions, becomes dormant and reactivates when appropriate, and keeps the intelligence and execution underneath it replaceable.**
 
 **You choose what you retain.**
 
@@ -2108,23 +1371,23 @@ CHECKPOINT
 
 **URACE autonomously discovers what should evolve.**
 
-**That can include the Product.**
+That can include the Product.
 
-**That can include URACE itself.**
+That can include URACE itself.
 
-**Self-evolution can be autonomously initiated.**
+Self-evolution can be autonomously initiated.
 
-**Self-evolution never means self-authorization.**
+Self-evolution never means self-authorization.
 
-**One capable AI is sufficient.**
+**One idea + one capable AI is enough to start.**
 
-**An orchestrator plus multiple complementary AIs is a suggested richer setup—not a dependency.**
+An Orchestrator plus multiple complementary Executors is a richer setup—not a dependency.
 
 Models improve. Agents change. Orchestrators come and go.
 
 **The autonomous Product lifecycle remains.**
 
-**The idea is open and editable. The intelligence built around each Product can remain its own—subject to the data practices of the executors you authorize to access it.**
+---
 
 ## License
 
