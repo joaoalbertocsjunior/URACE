@@ -2,9 +2,9 @@
 
 **Universal Recursive Autonomous Co-Founder Engine**
 
-URACE is a general-purpose, recursive autonomous product-evolution control plane that owns the journey from intent to continuously evolving product.
-
 > **It drives the boat. You pick the destination.**
+
+URACE is a general-purpose, recursive autonomous product-evolution control plane that owns the journey from intent to continuously evolving product.
 
 It preserves and governs a continuous Product lifecycle across bounded, replaceable, and potentially stateless intelligence and execution systems.
 
