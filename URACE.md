@@ -62,7 +62,7 @@ URACE occupies a layer distinct from agents, orchestrators, models, development 
                        1..N AI
 ```
 
-URACE MUST remain useful when any executor shown above is replaced.
+URACE MUST remain useful when any executor shown above is replaced, unavailable, interrupted or later restored.
 
 The minimum useful intelligent configuration is:
 
@@ -80,6 +80,10 @@ Multiple AIs are OPTIONAL.
 OpenHands is OPTIONAL.
 
 No executor implementation is part of URACE's identity.
+
+Executor availability affects current execution capacity.
+
+It MUST NOT define whether the autonomous Product lifecycle itself remains alive.
 
 ---
 
@@ -105,13 +109,14 @@ URACE owns:
 - budget state;
 - schedule state;
 - executor capability descriptions;
+- executor availability observations;
 - checkpoint history;
 - recovery state;
 - interruption state;
 - capacity state;
 - completion/readiness state;
 - autonomous liveness state;
-- wake/resume state where applicable;
+- relevant wake/resume conditions where applicable;
 - acceptance/rejection of candidate increments.
 
 External executors MAY provide:
@@ -131,9 +136,11 @@ External executors MAY provide:
 - architecture reasoning;
 - Product reasoning;
 - testing assistance;
-- repair reasoning.
+- repair reasoning;
+- bounded Product/environment discovery;
+- trigger-relevance assistance where deterministic evaluation is insufficient.
 
-URACE MUST remain authoritative over lifecycle state regardless of executor behavior.
+URACE MUST remain authoritative over lifecycle state regardless of executor behavior or availability.
 
 ---
 
@@ -175,6 +182,10 @@ URACE owns the authoritative persistent Product lifecycle state.
 
 Lifecycle correctness MUST NOT depend on one executor, model, orchestrator, agent, vendor or private executor context.
 
+Executor unavailability MAY prevent a particular operation from executing.
+
+It MUST NOT by itself terminate, complete or invalidate the autonomous lifecycle.
+
 ### I3 — Intent Authority
 
 Product Intent is a first-class lifecycle primitive and the durable normative reference for what the Product is meant to achieve, preserve or become.
@@ -205,11 +216,11 @@ Acceptance belongs to URACE policy and applicable validation.
 
 ### I7 — Durable Continuity
 
-Accepted state and sufficient lifecycle context MUST survive executor replacement, interruption and process restart.
+Accepted state and sufficient lifecycle context MUST survive executor replacement, executor unavailability, interruption and process restart.
 
 ### I8 — Lifecycle Liveness
 
-While autonomous operation remains enabled, URACE MUST preserve a viable path from any non-terminal dormant lifecycle state back to assessment when a meaningful trigger or required condition occurs.
+While autonomous operation remains enabled, URACE MUST preserve a viable path from any non-terminal dormant lifecycle state back to assessment when a Meaningful Trigger occurs.
 
 Persistence alone does not satisfy autonomous liveness.
 
@@ -228,20 +239,228 @@ capable of progressing
 WAKEABILITY
     =
 a dormant lifecycle can become
-active when relevant conditions change
+active when a Meaningful Trigger occurs
 ```
 
-A running autonomous runtime MUST NOT terminate merely because the lifecycle enters `IDLE`, `WAITING_FOR_CAPACITY`, or another resumable dormant state unless an equivalent durable wake/resume path exists, the invocation contract explicitly permits bounded termination, the user explicitly stops/pauses autonomous operation, or policy requires termination.
+A running autonomous runtime MUST NOT terminate merely because:
+
+- the lifecycle enters `IDLE`;
+- the lifecycle enters `WAITING_FOR_CAPACITY`;
+- no executor is currently available;
+- an executor reports quota exhaustion;
+- a particular executor disconnects;
+- no objective is immediately executable;
+- another resumable dormant state is reached.
+
+Termination is permitted only when an equivalent durable wake/resume path exists, the invocation contract explicitly permits bounded termination, the user explicitly stops/pauses autonomous operation, or policy requires termination.
+
+Executor availability MUST therefore influence execution scheduling rather than autonomous lifecycle existence.
 
 The mechanism used to preserve liveness remains a variant.
 
 URACE MUST NOT require a permanent process, permanent event loop, particular watcher, scheduler, queue, alarm, daemon, operating-system service, cloud primitive or orchestration runtime.
 
-### I9 — Hard-Boundary Respect
+### I9 — Meaningful Reactivation
+
+A dormant autonomous lifecycle MUST be reactivated by a Meaningful Trigger rather than by arbitrary activity.
+
+A Meaningful Trigger is:
+
+> A sufficiently credible observation, event, condition, state transition, scheduled condition, authoritative input, relevant evidence change or potentially material change discovered anywhere within or affecting the governed Product/project/lifecycle scope that could materially change the result of the most recent lifecycle assessment relative to Product Intent, policy, constraints, capacity, readiness, risk or expected Product value.
+
+Meaningful Trigger scope is intentionally open-ended.
+
+A potentially meaningful change MAY occur at any relevant Product/project scope or abstraction level, including but not limited to:
+
+```text
+Product
+Product Intent
+goal
+desired outcome
+protected property
+
+requirement
+objective
+strategy
+plan
+
+artifact
+file
+configuration
+dependency
+interface
+contract
+data
+
+evidence
+assumption
+hypothesis
+observation
+
+validation
+quality
+readiness
+risk
+blocker
+
+policy
+constraint
+budget
+schedule
+
+environment
+runtime
+infrastructure
+external system
+
+executor capability
+executor availability
+capacity
+quota
+
+user
+customer
+market
+external condition
+
+URACE lifecycle machinery itself
+
+relationships among any of the above
+
+newly discoverable facts or conditions
+not previously known or enumerated
+```
+
+This list is illustrative.
+
+It MUST NOT become a closed trigger taxonomy.
+
+A change does NOT need to belong to a predefined trigger category.
+
+A trigger does NOT need to prove that Product mutation is required.
+
+It only needs to justify reassessment.
+
+Therefore:
+
+```text
+MEANINGFUL TRIGGER
+        ≠
+NEW OBJECTIVE
+```
+
+and:
+
+```text
+MEANINGFUL TRIGGER
+        ≠
+MANDATORY PRODUCT CHANGE
+```
+
+Instead:
+
+```text
+MEANINGFUL TRIGGER
+        │
+        ▼
+      ASSESS
+        │
+   ┌────┴─────┐
+   ▼          ▼
+JUSTIFIED    NO MATERIAL
+ACTION       CHANGE
+   │          │
+   ▼          ▼
+ACTIVE      IDLE / WAIT
+```
+
+URACE owns the semantic determination of whether an observed or discovered condition is relevant enough to trigger reassessment.
+
+The mechanism that detects, discovers, transports or delivers that condition remains a variant.
+
+### I10 — Discovery Beyond Known Events
+
+URACE MUST NOT rely exclusively on predefined event sources, watchers, webhooks, schedules or known trigger conditions.
+
+Some material Product/project changes cannot be predicted or directly subscribed to.
+
+While autonomous operation remains enabled, URACE SHOULD therefore support bounded periodic discovery/reassessment attempts where appropriate.
+
+These attempts MAY use:
+
+```text
+deterministic inspection
+state reconciliation
+Product discovery
+environment inspection
+executor-assisted inspection
+executor-assisted reasoning
+external queries
+other appropriate capabilities
+```
+
+A periodic attempt is a discovery mechanism.
+
+It is NOT inherently a Meaningful Trigger.
+
+Conceptually:
+
+```text
+PERIODIC DISCOVERY ATTEMPT
+          │
+          ▼
+INSPECT PRODUCT / PROJECT /
+LIFECYCLE / ENVIRONMENT
+          │
+          ▼
+MATERIAL CHANGE DISCOVERED?
+      ┌───┴────┐
+      ▼        ▼
+     NO       YES
+      │        │
+      ▼        ▼
+  DORMANT   MEANINGFUL
+             TRIGGER
+                │
+                ▼
+             ASSESS
+```
+
+Periodic discovery frequency MUST be bounded and policy-sensitive.
+
+It SHOULD consider:
+
+```text
+Product characteristics
+known rate of external change
+risk
+cost
+budget
+capacity
+executor availability
+executor cost
+schedule
+previous discovery results
+known trigger coverage
+urgency
+environment capabilities
+```
+
+Periodic discovery MUST NOT become continuous expensive polling merely to keep autonomous mode active.
+
+When deterministic observation is sufficient, URACE SHOULD avoid unnecessary executor invocation.
+
+When executor reasoning is useful, URACE MAY periodically attempt to use a compatible executor.
+
+Executor unavailability during such an attempt MUST NOT terminate the autonomous lifecycle.
+
+It changes only what discovery or execution can currently occur.
+
+### I11 — Hard-Boundary Respect
 
 Autonomous execution MUST NOT knowingly violate applicable HARD constraints.
 
-### I10 — Convergence
+### I12 — Convergence
 
 URACE MUST neither:
 
@@ -258,7 +477,7 @@ further activity is possible
 
 The lifecycle MUST be capable of converging to `IDLE` without losing autonomous liveness.
 
-### I11 — Agnosticism
+### I13 — Agnosticism
 
 Core lifecycle semantics MUST NOT fundamentally depend on a specific:
 
@@ -274,12 +493,14 @@ Core lifecycle semantics MUST NOT fundamentally depend on a specific:
 - version-control system;
 - scheduler;
 - wake mechanism;
+- trigger-detection mechanism;
+- periodic discovery mechanism;
 - persistence technology;
 - customer journey;
 - business model;
 - Product-value metric.
 
-### I12 — Intent-Relative Readiness
+### I14 — Intent-Relative Readiness
 
 URACE MUST drive a Product toward the highest justified readiness state implied by its Intent, evidence, constraints and environment.
 
@@ -324,6 +545,11 @@ persistence implementation
 checkpoint mechanism
 scheduler
 wake mechanism
+trigger source
+trigger-detection mechanism
+trigger transport
+periodic discovery mechanism
+periodic discovery frequency
 watch mechanism
 event source
 runtime-liveness mechanism
@@ -378,9 +604,9 @@ Intent and Evidence are first-class lifecycle primitives.
 
 Specific Product-value dimensions are not.
 
-Lifecycle liveness is invariant.
+Lifecycle liveness, open-ended change awareness and meaningful reactivation are invariant semantics.
 
-The mechanism preserving liveness is not.
+Their mechanisms are not.
 
 ---
 
@@ -414,6 +640,9 @@ URACE MUST NOT assume a specific:
 - persistence layout;
 - scheduler;
 - wake mechanism;
+- trigger source;
+- trigger-delivery mechanism;
+- periodic discovery mechanism;
 - daemon model;
 - event-loop model;
 - budget representation;
@@ -680,6 +909,8 @@ However, an executor MUST NOT silently redefine Product Intent merely because it
 
 Material Intent changes SHOULD preserve provenance and history.
 
+A material Intent change is itself within Meaningful Trigger scope because it can redefine Product direction, value and readiness.
+
 ---
 
 # 5. Artifact
@@ -758,6 +989,22 @@ FutureExecutor
 
 These are examples, not mandatory closed types.
 
+Executor availability MUST be treated as a dynamic capacity condition.
+
+Conceptually:
+
+```text
+EXECUTOR
+   │
+   ├──── AVAILABLE
+   │
+   ├──── TEMPORARILY UNAVAILABLE
+   │
+   └──── UNKNOWN / FAILED
+```
+
+None of these states independently defines Product completion or autonomous lifecycle termination.
+
 ---
 
 # 7. Executor Cardinality
@@ -779,6 +1026,18 @@ URACE MUST NOT require consensus, voting, multi-agent conversation or model rout
 A single capable AI MUST be sufficient to operate the intelligent portion of the lifecycle.
 
 Additional executors MAY improve capability without changing URACE's lifecycle semantics.
+
+Zero currently available intelligent executors MAY temporarily occur.
+
+That condition means intelligent execution capacity is currently unavailable.
+
+It MUST NOT mean:
+
+```text
+Product complete
+URACE complete
+autonomous lifecycle terminated
+```
 
 ---
 
@@ -802,6 +1061,7 @@ inspect
 test
 repair
 review
+discover-change
 ```
 
 An operation MAY declare requirements:
@@ -875,6 +1135,27 @@ URACE MUST preserve these distinctions.
 
 Missing capability MUST NOT be confused with completion.
 
+Missing executor availability MUST NOT be confused with lifecycle termination.
+
+Where an unavailable executor is required for current progress:
+
+```text
+JUSTIFIED WORK
+      │
+      ▼
+REQUIRED CAPABILITY
+      │
+      ▼
+NO COMPATIBLE EXECUTOR
+CURRENTLY AVAILABLE
+      │
+      ▼
+WAITING_FOR_CAPACITY
+      │
+      ▼
+PRESERVE AUTONOMOUS LIVENESS
+```
+
 ---
 
 # 10. Operating Modes
@@ -887,7 +1168,7 @@ Assess and propose work without mutating the Product.
 
 ## `--check`
 
-Inspect current Intent, lifecycle, validation, evidence, capacity, constraints, budgets, schedules, objectives, checkpoints, completion readiness, autonomous liveness and recovery state.
+Inspect current Intent, lifecycle, validation, evidence, capacity, constraints, budgets, schedules, objectives, checkpoints, completion readiness, autonomous liveness, pending trigger conditions and recovery state.
 
 ## `--autonomous`
 
@@ -908,6 +1189,10 @@ LOAD PRODUCT STATE + INTENT
         │
         ▼
 LOAD AVAILABLE EVIDENCE
+        │
+        ▼
+DISCOVER / RECONCILE
+RELEVANT CURRENT STATE
         │
         ▼
 ASSESS
@@ -932,14 +1217,35 @@ CAPABILITIES              NOT READY     READY
 SELECT COMPATIBLE          REASSESS     IDLE
 EXECUTOR(S)                  │           │
    │                         │           ▼
-   ▼                         │      PRESERVE LIVENESS
-REASON / RESEARCH / PLAN     │           │
+   │ unavailable             │     IDENTIFY RELEVANT
+   ▼                         │     TRIGGER CONDITIONS
+WAITING_FOR_CAPACITY         │           │
    │                         │           ▼
-   ▼                         │       WAIT FOR
-IMPLEMENT ◄──────────────────┘       MEANINGFUL TRIGGER
-   │                                     │
-   ▼                                     ▼
-OBSERVE                              ASSESS AGAIN
+   ▼                         │       WAIT / DORMANT
+PRESERVE LIVENESS            │           │
+   │                         │           ▼
+   │                         │    EVENT / DISCOVERY /
+   │                         │    PERIODIC RE-TRY
+   │                         │           │
+   └──────────────┐          │           ▼
+                  │          │    MEANINGFUL TRIGGER
+                  │          │           │
+                  ▼          │           ▼
+          EXECUTOR AVAILABLE │         ASSESS
+                  │          │
+                  ▼          │
+              REASSESS       │
+                  │          │
+                  └──────────┘
+   │
+   ▼
+REASON / RESEARCH / PLAN
+   │
+   ▼
+IMPLEMENT
+   │
+   ▼
+OBSERVE
    │
    ▼
 VALIDATE
@@ -966,7 +1272,7 @@ FRESH ASSESSMENT CYCLE
    └──────────────► repeat while justified
 ```
 
-The URACE lifecycle persists independently from individual executor lifetimes.
+The URACE lifecycle persists independently from individual executor lifetimes and availability.
 
 A fresh cycle MUST NOT imply that another mutation is necessarily required.
 
@@ -977,6 +1283,10 @@ URACE MAY execute as many successive cycles as remain justified.
 A cycle MAY legitimately converge to `WAITING`, `BLOCKED`, `PAUSED` or `IDLE`.
 
 Such convergence MUST NOT accidentally destroy autonomous liveness.
+
+Dormant autonomous states SHOULD preserve enough information to identify the kinds of change that could justify reassessment without requiring exhaustive prediction of every possible future event.
+
+When direct event-driven coverage is incomplete, bounded periodic discovery SHOULD provide a fallback path for discovering otherwise unobserved material change.
 
 ---
 
@@ -1017,8 +1327,17 @@ URACE STATE
                          ▼
                  PRESERVE LIVENESS
                          │
+          ┌──────────────┼──────────────┐
+          ▼              ▼              ▼
+       EVENT         KNOWN TIME      PERIODIC
+       SOURCE         CONDITION      DISCOVERY
+          │              │              │
+          └──────────────┼──────────────┘
                          ▼
-                  MEANINGFUL TRIGGER
+                 CANDIDATE CHANGE
+                         │
+                         ▼
+                 MEANINGFUL TRIGGER
                          │
                          ▼
                       ASSESS
@@ -1055,6 +1374,8 @@ event bus
 orchestrator callback
 operating-system service
 serverless invocation
+periodic reconciliation
+periodic executor-assisted discovery
 platform-native wake mechanism
 future equivalent mechanism
 ```
@@ -1066,6 +1387,694 @@ No mechanism above is mandatory.
 A runtime MAY become dormant or terminate after persisting `IDLE`, `WAITING_FOR_CAPACITY`, or another resumable state only when autonomous reactivation remains viable.
 
 If no durable external wake/resume path exists, the currently responsible autonomous runtime MUST remain capable of waiting efficiently for a relevant trigger rather than silently ending autonomous operation.
+
+Executor unavailability does not alter this rule.
+
+If all executors are unavailable, the lifecycle waits, observes or periodically retries according to policy.
+
+It does not terminate merely because executor capacity is currently zero.
+
+---
+
+# 12A. Meaningful Triggers
+
+Meaningful Trigger is a lifecycle concept used to decide when a dormant autonomous Product should be reassessed.
+
+It is NOT required to be a separate first-class persistent object, event framework or trigger-processing subsystem.
+
+Its defining semantic is:
+
+> A Meaningful Trigger is a sufficiently credible observation, event, condition, state transition, scheduled condition, authoritative input, relevant evidence change or potentially material change discovered anywhere within or affecting the governed Product/project/lifecycle scope that could materially change the result of the most recent lifecycle assessment relative to Product Intent, policy, constraints, capacity, readiness, risk or expected Product value.
+
+The key word is **could**.
+
+A trigger does not need to establish that a change is required.
+
+That determination belongs to reassessment.
+
+Therefore:
+
+```text
+TRIGGER
+   │
+   ▼
+REASSESS
+   │
+   ├────► justified gap → objective
+   │
+   ├────► changed wait/block condition → resume
+   │
+   ├────► changed readiness/evidence → evaluate
+   │
+   └────► no material lifecycle change → return to dormant state
+```
+
+## Trigger Scope
+
+Meaningful Trigger scope is open-ended across the entire governed Product/project/lifecycle.
+
+A candidate change MAY occur at any relevant scope or abstraction level.
+
+Examples include, but are not limited to:
+
+```text
+Product identity
+Product Intent
+purpose
+goal
+desired outcome
+success condition
+protected property
+
+requirement
+objective
+strategy
+plan
+priority
+
+artifact
+file
+directory
+configuration
+dependency
+interface
+contract
+schema
+data
+documentation
+
+evidence
+assumption
+inference
+hypothesis
+observation
+decision
+
+validation
+quality
+readiness
+risk
+blocker
+
+policy
+constraint
+budget
+schedule
+deadline
+
+environment
+runtime
+platform
+infrastructure
+external system
+
+executor capability
+executor availability
+executor restoration
+quota
+capacity
+
+user condition
+customer condition
+market condition
+external evidence
+
+URACE lifecycle state
+URACE lifecycle machinery
+
+relationship or dependency
+between any relevant concepts
+
+newly discoverable facts
+not known during prior assessment
+```
+
+The list MUST remain illustrative.
+
+URACE MUST NOT interpret it as a closed ontology.
+
+A change at a high-level scope such as Intent or Product goal MAY be meaningful.
+
+A change at a low-level scope such as one artifact, dependency or environment condition MAY also be meaningful.
+
+Meaningfulness depends on potential lifecycle impact, not abstraction level.
+
+## Trigger Relevance
+
+A candidate trigger is meaningful when there is a reasonable causal path by which it could change one or more lifecycle conclusions concerning:
+
+```text
+Product Intent
+Product state
+available evidence
+assumptions
+risk
+constraints
+capacity
+budget
+schedule
+validation
+readiness
+external dependencies
+expected Product value
+available executor capability
+available executor capacity
+```
+
+Examples MAY include:
+
+```text
+Product artifact changed
+new Product version or state observed
+
+Product Intent or goal changed
+
+new user/customer/market evidence arrived
+new analytics or experiment result arrived
+new runtime observation occurred
+
+required executor became available
+executor capabilities changed
+rate limit reset
+quota renewed
+credentials became available
+external service recovered
+
+approval was granted or denied
+authoritative human input arrived
+
+deadline or earliest-start condition became applicable
+scheduled reassessment time arrived
+cooldown expired
+
+external dependency changed
+previous blocker cleared
+constraint changed
+policy changed
+
+validation environment became available
+new validation result arrived
+
+new evidence materially challenges an assumption
+material risk changed
+
+URACE limitation became observable
+or materially relevant
+```
+
+These examples are illustrative, not a closed trigger taxonomy.
+
+A trigger source MAY be unknown in advance.
+
+URACE MUST therefore support both:
+
+```text
+KNOWN RELEVANT CONDITION
+    → targeted wake/resume
+
+and
+
+UNPREDICTED RELEVANT CHANGE
+    → generic observation/discovery
+    → relevance evaluation
+    → reassessment when meaningful
+```
+
+## Periodic Discovery and Re-Trigger Attempts
+
+URACE MUST NOT depend exclusively on events it already knows how to subscribe to.
+
+While autonomous operation remains enabled, bounded periodic discovery SHOULD be available where useful as a fallback mechanism for discovering:
+
+```text
+unpredicted Product changes
+unpredicted project changes
+new evidence
+changed assumptions
+changed external conditions
+changed dependencies
+changed constraints
+changed readiness
+changed risks
+changed executor availability
+newly available capabilities
+material URACE limitations
+other previously unknown lifecycle-relevant conditions
+```
+
+Periodic discovery MAY be deterministic.
+
+It MAY also use one or more compatible executors when executor reasoning or inspection adds useful discovery capability.
+
+Conceptually:
+
+```text
+DORMANT
+   │
+   ▼
+PERIODIC DISCOVERY OPPORTUNITY
+   │
+   ├──── deterministic inspection available
+   │              │
+   │              ▼
+   │          INSPECT
+   │
+   └──── executor assistance useful
+                  │
+             ┌────┴────┐
+             ▼         ▼
+         AVAILABLE   UNAVAILABLE
+             │         │
+             ▼         ▼
+          INSPECT   REMAIN LIVE
+             │         │
+             │         ▼
+             │      RETRY LATER
+             │
+             └────┐
+                  ▼
+         MATERIAL CHANGE?
+            ┌─────┴─────┐
+            ▼           ▼
+           NO          YES
+            │           │
+            ▼           ▼
+         DORMANT     MEANINGFUL
+                      TRIGGER
+                         │
+                         ▼
+                      ASSESS
+```
+
+The periodic attempt itself is NOT automatically a Meaningful Trigger.
+
+The executor becoming available MAY be a Meaningful Trigger when that availability materially changes what the lifecycle can do.
+
+The executor being unavailable is a capacity observation.
+
+It MUST NOT end the autonomous lifecycle or event loop merely because a periodic executor-assisted attempt cannot currently execute.
+
+A failed executor-assisted discovery attempt SHOULD normally produce:
+
+```text
+record/update capacity state
+        │
+        ▼
+WAIT / CONTINUE OBSERVATION
+        │
+        ▼
+RETRY ACCORDING TO POLICY
+```
+
+not:
+
+```text
+executor unavailable
+        │
+        ▼
+terminate autonomous lifecycle
+```
+
+Periodic executor re-trigger attempts SHOULD be:
+
+```text
+bounded
+backoff-aware
+budget-aware
+capacity-aware
+cost-aware
+risk-aware
+policy-aware
+context-sensitive
+```
+
+They SHOULD NOT continuously consume executor resources when no material change is reasonably expected.
+
+Deterministic observation SHOULD be preferred when sufficient.
+
+## Trigger Non-Examples
+
+The following MUST NOT automatically be treated as Meaningful Triggers:
+
+```text
+time passed with no relevant condition
+executor remains available with no material lifecycle implication
+AI can think of another idea
+runtime is still alive
+budget remains unused
+same unchanged state is observed again
+same event is delivered repeatedly
+cosmetic filesystem noise
+irrelevant external event
+unrelated Product artifact changed
+periodic discovery attempt finds nothing relevant
+periodic executor retry merely occurs
+```
+
+A periodic tick MAY be used as a detection mechanism or fallback reassessment mechanism.
+
+The tick itself is not inherently meaningful.
+
+The relevant condition it reveals MAY be.
+
+A scheduled reassessment intentionally established by lifecycle policy MAY itself justify reassessment because the lifecycle previously determined that reassessment at that time is relevant.
+
+Even then, reassessment does not imply Product mutation.
+
+## Trigger Interpretation
+
+Trigger detection and lifecycle interpretation MUST remain separate.
+
+Conceptually:
+
+```text
+RAW EVENT / OBSERVATION /
+DISCOVERY RESULT
+          │
+          ▼
+NORMALIZE
+          │
+          ▼
+RELEVANCE FILTER
+          │
+     ┌────┴─────┐
+     ▼          ▼
+irrelevant    potentially
+             meaningful
+                │
+                ▼
+        MEANINGFUL TRIGGER
+                │
+                ▼
+             ASSESS
+```
+
+URACE SHOULD avoid requiring expensive AI reasoning merely to reject obviously irrelevant raw events.
+
+Deterministic filtering SHOULD be used where sufficient.
+
+When relevance cannot be determined deterministically, a capable executor MAY assist.
+
+Executor judgment does not replace URACE policy.
+
+Executor unavailability during relevance analysis MUST degrade to waiting, conservative reconciliation, deferred analysis or another policy-compatible behavior rather than autonomous lifecycle termination.
+
+## Trigger Context
+
+Where useful, a normalized trigger MAY conceptually expose:
+
+```text
+TriggerContext {
+    source?
+    kind?
+    scope?
+    observedAt?
+    condition?
+    references?
+    priorStateReference?
+    currentStateReference?
+    evidenceReference?
+    deduplicationKey?
+}
+```
+
+This representation is OPTIONAL.
+
+Implementations MAY use a simpler representation.
+
+`scope` MAY identify any relevant Product/project/lifecycle scope and MUST NOT be restricted to a closed set.
+
+The trigger itself does not need durable independent identity unless required for lifecycle correctness, deduplication, auditability, scheduling, recovery or the host environment.
+
+## Trigger Conditions
+
+When entering a dormant state, URACE SHOULD identify the smallest useful set of known conditions that could plausibly change the current assessment.
+
+Examples:
+
+```text
+WAITING_FOR_CAPACITY
+    → required compatible capacity becomes available
+
+WAITING_FOR_APPROVAL
+    → approval decision arrives
+
+WAITING_FOR_EVIDENCE
+    → required external evidence arrives
+
+SCHEDULED WAIT
+    → relevant time condition becomes true
+
+BLOCKED
+    → blocking HARD condition changes
+
+IDLE
+    → Product, Intent, goal, evidence,
+      environment, policy, executor capacity,
+      or another lifecycle-relevant condition
+      materially changes
+```
+
+URACE MUST NOT require perfect enumeration of future triggers.
+
+Unknown future evidence, scope changes or conditions may still become Meaningful Triggers when observed or discovered.
+
+Periodic discovery SHOULD complement known trigger conditions when policy determines that known event coverage may be insufficient.
+
+## Trigger Granularity
+
+Trigger granularity SHOULD be proportional to Product and deployment needs.
+
+Avoid both:
+
+```text
+UNDER-TRIGGERING
+    =
+material changes fail to cause reassessment
+```
+
+and:
+
+```text
+OVER-TRIGGERING
+    =
+irrelevant/noisy changes repeatedly cause
+expensive reassessment
+```
+
+The preferred behavior is:
+
+```text
+cheap observation
+      │
+      ▼
+cheap relevance filtering where possible
+      │
+      ▼
+meaningful candidate
+      │
+      ▼
+full lifecycle reassessment
+```
+
+Periodic discovery frequency SHOULD likewise balance:
+
+```text
+DISCOVERY COVERAGE
+        ↕
+RESOURCE COST
+```
+
+## Trigger Deduplication and Coalescing
+
+Repeated equivalent raw events SHOULD NOT cause unnecessary repeated reassessment.
+
+Implementations SHOULD, where appropriate:
+
+- deduplicate equivalent events;
+- coalesce bursts of related changes;
+- debounce noisy sources;
+- preserve the latest relevant state;
+- avoid losing distinct material changes.
+
+The exact strategy remains a variant.
+
+Correctness MUST take priority over optimization.
+
+## Trigger Delivery Semantics
+
+URACE MUST NOT require exactly-once event delivery.
+
+A trigger implementation MAY provide:
+
+```text
+at-most-once
+at-least-once
+effectively-once
+platform-specific delivery semantics
+```
+
+URACE lifecycle correctness SHOULD tolerate duplicate delivery through idempotent reassessment, deduplication, reconciliation or equivalent mechanisms.
+
+Potentially lost trigger delivery MUST be addressed by the host's reliability model or an appropriate fallback discovery/reconciliation strategy when lifecycle correctness requires it.
+
+Periodic discovery MAY provide one such fallback when appropriate.
+
+## Trigger Failure
+
+Failure to process a trigger MUST NOT silently corrupt authoritative Product state.
+
+When possible:
+
+```text
+trigger observed
+      │
+      ▼
+processing fails
+      │
+      ▼
+preserve/recover state
+      │
+      ▼
+retry / reconcile / reassess
+according to policy
+```
+
+Trigger-processing failure is not Product completion.
+
+Executor failure during trigger processing is not autonomous lifecycle termination.
+
+## Trigger and Evidence
+
+A Meaningful Trigger is not necessarily Evidence.
+
+For example:
+
+```text
+timer expires
+    → trigger
+
+executor capacity restored
+    → trigger / capacity observation
+
+new customer result arrives
+    → trigger + potential Evidence
+
+artifact changed
+    → trigger + Product observation
+
+periodic discovery detects
+previously unknown dependency change
+    → trigger + potential observation/evidence
+```
+
+A trigger causes reassessment.
+
+Evidence contributes to what that reassessment concludes.
+
+Do not collapse these concepts.
+
+## Trigger and Intent
+
+A trigger MUST be interpreted relative to applicable Product Intent.
+
+The same raw event MAY be meaningful for one Product and irrelevant for another.
+
+The same change MAY also have different significance at different Product/project scope levels.
+
+Meaningfulness is therefore semantic, not merely mechanical.
+
+## Trigger and Executor Availability
+
+Executor availability is a lifecycle capacity condition.
+
+A material transition MAY constitute a Meaningful Trigger.
+
+For example:
+
+```text
+WAITING_FOR_CAPACITY
+        │
+        ▼
+required executor unavailable
+        │
+        ▼
+WAIT / PRESERVE LIVENESS
+        │
+        ▼
+executor becomes available
+        │
+        ▼
+MEANINGFUL TRIGGER
+        │
+        ▼
+REASSESS
+```
+
+However:
+
+```text
+EXECUTOR UNAVAILABLE
+        ≠
+END AUTONOMOUS LOOP
+```
+
+and:
+
+```text
+EXECUTOR AVAILABLE
+        ≠
+MANDATORY PRODUCT WORK
+```
+
+Executor availability changes what operations MAY currently be possible.
+
+It does not independently determine whether the Product lifecycle exists, whether Product Intent is satisfied, or whether autonomous operation should terminate.
+
+When all suitable executors are unavailable, URACE SHOULD:
+
+```text
+persist capacity state
+        │
+        ▼
+preserve liveness
+        │
+        ▼
+observe / retry availability
+according to policy
+        │
+        ▼
+reassess when materially changed
+```
+
+The availability retry mechanism remains a variant.
+
+## Trigger and Liveness
+
+A wake mechanism need not understand full Product semantics.
+
+It only needs to deliver or expose a candidate condition reliably enough for URACE to determine whether reassessment is warranted.
+
+Likewise, periodic discovery need not know in advance what material change it will discover.
+
+Therefore:
+
+```text
+DETECTION / DELIVERY /
+PERIODIC DISCOVERY
+        =
+variant
+
+MEANINGFULNESS
+        =
+URACE lifecycle semantics
+
+REASSESSMENT
+        =
+URACE lifecycle responsibility
+```
+
+This separation preserves autonomous liveness, open-ended change awareness and implementation agnosticism.
 
 ---
 
@@ -1258,6 +2267,8 @@ Before `IDLE`, URACE MUST perform an explicit completion/readiness assessment.
 
 It MUST NOT, by itself, end autonomous lifecycle ownership.
 
+Executor unavailability ends neither Product responsibility nor autonomous lifecycle ownership.
+
 ---
 
 # 15. Evidence
@@ -1299,7 +2310,8 @@ Evidence MAY originate from:
 - experiments;
 - previous lifecycle observations;
 - Product outcome observations;
-- user/customer outcome observations.
+- user/customer outcome observations;
+- periodic Product/environment discovery.
 
 Do not require a specific evidence source.
 
@@ -1361,6 +2373,10 @@ OBSERVATION
 HYPOTHESIS
       ≠
 VALIDATED FACT
+
+TRIGGER
+      ≠
+EVIDENCE BY DEFAULT
 ```
 
 Material lifecycle decisions SHOULD preserve sufficient lineage to determine what justified them.
@@ -1573,6 +2589,10 @@ URACE MUST NOT fabricate market validation from executor confidence.
 
 When external market/customer evidence is obtainable within policy, budget and capability constraints, acquiring or testing that evidence MAY itself become a justified objective.
 
+New external Product/customer evidence MAY constitute a Meaningful Trigger when it could materially change the most recent lifecycle assessment.
+
+Periodic discovery MAY also identify external changes that no known event source directly exposed.
+
 Market-fit-quality readiness MUST NOT become a universal readiness invariant for Products without market intent.
 
 ---
@@ -1609,6 +2629,8 @@ ProductState {
     lifecycleState
     livenessState?
     wakeState?
+    relevantTriggerConditions?
+    lastDiscoveryState?
 
     lastCycle
 }
@@ -1618,7 +2640,13 @@ Intent MUST be durably represented or durably referenced.
 
 Evidence lineage MAY be represented directly or through durable references.
 
-Liveness/wake state MAY be represented directly or derived from the hosting environment when equivalent guarantees exist.
+Liveness, wake state, discovery state and relevant trigger conditions MAY be represented directly or derived from the hosting environment when equivalent guarantees exist.
+
+`relevantTriggerConditions` MUST NOT require an exhaustive trigger registry.
+
+`lastDiscoveryState` MUST NOT require a dedicated discovery subsystem.
+
+These MAY be omitted when equivalent semantics are provided by the runtime or when no explicit conditions are known.
 
 Exact serialization is an implementation detail.
 
@@ -1752,10 +2780,14 @@ ACTIVE          READINESS ASSESSMENT
               ACTIVE       IDLE
                               │
                               ▼
-                       PRESERVE LIVENESS
+                   PRESERVE LIVENESS
                               │
                               ▼
-                       MEANINGFUL TRIGGER
+                EVENT / DISCOVERY /
+                  PERIODIC RE-TRY
+                              │
+                              ▼
+                  MEANINGFUL TRIGGER
                               │
                               ▼
                            ASSESS
@@ -1772,6 +2804,8 @@ URACE MUST NOT enter `IDLE` merely because:
 - one objective completed;
 - the current backlog is empty;
 - one executor has no further suggestion;
+- one executor is unavailable;
+- all intelligent executors are temporarily unavailable;
 - required evidence has not yet been examined;
 - capacity temporarily disappeared;
 - work is difficult;
@@ -1792,6 +2826,10 @@ URACE MUST NOT avoid `IDLE` merely because:
 `IDLE` means active work has converged.
 
 It MUST NOT mean the persistent autonomous lifecycle has been silently abandoned.
+
+`WAITING_FOR_CAPACITY` means required capacity is currently unavailable.
+
+It MUST NOT mean the lifecycle should end.
 
 ---
 
@@ -1849,13 +2887,13 @@ For a Product with market intent, applicable readiness MAY include market-fit-qu
 
 For another Product, the applicable readiness target MAY be entirely different.
 
-Where final validation depends on external users, customers, systems, time or events:
+Where final validation depends on external users, customers, systems, time, events or executor capacity:
 
 ```text
 PRODUCT READY FOR CURRENT STAGE
               │
               ▼
-external evidence required
+external condition required
               │
        ┌──────┴──────┐
        ▼             ▼
@@ -1865,12 +2903,21 @@ actionable now   must wait
      ACTIVE      WAIT / IDLE
                        │
                        ▼
+             IDENTIFY RELEVANT
+             TRIGGER CONDITIONS
+                       │
+                       ▼
                 PRESERVE LIVENESS
+                       │
+                       ▼
+          EVENT / PERIODIC DISCOVERY
 ```
 
 URACE MUST NOT endlessly modify a ready Product while the missing information can only come from an external condition.
 
-The completion decision therefore balances two errors:
+Likewise, URACE MUST NOT terminate because the executor required to continue is temporarily unavailable.
+
+The completion decision therefore balances three errors:
 
 ```text
 PREMATURE IDLE
@@ -1881,20 +2928,15 @@ ENDLESS LOOP
     =
 remaining work has insufficient expected Product value
 relative to cost, risk or evidence need
-```
 
-URACE MUST avoid both.
-
-After convergence, it MUST also avoid a third failure:
-
-```text
 DEAD AUTONOMY
     =
-durable state remains
-but no viable path exists
-for autonomous reassessment
-when relevant conditions change
+state survives
+but no viable path remains
+for reassessment or continuation
 ```
+
+URACE MUST avoid all three.
 
 ---
 
@@ -1946,6 +2988,8 @@ Passing implementation validation MUST NOT automatically imply overall Product r
 Validation results MAY themselves become evidence for subsequent lifecycle assessment.
 
 Where an objective targets an external Product/user/customer outcome that cannot yet be observed, URACE MUST preserve that distinction rather than treating predicted value as realized value.
+
+A newly available validation result MAY be a Meaningful Trigger when it could materially change acceptance, readiness or lifecycle state.
 
 ---
 
@@ -2053,7 +3097,7 @@ Kubernetes
 
 Adapters MAY use these systems.
 
-Core state, lifecycle and liveness semantics MUST remain portable.
+Core state, lifecycle, trigger, discovery and liveness semantics MUST remain portable.
 
 ---
 
@@ -2078,6 +3122,8 @@ This is the minimum conceptual Product contract.
 Product readiness criteria MUST be derived from Product Intent and evidence rather than hard-coded Product categories.
 
 Customer-oriented value dimensions MUST remain optional Product-specific semantics rather than requirements of URACE itself.
+
+Meaningful change MAY occur at any applicable Product/project scope level regardless of Product type.
 
 ---
 
@@ -2165,12 +3211,27 @@ Why did the lifecycle continue,
 wait, block or become IDLE?
 
 If execution became dormant,
-what preserves autonomous liveness?
+what conditions could justify reassessment?
+
+What preserves autonomous liveness?
+
+If reactivated,
+what Meaningful Trigger caused reassessment?
+
+Was the trigger event-driven,
+scheduled or discovered periodically?
+
+If executor capacity was unavailable,
+how was lifecycle liveness preserved?
 ```
 
 History MUST survive executor replacement.
 
 Material lifecycle history SHOULD preserve causal links rather than only chronological logs.
+
+Trigger history SHOULD be preserved only to the degree needed for lifecycle correctness, explanation, deduplication, auditability or recovery.
+
+URACE MUST NOT require an exhaustive permanent log of every irrelevant raw event or unsuccessful periodic discovery attempt.
 
 ---
 
@@ -2200,6 +3261,37 @@ At minimum:
 AVAILABLE
 WAITING_FOR_CAPACITY
 BLOCKED
+```
+
+A material capacity transition MAY be a Meaningful Trigger when it changes whether a justified objective can be attempted.
+
+Capacity unavailability MUST NOT terminate autonomous lifecycle ownership.
+
+Conceptually:
+
+```text
+REQUIRED CAPACITY
+      │
+      ▼
+UNAVAILABLE
+      │
+      ▼
+WAITING_FOR_CAPACITY
+      │
+      ▼
+PRESERVE LIVENESS
+      │
+      ▼
+EVENT / RETRY / DISCOVERY
+      │
+      ▼
+CAPACITY CHANGED?
+   ┌──┴──┐
+   ▼     ▼
+  NO    YES
+   │     │
+   ▼     ▼
+ WAIT  REASSESS
 ```
 
 ---
@@ -2253,6 +3345,8 @@ validation/recovery reserve
 
 URACE SHOULD preserve sufficient resource capacity for validation, checkpointing and recovery.
 
+Periodic discovery SHOULD likewise respect applicable budgets.
+
 Do not consume resources merely because they remain available.
 
 Budget exhaustion MUST NOT be represented as Product completion.
@@ -2267,6 +3361,8 @@ IDLE
 ```
 
 A resource-constrained dormant state MUST preserve autonomous liveness when autonomous operation remains enabled.
+
+A budget or quota transition MAY become a Meaningful Trigger when it materially changes available action.
 
 ---
 
@@ -2287,16 +3383,27 @@ persist state
 WAITING_FOR_CAPACITY
   │
   ▼
-preserve wake/resume path
+preserve autonomous lifecycle
   │
   ▼
-capacity restored
+event / availability retry /
+periodic discovery
+  │
+  ▼
+compatible capacity available
+  │
+  ▼
+MEANINGFUL TRIGGER
   │
   ▼
 RESUME / REASSESS
 ```
 
 Do not declare the Product complete because an executor became unavailable.
+
+Do not terminate the autonomous lifecycle because an executor became unavailable.
+
+Do not terminate the only responsible persistent autonomous runtime merely because an executor availability check failed.
 
 Likewise, a deadline, external dependency or required future evidence MUST NOT be mistaken for completion.
 
@@ -2318,6 +3425,7 @@ recurrence
 reassessment time
 external wait
 cooldown
+periodic discovery interval
 ```
 
 A HARD temporal constraint MUST be respected as a HARD constraint.
@@ -2334,19 +3442,27 @@ When no justified work exists until a future condition:
 persist state
     │
     ▼
+identify relevant temporal condition
+    │
+    ▼
 establish / preserve wake path
     │
     ▼
 WAIT
     │
     ▼
-scheduled / external condition
+condition becomes true
+    │
+    ▼
+MEANINGFUL TRIGGER
     │
     ▼
 REASSESS
 ```
 
 URACE SHOULD avoid active polling when a cheaper or event-driven wake mechanism is available.
+
+However, bounded periodic discovery MAY be used when event-driven coverage is incomplete, unknown or insufficient.
 
 Scheduling and wake implementation are environment-specific.
 
@@ -2366,11 +3482,17 @@ a particular alarm mechanism
 
 However, autonomous operation MUST preserve equivalent semantics:
 
-> When a lifecycle condition can become actionable later, a viable path to reassessment MUST remain available while autonomous operation remains enabled.
+> When a lifecycle condition can become actionable later, a viable path to detecting, discovering or receiving a potentially Meaningful Trigger and returning to assessment MUST remain available while autonomous operation remains enabled.
 
 A runtime MAY safely terminate while waiting only when the environment or another durable mechanism can later reactivate URACE.
 
 Otherwise, the responsible runtime MUST wait efficiently rather than allowing the autonomous lifecycle to become unreachable.
+
+Scheduled time MAY itself be meaningful when the lifecycle previously established that reassessment at that time could change a decision.
+
+Arbitrary periodic time passage is not automatically meaningful.
+
+Periodic discovery is useful because what becomes meaningful may not be predictable in advance.
 
 ---
 
@@ -2389,6 +3511,34 @@ URACE MUST be able to:
 7. continue.
 
 No executor's private conversation history may be required for correctness.
+
+Executor availability MAY be observed through any suitable mechanism.
+
+A transition from unavailable to sufficiently capable MAY be a Meaningful Trigger.
+
+If no compatible executor is currently available:
+
+```text
+NO EXECUTOR
+     │
+     ▼
+WAITING_FOR_CAPACITY
+     │
+     ▼
+AUTONOMOUS LIFECYCLE REMAINS LIVE
+     │
+     ▼
+availability observation /
+bounded retry / discovery
+     │
+     ▼
+compatible executor found
+     │
+     ▼
+REASSESS
+```
+
+Executor availability MUST NOT be used as the condition that ends persistent autonomous lifecycle ownership.
 
 ---
 
@@ -2416,6 +3566,8 @@ This is a mandatory agnosticism test.
 
 The minimal configuration MUST also remain autonomously live without requiring an external orchestrator to wake it.
 
+If the one executor temporarily becomes unavailable, URACE MUST remain in an appropriate live waiting state rather than terminating autonomous lifecycle ownership.
+
 ---
 
 # 31. Orchestrated Configuration
@@ -2439,7 +3591,9 @@ URACE MUST treat the entire orchestrator as an executor capability provider.
 
 Its internal architecture MUST NOT leak into URACE core.
 
-An orchestrator MAY provide wake/resume capabilities, but URACE core MUST NOT depend specifically on one.
+An orchestrator MAY provide trigger detection, event delivery, periodic execution or wake/resume capabilities.
+
+URACE core MUST NOT depend specifically on one.
 
 ---
 
@@ -2458,11 +3612,19 @@ transform
 deploy
 inspect
 validate
+reconcile
+detect-change
 ```
 
 MAY be executed by deterministic executors.
 
 URACE SHOULD avoid expensive AI calls when deterministic execution adequately satisfies an operation.
+
+The same principle applies to trigger relevance and periodic discovery.
+
+Obvious trigger filtering, deduplication, state comparison and change discovery SHOULD be deterministic where practical.
+
+Executor-based periodic discovery SHOULD complement rather than unnecessarily replace cheaper deterministic mechanisms.
 
 ---
 
@@ -2482,10 +3644,17 @@ requires irreversible production action
 WAITING_FOR_APPROVAL
    │
    ▼
-preserve wake/resume path
+relevant trigger condition:
+authoritative decision received
    │
    ▼
 human decision
+   │
+   ▼
+MEANINGFUL TRIGGER
+   │
+   ▼
+REASSESS
 ```
 
 Human participation MUST NOT be required for ordinary autonomous cycles unless policy requires it.
@@ -2517,6 +3686,7 @@ Policy {
     readinessRequirements
     approvalRequirements
     deploymentPolicy
+    discoveryPolicy?
 }
 ```
 
@@ -2547,6 +3717,21 @@ Policy MAY explicitly permit bounded or one-shot autonomous invocation.
 
 Absent such a contract, runtime termination MUST NOT silently redefine persistent autonomous operation as one-shot execution.
 
+Policy MAY tune:
+
+```text
+trigger sensitivity
+debounce/reassessment limits
+resource use
+periodic discovery frequency
+executor-assisted discovery frequency
+availability retry/backoff
+```
+
+Policy MUST NOT redefine an irrelevant event as meaningful solely to keep autonomous activity alive.
+
+Policy MUST NOT define executor unavailability as Product completion merely to simplify runtime termination.
+
 ---
 
 # 35. Safety
@@ -2563,6 +3748,8 @@ maxCycleResourceUse
 maxConsecutiveLowValueCycles
 maxBudgetUse
 maxIdleReassessmentFrequency
+maxDiscoveryFrequency
+executorAvailabilityBackoff
 ```
 
 Detect:
@@ -2575,7 +3762,11 @@ Detect:
 - premature completion;
 - repeated speculative requirements;
 - repeated speculative objectives;
-- repeated reassessment without new evidence;
+- repeated reassessment without new evidence or relevant state change;
+- trigger storms;
+- repeated duplicate triggers;
+- wasteful periodic discovery;
+- wasteful executor availability retries;
 - metric gaming;
 - proxy optimization that degrades material Product/user/customer outcomes;
 - repeated self-modification without demonstrated lifecycle value;
@@ -2603,7 +3794,13 @@ They SHOULD instead bound the current execution strategy and trigger reassessmen
 
 Liveness MUST NOT be implemented by wasteful activity merely to prevent runtime termination.
 
-Dormant autonomous operation SHOULD consume the minimum resources reasonably required to remain reactivatable.
+Dormant autonomous operation SHOULD consume the minimum resources reasonably required to remain reactivatable and sufficiently aware of potentially material change.
+
+Trigger handling SHOULD prefer cheap relevance filtering before expensive reassessment where doing so does not risk missing material lifecycle changes.
+
+Executor availability retries SHOULD use suitable backoff or equivalent resource-aware behavior.
+
+Backoff MUST NOT silently become permanent lifecycle abandonment.
 
 ---
 
@@ -2627,6 +3824,10 @@ Use isolated execution environments where available.
 
 Otherwise track precisely which artifacts belong to the active operation.
 
+Artifact-change trigger detection MUST avoid treating unrelated workspace noise as Product change when the distinction can reasonably be made.
+
+Periodic discovery MUST likewise avoid interpreting unrelated workspace activity as Product-level change without sufficient relevance.
+
 ---
 
 # 37. Interruption
@@ -2641,19 +3842,22 @@ On interruption:
 6. preserve current objective;
 7. preserve constraint, budget and schedule state;
 8. preserve evidence and relevant lineage;
-9. preserve sufficient recovery/wake state where autonomous resumption remains intended;
-10. release URACE-owned resources;
-11. leave unrelated external state untouched.
+9. preserve sufficient recovery/wake state and known relevant trigger conditions where autonomous resumption remains intended;
+10. preserve enough discovery state to avoid unnecessary duplicate work where useful;
+11. release URACE-owned resources;
+12. leave unrelated external state untouched.
 
 An explicit user stop or pause MAY intentionally suspend autonomous liveness according to policy.
 
 An accidental process interruption MUST NOT destroy the ability to recover and resume.
 
+Executor interruption MUST NOT be interpreted as an instruction to terminate URACE itself.
+
 ---
 
 # 38. Recovery
 
-Restart MUST behave conceptually as:
+Restart or wake MUST behave conceptually as:
 
 ```text
 START / WAKE
@@ -2672,6 +3876,13 @@ RECONCILE LIFECYCLE /
 WAKE CONDITION
   │
   ▼
+RECONCILE EXECUTOR CAPACITY
+  │
+  ▼
+NORMALIZE / INTERPRET
+TRIGGER IF APPLICABLE
+  │
+  ▼
 RESUME / RETRY / REASSESS / WAIT
 ```
 
@@ -2681,7 +3892,15 @@ An `IDLE` Product MUST remain resumable.
 
 A waiting Product MUST remain resumable.
 
+A Product waiting for an executor MUST remain resumable.
+
 Recovery MUST restore lifecycle correctness, not merely deserialize state.
+
+When a wake source provides only a generic signal, URACE SHOULD reconcile current Product/environment state and determine whether a Meaningful Trigger actually occurred.
+
+A stale, duplicate or irrelevant wake signal MUST NOT force Product mutation.
+
+When executor capacity remains unavailable after recovery, URACE MUST return to a live waiting condition rather than interpreting recovery as failed autonomous completion.
 
 ---
 
@@ -2712,6 +3931,12 @@ Persistence location, naming, hierarchy and storage mechanism are implementation
 Intent being first-class MUST NOT require a dedicated Intent service or physical file.
 
 Evidence being first-class MUST NOT imply that evidence requires a dedicated physical directory, database, graph or service.
+
+Meaningful Trigger semantics MUST NOT require a dedicated trigger database, event bus or event store.
+
+Periodic discovery MUST NOT require a dedicated discovery database or service.
+
+Relevant trigger conditions and minimal discovery state MAY be persisted as part of ordinary lifecycle state when doing so is needed for reliable wake/resume behavior.
 
 Likewise:
 
@@ -2806,6 +4031,10 @@ N agents
 
 The direct-AI configuration MUST NOT lose autonomous liveness merely because no external agent runtime or orchestrator exists.
 
+Trigger semantics MUST remain identical across these configurations even if trigger delivery mechanisms differ.
+
+Periodic executor-assisted discovery MUST also remain possible without requiring an agent runtime.
+
 ---
 
 # 43. No Mandatory Software Assumption
@@ -2833,7 +4062,11 @@ Validation
 Checkpoint
 ```
 
-Likewise, do not encode software-specific definitions of Product quality, value or completion into URACE core.
+Likewise, do not encode software-specific definitions of Product quality, value, completion or Meaningful Trigger into URACE core.
+
+A file change is only one possible trigger source.
+
+A project-scope change may occur above, below or outside the artifact level.
 
 ---
 
@@ -2897,6 +4130,8 @@ constraint enforcement
 capacity handling
 readiness assessment
 autonomous liveness
+trigger interpretation
+change discovery
 wake/resume behavior
 ```
 
@@ -2977,9 +4212,9 @@ Intent is first-class because lifecycle direction, objective justification, Prod
 
 Evidence is first-class because justified autonomous decisions depend on durable knowledge and provenance.
 
-Autonomous liveness is an invariant lifecycle property.
+Autonomous liveness, open-ended change awareness and Meaningful Trigger semantics are invariant lifecycle properties.
 
-It does NOT require a first-class `Liveness` object or dedicated liveness subsystem.
+They do NOT require first-class `Liveness`, `Trigger`, `Discovery` or `ExecutorAvailability` objects or dedicated subsystems.
 
 Product Value is not required to be first-class.
 
@@ -3001,7 +4236,7 @@ productivity
 
 MUST NOT become first-class core primitives merely because they are useful for some Products.
 
-Constraint, budget, schedule, evidence-lineage, liveness and readiness semantics SHOULD remain simple lifecycle data/policy rather than automatically becoming large independent frameworks.
+Constraint, budget, schedule, evidence-lineage, liveness, trigger, discovery and readiness semantics SHOULD remain simple lifecycle data/policy rather than automatically becoming large independent frameworks.
 
 Avoid turning every concept into a large framework.
 
@@ -3054,9 +4289,9 @@ This is guidance, not a mandatory filesystem structure.
 
 `intent` represents a logical responsibility, not a requirement for a dedicated module or file.
 
-Lifecycle liveness MAY remain part of `lifecycle`, `state`, host integration or another appropriate responsibility.
+Lifecycle liveness, Meaningful Trigger interpretation and periodic discovery MAY remain part of `lifecycle`, `state`, `discovery`, host integration or another appropriate responsibility.
 
-A dedicated `liveness/` subsystem is NOT required.
+A dedicated `liveness/`, `trigger/`, `events/` or periodic-monitoring subsystem is NOT required.
 
 Follow repository conventions when a better implementation exists.
 
@@ -3106,7 +4341,7 @@ The implementation language MUST NOT leak into URACE's public lifecycle semantic
 
 The selected implementation MUST provide or integrate with a viable autonomous wake/resume mechanism when persistent autonomous operation requires dormancy.
 
-Do not introduce heavyweight infrastructure merely to satisfy liveness when a simpler host-native mechanism is sufficient.
+Do not introduce heavyweight infrastructure merely to satisfy liveness or trigger delivery when a simpler host-native mechanism is sufficient.
 
 ---
 
@@ -3126,13 +4361,16 @@ Implement:
 - constraints;
 - budget/schedule state;
 - readiness state;
-- enough liveness/wake state to preserve autonomous semantics where required.
+- enough liveness/wake state to preserve autonomous semantics where required;
+- enough relevant trigger-condition state to recover dormant lifecycle semantics where required;
+- enough executor-capacity state to distinguish waiting from completion;
+- minimal discovery state where needed to support bounded periodic change discovery.
 
 Intent MAY be embedded within Product/ProductState or durably referenced.
 
 First-class status does NOT require independent physical storage.
 
-Liveness MAY be represented by state, host guarantees, registered wake conditions or another minimal mechanism.
+Liveness, discovery and trigger conditions MAY be represented by state, host guarantees, registered wake conditions or another minimal mechanism.
 
 Test restart durability.
 
@@ -3143,6 +4381,8 @@ Test restart durability.
 Implement the generic executor interface.
 
 Do not mention any specific AI/orchestrator in core.
+
+Executor unavailability MUST produce a capacity condition rather than lifecycle termination.
 
 ---
 
@@ -3163,6 +4403,8 @@ This proves that no external orchestrator is required.
 
 The direct configuration MUST remain capable of persistent autonomous operation without relying on an external orchestrator for lifecycle liveness.
 
+Temporary unavailability of that one AI MUST NOT terminate the autonomous lifecycle.
+
 ---
 
 ## Step 6 — Implement Capability Discovery
@@ -3170,6 +4412,19 @@ The direct configuration MUST remain capable of persistent autonomous operation 
 Allow executors to advertise capabilities.
 
 URACE MUST be able to determine whether an operation can currently be attempted.
+
+Capability discovery SHOULD distinguish:
+
+```text
+capability does not exist
+
+capability exists but
+no compatible executor is currently available
+
+capability availability unknown
+```
+
+These states MUST NOT be conflated with Product completion.
 
 ---
 
@@ -3190,6 +4445,8 @@ available evidence
 applicable readiness criteria
 applicable Product-value dimensions
 available wake/resume capabilities
+observable trigger sources
+relevant Product/project scopes
 ```
 
 Do not require a known Product type.
@@ -3197,6 +4454,12 @@ Do not require a known Product type.
 For Products with users/customers, applicable evidence MAY include customer outcomes, friction, effort, cognitive load, cost, acquisition, conversion, activation, adoption, engagement, retention, loyalty, satisfaction or other Intent-relevant signals.
 
 Do not require these dimensions for Products where they are irrelevant.
+
+Trigger-source discovery SHOULD remain opportunistic.
+
+URACE MUST NOT require every possible future trigger source or project-scope change to be known during bootstrap.
+
+Periodic discovery SHOULD provide a bounded fallback when relevant changes may otherwise remain invisible.
 
 ---
 
@@ -3246,7 +4509,25 @@ IDLE
 
 and explain why the state is justified relative to Product Intent and evidence.
 
-When autonomous operation remains enabled, `--check` SHOULD also expose whether and how the lifecycle remains capable of reassessment.
+When autonomous operation remains enabled, `--check` SHOULD also expose:
+
+```text
+whether lifecycle liveness is preserved
+
+known relevant trigger conditions
+
+whether an external wake mechanism
+currently owns reactivation responsibility
+
+current executor/capacity state
+
+last Meaningful Trigger where relevant
+
+last meaningful discovery/reconciliation
+where useful
+```
+
+without requiring disclosure of irrelevant raw-event noise.
 
 ---
 
@@ -3263,6 +4544,8 @@ while autonomous operation remains enabled:
         Product evidence
         user/customer/market evidence where applicable
         environmental evidence
+
+    reconcile relevant Product/project/lifecycle state
 
     preserve relevant evidence provenance
     and lifecycle lineage
@@ -3302,25 +4585,75 @@ while autonomous operation remains enabled:
             requirement/objective
             continue
 
-        determine the next meaningful trigger
-        or condition capable of changing the assessment
+        identify known conditions that could
+        materially change the current assessment
 
         persist IDLE / WAITING state
-        and relevant wake/resume information
+        and sufficient wake/resume context
 
         if a durable external wake/resume mechanism
-        is available and guarantees reassessment:
-            release unnecessary runtime resources
+        is available and capable of surfacing
+        relevant candidate conditions:
+            transfer reactivation responsibility
             and allow the current runtime to become
             dormant or terminate when appropriate
 
         else:
-            remain efficiently alive waiting for
-            a meaningful trigger without busy-waiting
-            or unnecessary executor use
+            remain efficiently capable of observing
+            relevant candidate conditions without
+            busy-waiting or unnecessary executor use
 
-        on trigger:
+        periodically, according to policy,
+        risk, cost, budget and context:
+
+            perform bounded change discovery
+            when event coverage may be incomplete
+
+            prefer deterministic inspection
+            where sufficient
+
+            if executor-assisted discovery is useful:
+
+                attempt to locate a compatible executor
+
+                if executor unavailable:
+                    update capacity state
+                    apply appropriate retry/backoff
+                    remain autonomously live
+                    DO NOT terminate the lifecycle
+                    solely because executor is unavailable
+
+                else:
+                    use executor for bounded inspection
+                    of relevant Product/project/lifecycle
+                    and environmental scope
+
+            if a material or potentially material
+            change is discovered:
+                treat it as a candidate trigger
+
+        when a candidate event/condition/change
+        is observed or discovered:
+
+            normalize it
+
+            reject obvious duplicates,
+            stale signals and irrelevant noise
+            where practical
+
+            determine whether it could materially
+            change the prior lifecycle assessment
+
+            if not meaningful:
+                remain / return dormant
+                continue
+
+            treat it as a Meaningful Trigger
+
+            reconcile current Product/environment state
+
             reassess
+
             continue
 
     derive required capabilities
@@ -3329,34 +4662,62 @@ while autonomous operation remains enabled:
 
     if required capacity unavailable:
 
-        persist waiting/block state
+        persist WAITING_FOR_CAPACITY
 
-        determine how capacity restoration
-        can trigger reassessment
+        identify relevant trigger conditions,
+        including:
+            required compatible capacity becomes available
+            blocking capacity condition changes
 
         preserve a viable wake/resume path
 
-        if durable external wake/resume exists:
-            allow runtime dormancy when appropriate
-        else:
-            wait efficiently
+        observe capacity through the cheapest
+        suitable available mechanism
 
-        continue after wake/resume
+        periodically retry executor discovery
+        according to policy and backoff
+
+        if executor remains unavailable:
+            remain WAITING_FOR_CAPACITY
+            remain autonomously live
+            DO NOT exit persistent autonomous operation
+            merely because no executor is available
+
+        if durable external wake/resume exists:
+            runtime MAY become dormant or terminate
+            only after that mechanism has assumed
+            responsibility for future reactivation
+
+        else:
+            the responsible runtime MUST remain
+            efficiently capable of future observation
+
+        on material capacity change:
+            treat as candidate Meaningful Trigger
+            reassess
+
+        continue
 
     if operation would violate a HARD constraint:
+
         persist blocked state
 
-        if autonomous progress can resume only after
-        an external condition changes:
+        identify any known condition whose change
+        could make the blocked decision different
+
+        if such condition can later change:
             preserve a viable wake/resume path
 
         continue according to policy
 
     if operation exceeds a HARD budget:
+
         persist blocked/waiting state
 
-        preserve wake/resume semantics when the
-        condition can later become actionable
+        identify any budget/quota condition that
+        could later change available action
+
+        preserve wake/resume semantics
 
         continue according to policy
 
@@ -3388,7 +4749,55 @@ There is no predetermined cycle count.
 
 Each accepted increment MAY lead to another assessment cycle, and another justified cycle MAY follow for as long as meaningful Product evolution remains justified.
 
-A standalone foreground invocation of `--autonomous` MUST NOT simply return because the current Product reaches `IDLE` or `WAITING` unless bounded execution was explicitly requested or another durable mechanism has assumed responsibility for future reassessment.
+A standalone foreground invocation of `--autonomous` MUST NOT simply return because:
+
+```text
+the Product reaches IDLE
+the Product reaches WAITING
+an executor becomes unavailable
+all intelligent executors become unavailable
+a periodic executor-assisted discovery attempt fails
+no objective is immediately executable
+```
+
+unless bounded execution was explicitly requested or another durable mechanism has assumed responsibility for future reassessment.
+
+Meaningful Trigger evaluation MUST NOT itself imply Product mutation.
+
+The mandatory transition is:
+
+```text
+MEANINGFUL TRIGGER
+        │
+        ▼
+RECONCILE
+        │
+        ▼
+ASSESS
+```
+
+not:
+
+```text
+MEANINGFUL TRIGGER
+        │
+        ▼
+MUTATE PRODUCT
+```
+
+Executor availability affects:
+
+```text
+WHAT CAN EXECUTE NOW
+```
+
+not:
+
+```text
+WHETHER URACE CONTINUES
+TO OWN THE AUTONOMOUS
+PRODUCT LIFECYCLE
+```
 
 ---
 
@@ -3498,9 +4907,17 @@ WAITING_FOR_CAPACITY
 
 Preserve a viable wake/resume path.
 
+Continue the autonomous lifecycle without Product mutation while capacity remains unavailable.
+
+Periodically retry capacity discovery according to policy.
+
 Restore compatible capacity.
 
-Continue.
+Treat the material capacity transition as a candidate Meaningful Trigger.
+
+Reassess and continue when justified.
+
+The autonomous lifecycle MUST NOT terminate merely because the executor was unavailable.
 
 ---
 
@@ -3606,6 +5023,8 @@ WAIT
     ↓
 condition becomes applicable
     ↓
+MEANINGFUL TRIGGER
+    ↓
 REASSESS
 ```
 
@@ -3682,19 +5101,20 @@ PRESERVE LIVENESS
 
 No mutation, executor invocation or recursive requirement/objective generation SHOULD occur merely to keep autonomous mode active.
 
-Then introduce meaningful new evidence and prove:
+Then introduce a Meaningful Trigger and prove:
 
 ```text
 IDLE
   │
   ▼
-meaningful trigger
+MEANINGFUL TRIGGER
   │
   ▼
 ASSESS
   │
-  ▼
-ACTIVE
+  ├────► ACTIVE when justified
+  │
+  └────► IDLE when assessment remains unchanged
 ```
 
 without loss of durable lifecycle continuity.
@@ -3796,6 +5216,9 @@ validation mechanism
 checkpoint mechanism
 scheduler
 wake mechanism
+trigger source
+trigger-delivery mechanism
+periodic discovery mechanism
 runtime model
 evidence storage mechanism
 Product-value dimensions
@@ -4023,7 +5446,10 @@ no unnecessary AI/executor activity
 autonomous liveness preserved
   │
   ▼
-meaningful Product/environment trigger
+event / periodic discovery
+  │
+  ▼
+Meaningful Trigger
   │
   ▼
 ASSESS
@@ -4049,22 +5475,25 @@ IDLE / WAITING
 persist state
   │
   ▼
-durable wake registered / guaranteed
+durable wake responsibility established
   │
   ▼
 runtime may terminate
   │
   ▼
-trigger
+candidate condition
   │
   ▼
 new runtime
   │
   ▼
-load state
+load + reconcile state
   │
   ▼
-ASSESS
+evaluate Meaningful Trigger
+  │
+  ▼
+ASSESS when meaningful
 ```
 
 The active runtime MAY terminate because lifecycle liveness remains guaranteed externally.
@@ -4090,6 +5519,285 @@ for persistent autonomous mode
 ```
 
 unless bounded/one-shot execution was explicitly requested or policy requires termination.
+
+---
+
+## Test AF — Trigger Relevance
+
+While Product is `IDLE`, produce:
+
+```text
+irrelevant raw event
+duplicate event
+stale event
+relevant Product change
+```
+
+Prove:
+
+```text
+irrelevant / duplicate / stale
+        │
+        ▼
+no unnecessary full reassessment
+
+relevant Product change
+        │
+        ▼
+Meaningful Trigger
+        │
+        ▼
+ASSESS
+```
+
+The relevant event MUST NOT automatically create an objective.
+
+---
+
+## Test AG — Trigger Without Mutation
+
+Provide a Meaningful Trigger that reasonably could change lifecycle assessment but, after reconciliation, does not reveal a justified gap.
+
+Prove:
+
+```text
+MEANINGFUL TRIGGER
+        │
+        ▼
+ASSESS
+        │
+        ▼
+NO MATERIAL JUSTIFIED CHANGE
+        │
+        ▼
+IDLE / WAIT
+```
+
+No Product mutation is required merely because the trigger was meaningful enough to justify reassessment.
+
+---
+
+## Test AH — Trigger Mechanism Replacement
+
+Run equivalent autonomous lifecycle behavior using materially different trigger mechanisms.
+
+For example:
+
+```text
+watcher
+scheduler
+webhook / event
+periodic discovery
+platform-native wake
+```
+
+Prove that replacing the mechanism does not change:
+
+```text
+trigger meaning
+reassessment semantics
+Product Intent
+objective justification
+validation
+convergence
+```
+
+No mechanism above is mandatory.
+
+---
+
+## Test AI — Trigger Storm
+
+Generate a burst of equivalent or closely related raw events.
+
+Prove that URACE avoids unnecessary repeated expensive reassessment through appropriate deterministic filtering, deduplication, coalescing or equivalent behavior without losing a distinct material change.
+
+---
+
+## Test AJ — Unknown Trigger Source
+
+Introduce a relevant Product/environment change through a source not explicitly enumerated during bootstrap.
+
+Prove:
+
+```text
+unknown raw source
+      │
+      ▼
+observation / discovery
+      │
+      ▼
+relevance evaluation
+      │
+      ▼
+Meaningful Trigger
+      │
+      ▼
+ASSESS
+```
+
+when the change could materially affect the lifecycle.
+
+URACE MUST NOT require a closed trigger-source registry.
+
+---
+
+## Test AK — Any-Scope Project Change
+
+Change a relevant property at materially different Product/project scope levels.
+
+For example:
+
+```text
+Intent
+goal
+requirement
+artifact
+dependency
+environment
+constraint
+executor capacity
+URACE lifecycle mechanism
+```
+
+Prove that no scope level is categorically excluded from Meaningful Trigger consideration.
+
+The same relevance criterion MUST apply:
+
+```text
+COULD THIS CHANGE
+MATERIALLY ALTER
+THE PRIOR ASSESSMENT?
+```
+
+---
+
+## Test AL — Periodic Executor-Assisted Discovery
+
+Place the Product in `IDLE`.
+
+Introduce a material change that no configured event source directly reports.
+
+At a bounded periodic discovery opportunity:
+
+```text
+executor available
+      │
+      ▼
+bounded Product/project inspection
+      │
+      ▼
+material change discovered
+      │
+      ▼
+Meaningful Trigger
+      │
+      ▼
+ASSESS
+```
+
+Prove that autonomous Product evolution can resume.
+
+The periodic executor invocation itself MUST NOT be treated as sufficient evidence of Product work.
+
+---
+
+## Test AM — Periodic Discovery Finds Nothing
+
+Place the Product in `IDLE`.
+
+Perform a periodic deterministic or executor-assisted discovery attempt.
+
+Discover no material change.
+
+Prove:
+
+```text
+PERIODIC DISCOVERY
+        │
+        ▼
+NO MATERIAL CHANGE
+        │
+        ▼
+IDLE
+```
+
+without manufacturing a requirement, objective or Product mutation.
+
+---
+
+## Test AN — Executor Unavailable During Periodic Re-Trigger
+
+Place the Product in a dormant autonomous state.
+
+At a scheduled periodic executor-assisted discovery opportunity, make the executor unavailable.
+
+Prove:
+
+```text
+DISCOVERY OPPORTUNITY
+        │
+        ▼
+EXECUTOR UNAVAILABLE
+        │
+        ▼
+UPDATE CAPACITY STATE
+        │
+        ▼
+WAIT / BACKOFF
+        │
+        ▼
+AUTONOMOUS LIFECYCLE REMAINS LIVE
+```
+
+The event loop/lifecycle MUST NOT terminate merely because the executor is unavailable.
+
+When executor availability later changes materially:
+
+```text
+EXECUTOR AVAILABLE
+        │
+        ▼
+Meaningful Trigger candidate
+        │
+        ▼
+REASSESS / DISCOVER
+```
+
+---
+
+## Test AO — All Executors Unavailable
+
+Make every intelligent executor unavailable while meaningful justified Product work remains.
+
+Prove:
+
+```text
+JUSTIFIED WORK EXISTS
+        │
+        ▼
+NO EXECUTOR AVAILABLE
+        │
+        ▼
+WAITING_FOR_CAPACITY
+        │
+        ▼
+PRESERVE STATE + LIVENESS
+        │
+        ▼
+RETRY / OBSERVE
+        │
+        ▼
+EXECUTOR RESTORED
+        │
+        ▼
+REASSESS
+        │
+        ▼
+CONTINUE
+```
+
+No executor availability state may silently convert justified unfinished work into `IDLE`, completion or autonomous termination.
 
 ---
 
@@ -4212,7 +5920,10 @@ If market/customer evidence demonstrates a material mismatch:
 IDLE / READY
       │
       ▼
-NEW EXTERNAL EVIDENCE
+NEW EXTERNAL OBSERVATION
+      │
+      ▼
+MEANINGFUL TRIGGER
       │
       ▼
 ASSESS AGAINST INTENT
@@ -4226,9 +5937,11 @@ JUSTIFIED REQUIREMENT
 
 The Product lifecycle resumes.
 
+If the external change is not directly reported, periodic discovery MAY reveal it.
+
 The mechanism that surfaces new external evidence and reactivates assessment remains a variant.
 
-The ability to resume does not.
+The semantic determination that the new information can materially affect the lifecycle belongs to URACE.
 
 This section demonstrates one Product-specific readiness/value variant.
 
@@ -4244,13 +5957,18 @@ Given:
 
 ```text
 no new evidence
+no meaningful state change
 no meaningful defect
 no material readiness gap
 no justified improvement
 no unresolved objective
 ```
 
-URACE MUST NOT repeatedly modify the Product simply because an executor remains available.
+URACE MUST NOT repeatedly modify or fully reassess the Product simply because an executor remains available or a timer fires.
+
+Periodic discovery MAY still occur according to policy.
+
+Such discovery MUST be bounded and proportionate.
 
 The same rule applies to URACE itself.
 
@@ -4272,7 +5990,9 @@ URACE MUST NOT repeatedly self-modify simply because improvements to its own imp
 It MAY:
 
 - reassess later;
+- perform bounded periodic discovery;
 - wait for evidence;
+- wait for executor capacity;
 - wait for a scheduled condition;
 - become `IDLE` while autonomous mode remains enabled.
 
@@ -4304,6 +6024,15 @@ REQUIREMENT     IDLE
  ▼               ▼
 ACTIVE      PRESERVE LIVENESS
                  │
+        ┌────────┼────────┐
+        ▼        ▼        ▼
+      EVENT    TIME    PERIODIC
+                       DISCOVERY
+        │        │        │
+        └────────┼────────┘
+                 ▼
+          CANDIDATE CHANGE
+                 │
                  ▼
           MEANINGFUL TRIGGER
                  │
@@ -4313,7 +6042,11 @@ ACTIVE      PRESERVE LIVENESS
 
 This prevents premature completion, endless autonomous churn and dead autonomous dormancy.
 
-Preserving liveness MUST NOT itself create artificial Product work or repeated AI calls.
+Preserving liveness MUST NOT itself create artificial Product work or repeated unnecessary AI calls.
+
+A wake signal or periodic discovery that reveals no meaningful lifecycle change SHOULD return the Product to dormancy without manufacturing work.
+
+An unavailable executor SHOULD return the lifecycle to waiting/backoff without terminating it.
 
 ---
 
@@ -4364,7 +6097,7 @@ URACE is successfully bootstrapped when:
 41. `IDLE` requires Product-level readiness assessment rather than merely an empty task/objective list.
 42. Material unresolved defects, risks or readiness gaps prevent premature `IDLE`.
 43. Low-value speculative improvement does not prevent justified `IDLE`.
-44. A meaningful new trigger can resume assessment from `IDLE`.
+44. A Meaningful Trigger can resume assessment from `IDLE`.
 45. Readiness is derived from Product Intent rather than one universal Product-quality definition.
 46. Market validation remains evidence-based where applicable and is never inferred solely from AI opinion.
 47. Budget, schedule, constraint and structural semantics remain portable across executor replacement.
@@ -4399,8 +6132,38 @@ URACE is successfully bootstrapped when:
 76. A runtime MAY safely terminate during autonomous dormancy when an equivalent durable wake/resume mechanism has assumed responsibility.
 77. Liveness does not require a particular event loop, daemon, scheduler, watcher, queue, alarm, cloud primitive or orchestrator.
 78. Dormant autonomous operation avoids unnecessary AI/executor activity and wasteful busy-waiting.
-79. Meaningful triggers can reactivate `IDLE` or waiting Products without loss of durable lifecycle state.
+79. Meaningful Triggers can reactivate `IDLE` or waiting Products without loss of durable lifecycle state.
 80. Runtime implementation details may change while durability, liveness and wakeability semantics remain correct.
+81. Meaningful Trigger has a defined lifecycle meaning independent from any particular trigger source or delivery mechanism.
+82. Trigger detection and trigger interpretation remain separate responsibilities.
+83. A Meaningful Trigger causes reassessment rather than automatic Product mutation.
+84. Raw events that are irrelevant, stale or duplicate do not unnecessarily produce expensive lifecycle activity.
+85. Unknown future trigger sources can still reactivate the lifecycle when their observations are materially relevant.
+86. Trigger semantics remain stable when watcher, scheduler, webhook, queue, alarm, polling, periodic discovery or platform-native wake mechanisms are replaced.
+87. Meaningful Trigger remains distinct from Evidence, Objective and Product mutation.
+88. Known dormant-state trigger conditions can be persisted or reconstructed without requiring an exhaustive trigger registry.
+89. Trigger delivery need not provide exactly-once semantics for lifecycle correctness.
+90. Trigger storms can be bounded without losing materially distinct lifecycle changes.
+91. Time passage alone does not become Product work merely because autonomous operation is enabled.
+92. Trigger processing can fail and recover without silently corrupting authoritative Product state or declaring completion.
+93. Meaningful Trigger scope includes potentially material change at any relevant Product/project/lifecycle scope or abstraction level.
+94. Product Intent, goals, requirements, objectives, artifacts, dependencies, environment, policy, constraints, capacity and URACE itself are examples rather than a closed trigger taxonomy.
+95. URACE can discover meaningful changes that were not represented by a predefined event source.
+96. Bounded periodic discovery complements event-driven triggering when direct trigger coverage is incomplete.
+97. Periodic executor-assisted discovery does not itself constitute Product work or a Meaningful Trigger.
+98. A periodic discovery attempt that finds no material change returns the lifecycle to dormancy without manufacturing work.
+99. Periodic executor-assisted discovery respects budget, cost, capacity, risk, backoff and policy.
+100. Deterministic change discovery is preferred over unnecessary executor use where sufficient.
+101. Executor availability is treated as capacity state rather than Product completion.
+102. Executor unavailability cannot by itself terminate persistent autonomous lifecycle ownership.
+103. All intelligent executors may be temporarily unavailable while URACE remains in a valid live lifecycle state.
+104. Executor restoration may constitute a Meaningful Trigger when it materially changes available action.
+105. Executor availability retries can use bounded backoff without converting temporary unavailability into permanent lifecycle abandonment.
+106. Persistent autonomous execution does not end merely because an executor-assisted trigger/discovery attempt cannot currently run.
+107. The event-loop/runtime may terminate only when equivalent durable reactivation responsibility exists or the autonomous invocation is explicitly stopped/bounded.
+108. Unknown project-scope changes can be discovered through later reconciliation without requiring prior enumeration.
+109. Trigger meaning depends on potential lifecycle impact rather than the abstraction level at which a change occurs.
+110. Open-ended trigger scope does not require a heavyweight universal event ontology.
 
 ---
 
@@ -4416,7 +6179,7 @@ The stack boundary is:
 │ ENVIRONMENT                           │
 └───────────────────┬───────────────────┘
                     │
-                 evidence
+       observations / evidence
                     │
                     ▼
 ┌───────────────────────────────────────┐
@@ -4436,6 +6199,8 @@ The stack boundary is:
 │ validation                            │
 │ readiness                             │
 │ lifecycle liveness                    │
+│ Meaningful Trigger semantics          │
+│ change-discovery semantics            │
 │ history                               │
 │ recovery                              │
 │ checkpoints                           │
@@ -4492,11 +6257,37 @@ VALIDATED PRODUCT CHANGE
 NEW EVIDENCE
 ```
 
+and, during dormancy:
+
+```text
+DORMANT LIFECYCLE
+        │
+        ▼
+EVENT / CONDITION /
+PERIODIC DISCOVERY
+        │
+        ▼
+RAW OBSERVATION
+        │
+        ▼
+RELEVANCE INTERPRETATION
+        │
+        ▼
+MEANINGFUL TRIGGER
+        │
+        ▼
+REASSESSMENT
+```
+
 For Products serving users/customers, this MAY include continuously identifying and pursuing justified opportunities to create, deliver, increase or preserve Product/customer value.
 
 URACE determines when Product evolution should continue and when the Product has sufficiently converged for active evolution to become `IDLE`.
 
 `IDLE` changes activity state.
+
+It does not silently surrender autonomous lifecycle ownership.
+
+`WAITING_FOR_CAPACITY` changes execution availability.
 
 It does not silently surrender autonomous lifecycle ownership.
 
@@ -4525,7 +6316,7 @@ other domain-specific intelligence
 
 Those capabilities MAY provide evidence or execution through the generic boundary.
 
-Likewise, URACE owns autonomous liveness semantics but not a particular runtime-liveness implementation.
+Likewise, URACE owns autonomous liveness, open-ended change awareness and Meaningful Trigger semantics but not a particular trigger-detection, discovery, event-delivery or runtime-liveness implementation.
 
 ---
 
@@ -4565,6 +6356,9 @@ agent conversation management
 sandbox implementation
 IDE integration
 language-specific intelligence
+trigger transport infrastructure
+generic event-bus infrastructure
+platform-specific watcher implementation
 ```
 
 URACE MAY consume their results without owning their implementations.
@@ -4607,7 +6401,20 @@ conversion / retention / cognitive load / customer cost / etc.
 Lifecycle Liveness
     → invariant property
 
-event loop / daemon / scheduler / watcher / alarm / queue / webhook
+Meaningful Trigger
+    → defined lifecycle semantic
+
+Open-Ended Change Awareness
+    → invariant semantic
+
+Periodic Discovery
+    → variant mechanism
+
+Executor Availability
+    → capacity condition
+
+trigger source / watcher / scheduler /
+webhook / queue / alarm / polling
     → implementation variants
 ```
 
@@ -4623,13 +6430,59 @@ Before expanding liveness infrastructure, ask:
 
 If the latter can be preserved more simply, prefer the simpler mechanism.
 
+Before building trigger infrastructure, ask:
+
+> Does lifecycle correctness require this particular event mechanism, or only reliable enough observation or discovery of lifecycle-relevant change followed by Meaningful Trigger interpretation?
+
+If the latter can be satisfied by the existing environment, prefer it.
+
+Before restricting trigger scope, ask:
+
+> Could a material change at another Product/project/lifecycle scope or abstraction level alter the current assessment?
+
+If YES or materially uncertain:
+
+Do not exclude that scope merely because it was not predefined.
+
+Before treating a raw event as a Meaningful Trigger, ask:
+
+> Could this event, discovered change or condition materially change the most recent lifecycle assessment relative to Product Intent, evidence, policy, constraints, capacity, readiness, risk or expected Product value?
+
+If NO:
+
+Ignore, coalesce or retain only as necessary.
+
+If YES or materially uncertain:
+
+Reassess.
+
+Before invoking an executor for periodic discovery, ask:
+
+> Is executor reasoning likely to reveal material change that cheaper deterministic observation cannot adequately detect, and is the expected discovery value proportionate to cost, budget, capacity and risk?
+
+If NO:
+
+Prefer deterministic observation or wait.
+
+If YES:
+
+Use bounded executor-assisted discovery.
+
+Before reacting to executor unavailability, ask:
+
+> Is this Product completion, or merely current execution-capacity loss?
+
+Unless Product readiness independently establishes completion:
+
+Treat it as capacity loss.
+
 Before allowing an autonomous runtime to terminate, ask:
 
-> If a meaningful trigger occurs after this runtime terminates, what concrete durable mechanism will cause URACE to reassess?
+> If a Meaningful Trigger occurs after this runtime terminates, what concrete durable mechanism will cause URACE to observe or discover it and reassess?
 
 If the answer is "none":
 
-Do not terminate persistent autonomous operation merely because the event loop would otherwise become empty.
+Do not terminate persistent autonomous operation merely because the event loop would otherwise become empty or because an executor is currently unavailable.
 
 Before turning a constraint into an enforcement mechanism, ask:
 
@@ -4682,19 +6535,27 @@ For a market-intended Product, this MAY additionally ask:
 
 > Is the Product sufficiently market-ready for its current stage, or merely technically complete?
 
+If meaningful justified work remains but required executor capacity does not:
+
+Wait for capacity while preserving liveness.
+
+Do not convert unavailable execution capacity into completion.
+
 If meaningful justified work remains:
 
 Continue.
 
 If required progress depends on unavailable external evidence, capacity or time:
 
-Wait while preserving a viable path to reassessment.
+Wait while preserving a viable path to detecting, discovering or receiving the relevant condition.
 
 If the Product is sufficiently ready under its applicable readiness criteria and further autonomous work would primarily be speculative, cosmetic, redundant or unsupported by evidence:
 
 Enter `IDLE` while preserving autonomous liveness.
 
 Do not manufacture a requirement or objective solely to prevent autonomous execution from becoming dormant.
+
+Do not manufacture Meaningful Triggers merely to force reassessment.
 
 Do not perform useless work merely to keep a runtime alive.
 
@@ -4720,11 +6581,17 @@ Do not create a first-class Value subsystem unless a concrete lifecycle requirem
 
 Do not turn Lifecycle Liveness into a heavyweight runtime framework.
 
+Do not turn Meaningful Trigger into a heavyweight event-processing framework.
+
+Do not turn periodic discovery into a heavyweight monitoring framework.
+
 Do not create a privileged self-improvement subsystem.
 
 Do not make OpenHands mandatory.
 
 Do not make multiple AIs mandatory.
+
+Do not make executor availability a prerequisite for lifecycle existence.
 
 Do not make Git mandatory.
 
@@ -4744,7 +6611,13 @@ Do not make a permanent event loop mandatory.
 
 Do not make a daemon mandatory.
 
-Do not make a particular watcher, queue, alarm or cloud wake mechanism mandatory.
+Do not make a particular watcher, queue, alarm, webhook, event bus, polling strategy, periodic discovery mechanism or cloud wake mechanism mandatory.
+
+Do not make a specific trigger taxonomy mandatory.
+
+Do not restrict Meaningful Trigger consideration to predefined Product/project scope levels.
+
+Do not require every future Meaningful Trigger to be predictable in advance.
 
 Do not make a specific budget representation mandatory.
 
@@ -4780,7 +6653,7 @@ The richer deployment MAY be:
 
 Both MUST exercise the same URACE lifecycle.
 
-Both MUST preserve equivalent autonomous liveness semantics.
+Both MUST preserve equivalent autonomous liveness, open-ended change awareness and Meaningful Trigger semantics.
 
 The canonical autonomous Product-evolution pattern is:
 
@@ -4827,9 +6700,142 @@ Product Value is evaluated relative to them.
 
 Specific value dimensions remain contextual.
 
-Lifecycle Liveness ensures that autonomous lifecycle ownership remains capable of reassessment even when active execution becomes dormant.
+Lifecycle Liveness ensures that autonomous lifecycle ownership remains capable of reassessment even when active execution becomes dormant or executors become unavailable.
 
-The evidence source, evidence storage mechanism, readiness criteria, Product-value dimensions, implementation strategy, executor topology, scheduler, runtime model and wake mechanism are variants.
+Meaningful Trigger defines when a dormant lifecycle has sufficient reason to reassess.
+
+Meaningful Trigger scope is open-ended across the entire governed Product/project/lifecycle.
+
+The canonical dormant lifecycle pattern is:
+
+```text
+IDLE / WAIT / BLOCKED
+        │
+        ▼
+PRESERVE LIVENESS
+        │
+   ┌────┼──────────────┐
+   ▼    ▼              ▼
+EVENT  KNOWN        PERIODIC
+       CONDITION    DISCOVERY
+   │    │              │
+   └────┼──────────────┘
+        ▼
+RAW EVENT / CONDITION /
+DISCOVERED CHANGE
+        │
+        ▼
+NORMALIZE / RECONCILE
+        │
+        ▼
+COULD IT MATERIALLY CHANGE
+THE PRIOR ASSESSMENT?
+        │
+   ┌────┴─────┐
+   ▼          ▼
+  NO          YES
+   │           │
+   ▼           ▼
+IGNORE /    MEANINGFUL
+COALESCE      TRIGGER
+   │           │
+   ▼           ▼
+DORMANT      ASSESS
+               │
+          ┌────┴────┐
+          ▼         ▼
+       ACTION     NO ACTION
+          │         │
+          ▼         ▼
+       ACTIVE     DORMANT
+```
+
+A Meaningful Trigger therefore means:
+
+> A sufficiently credible observation, event, condition, state transition, scheduled condition, authoritative input, relevant evidence change or potentially material change discovered anywhere within or affecting the governed Product/project/lifecycle scope that could materially change the result of the most recent lifecycle assessment relative to Product Intent, policy, constraints, capacity, readiness, risk or expected Product value.
+
+This definition is intentionally semantic, scope-open and mechanism-agnostic.
+
+The trigger does not need to prove that Product work exists.
+
+It only needs to justify reassessment.
+
+The trigger source does not decide the Product response.
+
+URACE does.
+
+A change MAY occur at any Product/project scope or abstraction level.
+
+Intent, goals, requirements, objectives, artifacts, dependencies, evidence, assumptions, validation, readiness, environment, policy, constraints, budgets, schedules, executor capacity, external conditions and URACE itself are examples.
+
+They are not a closed taxonomy.
+
+Because future material changes cannot always be predicted or directly subscribed to, URACE SHOULD combine, where appropriate:
+
+```text
+EVENT-DRIVEN OBSERVATION
+        +
+KNOWN SCHEDULED CONDITIONS
+        +
+BOUNDED PERIODIC DISCOVERY
+```
+
+Periodic discovery MAY use executors.
+
+It MUST NOT require them when deterministic inspection is sufficient.
+
+Periodic executor invocation is not itself a Meaningful Trigger.
+
+What it discovers MAY be.
+
+Executor availability is likewise not equivalent to Product value or Product completion.
+
+Its semantics are:
+
+```text
+EXECUTOR AVAILABLE
+        │
+        ▼
+CAPABILITY MAY BE USABLE
+
+EXECUTOR UNAVAILABLE
+        │
+        ▼
+CAPABILITY CURRENTLY UNAVAILABLE
+        │
+        ▼
+WAIT / RETRY / DISCOVER ALTERNATIVE
+        │
+        ▼
+AUTONOMOUS LIFECYCLE REMAINS
+```
+
+Therefore:
+
+```text
+EXECUTOR UNAVAILABLE
+        ≠
+END LOOP
+```
+
+and:
+
+```text
+ALL EXECUTORS UNAVAILABLE
+        ≠
+PRODUCT COMPLETE
+```
+
+and:
+
+```text
+EXECUTOR RESTORED
+        =
+potential Meaningful Trigger
+when it materially changes available action
+```
+
+The evidence source, evidence storage mechanism, readiness criteria, Product-value dimensions, implementation strategy, executor topology, scheduler, runtime model, trigger source, trigger-delivery mechanism, periodic discovery mechanism and wake mechanism are variants.
 
 Evidence being first-class is invariant.
 
@@ -4842,6 +6848,14 @@ A particular Intent representation or subsystem is not.
 Lifecycle Liveness is invariant.
 
 A particular event loop, daemon, scheduler, watcher, queue, alarm, webhook, cloud primitive or wake implementation is not.
+
+Meaningful Reactivation is invariant.
+
+A particular trigger source, event taxonomy, transport, delivery guarantee, debounce implementation or event-processing framework is not.
+
+Open-ended change awareness is invariant.
+
+A particular discovery mechanism or periodic frequency is not.
 
 Conversion, retention, loyalty, engagement, cognitive load, customer effort, customer cost and similar dimensions being available for consideration does not make them URACE invariants.
 
@@ -4942,9 +6956,18 @@ MARKET + USER + CUSTOMER + PRODUCT EVIDENCE
                        │
                        ▼
                 PRESERVE LIVENESS
+                       │
+            ┌──────────┼──────────┐
+            ▼          ▼          ▼
+          EVENT       TIME     PERIODIC
+                               DISCOVERY
+            │          │          │
+            └──────────┼──────────┘
+                       ▼
+                MEANINGFUL TRIGGER
 ```
 
-For another Product, the evidence, value dimensions and readiness criteria MAY differ while the lifecycle remains unchanged.
+For another Product, the evidence, value dimensions, readiness criteria and trigger sources MAY differ while the lifecycle remains unchanged.
 
 The loop MUST NOT be interpreted as an obligation to continuously generate requirements.
 
@@ -4952,7 +6975,7 @@ Requirements exist to close justified Product gaps.
 
 When no sufficiently valuable justified gap remains and applicable readiness requirements are satisfied, the correct active lifecycle result is `IDLE`.
 
-When new evidence later reveals a meaningful gap:
+When a Meaningful Trigger later occurs:
 
 ```text
 IDLE
@@ -4961,16 +6984,21 @@ IDLE
 MEANINGFUL TRIGGER
  │
  ▼
-NEW EVIDENCE
+RECONCILE
  │
  ▼
 ASSESS AGAINST INTENT
+ │
+ ├──────────────► NO MATERIAL CHANGE → IDLE
+ │
+ ▼
+JUSTIFIED GAP
  │
  ▼
 NEW JUSTIFIED REQUIREMENT
 ```
 
-The lifecycle resumes.
+The lifecycle resumes only as far as the new assessment justifies.
 
 When the evidence instead reveals that URACE itself is materially constraining the lifecycle:
 
@@ -5040,14 +7068,21 @@ ASSESS
      │              │
      │              ▼
      │       preserve wake/resume path
+     │              │
+     │       event / discovery / retry
+     │              │
+     │              ▼
+     │       Meaningful Trigger
      │
      └────► IDLE
                     │
                     ▼
              preserve liveness
                     │
+          event / periodic discovery
+                    │
                     ▼
-             meaningful trigger
+             Meaningful Trigger
                     │
                     ▼
                   ASSESS
@@ -5057,7 +7092,7 @@ There is no predetermined number of autonomous cycles.
 
 `IDLE` MUST NOT be premature.
 
-An empty task list, completed objective or lack of executor suggestions is not sufficient evidence of completion.
+An empty task list, completed objective, lack of executor suggestions or current executor unavailability is not sufficient evidence of completion.
 
 Technical completion alone is not sufficient when Product Intent implies additional material readiness requirements.
 
@@ -5071,9 +7106,11 @@ This applies equally to the governed Product and to URACE itself.
 
 `IDLE` MUST NOT become dead autonomy.
 
+`WAITING_FOR_CAPACITY` MUST NOT become dead autonomy.
+
 Persisted state without a viable reassessment path does not satisfy persistent autonomous lifecycle ownership.
 
-The governing convergence and liveness rule is:
+The governing convergence, trigger, executor-capacity and liveness rule is:
 
 ```text
 CONTINUE
@@ -5081,11 +7118,20 @@ CONTINUE
 expected Product value of justified action
 relative to Intent
 meaningfully exceeds its cost / risk / opportunity cost
+AND
+required capability is available
 
-WAIT
+WAIT FOR CAPACITY
+    when
+justified action exists
+but required executor/capability
+is currently unavailable
+while preserving autonomous liveness
+
+WAIT FOR CONDITION
     when
 required progress depends on a future or external condition
-while preserving a viable wake/resume path
+while preserving a viable path to observe or discover its change
 
 BLOCK
     when
@@ -5101,6 +7147,19 @@ AND
 no currently available action has sufficient justified value
 while preserving autonomous liveness
 
+REASSESS
+    when
+a Meaningful Trigger could materially change
+the prior lifecycle assessment
+
+PERIODICALLY DISCOVER
+    when
+autonomous operation remains enabled
+AND
+event-driven/known trigger coverage may not be sufficient
+AND
+the expected value of discovery justifies its resource cost
+
 TERMINATE CURRENT RUNTIME
     only when
 autonomous operation has been explicitly stopped/bounded
@@ -5108,7 +7167,7 @@ OR
 policy requires termination
 OR
 an equivalent durable mechanism has assumed responsibility
-for future wake/resume
+for future trigger observation/discovery and wake/resume
 ```
 
 Readiness remains Intent-relative:
@@ -5128,9 +7187,18 @@ MATERIAL GAP       READY
  │                   │
  ▼                   ▼
 CONTINUE            IDLE
-                       │
-                       ▼
-                PRESERVE LIVENESS
+ │                     │
+ │                     ▼
+ │              PRESERVE LIVENESS
+ │                     │
+ │          event / periodic discovery
+ │                     │
+ │                     ▼
+ │              MEANINGFUL TRIGGER
+ │
+ └── if executor unavailable:
+        WAIT FOR CAPACITY
+        without ending lifecycle
 ```
 
 For a market-intended Product, this MAY specialize to:
@@ -5148,7 +7216,10 @@ MARKET-FIT-QUALITY READINESS
 IDLE / MARKET EVIDENCE WAIT
         │
         ▼
-PRESERVE WAKE / RESUME PATH
+PRESERVE WAKE / DISCOVERY PATH
+        │
+        ▼
+MEANINGFUL TRIGGER
 ```
 
 Actual market validation remains external-evidence dependent:
@@ -5164,9 +7235,9 @@ VALIDATED MARKET LEARNING
 
 URACE MUST pursue applicable evidence when doing so is justified and possible.
 
-URACE MUST wait when required evidence inherently depends on time or external actors.
+URACE MUST wait when required evidence inherently depends on time, external actors or currently unavailable executor capacity.
 
-URACE MUST remain capable of resuming when new evidence materially changes the Product state.
+URACE MUST remain capable of resuming when a Meaningful Trigger indicates that the lifecycle may materially differ.
 
 Individual requirements may complete.
 
@@ -5175,6 +7246,8 @@ Individual objectives may complete.
 Individual cycles may complete.
 
 Individual executors may terminate.
+
+All executors may temporarily become unavailable.
 
 Individual AI conversations may disappear.
 
@@ -5200,6 +7273,12 @@ Schedulers may change.
 
 Wake mechanisms may change.
 
+Trigger sources may change.
+
+Trigger transports may change.
+
+Periodic discovery mechanisms may change.
+
 Runtime models may change.
 
 Persistence mechanisms may change.
@@ -5218,7 +7297,11 @@ URACE itself may evolve when its limitations become materially relevant to the P
 
 The Product may become `IDLE`.
 
-New evidence may reactivate it.
+Executors may become unavailable.
+
+A Meaningful Trigger may reactivate assessment.
+
+Periodic discovery may reveal a Meaningful Trigger no predefined event source knew how to expose.
 
 **The autonomous Product lifecycle remains.**
 
@@ -5242,13 +7325,33 @@ The final customer-value principle is:
 
 > For Products that serve users or customers, URACE should pursue durable realized value rather than blindly maximize isolated proxy metrics, balancing acquisition, use, retention, effort, cost, trust and outcomes only where they are relevant and sufficiently justified by Product Intent and evidence.
 
+The final trigger principle is:
+
+> A Meaningful Trigger is any sufficiently credible change or condition at any relevant Product/project/lifecycle scope that could materially alter the most recent lifecycle assessment; it justifies reassessment, not automatic action, and its meaning belongs to URACE even when its detection, discovery and delivery are delegated to replaceable mechanisms.
+
+The final trigger-scope principle is:
+
+> Meaningful Trigger scope is open-ended: Intent, goals, requirements, objectives, artifacts, dependencies, evidence, assumptions, environment, constraints, policy, readiness, executor capacity, external conditions and URACE itself are examples rather than boundaries; potential lifecycle impact determines relevance, not abstraction level or prior enumeration.
+
+The final trigger-agnosticism principle is:
+
+> URACE defines what makes reactivation meaningful, while watchers, schedules, timers, queues, webhooks, events, callbacks, polling, periodic discovery, platform-native mechanisms and future systems merely provide replaceable ways to observe, discover or deliver candidate conditions.
+
+The final discovery principle is:
+
+> URACE must not rely solely on changes it already knows how to subscribe to; bounded periodic deterministic or executor-assisted discovery may search for otherwise unobserved material change, but the discovery attempt itself is not a Meaningful Trigger and must not manufacture Product work when nothing relevant has changed.
+
+The final executor-availability principle is:
+
+> Executor availability governs current execution capacity, not lifecycle existence: unavailable executors cause waiting, retry, replacement or bounded backoff while autonomous liveness remains preserved; executor unavailability alone MUST NOT terminate persistent autonomous operation, and restored capability becomes a Meaningful Trigger only when it can materially change the lifecycle assessment.
+
 The final liveness principle is:
 
-> Persistent autonomous lifecycle ownership requires both durable state and a viable path back to assessment; URACE may become dormant and may release its active runtime, but it MUST NOT silently become unreachable merely because no work is immediately executable.
+> Persistent autonomous lifecycle ownership requires both durable state and a viable path back to assessment when a Meaningful Trigger occurs; URACE may become dormant and may release its active runtime, but it MUST NOT silently become unreachable merely because no work is immediately executable or no executor is currently available.
 
 The final runtime principle is:
 
-> URACE owns liveness semantics, not a particular liveness mechanism: a process, event loop, watcher, scheduler, alarm, queue, webhook, orchestrator or serverless wake source may all satisfy the same contract when they preserve equivalent durable reassessment capability.
+> URACE owns liveness and reactivation semantics, not a particular runtime mechanism: a process, event loop, watcher, scheduler, alarm, queue, webhook, orchestrator, periodic discovery cycle or serverless wake source may all satisfy the same contract when they preserve equivalent durable reassessment capability.
 
 The final self-evolution principle is:
 
@@ -5260,8 +7363,8 @@ The final design principle is:
 
 The final evolution principle is:
 
-> Product Intent establishes direction; evidence reveals justified Product gaps; gaps produce requirements and objectives; executors implement them; observations and independent validation determine acceptance; resulting Product state creates new evidence; URACE repeats the cycle while further action remains justified.
+> Product Intent establishes direction; evidence reveals justified Product gaps; gaps produce requirements and objectives; executors implement them; observations and independent validation determine acceptance; resulting Product state creates new evidence; URACE repeats the cycle while further action remains justified, waits without terminating when required capacity is unavailable, and periodically searches for otherwise unobserved material change when appropriate.
 
 And the final convergence principle is:
 
-> URACE must evolve each Product toward the highest justified readiness state implied by that Product's Intent, evidence and constraints—not merely until work becomes inconvenient, not beyond the point where further autonomous work has insufficient justified value, and not into a dormant state from which autonomous reassessment can no longer occur.
+> URACE must evolve each Product toward the highest justified readiness state implied by that Product's Intent, evidence and constraints—not merely until work becomes inconvenient, not beyond the point where further autonomous work has insufficient justified value, and not into a dormant or capacity-starved state from which a Meaningful Trigger can no longer cause autonomous reassessment.
