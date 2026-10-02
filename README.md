@@ -8,7 +8,7 @@ URACE is an **executor-agnostic persistent autonomous Product-evolution control 
 
 It turns bounded and replaceable AI/executor sessions into a **continuous autonomous Product lifecycle** governed by authoritative Intent, bounded Authority, Evidence, independent validation, durable state, and recovery.
 
-This is deliberate: the lifecycle architecture can be inspected, adapted, extended, and evolved without being architecturally dependent on any particular Product, AI, executor, or implementation.
+At its core, URACE is also an **open and editable idea expressed as an open-source blueprint** through `URACE.md`. This is deliberate: the lifecycle architecture can be inspected, adapted, extended, and evolved independently of any particular AI, executor, implementation, or Product-specific intelligence.
 
 ```text
                  AUTHORITATIVE SOURCE
