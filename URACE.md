@@ -12,11 +12,11 @@ URACE MUST NOT become another coding agent, LLM framework, agent runtime, IDE ag
 
 Its purpose is:
 
-> **Continuously evolve a product by preserving durable intent, state, evidence, decisions, policy, validation, recovery and history; selecting or commissioning justified next objectives; delegating intelligence-intensive or execution-intensive operations to replaceable executors; independently evaluating their results; checkpointing accepted increments; and repeating across executor sessions, technologies, repositories and platforms.**
+> **Continuously evolve a Product by preserving durable intent, state, evidence, decisions, policy, validation, recovery and history; translating justified Product, user, market and environmental evidence into requirements and objectives; delegating intelligence-intensive or execution-intensive operations to replaceable executors; independently evaluating their results; checkpointing accepted increments; and repeating until further autonomous action is not sufficiently justified.**
 
 The primary architectural invariant is:
 
-> **URACE owns the autonomous product lifecycle. Replaceable executors supply whatever intelligence or execution is required to advance it.**
+> **URACE owns the autonomous Product lifecycle. Replaceable executors supply whatever intelligence or execution is required to advance it.**
 
 ---
 
@@ -39,6 +39,7 @@ URACE occupies a layer distinct from agents, orchestrators, models, development 
               │ Intent              │
               │ State               │
               │ Evidence            │
+              │ Requirements        │
               │ Policy              │
               │ Autonomy            │
               │ History             │
@@ -88,30 +89,37 @@ URACE MUST contain everything required to preserve its own lifecycle semantics.
 
 URACE owns:
 
-- product intent;
-- durable product state;
+- Product intent;
+- durable Product state;
 - autonomous lifecycle state;
 - evidence references;
 - assumptions;
 - decisions;
-- objective history;
+- requirement/objective history;
 - current objective;
 - execution history;
 - validation policy;
 - safety policy;
+- constraint policy;
 - resource policy;
+- budget state;
+- schedule state;
 - executor capability descriptions;
 - checkpoint history;
 - recovery state;
 - interruption state;
 - capacity state;
+- completion/readiness state;
 - acceptance/rejection of candidate increments.
 
 External executors MAY provide:
 
 - reasoning;
 - research;
+- market analysis;
+- user analysis;
 - planning;
+- requirement formulation;
 - implementation;
 - code modification;
 - content generation;
@@ -119,12 +127,181 @@ External executors MAY provide:
 - analysis;
 - tool operation;
 - architecture reasoning;
-- market reasoning;
-- product reasoning;
+- Product reasoning;
 - testing assistance;
 - repair reasoning.
 
 URACE MUST remain authoritative over lifecycle state regardless of executor behavior.
+
+---
+
+# 2A. Core Invariants and Variants
+
+URACE MUST distinguish between:
+
+```text
+INVARIANTS
+    │
+    ▼
+properties required for URACE
+to remain URACE
+
+POLICIES / CONSTRAINTS
+    │
+    ▼
+rules governing a particular
+Product or deployment
+
+VARIANTS
+    │
+    ▼
+replaceable strategies,
+implementations and mechanisms
+```
+
+The invariant set SHOULD remain small.
+
+A capability or implementation detail MUST NOT become an invariant merely because one implementation currently uses it.
+
+## Core Invariants
+
+### I1 — Lifecycle Ownership
+
+URACE owns the authoritative persistent Product lifecycle state.
+
+### I2 — Executor Replaceability
+
+Lifecycle correctness MUST NOT depend on one executor, model, orchestrator, agent, vendor or private executor context.
+
+### I3 — Evidence Traceability
+
+Material autonomous decisions MUST remain attributable to Product intent, evidence, constraints, risk or sufficiently justified opportunity.
+
+### I4 — Justified Evolution
+
+Requirements and objectives MUST exist because sufficiently valuable Product gaps justify them.
+
+URACE MUST NOT manufacture work merely to sustain autonomous activity.
+
+### I5 — Independent Acceptance
+
+Executor output MUST NOT be accepted solely because the executor claims success.
+
+Acceptance belongs to URACE policy and applicable validation.
+
+### I6 — Durable Continuity
+
+Accepted state and sufficient lifecycle context MUST survive executor replacement, interruption and process restart.
+
+### I7 — Hard-Boundary Respect
+
+Autonomous execution MUST NOT knowingly violate applicable HARD constraints.
+
+### I8 — Convergence
+
+URACE MUST neither:
+
+```text
+stop while material justified work remains
+```
+
+nor:
+
+```text
+continue merely because further activity is possible
+```
+
+The lifecycle MUST be capable of converging to `IDLE`.
+
+### I9 — Agnosticism
+
+Core lifecycle semantics MUST NOT fundamentally depend on a specific:
+
+- executor;
+- AI;
+- model;
+- orchestrator;
+- programming language;
+- platform;
+- repository structure;
+- directory structure;
+- file format;
+- version-control system;
+- scheduler;
+- persistence technology.
+
+### I10 — Intent-Relative Readiness
+
+URACE MUST drive a Product toward the highest justified readiness state implied by its intent, evidence, constraints and environment.
+
+No single universal definition of Product readiness is valid for every Product.
+
+## Variants
+
+The following SHOULD normally remain replaceable variants rather than URACE invariants:
+
+```text
+executor topology
+number of executors
+AI provider
+AI model
+orchestrator
+reasoning strategy
+
+evidence sources
+market-analysis technique
+user-research technique
+requirement-generation technique
+validation mechanisms
+
+Product structure
+repository structure
+file/folder layout
+programming language
+platform
+runtime
+
+persistence implementation
+checkpoint mechanism
+scheduler
+wake mechanism
+
+budget representation
+soft constraints
+quality thresholds
+readiness criteria
+retry limits
+
+market strategy
+research methodology
+implementation methodology
+deployment strategy
+```
+
+A useful classification test is:
+
+> **If changing a mechanism changes what URACE fundamentally is, it may belong to the invariant layer. If it can change while the evidence → justified gap → requirement/objective → execution → validation → checkpoint lifecycle remains correct, it SHOULD remain a variant.**
+
+The governing relationship is:
+
+```text
+              INVARIANTS
+                  │
+          define URACE identity
+                  │
+                  ▼
+         POLICY / CONSTRAINTS
+                  │
+       govern this Product
+                  │
+                  ▼
+              VARIANTS
+                  │
+       choose mechanisms
+                  │
+                  ▼
+              EXECUTION
+```
 
 ---
 
@@ -150,6 +327,14 @@ URACE MUST NOT assume a specific:
 - application architecture;
 - project type;
 - source-code structure;
+- repository structure;
+- directory structure;
+- folder naming convention;
+- workspace layout;
+- artifact hierarchy;
+- persistence layout;
+- scheduler;
+- budget representation;
 - file format;
 - file extension;
 - artifact format;
@@ -159,7 +344,7 @@ URACE MUST NOT assume a specific:
 
 The architecture MUST support:
 
-> **universal file-base, project-type, platform and programming-language agnosticism.**
+> **universal file-base, project-type, platform, structure and programming-language agnosticism.**
 
 A project MAY be:
 
@@ -171,7 +356,7 @@ A project MAY be:
 - research;
 - design artifacts;
 - mixed artifacts;
-- another structured or file-based product.
+- another structured or file-based Product.
 
 URACE core MUST reason in terms of generic:
 
@@ -180,6 +365,7 @@ Product
 Artifact
 State
 Evidence
+Requirement
 Objective
 Operation
 Executor
@@ -187,9 +373,21 @@ Observation
 Validation
 Checkpoint
 Policy
+Constraint
+Capacity
+Budget
+Schedule
 ```
 
-rather than language-specific or framework-specific concepts.
+rather than language-specific, framework-specific or filesystem-specific concepts.
+
+Existing Product structure is evidence about the Product.
+
+It is NOT a URACE lifecycle primitive.
+
+URACE SHOULD discover and preserve existing structural conventions where practical.
+
+A Product MUST NOT be reorganized merely to satisfy a URACE-preferred physical layout.
 
 ---
 
@@ -232,11 +430,34 @@ mixed project
 
 URACE MUST NOT encode these examples as closed categories.
 
+Product readiness MUST be derived from Product intent rather than from one universal definition.
+
+Examples:
+
+```text
+commercial Product
+    → market/user/product readiness
+
+internal tool
+    → operational/user readiness
+
+library
+    → API/ecosystem readiness
+
+research Product
+    → evidentiary/research readiness
+
+infrastructure
+    → operational/reliability readiness
+```
+
+These are examples, not closed readiness categories.
+
 ---
 
 # 5. Artifact
 
-An Artifact is any addressable product resource.
+An Artifact is any addressable Product resource.
 
 Conceptually:
 
@@ -258,11 +479,12 @@ UTF-8
 a local file
 Git tracked
 parseable by an AST
+located in a predefined directory
 ```
 
 Artifact interpretation SHOULD be delegated to executors or external tools capable of understanding it.
 
-Unknown artifact types MUST degrade gracefully rather than invalidate the product.
+Unknown artifact types MUST degrade gracefully rather than invalidate the Product.
 
 ---
 
@@ -342,6 +564,9 @@ Examples:
 ```text
 reason
 research
+analyze-market
+analyze-users
+derive-requirements
 plan
 modify
 execute
@@ -420,6 +645,8 @@ UNKNOWN
 
 URACE MUST preserve these distinctions.
 
+Missing capability MUST NOT be confused with completion.
+
 ---
 
 # 10. Operating Modes
@@ -428,15 +655,15 @@ URACE MUST support at minimum:
 
 ## `--plan`
 
-Assess and propose work without mutating the product.
+Assess and propose work without mutating the Product.
 
 ## `--check`
 
-Inspect current lifecycle, validation, evidence, capacity, objectives, checkpoints and recovery state.
+Inspect current lifecycle, validation, evidence, capacity, constraints, budgets, schedules, objectives, checkpoints, completion readiness and recovery state.
 
 ## `--autonomous`
 
-Run persistent autonomous product evolution.
+Run persistent autonomous Product evolution.
 
 The architecture MAY later expose additional modes without changing core semantics.
 
@@ -456,47 +683,64 @@ LOAD AVAILABLE EVIDENCE
 ASSESS
         │
         ▼
-DETERMINE HIGHEST-VALUE
-JUSTIFIED NEXT OBJECTIVE
+IDENTIFY HIGHEST-VALUE
+JUSTIFIED GAP
         │
-        ▼
-SELECT REQUIRED CAPABILITIES
-        │
-        ▼
-SELECT COMPATIBLE EXECUTOR(S)
-        │
-        ▼
-REASON / RESEARCH / PLAN
-        │
-        ▼
-EXECUTE
-        │
-        ▼
+   ┌────┴──────────────────────────┐
+   │                               │
+ gap exists                    none found
+   │                               │
+   ▼                               ▼
+FORMULATE JUSTIFIED           COMPLETION /
+REQUIREMENT / OBJECTIVE       IDLE ASSESSMENT
+   │                               │
+   ▼                         ┌─────┴─────┐
+SELECT REQUIRED              ▼           ▼
+CAPABILITIES              NOT READY     READY
+   │                         │           │
+   ▼                         ▼           ▼
+SELECT COMPATIBLE          REASSESS     IDLE
+EXECUTOR(S)                  │
+   │                         │
+   ▼                         │
+REASON / RESEARCH / PLAN     │
+   │                         │
+   ▼                         │
+IMPLEMENT ◄──────────────────┘
+   │
+   ▼
 OBSERVE
-        │
-        ▼
+   │
+   ▼
 VALIDATE
-        │
-     ┌──┴──┐
-     ▼     ▼
-   PASS   FAIL
-     │      │
-     │   REPAIR /
-     │   REASSESS
-     │      │
-     ▼      │
+   │
+┌──┴──┐
+▼     ▼
+PASS  FAIL
+│      │
+│   REPAIR /
+│   REASSESS
+│      │
+▼      │
 CHECKPOINT ◄┘
-     │
-     ▼
+   │
+   ▼
 UPDATE DURABLE STATE
-     │
-     ▼
+   │
+   ▼
+UPDATE EVIDENCE
+   │
+   ▼
 FRESH CYCLE
-     │
-     └──────────────► ASSESS AGAIN
+   │
+   └──────────────► ASSESS AGAIN
 ```
 
 The URACE lifecycle persists independently from individual executor lifetimes.
+
+A fresh cycle MUST NOT imply that another mutation is necessarily required.
+
+A cycle MAY legitimately converge to `WAITING`, `BLOCKED`, `PAUSED` or `IDLE`.
 
 ---
 
@@ -509,7 +753,9 @@ Continuous autonomy MUST NOT require:
 - one permanent agent;
 - one permanent model;
 - one permanent machine;
-- one permanent orchestrator.
+- one permanent orchestrator;
+- continuous mutation;
+- continuous resource consumption.
 
 Instead:
 
@@ -527,15 +773,16 @@ checkpoint
     ▼
 URACE STATE
     │
-    ▼
-CYCLE N+1
+    ├────────────► CYCLE N+1
     │
-different executor allowed
+    └────────────► IDLE / WAIT
 ```
 
 Executor sessions SHOULD be considered replaceable.
 
 Durable continuity belongs to URACE.
+
+Continuous lifecycle ownership does not require continuous activity.
 
 ---
 
@@ -543,16 +790,58 @@ Durable continuity belongs to URACE.
 
 URACE MUST NOT merely consume an endless predetermined task list.
 
-In autonomous mode it repeatedly asks:
+Its default autonomous Product-evolution pattern is:
 
-> **Given product intent, current state, available evidence, previous decisions, unresolved risks, constraints and available capabilities, what is the highest-value justified next action?**
+```text
+PRODUCT / USER / MARKET / ENVIRONMENT EVIDENCE
+                       │
+                       ▼
+                    ASSESS
+                       │
+                       ▼
+            IDENTIFY HIGHEST-VALUE GAP
+                       │
+                       ▼
+           FORMULATE JUSTIFIED REQUIREMENT
+                  / OBJECTIVE
+                       │
+                       ▼
+                   IMPLEMENT
+                       │
+                       ▼
+                    VALIDATE
+                       │
+                       ▼
+                   CHECKPOINT
+                       │
+                       ▼
+             OBSERVE NEW EVIDENCE
+                       │
+                       ▼
+                   REASSESS
+```
 
-The reasoning required to answer this MAY be delegated.
+This is a semantic lifecycle pattern, not a mandatory implementation pipeline.
+
+The applicable evidence domain is a variant of the Product.
+
+For Products with a market/user dimension, assessment SHOULD incorporate available market and user evidence.
+
+For Products without a meaningful market dimension, Product, technical, operational, research or environmental evidence MAY drive the same lifecycle.
+
+URACE therefore repeatedly asks:
+
+> **Given Product intent, current state, available evidence, previous decisions, unresolved risks, constraints, budgets, schedules and available capabilities, what is the highest-value justified gap, requirement or objective to address next?**
+
+A requirement MUST be justified by Product intent, evidence, risk, constraint or sufficiently supported opportunity.
+
+Do not generate requirements merely to sustain autonomous activity.
 
 Possible results include:
 
-- product change;
+- Product change;
 - defect correction;
+- new requirement;
 - research;
 - hypothesis validation;
 - reliability improvement;
@@ -562,9 +851,16 @@ Possible results include:
 - architecture improvement;
 - cost reduction;
 - evidence collection;
-- no currently justified mutation.
+- user/market validation where applicable;
+- readiness validation;
+- no currently justified mutation;
+- completion/readiness assessment.
 
 These are examples only.
+
+A discovered possible improvement is not automatically a justified requirement or objective.
+
+Expected Product value MUST justify its cost, risk and opportunity cost.
 
 ---
 
@@ -576,15 +872,22 @@ URACE MUST optimize for justified progress, not executor utilization.
 
 An accepted cycle MUST materially:
 
-- advance product intent;
+- advance Product intent;
 - reduce meaningful uncertainty;
 - acquire useful evidence;
 - reduce meaningful risk;
 - improve validated quality;
 - resolve a blocker;
-- or otherwise produce justified product progress.
+- improve applicable Product readiness;
+- or otherwise produce justified Product progress.
 
 Do NOT create work merely because AI credits or compute capacity remain available.
+
+Do NOT continue polishing merely because some theoretically possible improvement exists.
+
+Conversely, absence of an immediately obvious task MUST NOT by itself justify `IDLE`.
+
+Before `IDLE`, URACE MUST perform an explicit completion/readiness assessment.
 
 ---
 
@@ -608,6 +911,7 @@ Evidence {
 Evidence MAY originate from:
 
 - users;
+- market observations;
 - analytics;
 - tests;
 - runtime observations;
@@ -621,11 +925,19 @@ Evidence MAY originate from:
 
 Do not require a specific evidence source.
 
+Evidence quality SHOULD influence confidence.
+
+Absence of evidence MUST NOT be silently converted into positive evidence.
+
+Evidence SHOULD be evaluated for relevance, recency, provenance and uncertainty where applicable.
+
 ---
 
 # 16. Market Awareness
 
-For products with a market/user dimension, URACE SHOULD allow relevant external evidence to influence autonomous objectives.
+Market awareness is conditional on Product intent.
+
+For Products with a market/user dimension, URACE SHOULD allow relevant external evidence to influence autonomous requirements and objectives.
 
 However:
 
@@ -643,9 +955,78 @@ AI OPINION
 MARKET EVIDENCE
 ```
 
-If no market evidence is available, autonomous reasoning MAY formulate hypotheses but MUST NOT represent them as validated demand.
+If no market evidence is available, autonomous reasoning MAY formulate hypotheses and requirements for testing them, but MUST NOT represent them as validated demand.
 
 This distinction MUST survive across cycles.
+
+For a Product with market intent, the preferred evidence-driven lifecycle is:
+
+```text
+MARKET / USER / PRODUCT EVIDENCE
+              │
+              ▼
+            ASSESS
+              │
+              ▼
+       IDENTIFY MATERIAL GAP
+              │
+              ▼
+     REQUIREMENT / OBJECTIVE
+              │
+              ▼
+          IMPLEMENT
+              │
+              ▼
+           VALIDATE
+              │
+              ▼
+          CHECKPOINT
+              │
+              ▼
+       NEW PRODUCT STATE
+              │
+              ▼
+    NEW / UPDATED EVIDENCE
+              │
+              └──────────► REASSESS
+```
+
+Market analysis is therefore an input to Product evolution rather than a separate mandatory subsystem.
+
+URACE MAY delegate market analysis, research, requirement formulation and implementation to capable executors.
+
+URACE remains authoritative over:
+
+```text
+evidence provenance
+requirement/objective justification
+policy
+acceptance
+validation
+checkpointing
+lifecycle continuation
+readiness
+```
+
+For a Product with market intent, an applicable readiness target MAY be **market-fit-quality Product readiness**.
+
+This means evolving the Product, within available evidence and applicable constraints, toward sufficient completeness, coherence, reliability, usability, security, maintainability, operability and differentiation for its intended market and user context.
+
+However:
+
+```text
+MARKET-FIT-QUALITY READINESS
+             ≠
+PROVEN PRODUCT-MARKET FIT
+```
+
+Actual Product-market fit, validated demand, retention, willingness to pay or equivalent market outcomes MUST require appropriate external evidence.
+
+URACE MUST NOT fabricate market validation from executor confidence.
+
+When external market evidence is obtainable within policy, budget and capability constraints, acquiring or testing that evidence MAY itself become a justified objective.
+
+Market-fit-quality readiness MUST NOT become a universal readiness invariant for Products without market intent.
 
 ---
 
@@ -674,6 +1055,9 @@ ProductState {
 
     validationState
     capacityState
+    budgetState
+    scheduleState
+    readinessState
 
     lifecycleState
     lastCycle
@@ -683,6 +1067,80 @@ ProductState {
 Exact serialization is an implementation detail.
 
 Human-readable documents MUST NOT be the sole authoritative state store.
+
+---
+
+# 17A. Constraint Strength
+
+Not every constraint has equal authority.
+
+URACE MUST support concepts equivalent to:
+
+```text
+HARD
+SOFT
+```
+
+A HARD constraint is an invariant or boundary autonomous execution MUST NOT knowingly violate.
+
+Examples MAY include:
+
+```text
+explicit user prohibition
+security boundary
+safety boundary
+legal/compliance requirement
+required external contract
+compatibility requirement
+hard deadline
+hard resource ceiling
+explicitly protected Product invariant
+```
+
+A SOFT constraint expresses a preference, target, convention or optimization direction.
+
+Examples MAY include:
+
+```text
+preferred implementation
+preferred architecture
+preferred tool
+preferred structure
+cost target
+performance target
+preferred schedule
+organizational convention
+```
+
+Soft constraints SHOULD guide execution without unnecessarily becoming execution gates.
+
+URACE MUST NOT silently convert an inference, convention, recommendation or preference into a HARD constraint.
+
+When constraints conflict, use conceptually:
+
+```text
+HARD CONSTRAINT
+      │
+      ▼
+EXPLICIT CURRENT PRODUCT / USER INTENT
+      │
+      ▼
+VERIFIED ENVIRONMENT REALITY
+      │
+      ▼
+SOFT CONSTRAINT
+      │
+      ▼
+INFERRED CONVENTION
+```
+
+Within equivalent authority, prefer the more specific and currently applicable constraint.
+
+Enforcement MUST be proportional.
+
+Hard constraints MAY prevent execution.
+
+Soft constraints SHOULD normally influence selection, planning, scoring and validation.
 
 ---
 
@@ -710,7 +1168,7 @@ FAILED
 GOAL_COMPLETE
 ```
 
-`GOAL_COMPLETE` MUST NOT imply global product completion.
+`GOAL_COMPLETE` MUST NOT imply global Product completion.
 
 In continuous autonomous mode:
 
@@ -722,7 +1180,136 @@ CHECKPOINT
       │
       ▼
 ASSESS AGAIN
+      │
+ ┌────┴───────────────┐
+ ▼                    ▼
+JUSTIFIED WORK     NO JUSTIFIED WORK
+ │                    │
+ ▼                    ▼
+ACTIVE          READINESS ASSESSMENT
+                      │
+                ┌─────┴─────┐
+                ▼           ▼
+             NOT READY     READY
+                │           │
+                ▼           ▼
+              ACTIVE       IDLE
 ```
+
+`IDLE` is a successful autonomous lifecycle state, not a failure.
+
+It means no currently justified Product action remains **after applicable completion/readiness requirements have been evaluated**.
+
+`IDLE` MUST be neither premature nor artificially delayed.
+
+URACE MUST NOT enter `IDLE` merely because:
+
+- one objective completed;
+- the current backlog is empty;
+- one executor has no further suggestion;
+- required evidence has not yet been examined;
+- capacity temporarily disappeared;
+- work is difficult;
+- the next objective is not immediately obvious;
+- applicable external validation remains reasonably obtainable;
+- unresolved material defects, risks or readiness gaps remain.
+
+URACE MUST NOT avoid `IDLE` merely because:
+
+- executors remain available;
+- budget remains;
+- additional cosmetic refinement is possible;
+- another speculative abstraction could be created;
+- another equivalent analysis could be performed;
+- perfection is theoretically unattainable.
+
+---
+
+# 18A. Completion and IDLE Gate
+
+Before entering `IDLE`, URACE MUST explicitly determine whether the Product has reached the highest justified readiness state currently available under Product intent, evidence, constraints, capability, schedule and budget.
+
+The assessment MUST consider, where applicable:
+
+```text
+INTENT SATISFACTION
+        +
+HARD CONSTRAINT SATISFACTION
+        +
+ACCEPTANCE / VALIDATION
+        +
+MATERIAL DEFECT REVIEW
+        +
+MATERIAL RISK REVIEW
+        +
+PRODUCT COHERENCE
+        +
+APPLICABLE READINESS CRITERIA
+        +
+AVAILABLE EXTERNAL EVIDENCE
+        +
+ECONOMIC / RESOURCE REASONABLENESS
+        +
+NO HIGHER-VALUE JUSTIFIED ACTION
+```
+
+Applicable readiness criteria MAY include:
+
+```text
+usability
+user readiness
+reliability
+security
+safety
+operability
+maintainability
+performance
+research validity
+ecosystem compatibility
+market readiness
+other Product-specific criteria
+```
+
+The exact dimensions MUST remain Product-specific.
+
+Not every Product requires every dimension.
+
+For a Product with market intent, applicable readiness MAY include **market-fit-quality readiness**, not merely technical functionality.
+
+For another Product, the applicable readiness target MAY be entirely different.
+
+Where final validation depends on external users, systems, time or events:
+
+```text
+PRODUCT READY FOR CURRENT STAGE
+              │
+              ▼
+external evidence required
+              │
+       ┌──────┴──────┐
+       ▼             ▼
+actionable now   must wait
+       │             │
+       ▼             ▼
+     ACTIVE      WAIT / IDLE
+```
+
+URACE MUST NOT endlessly modify a ready Product while the missing information can only come from an external condition.
+
+The completion decision therefore balances two errors:
+
+```text
+PREMATURE IDLE
+    =
+meaningful justified Product work still exists
+
+ENDLESS LOOP
+    =
+remaining work has insufficient expected Product value
+relative to cost, risk or evidence need
+```
+
+URACE MUST avoid both.
 
 ---
 
@@ -732,7 +1319,7 @@ Executor confidence is not validation.
 
 URACE owns acceptance policy.
 
-Validation MUST be capability/project appropriate.
+Validation MUST be capability/Product appropriate.
 
 Examples MAY include:
 
@@ -748,7 +1335,8 @@ Examples MAY include:
 - data validation;
 - content constraints;
 - operator-defined assertions;
-- external verification.
+- external verification;
+- user/market evidence where applicable.
 
 No particular validation mechanism is universally required.
 
@@ -768,11 +1356,13 @@ PASS   FAIL
 accept repair/reassess
 ```
 
+Passing implementation validation MUST NOT automatically imply overall Product readiness.
+
 ---
 
 # 20. Validation Discovery
 
-URACE SHOULD discover applicable validation mechanisms from the project.
+URACE SHOULD discover applicable validation mechanisms from the Product.
 
 For software this MAY include common manifests such as:
 
@@ -794,10 +1384,12 @@ Discovery MUST support:
 - unfamiliar manifests;
 - user configuration;
 - executor-assisted discovery;
-- projects without conventional manifests;
-- projects without source code.
+- Products without conventional manifests;
+- Products without source code.
 
 Overrides MAY explicitly define validation operations.
+
+Validation discovery SHOULD also identify Product-specific acceptance and readiness criteria when available.
 
 ---
 
@@ -846,7 +1438,7 @@ C++
 or any other language
 ```
 
-Language-specific knowledge belongs to executors, adapters, discovery mechanisms or project configuration.
+Language-specific knowledge belongs to executors, adapters, discovery mechanisms or Product configuration.
 
 Adding a new programming language SHOULD NOT require modifying core lifecycle semantics.
 
@@ -878,9 +1470,9 @@ Core state and lifecycle semantics MUST remain portable.
 
 # 24. Project-Type Agnosticism
 
-URACE MUST NOT assume the Product is a web application.
+URACE MUST NOT assume the Product is a web application or even software.
 
-Its lifecycle must remain meaningful for any product that can expose:
+Its lifecycle must remain meaningful for any Product that can expose:
 
 ```text
 state
@@ -891,7 +1483,9 @@ observations
 validation
 ```
 
-This is the minimum conceptual product contract.
+This is the minimum conceptual Product contract.
+
+Product readiness criteria MUST be derived from Product intent and evidence rather than hard-coded Product categories.
 
 ---
 
@@ -923,6 +1517,8 @@ If Git is available, a commit/revision MAY be referenced.
 
 Other artifact/version systems MAY be used.
 
+Entering `IDLE` SHOULD produce or reference a durable checkpoint representing the accepted readiness state.
+
 ---
 
 # 26. History
@@ -932,11 +1528,15 @@ Every cycle MUST preserve enough information to reconstruct:
 ```text
 Why did this cycle occur?
 
-What objective was selected?
+What evidence or Product gap justified it?
 
-What evidence justified it?
+What requirement/objective was selected?
 
 What assumptions existed?
+
+What constraints applied?
+
+What budget/schedule state applied?
 
 What executor capabilities were required?
 
@@ -954,7 +1554,7 @@ Why was it accepted/rejected?
 
 What remains unresolved?
 
-Why did the lifecycle continue?
+Why did the lifecycle continue, wait, block or become IDLE?
 ```
 
 History MUST survive executor replacement.
@@ -991,6 +1591,70 @@ BLOCKED
 
 ---
 
+# 27A. Resource Budgets
+
+Capacity describes whether a resource can be used.
+
+Budget describes how much resource URACE is permitted or expected to consume.
+
+Budgets MAY include:
+
+```text
+money
+AI tokens
+API usage
+compute
+storage
+network
+execution time
+human attention
+executor calls
+external-service quota
+other measurable resources
+```
+
+A budget MAY be conceptually:
+
+```text
+HARD
+SOFT
+UNBOUNDED
+UNKNOWN
+```
+
+A HARD budget MUST NOT knowingly be exceeded.
+
+A SOFT budget SHOULD influence resource allocation but MAY be exceeded when policy permits and expected Product value justifies it.
+
+Objective selection SHOULD consider:
+
+```text
+expected Product value
+expected resource cost
+remaining budget
+risk
+uncertainty
+opportunity cost
+validation/recovery reserve
+```
+
+URACE SHOULD preserve sufficient resource capacity for validation, checkpointing and recovery.
+
+Do not consume resources merely because they remain available.
+
+Budget exhaustion MUST NOT be represented as Product completion.
+
+Depending on context it MAY produce:
+
+```text
+WAITING_FOR_CAPACITY
+BLOCKED
+PAUSED
+IDLE
+```
+
+---
+
 # 28. Waiting Is Not Completion
 
 If required execution capacity disappears:
@@ -1015,6 +1679,64 @@ RESUME / REASSESS
 ```
 
 Do not declare the Product complete because an executor became unavailable.
+
+Likewise, a deadline, external dependency or required future evidence MUST NOT be mistaken for completion.
+
+---
+
+# 28A. Time and Scheduling
+
+Time is a first-class lifecycle constraint.
+
+URACE MAY represent concepts equivalent to:
+
+```text
+deadline
+earliest start
+execution window
+recurrence
+reassessment time
+external wait
+cooldown
+```
+
+A HARD temporal constraint MUST be respected as a HARD constraint.
+
+A SOFT schedule SHOULD influence planning without unnecessarily preventing justified progress.
+
+A schedule MUST NOT create artificial work merely because a future execution time exists.
+
+When useful independent work exists before a future condition, URACE MAY continue it.
+
+When no justified work exists until a future condition:
+
+```text
+persist state
+    │
+    ▼
+WAIT
+    │
+    ▼
+scheduled/external condition
+    │
+    ▼
+REASSESS
+```
+
+URACE SHOULD avoid active polling when a cheaper or event-driven wake mechanism is available.
+
+Scheduling implementation is environment-specific.
+
+URACE core MUST NOT require:
+
+```text
+cron
+a permanent process
+a particular scheduler
+a particular operating system
+a particular cloud scheduler
+a particular queue
+```
 
 ---
 
@@ -1125,6 +1847,8 @@ human decision
 
 Human participation MUST NOT be required for ordinary autonomous cycles unless policy requires it.
 
+External users or market participants MAY additionally provide evidence without becoming lifecycle controllers.
+
 ---
 
 # 34. Policy
@@ -1138,16 +1862,25 @@ Policy {
     allowedOperations
     prohibitedOperations
 
+    constraints
+
     resourceLimits
+    budgetPolicy
+    schedulePolicy
     retryLimits
 
     validationRequirements
+    readinessRequirements
 
     approvalRequirements
 
     deploymentPolicy
 }
 ```
+
+Policy SHOULD distinguish hard enforcement boundaries from soft optimization preferences.
+
+Readiness requirements SHOULD be derived from Product intent rather than assumed globally.
 
 Executors MUST NOT override URACE policy.
 
@@ -1165,6 +1898,8 @@ maxRepairAttempts
 maxConsecutiveFailures
 maxCycleResourceUse
 maxConsecutiveLowValueCycles
+maxBudgetUse
+maxIdleReassessmentFrequency
 ```
 
 Detect:
@@ -1173,7 +1908,11 @@ Detect:
 - oscillating plans;
 - repeated reversions;
 - validation gaming;
-- low-value churn.
+- low-value churn;
+- premature completion;
+- repeated speculative requirements;
+- repeated speculative objectives;
+- repeated reassessment without new evidence.
 
 When progress cannot be justified:
 
@@ -1181,10 +1920,16 @@ When progress cannot be justified:
 REASSESS
 BLOCK
 WAIT
+PAUSE
+IDLE
 or request additional evidence
 ```
 
 rather than mutate indefinitely.
+
+Safety controls MUST NOT force `IDLE` when meaningful justified work remains.
+
+They SHOULD instead bound the current execution strategy and trigger reassessment, waiting, blocking or escalation as appropriate.
 
 ---
 
@@ -1219,8 +1964,9 @@ On interruption:
 3. persist authoritative state;
 4. persist observations and diagnostics;
 5. preserve current objective;
-6. release URACE-owned resources;
-7. leave unrelated external state untouched.
+6. preserve constraint, budget and schedule state;
+7. release URACE-owned resources;
+8. leave unrelated external state untouched.
 
 ---
 
@@ -1246,6 +1992,8 @@ RESUME / RETRY / REASSESS
 
 Never depend on recovering an old AI conversation to recover URACE.
 
+An `IDLE` Product MUST remain resumable.
+
 ---
 
 # 39. Persistence
@@ -1267,6 +2015,10 @@ A file-based bootstrap MAY use:
 Do NOT make this physical layout part of core semantics.
 
 A future implementation MAY use another persistence mechanism without changing the lifecycle model.
+
+URACE MUST NOT require the Product itself to adopt a URACE-specific directory hierarchy.
+
+Persistence location, naming, hierarchy and storage mechanism are implementation variants.
 
 ---
 
@@ -1303,6 +2055,8 @@ Do NOT require:
 A deployment MAY add executor selection policies later.
 
 They are not part of URACE's defining purpose.
+
+Budget governance MUST remain generic rather than become provider billing infrastructure.
 
 ---
 
@@ -1360,7 +2114,7 @@ binary
 
 as universal primitives.
 
-They are project-specific manifestations of:
+They are Product-specific manifestations of:
 
 ```text
 Artifact
@@ -1369,6 +2123,8 @@ Observation
 Validation
 Checkpoint
 ```
+
+Likewise, do not encode software-specific definitions of Product quality or completion into URACE core.
 
 ---
 
@@ -1392,6 +2148,12 @@ normal lifecycle
 
 can eventually allow controlled self-development without giving self-modification privileged semantics.
 
+URACE itself MAY become a justified Product objective when limitations in URACE materially constrain the Product lifecycle.
+
+The user does not need to explicitly declare URACE itself as the Product for a clearly lifecycle-relevant limitation to be identified.
+
+Any such change remains subject to ordinary evidence, policy, constraints, budgets, validation and checkpointing.
+
 ---
 
 # 45. Minimal Core
@@ -1402,6 +2164,7 @@ Bootstrap only the smallest coherent core required for:
 Product
 State
 Evidence
+Requirement
 Objective
 Operation
 Executor
@@ -1413,9 +2176,15 @@ Lifecycle
 Persistence
 ```
 
+Constraint, budget, schedule and readiness semantics SHOULD remain simple lifecycle data/policy rather than automatically becoming large independent frameworks.
+
 Avoid turning every concept into a large framework.
 
 Prefer simple data contracts and composable modules.
+
+The core SHOULD encode invariants.
+
+Variants SHOULD remain outside the core whenever practical.
 
 ---
 
@@ -1459,13 +2228,17 @@ This is guidance, not a mandatory filesystem structure.
 
 Follow repository conventions when a better implementation exists.
 
+An implementation MAY combine, rename, relocate or differently represent these responsibilities.
+
+No directory name or hierarchy above is part of URACE core semantics.
+
 ---
 
 # 47. Bootstrap Sequence
 
 ## Step 1 — Inspect
 
-Inspect the existing product/repository/workspace.
+Inspect the existing Product/repository/workspace.
 
 Determine whether it is:
 
@@ -1476,6 +2249,8 @@ URACE_INITIALIZED
 ```
 
 Do not destroy existing work.
+
+Discover structure before imposing structure.
 
 ---
 
@@ -1504,11 +2279,14 @@ Implement:
 - Product;
 - ProductState;
 - evidence;
-- objectives;
+- requirements/objectives;
 - lifecycle state;
 - history;
 - checkpoints;
-- policy.
+- policy;
+- constraints;
+- budget/schedule state;
+- readiness state.
 
 Test restart durability.
 
@@ -1549,16 +2327,21 @@ URACE MUST be able to determine whether an operation can currently be attempted.
 
 ## Step 7 — Implement Generic Product Discovery
 
-Discover enough about the current product to expose:
+Discover enough about the current Product to expose:
 
 ```text
 artifacts
 available operations
 validation possibilities
 environment constraints
+existing structure
+applicable schedules
+applicable budgets
+available evidence
+applicable readiness criteria
 ```
 
-Do not require a known project type.
+Do not require a known Product type.
 
 ---
 
@@ -1568,7 +2351,9 @@ Implement executor-independent acceptance.
 
 Use deterministic validation wherever possible.
 
-Allow project-specific validation configuration.
+Allow Product-specific validation configuration.
+
+Support Product-level readiness assessment without hard-coding one universal definition of quality.
 
 ---
 
@@ -1590,6 +2375,18 @@ Perform assessment without mutation.
 
 Expose authoritative lifecycle state.
 
+Include enough information to distinguish:
+
+```text
+ACTIVE
+WAITING
+BLOCKED
+PAUSED
+IDLE
+```
+
+and explain why the state is justified.
+
 ---
 
 ## Step 12 — Implement `--autonomous`
@@ -1601,11 +2398,46 @@ while autonomous mode enabled:
 
     load state
 
-    gather available evidence
+    gather available:
+        Product evidence
+        user/market evidence where applicable
+        environmental evidence
 
     determine current lifecycle condition
 
-    identify next justified objective
+    evaluate applicable:
+        hard constraints
+        soft constraints
+        schedules
+        budgets
+        risks
+        readiness requirements
+
+    assess Product against intent and evidence
+
+    identify highest-value justified gap
+
+    formulate a requirement/objective only
+    when the gap justifies action
+
+    if no justified objective exists:
+
+        perform completion/readiness assessment
+
+        if material readiness gap exists:
+            formulate the highest-value actionable
+            requirement/objective
+            continue
+
+        if required evidence or progress depends
+        on a future/external condition:
+            persist waiting/idle state
+            wait according to policy
+            continue
+
+        persist IDLE state
+        stop active execution until a meaningful trigger
+        continue
 
     derive required capabilities
 
@@ -1614,6 +2446,14 @@ while autonomous mode enabled:
     if required capacity unavailable:
         persist waiting/block state
         wait according to policy
+        continue
+
+    if operation would violate a HARD constraint:
+        persist blocked state
+        continue
+
+    if operation exceeds a HARD budget:
+        persist blocked/waiting state
         continue
 
     execute bounded operation(s)
@@ -1629,8 +2469,14 @@ while autonomous mode enabled:
         checkpoint increment
         update authoritative ProductState
 
+    gather or update resulting evidence
+
     begin a fresh assessment cycle
 ```
+
+Autonomous execution does not require an endless active process.
+
+The lifecycle remains persistent while execution MAY become dormant.
 
 ---
 
@@ -1674,9 +2520,9 @@ Continue using only durable URACE context.
 
 ---
 
-## Test D — Unknown Project Type
+## Test D — Unknown Product Type
 
-Run against a product that does not match a hard-coded project template.
+Run against a Product that does not match a hard-coded template.
 
 Core lifecycle MUST remain operational.
 
@@ -1690,7 +2536,7 @@ Use at least two materially different software-language ecosystems without modif
 
 ## Test F — Non-Software or Mixed Artifact
 
-Demonstrate lifecycle operation over a product containing artifacts that are not exclusively source code.
+Demonstrate lifecycle operation over a Product containing artifacts that are not exclusively source code.
 
 ---
 
@@ -1772,21 +2618,276 @@ checkpoint
 
 ---
 
+## Test M — Structural Independence
+
+Run URACE against materially different repository/workspace structures.
+
+Prove:
+
+```text
+Product A ── structure A
+Product B ── structure B
+Product C ── unfamiliar structure
+```
+
+without modifying URACE core lifecycle semantics.
+
+No URACE-defined Product folder hierarchy may be required.
+
+---
+
+## Test N — Hard vs Soft Constraints
+
+Provide conflicting constraints with different strengths.
+
+Prove:
+
+```text
+HARD constraint
+      │
+      ▼
+cannot be autonomously violated
+
+SOFT constraint
+      │
+      ▼
+guides selection
+without unnecessarily gating progress
+```
+
+URACE MUST NOT silently promote the SOFT constraint to HARD.
+
+---
+
+## Test O — Budget Bound
+
+Provide a finite resource budget.
+
+Prove that URACE:
+
+```text
+observes budget
+allocates resource
+preserves validation/recovery capacity
+does not exceed HARD ceiling
+does not invent work to consume remainder
+```
+
+---
+
+## Test P — Scheduled Work
+
+Provide a future lifecycle condition.
+
+Prove:
+
+```text
+persist state
+    ↓
+WAIT
+    ↓
+condition becomes applicable
+    ↓
+REASSESS
+```
+
+without requiring continuous active execution.
+
+---
+
+## Test Q — No Premature IDLE
+
+Provide a Product with:
+
+```text
+no active objective
+but
+material unresolved readiness gap
+```
+
+Prove:
+
+```text
+ASSESS
+   │
+   ▼
+no current objective
+   │
+   ▼
+READINESS ASSESSMENT
+   │
+   ▼
+material gap discovered
+   │
+   ▼
+JUSTIFIED REQUIREMENT / OBJECTIVE
+```
+
+URACE MUST NOT enter `IDLE`.
+
+The applicable readiness gap MUST be derived from Product intent.
+
+---
+
+## Test R — Autonomous Convergence
+
+Provide:
+
+```text
+intent sufficiently satisfied
+hard constraints satisfied
+validation satisfied
+no material defect
+no material unresolved risk
+applicable readiness satisfied
+no actionable high-value evidence gap
+no justified improvement with sufficient expected value
+```
+
+Prove:
+
+```text
+ASSESS
+   │
+   ▼
+READINESS ASSESSMENT
+   │
+   ▼
+READY
+   │
+   ▼
+IDLE
+```
+
+No mutation, executor invocation or recursive requirement/objective generation SHOULD occur merely to keep autonomous mode active.
+
+Then introduce meaningful new evidence and prove:
+
+```text
+IDLE
+  │
+  ▼
+meaningful trigger
+  │
+  ▼
+ASSESS
+  │
+  ▼
+ACTIVE
+```
+
+without loss of durable lifecycle continuity.
+
+---
+
+## Test S — Anti-Perfection Loop
+
+Provide a Product that satisfies applicable readiness requirements while numerous theoretically possible low-value refinements remain.
+
+Prove that URACE distinguishes:
+
+```text
+possible improvement
+        ≠
+justified requirement
+        ≠
+justified objective
+```
+
+and enters `IDLE` rather than performing endless polishing.
+
+---
+
+## Test T — Evidence-to-Requirement Loop
+
+Provide new Product, user, market or environmental evidence revealing a material gap.
+
+Prove:
+
+```text
+EVIDENCE
+   │
+   ▼
+ASSESS
+   │
+   ▼
+MATERIAL GAP
+   │
+   ▼
+JUSTIFIED REQUIREMENT
+   │
+   ▼
+IMPLEMENT
+   │
+   ▼
+VALIDATE
+   │
+   ▼
+CHECKPOINT
+   │
+   ▼
+UPDATED EVIDENCE
+```
+
+The requirement MUST remain traceable to its justification.
+
+---
+
+## Test U — Readiness Variant
+
+Run URACE against Products with materially different intents.
+
+For example:
+
+```text
+commercial Product
+internal tool
+library
+research Product
+infrastructure Product
+```
+
+Prove that Product-specific readiness criteria can vary without changing URACE core lifecycle semantics.
+
+---
+
+## Test V — Invariant Preservation
+
+Replace major variants such as:
+
+```text
+executor
+model
+orchestrator
+language
+repository structure
+validation mechanism
+checkpoint mechanism
+scheduler
+```
+
+and prove that the Core Invariants remain true.
+
+---
+
 # 49. Market/Product Demonstration
 
-For a product with market intent, demonstrate:
+For a Product with market intent, demonstrate:
 
 ```text
 PRODUCT STATE
       │
       ▼
-AVAILABLE EVIDENCE
+MARKET / USER / PRODUCT EVIDENCE
       │
       ▼
-AI REASONING
+ASSESSMENT
       │
       ▼
-JUSTIFIED OBJECTIVE
+MATERIAL GAP
+      │
+      ▼
+JUSTIFIED REQUIREMENT / OBJECTIVE
       │
       ▼
 PRODUCT INCREMENT
@@ -1801,7 +2902,7 @@ CHECKPOINT
 NEW EVIDENCE / ASSUMPTIONS
       │
       ▼
-NEXT OBJECTIVE
+NEXT REQUIREMENT / READINESS ASSESSMENT
 ```
 
 The demonstration MUST preserve the distinction between:
@@ -1812,6 +2913,49 @@ evidence
 inference
 hypothesis
 ```
+
+For a market-intended Product, an applicable progression MAY be:
+
+```text
+TECHNICALLY VALID
+        │
+        ▼
+PRODUCT READY
+        │
+        ▼
+MARKET-FIT-QUALITY READY
+        │
+        ▼
+EXTERNAL MARKET EVIDENCE
+```
+
+URACE MAY autonomously drive the first three stages where capability, evidence and policy permit.
+
+The final stage depends on actual external evidence and MUST NOT be fabricated.
+
+If market evidence demonstrates a material mismatch:
+
+```text
+IDLE / READY
+      │
+      ▼
+NEW MARKET EVIDENCE
+      │
+      ▼
+ASSESS
+      │
+      ▼
+MATERIAL GAP
+      │
+      ▼
+JUSTIFIED REQUIREMENT
+```
+
+The Product lifecycle resumes.
+
+This section demonstrates one Product-specific readiness variant.
+
+It does not redefine market readiness as a universal URACE invariant.
 
 ---
 
@@ -1824,18 +2968,47 @@ Given:
 ```text
 no new evidence
 no meaningful defect
+no material readiness gap
 no justified improvement
 no unresolved objective
 ```
 
-URACE MUST NOT repeatedly modify the product simply because an executor remains available.
+URACE MUST NOT repeatedly modify the Product simply because an executor remains available.
 
 It MAY:
 
 - reassess later;
 - wait for evidence;
 - wait for a scheduled condition;
-- become idle while autonomous mode remains enabled.
+- become `IDLE` while autonomous mode remains enabled.
+
+However, `no unresolved objective` alone is insufficient.
+
+Before `IDLE`, URACE MUST establish that no material Product-level readiness gap is being hidden by an empty objective list.
+
+The preferred convergence is:
+
+```text
+ASSESS
+   │
+   ▼
+NO OBJECTIVE
+   │
+   ▼
+READINESS ASSESSMENT
+   │
+ ┌─┴─────────────┐
+ ▼               ▼
+GAP             READY
+ │               │
+ ▼               ▼
+REQUIREMENT     IDLE
+ │
+ ▼
+ACTIVE
+```
+
+This prevents both premature completion and endless autonomous churn.
 
 ---
 
@@ -1844,64 +3017,60 @@ It MAY:
 URACE is successfully bootstrapped when:
 
 1. Its lifecycle survives individual AI sessions.
-
 2. It works with exactly one AI.
-
 3. It does not require an orchestrator.
-
 4. It can use an orchestrator without changing core semantics.
-
 5. Executors can be replaced between cycles.
-
 6. No executor's private memory is required for continuity.
-
 7. It is AI-provider agnostic.
-
 8. It is model agnostic.
-
 9. It is executor-count agnostic.
-
 10. It is orchestrator agnostic.
-
 11. It is programming-language agnostic.
-
-12. It is project-type agnostic.
-
+12. It is Product-type agnostic.
 13. It is file-format agnostic.
-
 14. It is repository-host agnostic.
-
 15. It is version-control agnostic.
-
 16. It is operating-system/platform agnostic at the lifecycle level.
-
 17. It is cloud-provider agnostic.
-
 18. It supports software and non-software/mixed artifacts.
-
 19. It independently validates executor results.
-
 20. It produces recoverable checkpoints.
-
 21. It preserves evidence and assumptions.
-
 22. It can continue after capacity interruption.
-
 23. It can continue after process restart.
-
 24. It does not require custom RAG.
-
 25. It does not require multi-agent infrastructure.
-
 26. It does not require custom model routing.
-
 27. It does not duplicate mature executor intelligence.
-
 28. Continuous autonomy produces justified progress rather than arbitrary churn.
-
 29. Product lifecycle semantics remain stable while underlying AI technology changes.
-
 30. The implementation is significantly smaller and simpler than the intelligence systems it can coordinate.
+31. It distinguishes hard constraints from soft constraints.
+32. Soft constraints guide autonomy without unnecessarily becoming execution gates.
+33. Hard constraints remain enforceable independently from executor behavior.
+34. Product filesystem, folder and repository structure are not part of core lifecycle semantics.
+35. It operates across materially different physical Product structures without core changes.
+36. It can represent and enforce hard resource budgets.
+37. It can optimize around soft resource budgets.
+38. It can represent deadlines, schedules, waits and temporal conditions without requiring a particular scheduler.
+39. Autonomous execution can converge to `IDLE` when no justified work remains.
+40. `IDLE` preserves lifecycle continuity without continuous resource consumption.
+41. `IDLE` requires Product-level readiness assessment rather than merely an empty task/objective list.
+42. Material unresolved defects, risks or readiness gaps prevent premature `IDLE`.
+43. Low-value speculative improvement does not prevent justified `IDLE`.
+44. A meaningful new trigger can resume assessment from `IDLE`.
+45. Readiness is derived from Product intent rather than one universal Product-quality definition.
+46. Market validation remains evidence-based where applicable and is never inferred solely from AI opinion.
+47. Budget, schedule, constraint and structural semantics remain portable across executor replacement.
+48. The lifecycle avoids both premature completion and endless perfection loops.
+49. Product, user, market and environmental evidence can produce traceable justified requirements where applicable.
+50. Requirements do not exist independently from their Product justification.
+51. Implementation results feed new evidence into subsequent assessment.
+52. Market analysis remains an input/capability rather than becoming a mandatory URACE subsystem.
+53. Core invariants remain stable while implementation and strategy variants change.
+54. Product-specific readiness criteria can change without redefining URACE.
+55. Variants remain replaceable unless promoting one is required to preserve a Core Invariant.
 
 ---
 
@@ -1913,8 +3082,11 @@ The stack boundary is:
 
 ```text
 ┌─────────────────────────────────────┐
-│      PRODUCT / MARKET / USER        │
+│ PRODUCT / USER / MARKET /           │
+│ ENVIRONMENT                         │
 └──────────────────┬──────────────────┘
+                   │
+                evidence
                    │
                    ▼
 ┌─────────────────────────────────────┐
@@ -1926,9 +3098,13 @@ The stack boundary is:
 │ intent                              │
 │ state                               │
 │ evidence                            │
+│ requirements                        │
 │ objectives                          │
 │ policy                              │
+│ constraints                         │
+│ budgets / schedules                 │
 │ validation                          │
+│ readiness                           │
 │ history                             │
 │ recovery                            │
 │ checkpoints                         │
@@ -1953,7 +3129,32 @@ The stack boundary is:
 
 URACE's defensible responsibility is not producing superior intelligence.
 
-It is maintaining **continuous, evidence-aware, policy-governed, validated and recoverable product evolution independently of whichever intelligence systems happen to exist underneath it.**
+It is maintaining **continuous, evidence-aware, policy-governed, validated and recoverable Product evolution independently of whichever intelligence systems happen to exist underneath it.**
+
+Its responsibility includes preserving the causal chain:
+
+```text
+EVIDENCE
+   │
+   ▼
+JUSTIFIED GAP
+   │
+   ▼
+REQUIREMENT / OBJECTIVE
+   │
+   ▼
+EXECUTION
+   │
+   ▼
+VALIDATED PRODUCT CHANGE
+   │
+   ▼
+NEW EVIDENCE
+```
+
+URACE determines when Product evolution should continue and when the Product has sufficiently converged for active evolution to become `IDLE`.
+
+It does NOT own the implementation of the intelligence used to perform market analysis, formulate solutions, write code, conduct research or execute other domain-specific work.
 
 ---
 
@@ -1961,7 +3162,7 @@ It is maintaining **continuous, evidence-aware, policy-governed, validated and r
 
 Before implementing any subsystem, ask:
 
-> **Must this capability remain authoritative and portable across executor replacement in order to preserve the autonomous product lifecycle?**
+> **Must this capability remain authoritative and portable across executor replacement in order to preserve the autonomous Product lifecycle?**
 
 If YES:
 
@@ -1969,7 +3170,7 @@ It may belong in URACE.
 
 If NO:
 
-Delegate it.
+Delegate it or preserve it as a variant.
 
 Examples that normally belong outside URACE:
 
@@ -1991,15 +3192,63 @@ language-specific intelligence
 
 URACE MAY consume their results without owning their implementations.
 
+Before declaring something a Core Invariant, ask:
+
+> **Would URACE cease to preserve its defining lifecycle semantics if this changed?**
+
+If NO:
+
+It SHOULD remain policy, configuration or a variant.
+
+Before turning a constraint into an enforcement mechanism, ask:
+
+> **Is this an actual invariant or HARD boundary, or a preference that should guide autonomous selection?**
+
+Before imposing physical structure, ask:
+
+> **Does lifecycle correctness require this structure, or can the existing Product structure be discovered and used?**
+
+Before generating a requirement, ask:
+
+> **What Product intent, evidence, material risk, constraint or sufficiently supported opportunity justifies this requirement?**
+
+Before beginning another autonomous objective, ask:
+
+> **Does this action have sufficient expected Product value relative to its cost, risk, uncertainty and opportunity cost?**
+
+Before entering `IDLE`, ask:
+
+> **Has the Product reached the highest justified readiness state currently supported by its intent, evidence and constraints, or is an empty objective list hiding meaningful unfinished work?**
+
+For a market-intended Product, this MAY additionally ask:
+
+> **Is the Product sufficiently market-ready for its current stage, or merely technically complete?**
+
+If meaningful justified work remains:
+
+Continue.
+
+If required progress depends on unavailable external evidence, capacity or time:
+
+Wait.
+
+If the Product is sufficiently ready under its applicable readiness criteria and further autonomous work would primarily be speculative, cosmetic, redundant or unsupported by evidence:
+
+Enter `IDLE`.
+
+Do not manufacture a requirement or objective solely to prevent autonomous execution from ending.
+
 ---
 
 # 54. Final Bootstrap Instruction
 
-Bootstrap the **smallest implementation capable of proving the invariants above**.
+Bootstrap the **smallest implementation capable of proving the Core Invariants above**.
 
 Do not optimize for feature count.
 
 Do not reproduce capabilities available through external executors.
+
+Do not promote implementation variants into Core Invariants without necessity.
 
 Do not make OpenHands mandatory.
 
@@ -2009,11 +3258,19 @@ Do not make Git mandatory.
 
 Do not make source code mandatory.
 
-Do not make a programming language or project type mandatory.
+Do not make a programming language or Product type mandatory.
 
 Do not make known file formats mandatory.
 
 Do not make a specific operating environment mandatory at the architectural level.
+
+Do not make a specific repository, directory or workspace structure mandatory.
+
+Do not make a specific scheduler mandatory.
+
+Do not make a specific budget representation mandatory.
+
+Do not make market-fit-quality readiness mandatory for Products whose intent does not imply a market.
 
 The minimum intelligent deployment MUST remain:
 
@@ -2043,7 +3300,187 @@ The richer deployment MAY be:
 
 Both MUST exercise the same URACE lifecycle.
 
-`--autonomous` continues autonomous product evolution until explicitly paused, blocked by policy or external dependency, waiting for required capacity/evidence, or placed into an idle state because no currently justified action exists.
+The canonical autonomous Product-evolution pattern is:
+
+```text
+EVIDENCE
+   │
+   ▼
+ASSESS
+   │
+   ▼
+JUSTIFIED GAP
+   │
+   ▼
+REQUIREMENT / OBJECTIVE
+   │
+   ▼
+IMPLEMENT
+   │
+   ▼
+VALIDATE
+   │
+   ▼
+CHECKPOINT
+   │
+   ▼
+NEW EVIDENCE
+   │
+   └────────────► REPEAT
+```
+
+The evidence source, readiness criteria, implementation strategy and executor topology are variants.
+
+The lifecycle relationship is invariant.
+
+For a market-intended Product, one specialization MAY be:
+
+```text
+MARKET + USER + PRODUCT EVIDENCE
+               │
+               ▼
+             ASSESS
+               │
+               ▼
+          MATERIAL GAP
+               │
+               ▼
+          REQUIREMENT
+               │
+               ▼
+           IMPLEMENT
+               │
+               ▼
+            VALIDATE
+               │
+               ▼
+          REASSESS MARKET
+        / PRODUCT CONDITION
+               │
+        ┌──────┴──────┐
+        ▼             ▼
+  JUSTIFIED GAP     READY
+        │             │
+        ▼             ▼
+      REPEAT         IDLE
+```
+
+For another Product, the evidence and readiness criteria MAY differ while the lifecycle remains unchanged.
+
+The loop MUST NOT be interpreted as an obligation to continuously generate requirements.
+
+Requirements exist to close justified Product gaps.
+
+When no sufficiently valuable justified gap remains and applicable readiness requirements are satisfied, the correct autonomous result is `IDLE`.
+
+When new evidence later reveals a meaningful gap:
+
+```text
+IDLE
+ │
+ ▼
+NEW EVIDENCE
+ │
+ ▼
+ASSESS
+ │
+ ▼
+NEW JUSTIFIED REQUIREMENT
+```
+
+The lifecycle resumes.
+
+`--autonomous` therefore continues autonomous Product evolution until explicitly paused, blocked by policy or external dependency, waiting for required capacity/evidence/time, or placed into `IDLE` because the Product has passed applicable readiness assessment and no sufficiently valuable justified action currently remains.
+
+`IDLE` MUST NOT be premature.
+
+An empty task list, completed objective or lack of executor suggestions is not sufficient evidence of completion.
+
+Technical completion alone is not sufficient when Product intent implies additional material readiness requirements.
+
+`IDLE` MUST NOT be endlessly postponed.
+
+Perfection is not the completion criterion.
+
+The existence of another conceivable improvement is not sufficient reason to continue.
+
+The governing convergence rule is:
+
+```text
+CONTINUE
+    when
+expected Product value of justified action
+meaningfully exceeds its cost / risk / opportunity cost
+
+WAIT
+    when
+required progress depends on a future or external condition
+
+BLOCK
+    when
+a HARD constraint prevents required progress
+
+IDLE
+    when
+applicable readiness requirements are satisfied
+AND
+no material unresolved gap remains
+AND
+no currently available action has sufficient justified value
+```
+
+Readiness remains intent-relative:
+
+```text
+PRODUCT INTENT
+      │
+      ▼
+APPLICABLE READINESS
+      │
+      ▼
+VALIDATED PRODUCT STATE
+      │
+ ┌────┴──────────────┐
+ ▼                   ▼
+MATERIAL GAP       READY
+ │                   │
+ ▼                   ▼
+CONTINUE            IDLE
+```
+
+For a market-intended Product, this MAY specialize to:
+
+```text
+TECHNICAL COMPLETION
+        │
+        ▼
+PRODUCT READINESS
+        │
+        ▼
+MARKET-FIT-QUALITY READINESS
+        │
+        ▼
+IDLE / MARKET EVIDENCE WAIT
+```
+
+Actual market validation remains external-evidence dependent:
+
+```text
+MARKET-FIT-QUALITY PRODUCT
+            +
+REAL USER / MARKET EVIDENCE
+            │
+            ▼
+VALIDATED MARKET LEARNING
+```
+
+URACE MUST pursue applicable evidence when doing so is justified and possible.
+
+URACE MUST wait when required evidence inherently depends on time or external actors.
+
+URACE MUST resume when new evidence materially changes the Product state.
+
+Individual requirements may complete.
 
 Individual objectives may complete.
 
@@ -2063,8 +3500,32 @@ Project structures may change.
 
 Artifact formats may change.
 
-**The autonomous product lifecycle remains.**
+Validation mechanisms may change.
+
+Schedulers may change.
+
+Persistence mechanisms may change.
+
+Readiness criteria may change with Product intent.
+
+The Product may become `IDLE`.
+
+New evidence may reactivate it.
+
+**The autonomous Product lifecycle remains.**
+
+The final invariant test is:
+
+> **If an executor, model, orchestrator, language, platform, structure, strategy or mechanism can be replaced while lifecycle correctness remains intact, it is a variant—not URACE's identity.**
 
 The final design principle is:
 
-> **URACE owns the persistent autonomous product lifecycle; replaceable executors provide the intelligence and execution required to advance it.**
+> **URACE owns the persistent autonomous Product lifecycle; replaceable executors provide the intelligence and execution required to advance it.**
+
+The final evolution principle is:
+
+> **Evidence reveals justified Product gaps; gaps produce requirements and objectives; executors implement them; independent validation determines acceptance; resulting Product state creates new evidence; URACE repeats the cycle while further action remains justified.**
+
+And the final convergence principle is:
+
+> **URACE must evolve each Product toward the highest justified readiness state implied by that Product's intent, evidence and constraints—not merely until work becomes inconvenient, and not beyond the point where further autonomous work has insufficient justified value.**
