@@ -72,6 +72,29 @@ When external Executors, Orchestrators, AI models, APIs, or services receive Pro
 
 ---
 
+## Summary
+
+- **[What URACE Is](#what-is-urace)** — A persistent autonomous product-evolution control plane that owns lifecycle navigation above replaceable intelligence and execution systems.
+- **[Why URACE](#why-urace)** — Preserves continuous product evolution beyond individual AI sessions, models, agents, and orchestrators.
+- **[Core Model](#the-core-model)** — Separates Intent, Authority, Evidence, URACE navigation, executor capabilities, and Validation.
+- **[Authority](#you-decide-what-you-retain)** — You decide what remains authoritative; URACE autonomously drives what you delegate.
+- **[Autonomous Evolution](#autonomous-product-evolution)** — Discovers, prioritizes, executes, validates, and checkpoints justified product evolution.
+- **[Evidence](#evidence-driven-not-mutation-driven)** — Uses observed reality to guide evolution without allowing Evidence to manufacture Authority.
+- **[Recursive Self-Evolution](#recursive-self-evolution)** — Can discover and execute improvements to its own implementation where already authorized.
+- **[Evolution Boundaries](#three-kinds-of-evolution)** — Keeps product evolution, runtime URACE self-evolution, and `URACE.md` specification evolution distinct.
+- **[Executors and Orchestrators](#not-an-executor-replacement)** — Keeps intelligence and execution replaceable; one capable executor is sufficient, while richer orchestration remains optional.
+- **[Universal Design](#universal-by-design)** — Remains independent of particular models, executors, orchestrators, languages, repositories, platforms, and product types.
+- **[Bootstrap](#bootstrap)** — Uses `URACE.md` as the authoritative bootstrap specification for creating an environment-appropriate running URACE.
+- **[Using URACE](#using-urace-after-bootstrap)** — Operates through the generated persistent implementation rather than repeatedly using the bootstrap specification.
+- **[Persistent Autonomy](#persistent-autonomy-and-dormancy)** — Remains lifecycle-active through both execution and efficient dormant/wake states.
+- **[Validation and Effect Integrity](#validation-before-acceptance)** — Separates execution, observation, external effects, Validation, acceptance, and recovery.
+- **[Executor Data, Privacy, and Disclosure](#executor-data-privacy-and-disclosure)** — Treats capability and permission to receive product information as separate concerns.
+- **[Re-Bootstrap vs. Self-Evolve](#re-bootstrap-vs-self-evolve)** — Distinguishes rebuilding from the specification from normal authorized runtime evolution.
+- **[Complete Model](#complete-model)** — Brings the architectural relationships together into the full URACE lifecycle.
+- **[In One Sentence](#in-one-sentence)** — The shortest statement of URACE's purpose and operating model.
+
+---
+
 ## Why URACE?
 
 Most AI-assisted Product development still behaves roughly like this:
