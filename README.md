@@ -4,9 +4,13 @@
 
 URACE is an executor-agnostic persistent autonomous product-evolution control plane.
 
-It turns bounded and replaceable AI/executor sessions into a continuous, evidence-aware, validated, and recoverable product-development lifecycle.
+**At its core, URACE is an open-source and editable idea:** a specification and bootstrap architecture for making the autonomous Product lifecycle persistent, evidence-aware, validated, recoverable, and independent of any particular AI or executor.
 
-URACE acts as a persistent autonomous product-lifecycle control plane, providing product-management-like coordination over goals, constraints, evidence, objectives, validation, and execution outcomes. Its goal is to progressively automate the AI-driven product-development loop while keeping the underlying intelligence and execution replaceable.
+The idea can be inspected, adapted, extended, and evolved while preserving its core lifecycle invariants. The idea is open and editable; the Product, its accumulated intelligence, and its implementation can remain proprietary.
+
+URACE turns bounded and replaceable AI/executor sessions into a continuous, evidence-aware, validated, and recoverable product-development lifecycle.
+
+It provides product-management-like coordination over goals, constraints, evidence, objectives, validation, and execution outcomes. Its goal is to progressively automate the AI-driven product-development loop while keeping the underlying intelligence and execution replaceable.
 
 > URACE owns the persistent autonomous Product lifecycle; replaceable executors provide the intelligence and execution required to advance it.
 
@@ -16,7 +20,7 @@ AI agents can research, reason, plan, code, test, and repair—but individual ex
 
 URACE keeps the Product lifecycle persistent while the intelligence underneath remains replaceable.
 
-```text
+```text id="a0bk7q"
 Product / Market / Users
           │
           ▼
@@ -49,7 +53,7 @@ Examples include:
 
 The minimum intelligent configuration is:
 
-```text
+```text id="i6tsnl"
 URACE → 1 capable AI
 ```
 
@@ -67,7 +71,7 @@ URACE is designed for:
 
 Its lifecycle is based on generic concepts:
 
-```text
+```text id="l82yj3"
 Product → Evidence → Objective → Operation
        → Executor → Validation → Checkpoint
 ```
@@ -77,6 +81,8 @@ Software is only one possible Product type.
 URACE continuously determines what should happen next—and why—from the Product's goals, constraints, evidence, and execution outcomes.
 
 In this role, it can serve as the persistent product-management layer around a Product—including Products built on proprietary intelligence—while delegating bounded intelligence and execution to replaceable external systems.
+
+The URACE idea and lifecycle architecture can remain open and editable while the intelligence accumulated around a particular Product remains its own. Evidence, Product context, objectives, decisions, validation history, implementation, and other Product-specific knowledge may therefore remain proprietary without making proprietary infrastructure a requirement of URACE itself.
 
 ## Setup
 
@@ -90,7 +96,7 @@ The executor reads the specification, inspects the environment, and bootstraps t
 
 Clone or copy this repository and use:
 
-```text
+```text id="lky8b2"
 URACE.md
 ```
 
@@ -102,7 +108,7 @@ You only need one capable AI.
 
 For example:
 
-```text
+```text id="7k1m2c"
 URACE.md
    │
    ├──► Codex
@@ -115,7 +121,7 @@ Give the executor access to the repository where URACE should be bootstrapped an
 
 For example:
 
-```text
+```text id="q01yfh"
 Read URACE.md completely.
 
 Treat it as the authoritative bootstrap specification.
@@ -136,7 +142,7 @@ For practical higher-capability deployments, using an orchestrator with multiple
 
 An orchestrator such as OpenHands may consume `URACE.md` and use its configured AI executors:
 
-```text
+```text id="2zqr7l"
              URACE.md
                  │
                  ▼
@@ -178,7 +184,7 @@ Only after those requirements pass should the bootstrap be considered complete.
 
 Once bootstrapped, URACE becomes the persistent layer and the relationship reverses:
 
-```text
+```text id="k9y9pu"
 BOOTSTRAP
 
 URACE.md
@@ -204,7 +210,7 @@ AI  Tools   Orchestrator
 
 At that point the generated implementation exposes the operational interface defined by the bootstrap, including conceptually:
 
-```text
+```text id="3nrzxz"
 # Inspect lifecycle state
 urace --check
 
@@ -219,7 +225,7 @@ Exact installation and invocation details are determined by the implementation p
 
 ## Autonomous Evolution
 
-```text
+```text id="5b8rgq"
 Assess → Select Objective → Execute → Validate
    ↑                                  │
    └──── Checkpoint ← Persist ←───────┘
@@ -233,9 +239,11 @@ The lifecycle is intentionally evidence-driven rather than mutation-driven: auto
 
 URACE itself may also be managed as a Product, allowing controlled evolution of URACE through the same policy-governed, evidence-aware, validated, checkpointed, and recoverable lifecycle without introducing privileged self-modification semantics.
 
+Because URACE is itself an open and editable specification, its architecture may also evolve over time. Changes to URACE do not require treating its current structure as immutable; what matters is preserving or deliberately revising the invariants that define the lifecycle.
+
 ## The Boundary
 
-```text
+```text id="edzcl6"
 ┌──────────────────────────────┐
 │   Product / Market / Users   │
 └──────────────┬───────────────┘
@@ -261,6 +269,8 @@ URACE itself may also be managed as a Product, allowing controlled evolution of 
 Models improve. Agents change. Orchestrators come and go.
 
 The autonomous Product lifecycle remains.
+
+**The idea is open and editable. The intelligence built around each Product can remain its own.**
 
 ## License
 
