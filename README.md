@@ -12,7 +12,9 @@ It preserves and governs a continuous Product lifecycle across bounded, replacea
 
 At its core, URACE is also an **open and editable idea expressed as an open-source blueprint** through `URACE.md`. Its lifecycle architecture can be inspected, adapted, extended, and evolved without depending on any particular Product, AI, [Executor, or Orchestrator](#where-urace-sits). URACE sits **above those replaceable execution capabilities**, preserving lifecycle ownership while delegating bounded Operations beneath it.
 
-**URACE is MIT-licensed. Users may keep their resulting products, derived sub-products, and accumulated product intelligence proprietary, subject to the MIT License and applicable third-party rights.**
+**URACE is MIT-licensed.** Users may keep their resulting products, derived sub-products, and accumulated product intelligence proprietary, subject to the MIT License and applicable third-party rights.
+
+When external Executors, Orchestrators, AI models, APIs, or services receive Product information, their own data-handling terms and controls still apply. See [Executor Data, Privacy, and Disclosure](#executor-data-privacy-and-disclosure).
 
 ```text
         PRODUCT / USERS / CUSTOMERS / MARKET / ENVIRONMENT
