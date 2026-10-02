@@ -2,9 +2,9 @@
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
-Your task is to bootstrap **URACE**.
+Your task is to bootstrap URACE.
 
-URACE is a **self-contained, executor-agnostic persistent autonomous product-evolution control plane**.
+URACE is a self-contained, executor-agnostic persistent autonomous product-evolution control plane.
 
 Its unique responsibility is to preserve and govern a continuous product-development lifecycle across otherwise bounded, replaceable and potentially stateless intelligence/execution systems.
 
@@ -12,11 +12,11 @@ URACE MUST NOT become another coding agent, LLM framework, agent runtime, IDE ag
 
 Its purpose is:
 
-> **Continuously evolve a Product by preserving durable intent, state, evidence, decisions, policy, validation, recovery and history; translating justified Product, user, market and environmental evidence into requirements and objectives; delegating intelligence-intensive or execution-intensive operations to replaceable executors; independently evaluating their results; checkpointing accepted increments; and repeating while further autonomous action remains sufficiently justified.**
+> Continuously evolve a Product by preserving durable intent, state, evidence, decisions, policy, validation, recovery and history; translating justified Product, user, customer, market and environmental evidence into requirements and objectives; delegating intelligence-intensive or execution-intensive operations to replaceable executors; independently evaluating their results; checkpointing accepted increments; and repeating while further autonomous action remains sufficiently justified.
 
 The primary architectural invariant is:
 
-> **URACE owns the autonomous Product lifecycle. Replaceable executors supply whatever intelligence or execution is required to advance it.**
+> URACE owns the autonomous Product lifecycle. Replaceable executors supply whatever intelligence or execution is required to advance it.
 
 ---
 
@@ -25,7 +25,7 @@ The primary architectural invariant is:
 URACE occupies a layer distinct from agents, orchestrators, models, development tools and infrastructure.
 
 ```text
-              USERS / MARKET / ENVIRONMENT
+          USERS / CUSTOMERS / MARKET / ENVIRONMENT
                          │
                          ▼
                  PRODUCT EVIDENCE
@@ -110,6 +110,8 @@ URACE owns:
 - interruption state;
 - capacity state;
 - completion/readiness state;
+- autonomous liveness state;
+- wake/resume state where applicable;
 - acceptance/rejection of candidate increments.
 
 External executors MAY provide:
@@ -117,7 +119,7 @@ External executors MAY provide:
 - reasoning;
 - research;
 - market analysis;
-- user analysis;
+- user/customer analysis;
 - planning;
 - requirement formulation;
 - implementation;
@@ -173,33 +175,73 @@ URACE owns the authoritative persistent Product lifecycle state.
 
 Lifecycle correctness MUST NOT depend on one executor, model, orchestrator, agent, vendor or private executor context.
 
-### I3 — Evidence Traceability
+### I3 — Intent Authority
 
-Material autonomous decisions MUST remain attributable to Product intent, evidence, constraints, risk, observations, policy or sufficiently justified opportunity.
+Product Intent is a first-class lifecycle primitive and the durable normative reference for what the Product is meant to achieve, preserve or become.
+
+Intent MUST remain distinguishable from objectives, executor suggestions, inferred opportunities and implementation strategies.
+
+Objectives and Product-value judgments MUST ultimately remain attributable to applicable Product Intent rather than becoming autonomous ends in themselves.
+
+### I4 — Evidence Traceability
+
+Evidence is a first-class lifecycle primitive.
+
+Material autonomous decisions MUST remain attributable to Product Intent, evidence, constraints, risk, observations, policy or sufficiently justified opportunity.
 
 Evidence used to justify lifecycle decisions MUST preserve sufficient provenance and lineage to distinguish what was observed from what was inferred, assumed, hypothesized or decided.
 
-### I4 — Justified Evolution
+### I5 — Justified Evolution
 
-Requirements and objectives MUST exist because sufficiently valuable Product gaps justify them.
+Requirements and objectives MUST exist because sufficiently valuable Product gaps justify them relative to applicable Intent.
 
 URACE MUST NOT manufacture work merely to sustain autonomous activity.
 
-### I5 — Independent Acceptance
+### I6 — Independent Acceptance
 
 Executor output MUST NOT be accepted solely because the executor claims success.
 
 Acceptance belongs to URACE policy and applicable validation.
 
-### I6 — Durable Continuity
+### I7 — Durable Continuity
 
 Accepted state and sufficient lifecycle context MUST survive executor replacement, interruption and process restart.
 
-### I7 — Hard-Boundary Respect
+### I8 — Lifecycle Liveness
+
+While autonomous operation remains enabled, URACE MUST preserve a viable path from any non-terminal dormant lifecycle state back to assessment when a meaningful trigger or required condition occurs.
+
+Persistence alone does not satisfy autonomous liveness.
+
+Conceptually:
+
+```text
+DURABILITY
+    =
+state survives runtime termination
+
+LIVENESS
+    =
+the autonomous lifecycle remains
+capable of progressing
+
+WAKEABILITY
+    =
+a dormant lifecycle can become
+active when relevant conditions change
+```
+
+A running autonomous runtime MUST NOT terminate merely because the lifecycle enters `IDLE`, `WAITING_FOR_CAPACITY`, or another resumable dormant state unless an equivalent durable wake/resume path exists, the invocation contract explicitly permits bounded termination, the user explicitly stops/pauses autonomous operation, or policy requires termination.
+
+The mechanism used to preserve liveness remains a variant.
+
+URACE MUST NOT require a permanent process, permanent event loop, particular watcher, scheduler, queue, alarm, daemon, operating-system service, cloud primitive or orchestration runtime.
+
+### I9 — Hard-Boundary Respect
 
 Autonomous execution MUST NOT knowingly violate applicable HARD constraints.
 
-### I8 — Convergence
+### I10 — Convergence
 
 URACE MUST neither:
 
@@ -210,12 +252,13 @@ stop while material justified work remains
 nor:
 
 ```text
-continue merely because further activity is possible
+continue active execution merely because
+further activity is possible
 ```
 
-The lifecycle MUST be capable of converging to `IDLE`.
+The lifecycle MUST be capable of converging to `IDLE` without losing autonomous liveness.
 
-### I9 — Agnosticism
+### I11 — Agnosticism
 
 Core lifecycle semantics MUST NOT fundamentally depend on a specific:
 
@@ -230,13 +273,17 @@ Core lifecycle semantics MUST NOT fundamentally depend on a specific:
 - file format;
 - version-control system;
 - scheduler;
-- persistence technology.
+- wake mechanism;
+- persistence technology;
+- customer journey;
+- business model;
+- Product-value metric.
 
-### I10 — Intent-Relative Readiness
+### I12 — Intent-Relative Readiness
 
-URACE MUST drive a Product toward the highest justified readiness state implied by its intent, evidence, constraints and environment.
+URACE MUST drive a Product toward the highest justified readiness state implied by its Intent, evidence, constraints and environment.
 
-No single universal definition of Product readiness is valid for every Product.
+No single universal definition of Product readiness or Product value is valid for every Product.
 
 ## Variants
 
@@ -253,9 +300,18 @@ reasoning strategy
 evidence sources
 evidence storage representation
 market-analysis technique
-user-research technique
+user/customer-research technique
 requirement-generation technique
 validation mechanisms
+
+Product-value dimensions
+customer journey
+business model
+market strategy
+acquisition strategy
+conversion strategy
+retention strategy
+pricing strategy
 
 Product structure
 repository structure
@@ -268,6 +324,9 @@ persistence implementation
 checkpoint mechanism
 scheduler
 wake mechanism
+watch mechanism
+event source
+runtime-liveness mechanism
 
 budget representation
 soft constraints
@@ -275,7 +334,6 @@ quality thresholds
 readiness criteria
 retry limits
 
-market strategy
 research methodology
 implementation methodology
 deployment strategy
@@ -283,11 +341,21 @@ deployment strategy
 
 A useful classification test is:
 
-> **If changing a mechanism changes what URACE fundamentally is, it may belong to the invariant layer. If it can change while the evidence → justified gap → requirement/objective → execution → validation → checkpoint lifecycle remains correct, it SHOULD remain a variant.**
+> If changing a mechanism, strategy or Product-value dimension changes what URACE fundamentally is, it may belong to the invariant layer. If it can change while the Intent → evidence → justified gap → requirement/objective → execution → validation → checkpoint lifecycle remains correct and autonomously resumable, it SHOULD remain a variant.
 
 The governing relationship is:
 
 ```text
+               INTENT
+                  │
+          establishes direction
+                  │
+                  ▼
+              EVIDENCE
+                  │
+        establishes knowledge
+                  │
+                  ▼
               INVARIANTS
                   │
           define URACE identity
@@ -305,6 +373,14 @@ The governing relationship is:
                   ▼
               EXECUTION
 ```
+
+Intent and Evidence are first-class lifecycle primitives.
+
+Specific Product-value dimensions are not.
+
+Lifecycle liveness is invariant.
+
+The mechanism preserving liveness is not.
 
 ---
 
@@ -337,17 +413,23 @@ URACE MUST NOT assume a specific:
 - artifact hierarchy;
 - persistence layout;
 - scheduler;
+- wake mechanism;
+- daemon model;
+- event-loop model;
 - budget representation;
 - file format;
 - file extension;
 - artifact format;
 - testing framework;
 - IDE;
-- editor.
+- editor;
+- business model;
+- customer lifecycle;
+- Product-value metric.
 
 The architecture MUST support:
 
-> **universal file-base, project-type, platform, structure and programming-language agnosticism.**
+> universal file-base, project-type, platform, structure and programming-language agnosticism.
 
 A project MAY be:
 
@@ -365,6 +447,7 @@ URACE core MUST reason in terms of generic:
 
 ```text
 Product
+Intent
 Artifact
 State
 Evidence
@@ -382,7 +465,7 @@ Budget
 Schedule
 ```
 
-rather than language-specific, framework-specific or filesystem-specific concepts.
+rather than language-specific, framework-specific, runtime-specific, business-model-specific or metric-specific concepts.
 
 Existing Product structure is evidence about the Product.
 
@@ -433,13 +516,13 @@ mixed project
 
 URACE MUST NOT encode these examples as closed categories.
 
-Product readiness MUST be derived from Product intent rather than from one universal definition.
+Product readiness MUST be derived from Product Intent rather than from one universal definition.
 
 Examples:
 
 ```text
 commercial Product
-    → market/user/product readiness
+    → market/user/customer/Product readiness
 
 internal tool
     → operational/user readiness
@@ -455,6 +538,147 @@ infrastructure
 ```
 
 These are examples, not closed readiness categories.
+
+Where a Product serves users or customers, its applicable value MAY include outcomes such as:
+
+```text
+acquisition
+conversion
+activation
+adoption
+engagement
+retention
+loyalty
+
+satisfaction
+trust
+usability
+accessibility
+clarity
+
+reduced friction
+reduced cognitive load
+reduced customer effort
+reduced customer cost
+
+increased customer productivity
+increased realized customer value
+successful customer outcomes
+
+reliability
+safety
+other Intent-relevant outcomes
+```
+
+These are possible Product-value dimensions.
+
+They are NOT universal objectives, mandatory metrics, a fixed customer journey or first-class URACE primitives.
+
+Their relevance MUST be derived from Product Intent and available evidence.
+
+---
+
+# 4A. Intent
+
+Intent is a first-class lifecycle primitive.
+
+It represents the durable normative direction of the Product.
+
+Conceptually:
+
+```text
+Intent {
+    purpose
+    desiredOutcomes?
+    beneficiaries?
+    protectedProperties?
+    successConditions?
+    boundaries?
+    provenance?
+}
+```
+
+This structure is conceptual.
+
+An implementation MAY represent Intent more simply.
+
+Intent MUST NOT require every optional field.
+
+Intent answers questions such as:
+
+```text
+What is this Product for?
+
+Who or what is it intended to benefit?
+
+What outcomes matter?
+
+What properties must be preserved?
+
+What would meaningful progress mean?
+
+What would sufficiently ready mean?
+```
+
+Intent MUST remain distinguishable from:
+
+```text
+Objective
+Requirement
+Evidence
+Constraint
+Strategy
+Implementation
+Metric
+Executor recommendation
+```
+
+Conceptually:
+
+```text
+INTENT
+  =
+durable direction
+
+EVIDENCE
+  =
+what is known or observed
+
+VALUE
+  =
+expected or realized benefit
+relative to Intent
+
+REQUIREMENT
+  =
+a justified Product need or gap
+
+OBJECTIVE
+  =
+a bounded action target
+
+STRATEGY
+  =
+a possible way to advance
+
+IMPLEMENTATION
+  =
+the concrete realization
+```
+
+An objective MAY change without changing Product Intent.
+
+A strategy MAY change without changing Product Intent.
+
+An executor MAY change without changing Product Intent.
+
+A Product-value metric MAY change without changing Product Intent.
+
+Intent itself MAY evolve when sufficiently justified by authoritative input, evidence, Product evolution or applicable policy.
+
+However, an executor MUST NOT silently redefine Product Intent merely because it identifies another possible objective or optimization target.
+
+Material Intent changes SHOULD preserve provenance and history.
 
 ---
 
@@ -569,6 +793,7 @@ reason
 research
 analyze-market
 analyze-users
+analyze-customers
 derive-requirements
 plan
 modify
@@ -662,11 +887,13 @@ Assess and propose work without mutating the Product.
 
 ## `--check`
 
-Inspect current lifecycle, validation, evidence, capacity, constraints, budgets, schedules, objectives, checkpoints, completion readiness and recovery state.
+Inspect current Intent, lifecycle, validation, evidence, capacity, constraints, budgets, schedules, objectives, checkpoints, completion readiness, autonomous liveness and recovery state.
 
 ## `--autonomous`
 
 Run persistent autonomous Product evolution.
+
+Unless explicitly configured as bounded/one-shot, `--autonomous` denotes continuing autonomous lifecycle ownership rather than merely "execute cycles until the current runtime has nothing immediately executable."
 
 The architecture MAY later expose additional modes without changing core semantics.
 
@@ -677,7 +904,7 @@ The architecture MAY later expose additional modes without changing core semanti
 `--autonomous` is the defining behavior.
 
 ```text
-LOAD PRODUCT STATE
+LOAD PRODUCT STATE + INTENT
         │
         ▼
 LOAD AVAILABLE EVIDENCE
@@ -703,16 +930,16 @@ CAPABILITIES              NOT READY     READY
    │                         │           │
    ▼                         ▼           ▼
 SELECT COMPATIBLE          REASSESS     IDLE
-EXECUTOR(S)                  │
-   │                         │
-   ▼                         │
-REASON / RESEARCH / PLAN     │
-   │                         │
-   ▼                         │
-IMPLEMENT ◄──────────────────┘
-   │
-   ▼
-OBSERVE
+EXECUTOR(S)                  │           │
+   │                         │           ▼
+   ▼                         │      PRESERVE LIVENESS
+REASON / RESEARCH / PLAN     │           │
+   │                         │           ▼
+   ▼                         │       WAIT FOR
+IMPLEMENT ◄──────────────────┘       MEANINGFUL TRIGGER
+   │                                     │
+   ▼                                     ▼
+OBSERVE                              ASSESS AGAIN
    │
    ▼
 VALIDATE
@@ -749,6 +976,8 @@ URACE MAY execute as many successive cycles as remain justified.
 
 A cycle MAY legitimately converge to `WAITING`, `BLOCKED`, `PAUSED` or `IDLE`.
 
+Such convergence MUST NOT accidentally destroy autonomous liveness.
+
 ---
 
 # 12. Continuous Means Lifecycle Continuity
@@ -761,6 +990,7 @@ Continuous autonomy MUST NOT require:
 - one permanent model;
 - one permanent machine;
 - one permanent orchestrator;
+- one permanent event loop;
 - continuous mutation;
 - continuous resource consumption.
 
@@ -783,13 +1013,59 @@ URACE STATE
     │                    └────► repeat while justified
     │
     └────────────► IDLE / WAIT
+                         │
+                         ▼
+                 PRESERVE LIVENESS
+                         │
+                         ▼
+                  MEANINGFUL TRIGGER
+                         │
+                         ▼
+                      ASSESS
 ```
 
 Executor sessions SHOULD be considered replaceable.
 
 Durable continuity belongs to URACE.
 
-Continuous lifecycle ownership does not require continuous activity.
+Continuous lifecycle ownership does not require continuous active execution.
+
+However:
+
+```text
+PERSISTENCE
+     ≠
+AUTONOMOUS LIVENESS
+```
+
+Persisting state and terminating every active runtime without any mechanism capable of reactivating the lifecycle does not satisfy persistent autonomous operation.
+
+A deployment MAY preserve liveness using any suitable mechanism, including conceptually:
+
+```text
+long-lived process
+event loop
+timer
+watcher
+scheduler
+alarm
+queue
+webhook
+event bus
+orchestrator callback
+operating-system service
+serverless invocation
+platform-native wake mechanism
+future equivalent mechanism
+```
+
+These are examples only.
+
+No mechanism above is mandatory.
+
+A runtime MAY become dormant or terminate after persisting `IDLE`, `WAITING_FOR_CAPACITY`, or another resumable state only when autonomous reactivation remains viable.
+
+If no durable external wake/resume path exists, the currently responsible autonomous runtime MUST remain capable of waiting efficiently for a relevant trigger rather than silently ending autonomous operation.
 
 ---
 
@@ -800,7 +1076,10 @@ URACE MUST NOT merely consume an endless predetermined task list.
 Its default autonomous Product-evolution pattern is:
 
 ```text
-PRODUCT / USER / MARKET / ENVIRONMENT EVIDENCE
+INTENT
+  │
+  ▼
+PRODUCT / USER / CUSTOMER / MARKET / ENVIRONMENT EVIDENCE
                        │
                        ▼
                     ASSESS
@@ -834,15 +1113,15 @@ This is a semantic lifecycle pattern, not a mandatory implementation pipeline.
 
 The applicable evidence domain is a variant of the Product.
 
-For Products with a market/user dimension, assessment SHOULD incorporate available market and user evidence.
+For Products with a market/user/customer dimension, assessment SHOULD incorporate available relevant evidence.
 
-For Products without a meaningful market dimension, Product, technical, operational, research or environmental evidence MAY drive the same lifecycle.
+For Products without a meaningful market or customer dimension, Product, technical, operational, research or environmental evidence MAY drive the same lifecycle.
 
 URACE therefore repeatedly asks:
 
-> **Given Product intent, current state, available evidence, previous decisions, unresolved risks, constraints, budgets, schedules and available capabilities, what is the highest-value justified gap, requirement or objective to address next?**
+> Given Product Intent, current state, available evidence, previous decisions, unresolved risks, constraints, budgets, schedules and available capabilities, what is the highest-value justified gap, requirement or objective to address next?
 
-A requirement MUST be justified by Product intent, evidence, risk, constraint or sufficiently supported opportunity.
+A requirement MUST be justified relative to Product Intent by evidence, risk, constraint or sufficiently supported opportunity.
 
 Do not generate requirements merely to sustain autonomous activity.
 
@@ -856,11 +1135,19 @@ Possible results include:
 - reliability improvement;
 - security improvement;
 - usability improvement;
+- accessibility improvement;
 - documentation improvement;
 - architecture improvement;
 - cost reduction;
 - evidence collection;
-- user/market validation where applicable;
+- user/customer/market validation where applicable;
+- reduction of meaningful friction or effort where applicable;
+- reduction of cognitive load where applicable;
+- reduction of customer cost where applicable;
+- improvement of acquisition or conversion where applicable;
+- improvement of activation or adoption where applicable;
+- improvement of retention or loyalty where applicable;
+- improvement of customer/user outcomes where applicable;
 - readiness validation;
 - no currently justified mutation;
 - completion/readiness assessment.
@@ -869,7 +1156,9 @@ These are examples only.
 
 A discovered possible improvement is not automatically a justified requirement or objective.
 
-Expected Product value MUST justify its cost, risk and opportunity cost.
+A Product-value dimension is not automatically an objective.
+
+Expected Product value MUST justify its cost, risk and opportunity cost relative to Product Intent.
 
 ---
 
@@ -877,20 +1166,87 @@ Expected Product value MUST justify its cost, risk and opportunity cost.
 
 Continuous autonomy does NOT mean continuous mutation.
 
-URACE MUST optimize for justified progress, not executor utilization.
+URACE MUST optimize for justified Product progress and value relative to Intent, not executor utilization or isolated metrics.
+
+Product Value is a derived evaluation concept.
+
+It is NOT currently required to be a separate first-class lifecycle object.
+
+Conceptually:
+
+```text
+PRODUCT INTENT
+      +
+AVAILABLE EVIDENCE
+      +
+EXPECTED OUTCOME
+      +
+CONSTRAINTS
+      +
+COST / RISK / TRADE-OFFS
+      │
+      ▼
+EXPECTED PRODUCT VALUE
+      │
+      ▼
+JUSTIFIED OBJECTIVE?
+```
 
 An accepted cycle MUST materially:
 
-- advance Product intent;
+- advance Product Intent;
+- improve a relevant Product/user/customer outcome;
 - reduce meaningful uncertainty;
 - acquire useful evidence;
 - reduce meaningful risk;
 - improve validated quality;
 - resolve a blocker;
 - improve applicable Product readiness;
+- reduce meaningful friction, effort, cognitive load or cost where applicable;
+- improve relevant acquisition, conversion, activation, adoption, engagement, retention, loyalty, satisfaction or trust where applicable;
+- improve customer/user productivity or intended outcomes where applicable;
 - or otherwise produce justified Product progress.
 
-Do NOT create work merely because AI credits or compute capacity remain available.
+These dimensions are contextual rather than universally ordered.
+
+URACE MUST evaluate them according to Product Intent, evidence, expected value, cost, risk, constraints and opportunity cost.
+
+No individual dimension is inherently authoritative.
+
+For example:
+
+```text
+higher conversion
+        ≠
+necessarily higher Product value
+```
+
+when it materially harms another Intent-relevant outcome such as:
+
+```text
+trust
+retention
+usability
+accessibility
+customer outcomes
+safety
+customer cost
+reliability
+```
+
+Likewise:
+
+```text
+more engagement
+        ≠
+necessarily better Product
+```
+
+unless engagement is meaningfully connected to Product Intent and realized user/customer value.
+
+A gain in one dimension MUST NOT automatically justify degradation of another material Intent-relevant outcome.
+
+Do NOT create work merely because AI credits, budget or compute capacity remain available.
 
 Do NOT continue polishing merely because some theoretically possible improvement exists.
 
@@ -898,11 +1254,15 @@ Conversely, absence of an immediately obvious task MUST NOT by itself justify `I
 
 Before `IDLE`, URACE MUST perform an explicit completion/readiness assessment.
 
+`IDLE` ends unnecessary active work.
+
+It MUST NOT, by itself, end autonomous lifecycle ownership.
+
 ---
 
 # 15. Evidence
 
-Evidence is a **first-class lifecycle primitive**.
+Evidence is a first-class lifecycle primitive.
 
 It is not merely transient executor context.
 
@@ -924,6 +1284,8 @@ Evidence {
 Evidence MAY originate from:
 
 - users;
+- customers;
+- prospects;
 - market observations;
 - analytics;
 - tests;
@@ -935,7 +1297,9 @@ Evidence MAY originate from:
 - files;
 - APIs;
 - experiments;
-- previous lifecycle observations.
+- previous lifecycle observations;
+- Product outcome observations;
+- user/customer outcome observations.
 
 Do not require a specific evidence source.
 
@@ -1004,8 +1368,8 @@ Material lifecycle decisions SHOULD preserve sufficient lineage to determine wha
 This includes, where applicable:
 
 ```text
+Intent
 evidence
-intent
 constraints
 observations
 risk
@@ -1016,6 +1380,9 @@ assumptions
 The expected relationship is:
 
 ```text
+INTENT
+   │
+   ▼
 EVIDENCE
    │
    ▼
@@ -1049,11 +1416,11 @@ Evidence storage, indexing and retrieval mechanisms remain implementation varian
 
 ---
 
-# 16. Market Awareness
+# 16. Market and Customer Awareness
 
-Market awareness is conditional on Product intent.
+Market and customer awareness are conditional on Product Intent.
 
-For Products with a market/user dimension, URACE SHOULD allow relevant external evidence to influence autonomous requirements and objectives.
+For Products with a market/user/customer dimension, URACE SHOULD allow relevant external evidence to influence autonomous requirements and objectives.
 
 However:
 
@@ -1071,14 +1438,77 @@ AI OPINION
 MARKET EVIDENCE
 ```
 
-If no market evidence is available, autonomous reasoning MAY formulate hypotheses and requirements for testing them, but MUST NOT represent them as validated demand.
+and:
+
+```text
+METRIC MOVEMENT
+        ≠
+REALIZED CUSTOMER VALUE
+```
+
+If no market/customer evidence is available, autonomous reasoning MAY formulate hypotheses and requirements for testing them, but MUST NOT represent them as validated demand or realized value.
 
 This distinction MUST survive across cycles.
+
+For applicable Products, relevant evidence MAY include signals related to:
+
+```text
+need
+demand
+
+discovery
+acquisition
+conversion
+activation
+adoption
+engagement
+
+retention
+churn
+loyalty
+
+satisfaction
+trust
+
+usability
+accessibility
+clarity
+friction
+customer effort
+cognitive load
+
+customer cost
+customer productivity
+willingness to pay
+realized customer value
+customer outcomes
+```
+
+This is an illustrative set, not a closed ontology or mandatory funnel.
+
+No single signal is universally authoritative.
+
+URACE SHOULD reason about Product Intent and the combination of available evidence rather than blindly maximizing an isolated metric.
+
+For example:
+
+Improving conversion MAY be valuable when evidence indicates that a relevant acquisition or decision-friction problem prevents intended Product value.
+
+Improving retention MAY be valuable when evidence indicates failure to sustain intended customer value.
+
+Reducing cognitive load, effort or total customer cost MAY be valuable when those factors materially prevent adoption, successful use, retention or intended outcomes.
+
+These are possible causal relationships to investigate and validate.
+
+They MUST NOT be assumed as facts.
 
 For a Product with market intent, the preferred evidence-driven lifecycle is:
 
 ```text
-MARKET / USER / PRODUCT EVIDENCE
+INTENT
+  │
+  ▼
+MARKET / USER / CUSTOMER / PRODUCT EVIDENCE
               │
               ▼
             ASSESS
@@ -1107,13 +1537,14 @@ MARKET / USER / PRODUCT EVIDENCE
               └──────────► REASSESS
 ```
 
-Market analysis is therefore an input to Product evolution rather than a separate mandatory subsystem.
+Market/customer analysis is therefore an input to Product evolution rather than a separate mandatory subsystem.
 
-URACE MAY delegate market analysis, research, requirement formulation and implementation to capable executors.
+URACE MAY delegate market analysis, customer analysis, research, requirement formulation and implementation to capable executors.
 
 URACE remains authoritative over:
 
 ```text
+Intent
 evidence provenance and lineage
 requirement/objective justification
 policy
@@ -1124,9 +1555,9 @@ lifecycle continuation
 readiness
 ```
 
-For a Product with market intent, an applicable readiness target MAY be **market-fit-quality Product readiness**.
+For a Product with market intent, an applicable readiness target MAY be market-fit-quality Product readiness.
 
-This means evolving the Product, within available evidence and applicable constraints, toward sufficient completeness, coherence, reliability, usability, security, maintainability, operability and differentiation for its intended market and user context.
+This means evolving the Product, within available evidence and applicable constraints, toward sufficient completeness, coherence, reliability, usability, accessibility, security, maintainability, operability and differentiation for its intended market, users and customers.
 
 However:
 
@@ -1136,11 +1567,11 @@ MARKET-FIT-QUALITY READINESS
 PROVEN PRODUCT-MARKET FIT
 ```
 
-Actual Product-market fit, validated demand, retention, willingness to pay or equivalent market outcomes MUST require appropriate external evidence.
+Actual Product-market fit, validated demand, retention, willingness to pay, customer loyalty or equivalent outcomes MUST require appropriate external evidence.
 
 URACE MUST NOT fabricate market validation from executor confidence.
 
-When external market evidence is obtainable within policy, budget and capability constraints, acquiring or testing that evidence MAY itself become a justified objective.
+When external market/customer evidence is obtainable within policy, budget and capability constraints, acquiring or testing that evidence MAY itself become a justified objective.
 
 Market-fit-quality readiness MUST NOT become a universal readiness invariant for Products without market intent.
 
@@ -1176,13 +1607,20 @@ ProductState {
     readinessState
 
     lifecycleState
+    livenessState?
+    wakeState?
+
     lastCycle
 }
 ```
 
-Exact serialization is an implementation detail.
+Intent MUST be durably represented or durably referenced.
 
 Evidence lineage MAY be represented directly or through durable references.
+
+Liveness/wake state MAY be represented directly or derived from the hosting environment when equivalent guarantees exist.
+
+Exact serialization is an implementation detail.
 
 Human-readable documents MUST NOT be the sole authoritative state store.
 
@@ -1312,11 +1750,20 @@ ACTIVE          READINESS ASSESSMENT
                 │           │
                 ▼           ▼
               ACTIVE       IDLE
+                              │
+                              ▼
+                       PRESERVE LIVENESS
+                              │
+                              ▼
+                       MEANINGFUL TRIGGER
+                              │
+                              ▼
+                           ASSESS
 ```
 
 `IDLE` is a successful autonomous lifecycle state, not a failure.
 
-It means no currently justified Product action remains **after applicable completion/readiness requirements have been evaluated**.
+It means no currently justified Product action remains after applicable completion/readiness requirements have been evaluated relative to Product Intent.
 
 `IDLE` MUST be neither premature nor artificially delayed.
 
@@ -1338,14 +1785,19 @@ URACE MUST NOT avoid `IDLE` merely because:
 - budget remains;
 - additional cosmetic refinement is possible;
 - another speculative abstraction could be created;
+- another metric could theoretically be improved;
 - another equivalent analysis could be performed;
 - perfection is theoretically unattainable.
+
+`IDLE` means active work has converged.
+
+It MUST NOT mean the persistent autonomous lifecycle has been silently abandoned.
 
 ---
 
 # 18A. Completion and IDLE Gate
 
-Before entering `IDLE`, URACE MUST explicitly determine whether the Product has reached the highest justified readiness state currently available under Product intent, evidence, constraints, capability, schedule and budget.
+Before entering `IDLE`, URACE MUST explicitly determine whether the Product has reached the highest justified readiness state currently available under Product Intent, evidence, constraints, capability, schedule and budget.
 
 The assessment MUST consider, where applicable:
 
@@ -1375,28 +1827,29 @@ Applicable readiness criteria MAY include:
 
 ```text
 usability
-user readiness
+user/customer readiness
 reliability
 security
 safety
 operability
 maintainability
 performance
+accessibility
 research validity
 ecosystem compatibility
 market readiness
-other Product-specific criteria
+other Intent-specific criteria
 ```
 
 The exact dimensions MUST remain Product-specific.
 
 Not every Product requires every dimension.
 
-For a Product with market intent, applicable readiness MAY include **market-fit-quality readiness**, not merely technical functionality.
+For a Product with market intent, applicable readiness MAY include market-fit-quality readiness, not merely technical functionality.
 
 For another Product, the applicable readiness target MAY be entirely different.
 
-Where final validation depends on external users, systems, time or events:
+Where final validation depends on external users, customers, systems, time or events:
 
 ```text
 PRODUCT READY FOR CURRENT STAGE
@@ -1410,6 +1863,9 @@ actionable now   must wait
        │             │
        ▼             ▼
      ACTIVE      WAIT / IDLE
+                       │
+                       ▼
+                PRESERVE LIVENESS
 ```
 
 URACE MUST NOT endlessly modify a ready Product while the missing information can only come from an external condition.
@@ -1428,6 +1884,17 @@ relative to cost, risk or evidence need
 ```
 
 URACE MUST avoid both.
+
+After convergence, it MUST also avoid a third failure:
+
+```text
+DEAD AUTONOMY
+    =
+durable state remains
+but no viable path exists
+for autonomous reassessment
+when relevant conditions change
+```
 
 ---
 
@@ -1454,7 +1921,7 @@ Examples MAY include:
 - content constraints;
 - operator-defined assertions;
 - external verification;
-- user/market evidence where applicable.
+- user/customer/market evidence where applicable.
 
 No particular validation mechanism is universally required.
 
@@ -1474,9 +1941,11 @@ PASS   FAIL
 accept repair/reassess
 ```
 
-Passing implementation validation MUST NOT automatically imply overall Product readiness.
+Passing implementation validation MUST NOT automatically imply overall Product readiness or realized Product value.
 
 Validation results MAY themselves become evidence for subsequent lifecycle assessment.
+
+Where an objective targets an external Product/user/customer outcome that cannot yet be observed, URACE MUST preserve that distinction rather than treating predicted value as realized value.
 
 ---
 
@@ -1584,7 +2053,7 @@ Kubernetes
 
 Adapters MAY use these systems.
 
-Core state and lifecycle semantics MUST remain portable.
+Core state, lifecycle and liveness semantics MUST remain portable.
 
 ---
 
@@ -1595,9 +2064,10 @@ URACE MUST NOT assume the Product is a web application or even software.
 Its lifecycle must remain meaningful for any Product that can expose:
 
 ```text
+Intent
 state
-intent
 artifacts
+evidence
 operations
 observations
 validation
@@ -1605,7 +2075,9 @@ validation
 
 This is the minimum conceptual Product contract.
 
-Product readiness criteria MUST be derived from Product intent and evidence rather than hard-coded Product categories.
+Product readiness criteria MUST be derived from Product Intent and evidence rather than hard-coded Product categories.
+
+Customer-oriented value dimensions MUST remain optional Product-specific semantics rather than requirements of URACE itself.
 
 ---
 
@@ -1621,6 +2093,7 @@ Checkpoint {
     parent?
     objective
     productStateReference
+    intentReference?
     artifactReferences
     evidenceReferences
     decisions
@@ -1631,15 +2104,19 @@ Checkpoint {
 }
 ```
 
-Checkpoint evidence references SHOULD preserve sufficient lineage to reconstruct why the accepted increment occurred.
-
 Checkpoints MUST NOT require Git.
 
 If Git is available, a commit/revision MAY be referenced.
 
 Other artifact/version systems MAY be used.
 
+Checkpoint evidence references SHOULD preserve sufficient lineage to reconstruct why the accepted increment occurred.
+
+Material Intent changes MUST be durably attributable across checkpoints/history.
+
 Entering `IDLE` SHOULD produce or reference a durable checkpoint representing the accepted readiness state.
+
+Checkpoint durability MUST NOT be confused with wakeability.
 
 ---
 
@@ -1648,11 +2125,16 @@ Entering `IDLE` SHOULD produce or reference a durable checkpoint representing th
 Every cycle MUST preserve enough information to reconstruct:
 
 ```text
+What Product Intent applied?
+
 Why did this cycle occur?
 
 What evidence or Product gap justified it?
 
 What requirement/objective was selected?
+
+What Product-value dimension, if any,
+was expected to improve?
 
 What assumptions existed?
 
@@ -1672,11 +2154,18 @@ What changed?
 
 How was the candidate validated?
 
+What intended Product/user/customer
+outcome changed or remained uncertain?
+
 Why was it accepted/rejected?
 
 What remains unresolved?
 
-Why did the lifecycle continue, wait, block or become IDLE?
+Why did the lifecycle continue,
+wait, block or become IDLE?
+
+If execution became dormant,
+what preserves autonomous liveness?
 ```
 
 History MUST survive executor replacement.
@@ -1777,6 +2266,8 @@ PAUSED
 IDLE
 ```
 
+A resource-constrained dormant state MUST preserve autonomous liveness when autonomous operation remains enabled.
+
 ---
 
 # 28. Waiting Is Not Completion
@@ -1796,6 +2287,9 @@ persist state
 WAITING_FOR_CAPACITY
   │
   ▼
+preserve wake/resume path
+  │
+  ▼
 capacity restored
   │
   ▼
@@ -1806,9 +2300,11 @@ Do not declare the Product complete because an executor became unavailable.
 
 Likewise, a deadline, external dependency or required future evidence MUST NOT be mistaken for completion.
 
+`WAITING_FOR_CAPACITY` MUST NOT silently become permanent inactivity merely because the active runtime would otherwise terminate.
+
 ---
 
-# 28A. Time and Scheduling
+# 28A. Time, Scheduling and Wakeability
 
 Time is a first-class lifecycle constraint.
 
@@ -1838,10 +2334,13 @@ When no justified work exists until a future condition:
 persist state
     │
     ▼
+establish / preserve wake path
+    │
+    ▼
 WAIT
     │
     ▼
-scheduled/external condition
+scheduled / external condition
     │
     ▼
 REASSESS
@@ -1849,18 +2348,29 @@ REASSESS
 
 URACE SHOULD avoid active polling when a cheaper or event-driven wake mechanism is available.
 
-Scheduling implementation is environment-specific.
+Scheduling and wake implementation are environment-specific.
 
 URACE core MUST NOT require:
 
 ```text
 cron
 a permanent process
+a permanent event loop
 a particular scheduler
 a particular operating system
 a particular cloud scheduler
 a particular queue
+a particular watcher
+a particular alarm mechanism
 ```
+
+However, autonomous operation MUST preserve equivalent semantics:
+
+> When a lifecycle condition can become actionable later, a viable path to reassessment MUST remain available while autonomous operation remains enabled.
+
+A runtime MAY safely terminate while waiting only when the environment or another durable mechanism can later reactivate URACE.
+
+Otherwise, the responsible runtime MUST wait efficiently rather than allowing the autonomous lifecycle to become unreachable.
 
 ---
 
@@ -1871,10 +2381,12 @@ An executor MAY disappear permanently.
 URACE MUST be able to:
 
 1. preserve lifecycle state;
-2. inspect required capabilities;
-3. discover another compatible executor;
-4. provide it with sufficient durable context;
-5. continue.
+2. preserve applicable Product Intent;
+3. inspect required capabilities;
+4. discover another compatible executor;
+5. provide it with sufficient durable context;
+6. preserve or regain execution liveness;
+7. continue.
 
 No executor's private conversation history may be required for correctness.
 
@@ -1902,6 +2414,8 @@ No model router.
 
 This is a mandatory agnosticism test.
 
+The minimal configuration MUST also remain autonomously live without requiring an external orchestrator to wake it.
+
 ---
 
 # 31. Orchestrated Configuration
@@ -1924,6 +2438,8 @@ OpenHands / future orchestrator
 URACE MUST treat the entire orchestrator as an executor capability provider.
 
 Its internal architecture MUST NOT leak into URACE core.
+
+An orchestrator MAY provide wake/resume capabilities, but URACE core MUST NOT depend specifically on one.
 
 ---
 
@@ -1966,12 +2482,19 @@ requires irreversible production action
 WAITING_FOR_APPROVAL
    │
    ▼
+preserve wake/resume path
+   │
+   ▼
 human decision
 ```
 
 Human participation MUST NOT be required for ordinary autonomous cycles unless policy requires it.
 
-External users or market participants MAY additionally provide evidence without becoming lifecycle controllers.
+External users, customers or market participants MAY additionally provide evidence without becoming lifecycle controllers.
+
+Authoritative human input MAY also modify Product Intent when appropriate.
+
+Such Intent changes SHOULD be persisted with provenance rather than treated as transient executor context.
 
 ---
 
@@ -1985,28 +2508,44 @@ Conceptually:
 Policy {
     allowedOperations
     prohibitedOperations
-
     constraints
-
     resourceLimits
     budgetPolicy
     schedulePolicy
     retryLimits
-
     validationRequirements
     readinessRequirements
-
     approvalRequirements
-
     deploymentPolicy
 }
 ```
 
 Policy SHOULD distinguish hard enforcement boundaries from soft optimization preferences.
 
-Readiness requirements SHOULD be derived from Product intent rather than assumed globally.
+Readiness requirements SHOULD be derived from Product Intent rather than assumed globally.
 
 Executors MUST NOT override URACE policy.
+
+Product-value optimization MUST remain subject to Product Intent, policy and constraints.
+
+A metric improvement MUST NOT justify violating applicable:
+
+```text
+safety
+trust
+security
+privacy
+legal requirements
+compliance
+accessibility
+contracts
+protected Product properties
+other HARD constraints
+```
+
+Policy MAY explicitly permit bounded or one-shot autonomous invocation.
+
+Absent such a contract, runtime termination MUST NOT silently redefine persistent autonomous operation as one-shot execution.
 
 ---
 
@@ -2037,7 +2576,11 @@ Detect:
 - repeated speculative requirements;
 - repeated speculative objectives;
 - repeated reassessment without new evidence;
-- repeated self-modification without demonstrated lifecycle value.
+- metric gaming;
+- proxy optimization that degrades material Product/user/customer outcomes;
+- repeated self-modification without demonstrated lifecycle value;
+- loss of autonomous wakeability;
+- busy-waiting or wasteful polling used only to keep a runtime alive.
 
 When progress cannot be justified:
 
@@ -2052,9 +2595,15 @@ or request additional evidence
 
 rather than mutate indefinitely.
 
+URACE MUST NOT blindly optimize measurable proxies when evidence indicates conflict with Product Intent or intended Product/user/customer value.
+
 Safety controls MUST NOT force `IDLE` when meaningful justified work remains.
 
 They SHOULD instead bound the current execution strategy and trigger reassessment, waiting, blocking or escalation as appropriate.
+
+Liveness MUST NOT be implemented by wasteful activity merely to prevent runtime termination.
+
+Dormant autonomous operation SHOULD consume the minimum resources reasonably required to remain reactivatable.
 
 ---
 
@@ -2087,12 +2636,18 @@ On interruption:
 1. stop scheduling new operations;
 2. cancel active executor operations where supported;
 3. persist authoritative state;
-4. persist observations and diagnostics;
-5. preserve current objective;
-6. preserve constraint, budget and schedule state;
-7. preserve evidence and relevant lineage;
-8. release URACE-owned resources;
-9. leave unrelated external state untouched.
+4. preserve applicable Product Intent;
+5. persist observations and diagnostics;
+6. preserve current objective;
+7. preserve constraint, budget and schedule state;
+8. preserve evidence and relevant lineage;
+9. preserve sufficient recovery/wake state where autonomous resumption remains intended;
+10. release URACE-owned resources;
+11. leave unrelated external state untouched.
+
+An explicit user stop or pause MAY intentionally suspend autonomous liveness according to policy.
+
+An accidental process interruption MUST NOT destroy the ability to recover and resume.
 
 ---
 
@@ -2101,10 +2656,10 @@ On interruption:
 Restart MUST behave conceptually as:
 
 ```text
-START
+START / WAKE
   │
   ▼
-LOAD DURABLE STATE
+LOAD DURABLE INTENT + STATE
   │
   ▼
 RECONCILE CURRENT PRODUCT
@@ -2113,12 +2668,20 @@ RECONCILE CURRENT PRODUCT
 RECONCILE LAST OPERATION
   │
   ▼
-RESUME / RETRY / REASSESS
+RECONCILE LIFECYCLE /
+WAKE CONDITION
+  │
+  ▼
+RESUME / RETRY / REASSESS / WAIT
 ```
 
 Never depend on recovering an old AI conversation to recover URACE.
 
 An `IDLE` Product MUST remain resumable.
+
+A waiting Product MUST remain resumable.
+
+Recovery MUST restore lifecycle correctness, not merely deserialize state.
 
 ---
 
@@ -2146,7 +2709,19 @@ URACE MUST NOT require the Product itself to adopt a URACE-specific directory hi
 
 Persistence location, naming, hierarchy and storage mechanism are implementation variants.
 
+Intent being first-class MUST NOT require a dedicated Intent service or physical file.
+
 Evidence being first-class MUST NOT imply that evidence requires a dedicated physical directory, database, graph or service.
+
+Likewise:
+
+```text
+DURABLE STATE
+     ≠
+DURABLE WAKEABILITY
+```
+
+Persistence MUST NOT be treated as sufficient proof that autonomous operation can reactivate.
 
 ---
 
@@ -2168,7 +2743,7 @@ An executor MAY use any of them internally.
 
 A deployment MAY use them as persistence/retrieval variants.
 
-URACE only requires enough durable lifecycle context and evidence lineage to preserve lifecycle correctness.
+URACE only requires enough durable Intent, lifecycle context and evidence lineage to preserve lifecycle correctness.
 
 ---
 
@@ -2229,6 +2804,8 @@ Orchestrator
 N agents
 ```
 
+The direct-AI configuration MUST NOT lose autonomous liveness merely because no external agent runtime or orchestrator exists.
+
 ---
 
 # 43. No Mandatory Software Assumption
@@ -2256,7 +2833,7 @@ Validation
 Checkpoint
 ```
 
-Likewise, do not encode software-specific definitions of Product quality or completion into URACE core.
+Likewise, do not encode software-specific definitions of Product quality, value or completion into URACE core.
 
 ---
 
@@ -2310,6 +2887,7 @@ Examples of potentially justified URACE limitations MAY include deficiencies in:
 
 ```text
 lifecycle control
+Intent preservation
 evidence handling
 executor abstraction
 validation
@@ -2318,6 +2896,8 @@ checkpointing
 constraint enforcement
 capacity handling
 readiness assessment
+autonomous liveness
+wake/resume behavior
 ```
 
 These examples MUST NOT become a mandatory self-improvement checklist.
@@ -2343,6 +2923,7 @@ JUSTIFIED URACE OBJECTIVE
 
 Any URACE-level change MUST remain subject to the same:
 
+- Intent;
 - evidence requirements;
 - justification;
 - HARD constraints;
@@ -2365,7 +2946,7 @@ URACE MUST NOT modify itself merely because:
 - autonomous mode remains enabled;
 - resources remain available.
 
-If changing URACE is not required or sufficiently valuable for advancing the governed Product lifecycle, URACE SHOULD leave itself unchanged.
+If changing URACE is not required or sufficiently valuable for advancing the governed Product lifecycle relative to Intent, URACE SHOULD leave itself unchanged.
 
 Conditional self-evolution is therefore an emergent application of the ordinary URACE lifecycle, not a separate privileged lifecycle.
 
@@ -2377,6 +2958,7 @@ Bootstrap only the smallest coherent core required for:
 
 ```text
 Product
+Intent
 State
 Evidence
 Requirement
@@ -2391,7 +2973,35 @@ Lifecycle
 Persistence
 ```
 
-Constraint, budget, schedule, evidence-lineage and readiness semantics SHOULD remain simple lifecycle data/policy rather than automatically becoming large independent frameworks.
+Intent is first-class because lifecycle direction, objective justification, Product-value evaluation and readiness depend on it.
+
+Evidence is first-class because justified autonomous decisions depend on durable knowledge and provenance.
+
+Autonomous liveness is an invariant lifecycle property.
+
+It does NOT require a first-class `Liveness` object or dedicated liveness subsystem.
+
+Product Value is not required to be first-class.
+
+It MAY remain a derived evaluation concept unless a future implementation demonstrates a concrete lifecycle requirement to persist or address value independently from Intent, Evidence, Requirements and Objectives.
+
+Specific Product-value dimensions such as:
+
+```text
+conversion
+retention
+loyalty
+engagement
+cognitive load
+customer effort
+customer cost
+trust
+productivity
+```
+
+MUST NOT become first-class core primitives merely because they are useful for some Products.
+
+Constraint, budget, schedule, evidence-lineage, liveness and readiness semantics SHOULD remain simple lifecycle data/policy rather than automatically becoming large independent frameworks.
 
 Avoid turning every concept into a large framework.
 
@@ -2411,6 +3021,7 @@ Conceptually:
 core/
     lifecycle
     state
+    intent
     objective
     policy
 
@@ -2440,6 +3051,12 @@ cli/
 ```
 
 This is guidance, not a mandatory filesystem structure.
+
+`intent` represents a logical responsibility, not a requirement for a dedicated module or file.
+
+Lifecycle liveness MAY remain part of `lifecycle`, `state`, host integration or another appropriate responsibility.
+
+A dedicated `liveness/` subsystem is NOT required.
 
 Follow repository conventions when a better implementation exists.
 
@@ -2487,6 +3104,10 @@ Do not introduce unnecessary:
 
 The implementation language MUST NOT leak into URACE's public lifecycle semantics.
 
+The selected implementation MUST provide or integrate with a viable autonomous wake/resume mechanism when persistent autonomous operation requires dormancy.
+
+Do not introduce heavyweight infrastructure merely to satisfy liveness when a simpler host-native mechanism is sufficient.
+
 ---
 
 ## Step 3 — Implement Durable State
@@ -2494,6 +3115,7 @@ The implementation language MUST NOT leak into URACE's public lifecycle semantic
 Implement:
 
 - Product;
+- Intent;
 - ProductState;
 - evidence and sufficient lineage;
 - requirements/objectives;
@@ -2503,7 +3125,14 @@ Implement:
 - policy;
 - constraints;
 - budget/schedule state;
-- readiness state.
+- readiness state;
+- enough liveness/wake state to preserve autonomous semantics where required.
+
+Intent MAY be embedded within Product/ProductState or durably referenced.
+
+First-class status does NOT require independent physical storage.
+
+Liveness MAY be represented by state, host guarantees, registered wake conditions or another minimal mechanism.
 
 Test restart durability.
 
@@ -2532,6 +3161,8 @@ to perform intelligent operations.
 
 This proves that no external orchestrator is required.
 
+The direct configuration MUST remain capable of persistent autonomous operation without relying on an external orchestrator for lifecycle liveness.
+
 ---
 
 ## Step 6 — Implement Capability Discovery
@@ -2547,6 +3178,7 @@ URACE MUST be able to determine whether an operation can currently be attempted.
 Discover enough about the current Product to expose:
 
 ```text
+Intent
 artifacts
 available operations
 validation possibilities
@@ -2556,9 +3188,15 @@ applicable schedules
 applicable budgets
 available evidence
 applicable readiness criteria
+applicable Product-value dimensions
+available wake/resume capabilities
 ```
 
 Do not require a known Product type.
+
+For Products with users/customers, applicable evidence MAY include customer outcomes, friction, effort, cognitive load, cost, acquisition, conversion, activation, adoption, engagement, retention, loyalty, satisfaction or other Intent-relevant signals.
+
+Do not require these dimensions for Products where they are irrelevant.
 
 ---
 
@@ -2570,7 +3208,9 @@ Use deterministic validation wherever possible.
 
 Allow Product-specific validation configuration.
 
-Support Product-level readiness assessment without hard-coding one universal definition of quality.
+Support Product-level readiness assessment without hard-coding one universal definition of quality or value.
+
+Where an objective targets an external Product/user/customer outcome that cannot be deterministically validated, preserve the result as unvalidated or partially validated until sufficient external evidence exists.
 
 ---
 
@@ -2580,7 +3220,7 @@ Persist accepted increments without assuming Git.
 
 Use Git when available and useful.
 
-Preserve enough evidence references and lineage to reconstruct material acceptance decisions.
+Preserve enough Intent and evidence references to reconstruct material acceptance decisions.
 
 ---
 
@@ -2604,7 +3244,9 @@ PAUSED
 IDLE
 ```
 
-and explain why the state is justified.
+and explain why the state is justified relative to Product Intent and evidence.
+
+When autonomous operation remains enabled, `--check` SHOULD also expose whether and how the lifecycle remains capable of reassessment.
 
 ---
 
@@ -2613,13 +3255,13 @@ and explain why the state is justified.
 Implement:
 
 ```text
-while autonomous mode enabled:
+while autonomous operation remains enabled:
 
-    load state
+    load Intent and state
 
     gather available:
         Product evidence
-        user/market evidence where applicable
+        user/customer/market evidence where applicable
         environmental evidence
 
     preserve relevant evidence provenance
@@ -2635,9 +3277,13 @@ while autonomous mode enabled:
         risks
         readiness requirements
 
-    assess Product against intent and evidence
+    assess Product against Intent and evidence
 
     identify highest-value justified gap
+
+    evaluate expected Product value
+    against Intent, evidence, cost,
+    risk, constraints and opportunity cost
 
     formulate a requirement/objective only
     when the gap justifies action
@@ -2656,32 +3302,63 @@ while autonomous mode enabled:
             requirement/objective
             continue
 
-        if required evidence or progress depends
-        on a future/external condition:
-            persist waiting/idle state
-            wait according to policy
-            continue
+        determine the next meaningful trigger
+        or condition capable of changing the assessment
 
-        persist IDLE state
-        stop active execution until a meaningful trigger
-        continue
+        persist IDLE / WAITING state
+        and relevant wake/resume information
+
+        if a durable external wake/resume mechanism
+        is available and guarantees reassessment:
+            release unnecessary runtime resources
+            and allow the current runtime to become
+            dormant or terminate when appropriate
+
+        else:
+            remain efficiently alive waiting for
+            a meaningful trigger without busy-waiting
+            or unnecessary executor use
+
+        on trigger:
+            reassess
+            continue
 
     derive required capabilities
 
     locate compatible executor(s)
 
     if required capacity unavailable:
+
         persist waiting/block state
-        wait according to policy
-        continue
+
+        determine how capacity restoration
+        can trigger reassessment
+
+        preserve a viable wake/resume path
+
+        if durable external wake/resume exists:
+            allow runtime dormancy when appropriate
+        else:
+            wait efficiently
+
+        continue after wake/resume
 
     if operation would violate a HARD constraint:
         persist blocked state
-        continue
+
+        if autonomous progress can resume only after
+        an external condition changes:
+            preserve a viable wake/resume path
+
+        continue according to policy
 
     if operation exceeds a HARD budget:
         persist blocked/waiting state
-        continue
+
+        preserve wake/resume semantics when the
+        condition can later become actionable
+
+        continue according to policy
 
     execute bounded operation(s)
 
@@ -2705,9 +3382,13 @@ Autonomous execution does not require an endless active process.
 
 The lifecycle remains persistent while execution MAY become dormant.
 
+However, dormancy MUST preserve autonomous liveness.
+
 There is no predetermined cycle count.
 
 Each accepted increment MAY lead to another assessment cycle, and another justified cycle MAY follow for as long as meaningful Product evolution remains justified.
+
+A standalone foreground invocation of `--autonomous` MUST NOT simply return because the current Product reaches `IDLE` or `WAITING` unless bounded execution was explicitly requested or another durable mechanism has assumed responsibility for future reassessment.
 
 ---
 
@@ -2815,6 +3496,8 @@ Persist:
 WAITING_FOR_CAPACITY
 ```
 
+Preserve a viable wake/resume path.
+
 Restore compatible capacity.
 
 Continue.
@@ -2825,7 +3508,7 @@ Continue.
 
 Terminate URACE.
 
-Restart.
+Restart or wake it through the configured runtime mechanism.
 
 Continue autonomous evolution from authoritative state.
 
@@ -2917,6 +3600,8 @@ Prove:
 ```text
 persist state
     ↓
+preserve wake path
+    ↓
 WAIT
     ↓
 condition becomes applicable
@@ -2958,7 +3643,7 @@ JUSTIFIED REQUIREMENT / OBJECTIVE
 
 URACE MUST NOT enter `IDLE`.
 
-The applicable readiness gap MUST be derived from Product intent.
+The applicable readiness gap MUST be derived from Product Intent.
 
 ---
 
@@ -2967,7 +3652,7 @@ The applicable readiness gap MUST be derived from Product intent.
 Provide:
 
 ```text
-intent sufficiently satisfied
+Intent sufficiently satisfied
 hard constraints satisfied
 validation satisfied
 no material defect
@@ -2990,6 +3675,9 @@ READY
    │
    ▼
 IDLE
+   │
+   ▼
+PRESERVE LIVENESS
 ```
 
 No mutation, executor invocation or recursive requirement/objective generation SHOULD occur merely to keep autonomous mode active.
@@ -3029,15 +3717,20 @@ justified objective
 
 and enters `IDLE` rather than performing endless polishing.
 
+`IDLE` MUST remain autonomously resumable.
+
 ---
 
 ## Test T — Evidence-to-Requirement Loop
 
-Provide new Product, user, market or environmental evidence revealing a material gap.
+Provide new Product, user, customer, market or environmental evidence revealing a material gap.
 
 Prove:
 
 ```text
+INTENT
+   │
+   ▼
 EVIDENCE
    │
    ▼
@@ -3065,7 +3758,7 @@ CHECKPOINT
 UPDATED EVIDENCE
 ```
 
-The requirement MUST remain traceable to its justification.
+The requirement MUST remain traceable to Intent and evidence.
 
 The resulting evidence MUST remain distinguishable from assumptions, inferences and hypotheses.
 
@@ -3102,7 +3795,10 @@ repository structure
 validation mechanism
 checkpoint mechanism
 scheduler
+wake mechanism
+runtime model
 evidence storage mechanism
+Product-value dimensions
 ```
 
 and prove that the Core Invariants remain true.
@@ -3116,6 +3812,9 @@ Provide evidence that results in a material autonomous decision.
 Prove that URACE can reconstruct:
 
 ```text
+INTENT
+   │
+   ▼
 SOURCE / OBSERVATION
         │
         ▼
@@ -3183,15 +3882,229 @@ Prove that no self-modification occurs solely because improvement is possible.
 
 ---
 
+## Test Y — Intent Persistence
+
+Provide a Product with durable Intent.
+
+Replace the executor, terminate all executor context and restart URACE.
+
+Prove:
+
+```text
+INTENT
+  │
+  ▼
+Executor A
+  │
+  ▼
+checkpoint / restart
+  │
+  ▼
+Executor B
+  │
+  ▼
+same applicable Product direction
+```
+
+No executor's private context may be required to reconstruct the applicable Product Intent.
+
+---
+
+## Test Z — Intent vs Objective
+
+Provide a Product whose current objective completes.
+
+Prove:
+
+```text
+OBJECTIVE COMPLETE
+       │
+       ▼
+INTENT REMAINS
+       │
+       ▼
+REASSESS
+       │
+ ┌─────┴─────┐
+ ▼           ▼
+new gap     ready
+ │           │
+ ▼           ▼
+objective   IDLE
+               │
+               ▼
+        preserve liveness
+```
+
+Completion of one objective MUST NOT be interpreted as completion or replacement of Product Intent.
+
+---
+
+## Test AA — Intent-Relative Product Value
+
+Provide a Product with evidence that a material user/customer-value problem exists.
+
+For example:
+
+```text
+PRODUCT INTENT
+      │
+      ▼
+high decision friction
+      │
+      ▼
+poor conversion
+      │
+      ▼
+evidence-supported causal hypothesis
+      │
+      ▼
+justified objective
+      │
+      ▼
+Product change
+      │
+      ▼
+external evidence
+```
+
+Prove that URACE MAY act on the relevant value dimension when justified.
+
+Then provide another Product where conversion is irrelevant to Intent.
+
+Prove that URACE does NOT create conversion objectives merely because conversion is a known Product metric.
+
+The same principle MUST hold for retention, engagement, loyalty, cognitive load, customer effort, customer cost and other example dimensions.
+
+---
+
+## Test AB — Multi-Dimensional Product Value
+
+Provide a proposed change that improves one measurable metric while materially degrading another applicable Product outcome.
+
+For example:
+
+```text
+conversion ↑
+but
+trust / retention / customer outcome ↓
+```
+
+Prove that URACE does not blindly accept the isolated metric improvement.
+
+Objective selection and validation MUST remain grounded in Product Intent, evidence, constraints, expected value and trade-offs.
+
+---
+
+## Test AC — Autonomous Liveness Without External Orchestrator
+
+Run the minimal configuration:
+
+```text
+URACE
+  │
+  ▼
+ONE AI
+```
+
+with no external orchestrator.
+
+Allow the Product to reach `IDLE`.
+
+Prove that:
+
+```text
+IDLE
+  │
+  ▼
+no unnecessary AI/executor activity
+  │
+  ▼
+autonomous liveness preserved
+  │
+  ▼
+meaningful Product/environment trigger
+  │
+  ▼
+ASSESS
+```
+
+The implementation MUST NOT simply return from persistent `--autonomous` execution and lose all path to reassessment.
+
+---
+
+## Test AD — Safe Runtime Dormancy
+
+Configure a durable external wake/resume mechanism.
+
+Prove:
+
+```text
+ACTIVE
+  │
+  ▼
+IDLE / WAITING
+  │
+  ▼
+persist state
+  │
+  ▼
+durable wake registered / guaranteed
+  │
+  ▼
+runtime may terminate
+  │
+  ▼
+trigger
+  │
+  ▼
+new runtime
+  │
+  ▼
+load state
+  │
+  ▼
+ASSESS
+```
+
+The active runtime MAY terminate because lifecycle liveness remains guaranteed externally.
+
+---
+
+## Test AE — Persistence Is Not Wakeability
+
+Persist a valid `IDLE` or `WAITING` Product state without configuring any external wake mechanism.
+
+Prove that URACE does NOT treat successful persistence alone as sufficient justification for terminating the only runtime responsible for autonomous operation.
+
+Conceptually:
+
+```text
+state persisted
+      +
+no wake path
+      │
+      ▼
+runtime termination prohibited
+for persistent autonomous mode
+```
+
+unless bounded/one-shot execution was explicitly requested or policy requires termination.
+
+---
+
 # 49. Market/Product Demonstration
 
 For a Product with market intent, demonstrate:
 
 ```text
+PRODUCT INTENT
+      │
+      ▼
 PRODUCT STATE
       │
       ▼
-MARKET / USER / PRODUCT EVIDENCE
+MARKET / USER / CUSTOMER / PRODUCT EVIDENCE
       │
       ▼
 ASSESSMENT
@@ -3227,6 +4140,53 @@ inference
 hypothesis
 ```
 
+Where relevant, Product evolution MAY reason across a customer lifecycle such as:
+
+```text
+DISCOVERY / ACQUISITION
+          │
+          ▼
+DECISION / CONVERSION
+          │
+          ▼
+ACTIVATION / ADOPTION
+          │
+          ▼
+REALIZED CUSTOMER VALUE
+          │
+          ▼
+RETENTION / LOYALTY
+```
+
+This sequence is illustrative only.
+
+Different Products MAY have:
+
+- different customer journeys;
+- non-linear journeys;
+- multiple simultaneous journeys;
+- no meaningful customer journey at all.
+
+Across any applicable stage, URACE MAY identify cross-cutting value opportunities such as:
+
+```text
+reduce friction
+reduce cognitive load
+reduce customer effort
+reduce customer cost
+increase clarity
+increase usability
+increase accessibility
+increase reliability
+increase trust
+increase productivity
+improve intended customer outcomes
+```
+
+URACE MUST NOT assume these opportunities exist.
+
+Product Intent and evidence determine whether they become justified objectives.
+
 For a market-intended Product, an applicable progression MAY be:
 
 ```text
@@ -3239,23 +4199,23 @@ PRODUCT READY
 MARKET-FIT-QUALITY READY
         │
         ▼
-EXTERNAL MARKET EVIDENCE
+EXTERNAL MARKET / CUSTOMER EVIDENCE
 ```
 
 URACE MAY autonomously drive the first three stages where capability, evidence and policy permit.
 
 The final stage depends on actual external evidence and MUST NOT be fabricated.
 
-If market evidence demonstrates a material mismatch:
+If market/customer evidence demonstrates a material mismatch:
 
 ```text
 IDLE / READY
       │
       ▼
-NEW MARKET EVIDENCE
+NEW EXTERNAL EVIDENCE
       │
       ▼
-ASSESS
+ASSESS AGAINST INTENT
       │
       ▼
 MATERIAL GAP
@@ -3266,9 +4226,13 @@ JUSTIFIED REQUIREMENT
 
 The Product lifecycle resumes.
 
-This section demonstrates one Product-specific readiness variant.
+The mechanism that surfaces new external evidence and reactivates assessment remains a variant.
 
-It does not redefine market readiness as a universal URACE invariant.
+The ability to resume does not.
+
+This section demonstrates one Product-specific readiness/value variant.
+
+It does not redefine customer or market metrics as universal URACE invariants.
 
 ---
 
@@ -3290,6 +4254,19 @@ URACE MUST NOT repeatedly modify the Product simply because an executor remains 
 
 The same rule applies to URACE itself.
 
+URACE MUST NOT repeatedly optimize:
+
+```text
+conversion
+engagement
+retention
+cost
+friction
+or another measurable Product metric
+```
+
+after further changes cease to have sufficiently justified Product value relative to Intent.
+
 URACE MUST NOT repeatedly self-modify simply because improvements to its own implementation can be imagined.
 
 It MAY:
@@ -3306,6 +4283,9 @@ Before `IDLE`, URACE MUST establish that no material Product-level readiness gap
 The preferred convergence is:
 
 ```text
+INTENT
+  │
+  ▼
 ASSESS
    │
    ▼
@@ -3320,12 +4300,20 @@ GAP             READY
  │               │
  ▼               ▼
 REQUIREMENT     IDLE
- │
- ▼
-ACTIVE
+ │               │
+ ▼               ▼
+ACTIVE      PRESERVE LIVENESS
+                 │
+                 ▼
+          MEANINGFUL TRIGGER
+                 │
+                 ▼
+              ASSESS
 ```
 
-This prevents both premature completion and endless autonomous churn.
+This prevents premature completion, endless autonomous churn and dead autonomous dormancy.
+
+Preserving liveness MUST NOT itself create artificial Product work or repeated AI calls.
 
 ---
 
@@ -3353,7 +4341,7 @@ URACE is successfully bootstrapped when:
 18. It supports software and non-software/mixed artifacts.
 19. It independently validates executor results.
 20. It produces recoverable checkpoints.
-21. It preserves evidence, provenance, lineage and assumptions sufficiently for lifecycle correctness.
+21. It preserves Intent, evidence, provenance, lineage and assumptions sufficiently for lifecycle correctness.
 22. It can continue after capacity interruption.
 23. It can continue after process restart.
 24. It does not require custom RAG.
@@ -3372,92 +4360,114 @@ URACE is successfully bootstrapped when:
 37. It can optimize around soft resource budgets.
 38. It can represent deadlines, schedules, waits and temporal conditions without requiring a particular scheduler.
 39. Autonomous execution can converge to `IDLE` when no justified work remains.
-40. `IDLE` preserves lifecycle continuity without continuous resource consumption.
+40. `IDLE` preserves lifecycle continuity without continuous Product mutation or unnecessary executor use.
 41. `IDLE` requires Product-level readiness assessment rather than merely an empty task/objective list.
 42. Material unresolved defects, risks or readiness gaps prevent premature `IDLE`.
 43. Low-value speculative improvement does not prevent justified `IDLE`.
 44. A meaningful new trigger can resume assessment from `IDLE`.
-45. Readiness is derived from Product intent rather than one universal Product-quality definition.
+45. Readiness is derived from Product Intent rather than one universal Product-quality definition.
 46. Market validation remains evidence-based where applicable and is never inferred solely from AI opinion.
 47. Budget, schedule, constraint and structural semantics remain portable across executor replacement.
 48. The lifecycle avoids both premature completion and endless perfection loops.
-49. Product, user, market and environmental evidence can produce traceable justified requirements where applicable.
+49. Product, user, customer, market and environmental evidence can produce traceable justified requirements where applicable.
 50. Requirements do not exist independently from their Product justification.
 51. Implementation results feed new evidence into subsequent assessment.
-52. Market analysis remains an input/capability rather than becoming a mandatory URACE subsystem.
+52. Market/customer analysis remains an input/capability rather than becoming a mandatory URACE subsystem.
 53. Core invariants remain stable while implementation and strategy variants change.
 54. Product-specific readiness criteria can change without redefining URACE.
 55. Variants remain replaceable unless promoting one is required to preserve a Core Invariant.
 56. Evidence is a first-class lifecycle primitive without requiring a heavyweight evidence subsystem.
 57. Material lifecycle decisions preserve sufficient evidence lineage to reconstruct their justification.
 58. Observations, assumptions, inferences, hypotheses and validated evidence remain meaningfully distinguishable.
-59. URACE can identify a material limitation in its own lifecycle machinery without requiring the Product/user to explicitly nominate URACE as the target.
-60. URACE self-evolution follows ordinary lifecycle governance rather than privileged self-modification semantics.
-61. URACE does not self-modify merely because self-improvement is possible.
-62. Autonomous evolution supports an unbounded sequence of justified cycles rather than implying exactly one subsequent cycle.
+59. Product Intent is a first-class lifecycle primitive without requiring a dedicated Intent subsystem.
+60. Product Intent survives executor replacement, restart and objective completion.
+61. Objectives remain subordinate to Product Intent rather than silently redefining it.
+62. Product Value remains derivable from Intent, evidence, expected outcomes and trade-offs without requiring a first-class Value object.
+63. Acquisition, conversion, activation, adoption, engagement, retention, loyalty and similar dimensions MAY influence objectives when applicable but are not universal requirements.
+64. Reducing user/customer friction, effort, cognitive load or cost MAY constitute Product value when supported by Intent and evidence.
+65. Customer/user outcomes MAY be treated as Product evidence without requiring a customer-success subsystem in URACE core.
+66. URACE can reason about trade-offs between multiple Product-value dimensions rather than blindly maximizing one metric.
+67. External Product/customer outcomes are not represented as validated merely because an executor predicts them.
+68. Customer-value capabilities and evidence sources remain replaceable and externalizable.
+69. URACE can identify a material limitation in its own lifecycle machinery without requiring the Product/user to explicitly nominate URACE as the target.
+70. URACE self-evolution follows ordinary lifecycle governance rather than privileged self-modification semantics.
+71. URACE does not self-modify merely because self-improvement is possible.
+72. Autonomous evolution supports an unbounded sequence of justified cycles rather than implying exactly one subsequent cycle.
+73. Persistent autonomous operation preserves lifecycle liveness across `IDLE`, waiting and runtime dormancy.
+74. Persistence alone is not treated as proof of wakeability.
+75. A standalone `--autonomous` runtime does not terminate merely because no objective is immediately executable when no other wake/resume path exists.
+76. A runtime MAY safely terminate during autonomous dormancy when an equivalent durable wake/resume mechanism has assumed responsibility.
+77. Liveness does not require a particular event loop, daemon, scheduler, watcher, queue, alarm, cloud primitive or orchestrator.
+78. Dormant autonomous operation avoids unnecessary AI/executor activity and wasteful busy-waiting.
+79. Meaningful triggers can reactivate `IDLE` or waiting Products without loss of durable lifecycle state.
+80. Runtime implementation details may change while durability, liveness and wakeability semantics remain correct.
 
 ---
 
 # 52. Defensible Boundary
 
-Do not allow URACE's purpose to drift downward into executor implementation.
+Do not allow URACE's purpose to drift downward into executor implementation or sideways into domain-specific Product optimization.
 
 The stack boundary is:
 
 ```text
-┌─────────────────────────────────────┐
-│ PRODUCT / USER / MARKET /           │
-│ ENVIRONMENT                         │
-└──────────────────┬──────────────────┘
-                   │
-                evidence
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│                URACE                │
-│                                     │
-│ Persistent Autonomous Product      │
-│ Lifecycle Control Plane             │
-│                                     │
-│ intent                              │
-│ state                               │
-│ evidence + lineage                  │
-│ requirements                        │
-│ objectives                          │
-│ policy                              │
-│ constraints                         │
-│ budgets / schedules                 │
-│ validation                          │
-│ readiness                           │
-│ history                             │
-│ recovery                            │
-│ checkpoints                         │
-└──────────────────┬──────────────────┘
-                   │
-          generic capabilities
-                   │
-                   ▼
-┌─────────────────────────────────────┐
-│       EXECUTION / INTELLIGENCE      │
-│                                     │
-│ one AI                              │
-│ many AIs                            │
-│ OpenHands                           │
-│ another orchestrator                │
-│ deterministic tools                 │
-│ APIs                                │
-│ humans                              │
-│ future systems                      │
-└─────────────────────────────────────┘
+┌───────────────────────────────────────┐
+│ PRODUCT / USER / CUSTOMER / MARKET / │
+│ ENVIRONMENT                           │
+└───────────────────┬───────────────────┘
+                    │
+                 evidence
+                    │
+                    ▼
+┌───────────────────────────────────────┐
+│                 URACE                 │
+│                                       │
+│ Persistent Autonomous Product        │
+│ Lifecycle Control Plane               │
+│                                       │
+│ Intent                                │
+│ state                                 │
+│ evidence + lineage                    │
+│ requirements                          │
+│ objectives                            │
+│ policy                                │
+│ constraints                           │
+│ budgets / schedules                   │
+│ validation                            │
+│ readiness                             │
+│ lifecycle liveness                    │
+│ history                               │
+│ recovery                              │
+│ checkpoints                           │
+└───────────────────┬───────────────────┘
+                    │
+           generic capabilities
+                    │
+                    ▼
+┌───────────────────────────────────────┐
+│        EXECUTION / INTELLIGENCE       │
+│                                       │
+│ one AI                                │
+│ many AIs                              │
+│ OpenHands                             │
+│ another orchestrator                  │
+│ deterministic tools                   │
+│ APIs                                  │
+│ humans                                │
+│ future systems                        │
+└───────────────────────────────────────┘
 ```
 
 URACE's defensible responsibility is not producing superior intelligence.
 
-It is maintaining **continuous, evidence-aware, policy-governed, validated and recoverable Product evolution independently of whichever intelligence systems happen to exist underneath it.**
+It is maintaining continuous, Intent-directed, evidence-aware, policy-governed, validated, recoverable and autonomously resumable Product evolution independently of whichever intelligence systems happen to exist underneath it.
 
 Its responsibility includes preserving the causal chain:
 
 ```text
+INTENT
+   │
+   ▼
 EVIDENCE
    │
    ▼
@@ -3482,7 +4492,13 @@ VALIDATED PRODUCT CHANGE
 NEW EVIDENCE
 ```
 
+For Products serving users/customers, this MAY include continuously identifying and pursuing justified opportunities to create, deliver, increase or preserve Product/customer value.
+
 URACE determines when Product evolution should continue and when the Product has sufficiently converged for active evolution to become `IDLE`.
+
+`IDLE` changes activity state.
+
+It does not silently surrender autonomous lifecycle ownership.
 
 When a material limitation in URACE itself obstructs this lifecycle, that limitation MAY enter the same causal chain as an ordinary justified Product gap.
 
@@ -3490,7 +4506,26 @@ This does not create a separate self-improvement architecture.
 
 It preserves one lifecycle.
 
-URACE does NOT own the implementation of the intelligence used to perform market analysis, formulate solutions, write code, conduct research or execute other domain-specific work.
+URACE does NOT own the specialized implementation of:
+
+```text
+market analysis
+customer research
+acquisition optimization
+growth analytics
+CRM
+retention systems
+pricing intelligence
+behavioral analysis
+solution formulation
+coding
+research
+other domain-specific intelligence
+```
+
+Those capabilities MAY provide evidence or execution through the generic boundary.
+
+Likewise, URACE owns autonomous liveness semantics but not a particular runtime-liveness implementation.
 
 ---
 
@@ -3498,7 +4533,7 @@ URACE does NOT own the implementation of the intelligence used to perform market
 
 Before implementing any subsystem, ask:
 
-> **Must this capability remain authoritative and portable across executor replacement in order to preserve the autonomous Product lifecycle?**
+> Must this capability remain authoritative and portable across executor replacement in order to preserve the autonomous Product lifecycle?
 
 If YES:
 
@@ -3516,6 +4551,12 @@ AST parsing
 embeddings
 web browsing
 market-search implementation
+customer-research implementation
+growth analytics
+CRM implementation
+retention analytics
+pricing analysis
+behavioral analytics
 LLM reasoning
 coding
 debugging intelligence
@@ -3530,37 +4571,104 @@ URACE MAY consume their results without owning their implementations.
 
 Before declaring something a Core Invariant, ask:
 
-> **Would URACE cease to preserve its defining lifecycle semantics if this changed?**
+> Would URACE cease to preserve its defining lifecycle semantics if this changed?
 
 If NO:
 
 It SHOULD remain policy, configuration or a variant.
 
+Before promoting something to a first-class lifecycle primitive, ask:
+
+> Does lifecycle correctness require this concept to retain independent durable identity or semantics across objectives, executors and cycles?
+
+If YES:
+
+First-class treatment MAY be justified.
+
+If NO:
+
+Prefer deriving it from existing primitives.
+
+This is why:
+
+```text
+Intent
+    → first-class
+
+Evidence
+    → first-class
+
+Product Value
+    → derived
+
+conversion / retention / cognitive load / customer cost / etc.
+    → contextual dimensions
+
+Lifecycle Liveness
+    → invariant property
+
+event loop / daemon / scheduler / watcher / alarm / queue / webhook
+    → implementation variants
+```
+
 Before expanding evidence infrastructure, ask:
 
-> **Does lifecycle correctness require this evidence mechanism, or only sufficient provenance and lineage?**
+> Does lifecycle correctness require this evidence mechanism, or only sufficient provenance and lineage?
 
 If sufficient lineage can be preserved more simply, prefer the simpler mechanism.
 
+Before expanding liveness infrastructure, ask:
+
+> Does lifecycle correctness require this particular runtime mechanism, or only a viable durable path back to assessment?
+
+If the latter can be preserved more simply, prefer the simpler mechanism.
+
+Before allowing an autonomous runtime to terminate, ask:
+
+> If a meaningful trigger occurs after this runtime terminates, what concrete durable mechanism will cause URACE to reassess?
+
+If the answer is "none":
+
+Do not terminate persistent autonomous operation merely because the event loop would otherwise become empty.
+
 Before turning a constraint into an enforcement mechanism, ask:
 
-> **Is this an actual invariant or HARD boundary, or a preference that should guide autonomous selection?**
+> Is this an actual invariant or HARD boundary, or a preference that should guide autonomous selection?
 
 Before imposing physical structure, ask:
 
-> **Does lifecycle correctness require this structure, or can the existing Product structure be discovered and used?**
+> Does lifecycle correctness require this structure, or can the existing Product structure be discovered and used?
 
 Before generating a requirement, ask:
 
-> **What Product intent, evidence, material risk, constraint or sufficiently supported opportunity justifies this requirement?**
+> What Product Intent, evidence, material risk, constraint or sufficiently supported opportunity justifies this requirement?
+
+Before creating a Product-value objective, ask:
+
+> Which Product Intent and sufficiently supported evidence make this outcome valuable, and what material Product/user/customer result is expected to improve?
+
+Do not assume:
+
+```text
+more conversion
+more engagement
+more retention
+lower customer cost
+less friction
+less cognitive load
+```
+
+is automatically better.
+
+Determine whether the dimension is applicable, whether the causal hypothesis is supported strongly enough to act upon, what trade-offs may result, and how the outcome can eventually be validated.
 
 Before beginning another autonomous objective, ask:
 
-> **Does this action have sufficient expected Product value relative to its cost, risk, uncertainty and opportunity cost?**
+> Does this action have sufficient expected Product value relative to Intent, cost, risk, uncertainty and opportunity cost?
 
 Before modifying URACE itself, ask:
 
-> **Is a demonstrated limitation in URACE materially constraining the governed Product lifecycle, and is changing URACE the highest-value justified response?**
+> Is a demonstrated limitation in URACE materially constraining the governed Product lifecycle, and is changing URACE the highest-value justified response?
 
 If NO:
 
@@ -3568,11 +4676,11 @@ Do not self-modify merely because improvement is possible.
 
 Before entering `IDLE`, ask:
 
-> **Has the Product reached the highest justified readiness state currently supported by its intent, evidence and constraints, or is an empty objective list hiding meaningful unfinished work?**
+> Has the Product reached the highest justified readiness state currently supported by its Intent, evidence and constraints, or is an empty objective list hiding meaningful unfinished work?
 
 For a market-intended Product, this MAY additionally ask:
 
-> **Is the Product sufficiently market-ready for its current stage, or merely technically complete?**
+> Is the Product sufficiently market-ready for its current stage, or merely technically complete?
 
 If meaningful justified work remains:
 
@@ -3580,19 +4688,21 @@ Continue.
 
 If required progress depends on unavailable external evidence, capacity or time:
 
-Wait.
+Wait while preserving a viable path to reassessment.
 
 If the Product is sufficiently ready under its applicable readiness criteria and further autonomous work would primarily be speculative, cosmetic, redundant or unsupported by evidence:
 
-Enter `IDLE`.
+Enter `IDLE` while preserving autonomous liveness.
 
-Do not manufacture a requirement or objective solely to prevent autonomous execution from ending.
+Do not manufacture a requirement or objective solely to prevent autonomous execution from becoming dormant.
+
+Do not perform useless work merely to keep a runtime alive.
 
 ---
 
 # 54. Final Bootstrap Instruction
 
-Bootstrap the **smallest implementation capable of proving the Core Invariants above**.
+Bootstrap the smallest implementation capable of proving the Core Invariants above.
 
 Do not optimize for feature count.
 
@@ -3600,7 +4710,15 @@ Do not reproduce capabilities available through external executors.
 
 Do not promote implementation variants into Core Invariants without necessity.
 
-Do not turn first-class evidence into a heavyweight evidence platform unless Product requirements independently justify one.
+Do not promote useful Product metrics into first-class lifecycle primitives merely because they are measurable.
+
+Do not turn first-class Intent into a heavyweight Intent-management subsystem.
+
+Do not turn first-class Evidence into a heavyweight evidence platform unless Product requirements independently justify one.
+
+Do not create a first-class Value subsystem unless a concrete lifecycle requirement eventually demonstrates that Value must possess independent durable identity beyond Intent, Evidence, Requirements and Objectives.
+
+Do not turn Lifecycle Liveness into a heavyweight runtime framework.
 
 Do not create a privileged self-improvement subsystem.
 
@@ -3622,9 +4740,17 @@ Do not make a specific repository, directory or workspace structure mandatory.
 
 Do not make a specific scheduler mandatory.
 
+Do not make a permanent event loop mandatory.
+
+Do not make a daemon mandatory.
+
+Do not make a particular watcher, queue, alarm or cloud wake mechanism mandatory.
+
 Do not make a specific budget representation mandatory.
 
-Do not make market-fit-quality readiness mandatory for Products whose intent does not imply a market.
+Do not make a customer lifecycle, sales funnel, growth model, business model or Product-value metric mandatory.
+
+Do not make market-fit-quality readiness mandatory for Products whose Intent does not imply a market.
 
 The minimum intelligent deployment MUST remain:
 
@@ -3654,9 +4780,14 @@ The richer deployment MAY be:
 
 Both MUST exercise the same URACE lifecycle.
 
+Both MUST preserve equivalent autonomous liveness semantics.
+
 The canonical autonomous Product-evolution pattern is:
 
 ```text
+INTENT
+   │
+   ▼
 EVIDENCE
    │
    ▼
@@ -3686,18 +4817,102 @@ NEW / UPDATED EVIDENCE
    └────────────► REPEAT WHILE JUSTIFIED
 ```
 
-The evidence source, evidence storage mechanism, readiness criteria, implementation strategy and executor topology are variants.
+Intent and Evidence are first-class lifecycle primitives.
+
+Intent establishes durable direction.
+
+Evidence establishes what is sufficiently known to act.
+
+Product Value is evaluated relative to them.
+
+Specific value dimensions remain contextual.
+
+Lifecycle Liveness ensures that autonomous lifecycle ownership remains capable of reassessment even when active execution becomes dormant.
+
+The evidence source, evidence storage mechanism, readiness criteria, Product-value dimensions, implementation strategy, executor topology, scheduler, runtime model and wake mechanism are variants.
 
 Evidence being first-class is invariant.
 
 A particular evidence subsystem is not.
 
+Intent being first-class is invariant.
+
+A particular Intent representation or subsystem is not.
+
+Lifecycle Liveness is invariant.
+
+A particular event loop, daemon, scheduler, watcher, queue, alarm, webhook, cloud primitive or wake implementation is not.
+
+Conversion, retention, loyalty, engagement, cognitive load, customer effort, customer cost and similar dimensions being available for consideration does not make them URACE invariants.
+
 The lifecycle relationship is invariant.
+
+For a Product serving users or customers, justified Product evolution MAY include improving any evidence-supported dimension of Product/customer value, including but not limited to:
+
+```text
+acquisition
+conversion
+activation
+adoption
+engagement
+retention
+loyalty
+
+satisfaction
+trust
+usability
+accessibility
+clarity
+
+reduced friction
+reduced cognitive load
+reduced customer effort
+reduced customer cost
+
+increased customer productivity
+realized customer value
+successful customer outcomes
+```
+
+No item in this list is universally required.
+
+No fixed ordering is implied.
+
+No isolated metric is equivalent to Product value.
+
+The governing Product-value relationship is:
+
+```text
+PRODUCT INTENT
+      +
+AVAILABLE EVIDENCE
+      +
+EXPECTED OUTCOME
+      +
+CONSTRAINTS
+      +
+COST / RISK / TRADE-OFFS
+      │
+      ▼
+EXPECTED PRODUCT VALUE
+      │
+      ▼
+HIGHEST-VALUE JUSTIFIED OBJECTIVE
+```
+
+A Product may therefore need to acquire customers, convert prospects, reduce decision friction, improve activation, increase successful adoption, retain customers, reduce cognitive burden, reduce total customer cost, improve trust, increase productivity, improve outcomes, or pursue an entirely different dimension.
+
+URACE does not prescribe which.
+
+It discovers what is justified relative to Product Intent.
 
 For a market-intended Product, one specialization MAY be:
 
 ```text
-MARKET + USER + PRODUCT EVIDENCE
+INTENT
+   │
+   ▼
+MARKET + USER + CUSTOMER + PRODUCT EVIDENCE
                │
                ▼
              ASSESS
@@ -3724,15 +4939,18 @@ MARKET + USER + PRODUCT EVIDENCE
         │             │
         ▼             ▼
       REPEAT         IDLE
+                       │
+                       ▼
+                PRESERVE LIVENESS
 ```
 
-For another Product, the evidence and readiness criteria MAY differ while the lifecycle remains unchanged.
+For another Product, the evidence, value dimensions and readiness criteria MAY differ while the lifecycle remains unchanged.
 
 The loop MUST NOT be interpreted as an obligation to continuously generate requirements.
 
 Requirements exist to close justified Product gaps.
 
-When no sufficiently valuable justified gap remains and applicable readiness requirements are satisfied, the correct autonomous result is `IDLE`.
+When no sufficiently valuable justified gap remains and applicable readiness requirements are satisfied, the correct active lifecycle result is `IDLE`.
 
 When new evidence later reveals a meaningful gap:
 
@@ -3740,10 +4958,13 @@ When new evidence later reveals a meaningful gap:
 IDLE
  │
  ▼
+MEANINGFUL TRIGGER
+ │
+ ▼
 NEW EVIDENCE
  │
  ▼
-ASSESS
+ASSESS AGAINST INTENT
  │
  ▼
 NEW JUSTIFIED REQUIREMENT
@@ -3784,70 +5005,113 @@ But the same justification threshold applies.
 
 URACE MUST NOT self-modify merely because it is capable of doing so.
 
-`--autonomous` therefore continues autonomous Product evolution until explicitly paused, blocked by policy or external dependency, waiting for required capacity/evidence/time, or placed into `IDLE` because the Product has passed applicable readiness assessment and no sufficiently valuable justified action currently remains.
+`--autonomous` therefore continues autonomous Product lifecycle ownership until explicitly stopped or otherwise terminated by its invocation/policy contract.
 
-There is no predetermined number of autonomous cycles.
+Active Product evolution MAY become:
+
+```text
+ACTIVE
+WAITING
+BLOCKED
+PAUSED
+IDLE
+```
+
+without requiring unnecessary active execution.
+
+When autonomous operation remains enabled, dormant states MUST preserve a viable path to future assessment.
 
 Conceptually:
 
 ```text
-CYCLE
-  │
-  ▼
+ACTIVE CYCLE
+     │
+     ▼
 CHECKPOINT
-  │
-  ▼
+     │
+     ▼
 ASSESS
-  │
-  ├────► NEXT JUSTIFIED CYCLE
-  │              │
-  │              └────► repeat while justified
-  │
-  ├────► WAIT / BLOCK / PAUSE
-  │
-  └────► IDLE
+     │
+     ├────► NEXT JUSTIFIED CYCLE
+     │              │
+     │              └────► repeat while justified
+     │
+     ├────► WAIT / BLOCK / PAUSE
+     │              │
+     │              ▼
+     │       preserve wake/resume path
+     │
+     └────► IDLE
+                    │
+                    ▼
+             preserve liveness
+                    │
+                    ▼
+             meaningful trigger
+                    │
+                    ▼
+                  ASSESS
 ```
+
+There is no predetermined number of autonomous cycles.
 
 `IDLE` MUST NOT be premature.
 
 An empty task list, completed objective or lack of executor suggestions is not sufficient evidence of completion.
 
-Technical completion alone is not sufficient when Product intent implies additional material readiness requirements.
+Technical completion alone is not sufficient when Product Intent implies additional material readiness requirements.
 
 `IDLE` MUST NOT be endlessly postponed.
 
 Perfection is not the completion criterion.
 
-The existence of another conceivable improvement is not sufficient reason to continue.
+The existence of another conceivable improvement or another optimizable metric is not sufficient reason to continue.
 
 This applies equally to the governed Product and to URACE itself.
 
-The governing convergence rule is:
+`IDLE` MUST NOT become dead autonomy.
+
+Persisted state without a viable reassessment path does not satisfy persistent autonomous lifecycle ownership.
+
+The governing convergence and liveness rule is:
 
 ```text
 CONTINUE
     when
 expected Product value of justified action
+relative to Intent
 meaningfully exceeds its cost / risk / opportunity cost
 
 WAIT
     when
 required progress depends on a future or external condition
+while preserving a viable wake/resume path
 
 BLOCK
     when
 a HARD constraint prevents required progress
+while preserving reassessment when the condition can change
 
 IDLE
     when
 applicable readiness requirements are satisfied
 AND
-no material unresolved gap remains
+no material unresolved Intent-relative gap remains
 AND
 no currently available action has sufficient justified value
+while preserving autonomous liveness
+
+TERMINATE CURRENT RUNTIME
+    only when
+autonomous operation has been explicitly stopped/bounded
+OR
+policy requires termination
+OR
+an equivalent durable mechanism has assumed responsibility
+for future wake/resume
 ```
 
-Readiness remains intent-relative:
+Readiness remains Intent-relative:
 
 ```text
 PRODUCT INTENT
@@ -3864,6 +5128,9 @@ MATERIAL GAP       READY
  │                   │
  ▼                   ▼
 CONTINUE            IDLE
+                       │
+                       ▼
+                PRESERVE LIVENESS
 ```
 
 For a market-intended Product, this MAY specialize to:
@@ -3879,6 +5146,9 @@ MARKET-FIT-QUALITY READINESS
         │
         ▼
 IDLE / MARKET EVIDENCE WAIT
+        │
+        ▼
+PRESERVE WAKE / RESUME PATH
 ```
 
 Actual market validation remains external-evidence dependent:
@@ -3886,7 +5156,7 @@ Actual market validation remains external-evidence dependent:
 ```text
 MARKET-FIT-QUALITY PRODUCT
             +
-REAL USER / MARKET EVIDENCE
+REAL USER / CUSTOMER / MARKET EVIDENCE
             │
             ▼
 VALIDATED MARKET LEARNING
@@ -3896,7 +5166,7 @@ URACE MUST pursue applicable evidence when doing so is justified and possible.
 
 URACE MUST wait when required evidence inherently depends on time or external actors.
 
-URACE MUST resume when new evidence materially changes the Product state.
+URACE MUST remain capable of resuming when new evidence materially changes the Product state.
 
 Individual requirements may complete.
 
@@ -3907,6 +5177,8 @@ Individual cycles may complete.
 Individual executors may terminate.
 
 Individual AI conversations may disappear.
+
+Active runtimes may terminate when another durable mechanism preserves autonomous liveness.
 
 Models may change.
 
@@ -3926,9 +5198,21 @@ Validation mechanisms may change.
 
 Schedulers may change.
 
+Wake mechanisms may change.
+
+Runtime models may change.
+
 Persistence mechanisms may change.
 
-Readiness criteria may change with Product intent.
+Customer journeys may change.
+
+Market conditions may change.
+
+Relevant Product-value dimensions may change.
+
+Readiness criteria may change with Product Intent.
+
+Product Intent itself may evolve through justified, authoritative change while remaining durably traceable.
 
 URACE itself may evolve when its limitations become materially relevant to the Product lifecycle.
 
@@ -3938,26 +5222,46 @@ New evidence may reactivate it.
 
 **The autonomous Product lifecycle remains.**
 
-The final invariant test is:
+The final first-class principle is:
 
-> **If an executor, model, orchestrator, language, platform, structure, strategy or mechanism can be replaced while lifecycle correctness remains intact, it is a variant—not URACE's identity.**
+> Intent and Evidence are first-class lifecycle primitives because autonomous lifecycle correctness depends on preserving both durable direction and justified knowledge across objectives, executors and cycles; Product Value remains derived unless independent lifecycle semantics eventually justify promoting it.
+
+The final Intent principle is:
+
+> Product Intent defines what meaningful Product progress, value and readiness mean; objectives, strategies, implementations and metrics may change without silently redefining that Intent.
 
 The final evidence principle is:
 
-> **Evidence is a first-class lifecycle primitive whose provenance and causal lineage justify autonomous decisions, without requiring URACE to become an evidence-management platform.**
+> Evidence is a first-class lifecycle primitive whose provenance and causal lineage justify autonomous decisions, without requiring URACE to become an evidence-management platform.
+
+The final Product-value principle is:
+
+> URACE pursues the highest-value justified Product outcomes supported by Intent and evidence; customer-facing outcomes such as acquisition, conversion, retention, reduced cognitive load, reduced effort and reduced cost are possible dimensions of value, never universal objectives.
+
+The final customer-value principle is:
+
+> For Products that serve users or customers, URACE should pursue durable realized value rather than blindly maximize isolated proxy metrics, balancing acquisition, use, retention, effort, cost, trust and outcomes only where they are relevant and sufficiently justified by Product Intent and evidence.
+
+The final liveness principle is:
+
+> Persistent autonomous lifecycle ownership requires both durable state and a viable path back to assessment; URACE may become dormant and may release its active runtime, but it MUST NOT silently become unreachable merely because no work is immediately executable.
+
+The final runtime principle is:
+
+> URACE owns liveness semantics, not a particular liveness mechanism: a process, event loop, watcher, scheduler, alarm, queue, webhook, orchestrator or serverless wake source may all satisfy the same contract when they preserve equivalent durable reassessment capability.
 
 The final self-evolution principle is:
 
-> **URACE may evolve its own lifecycle machinery when evidence shows that a limitation in URACE materially constrains the governed Product lifecycle; such evolution requires no special invitation, receives no special privilege, and remains subject to the same justification, validation, checkpointing and convergence rules as every other change.**
+> URACE may evolve its own lifecycle machinery when evidence shows that a limitation in URACE materially constrains the governed Product lifecycle; such evolution requires no special invitation, receives no special privilege, and remains subject to the same Intent, justification, validation, checkpointing and convergence rules as every other change.
 
 The final design principle is:
 
-> **URACE owns the persistent autonomous Product lifecycle; replaceable executors provide the intelligence and execution required to advance it.**
+> URACE owns the persistent autonomous Product lifecycle; replaceable executors provide the intelligence and execution required to advance it.
 
 The final evolution principle is:
 
-> **Evidence reveals justified Product gaps; gaps produce requirements and objectives; executors implement them; observations and independent validation determine acceptance; resulting Product state creates new evidence; URACE repeats the cycle while further action remains justified.**
+> Product Intent establishes direction; evidence reveals justified Product gaps; gaps produce requirements and objectives; executors implement them; observations and independent validation determine acceptance; resulting Product state creates new evidence; URACE repeats the cycle while further action remains justified.
 
 And the final convergence principle is:
 
-> **URACE must evolve each Product toward the highest justified readiness state implied by that Product's intent, evidence and constraints—not merely until work becomes inconvenient, and not beyond the point where further autonomous work has insufficient justified value.**
+> URACE must evolve each Product toward the highest justified readiness state implied by that Product's Intent, evidence and constraints—not merely until work becomes inconvenient, not beyond the point where further autonomous work has insufficient justified value, and not into a dormant state from which autonomous reassessment can no longer occur.
