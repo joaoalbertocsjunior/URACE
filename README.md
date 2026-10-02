@@ -10,7 +10,9 @@ It preserves and governs a continuous Product lifecycle across bounded, replacea
 
 **You choose the destination you want to retain. URACE drives everything you delegate beneath it.** Within that delegated Authority, URACE independently discovers what should happen next, prioritizes, plans, selects capabilities, executes, learns from Evidence, validates results, checkpoints accepted progress, recovers across interruptions, becomes dormant when no justified action exists, reactivates when meaningful change occurs, and continues evolving the Product.
 
-At its core, URACE is also an **open and editable idea expressed as an open-source blueprint** through `URACE.md`, from which its lifecycle architecture can be bootstrapped into an implementation, inspected, adapted, extended, and evolved without depending on any particular Product, AI, [Executor, or Orchestrator](#where-urace-sits). URACE sits **above those replaceable execution capabilities**, preserving lifecycle ownership while delegating bounded Operations beneath it.
+At its core, URACE is also an **open, editable, and bootstrap-ready idea expressed as an open-source blueprint** through `URACE.md`. It applies **meta-implementation principles**: the blueprint defines a lifecycle architecture that can be instantiated as an environment-appropriate implementation rather than prescribing a single fixed implementation. It can be inspected, adapted, extended, and evolved without depending on any particular Product, AI, [Executor, or Orchestrator](#where-urace-sits).
+
+URACE sits **above those replaceable execution capabilities**, preserving lifecycle ownership while delegating bounded Operations beneath it.
 
 **URACE is MIT-licensed.** Users may keep their resulting products, derived sub-products, and accumulated product intelligence proprietary, subject to the MIT License and applicable third-party rights.
 
