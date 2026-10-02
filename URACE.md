@@ -12,7 +12,7 @@ URACE MUST NOT become another coding agent, LLM framework, agent runtime, IDE ag
 
 Its purpose is:
 
-> **Continuously evolve a Product by preserving durable intent, state, evidence, decisions, policy, validation, recovery and history; translating justified Product, user, market and environmental evidence into requirements and objectives; delegating intelligence-intensive or execution-intensive operations to replaceable executors; independently evaluating their results; checkpointing accepted increments; and repeating until further autonomous action is not sufficiently justified.**
+> **Continuously evolve a Product by preserving durable intent, state, evidence, decisions, policy, validation, recovery and history; translating justified Product, user, market and environmental evidence into requirements and objectives; delegating intelligence-intensive or execution-intensive operations to replaceable executors; independently evaluating their results; checkpointing accepted increments; and repeating while further autonomous action remains sufficiently justified.**
 
 The primary architectural invariant is:
 
@@ -92,7 +92,7 @@ URACE owns:
 - Product intent;
 - durable Product state;
 - autonomous lifecycle state;
-- evidence references;
+- evidence references and lineage;
 - assumptions;
 - decisions;
 - requirement/objective history;
@@ -175,7 +175,9 @@ Lifecycle correctness MUST NOT depend on one executor, model, orchestrator, agen
 
 ### I3 — Evidence Traceability
 
-Material autonomous decisions MUST remain attributable to Product intent, evidence, constraints, risk or sufficiently justified opportunity.
+Material autonomous decisions MUST remain attributable to Product intent, evidence, constraints, risk, observations, policy or sufficiently justified opportunity.
+
+Evidence used to justify lifecycle decisions MUST preserve sufficient provenance and lineage to distinguish what was observed from what was inferred, assumed, hypothesized or decided.
 
 ### I4 — Justified Evolution
 
@@ -249,6 +251,7 @@ orchestrator
 reasoning strategy
 
 evidence sources
+evidence storage representation
 market-analysis technique
 user-research technique
 requirement-generation technique
@@ -731,14 +734,18 @@ UPDATE DURABLE STATE
 UPDATE EVIDENCE
    │
    ▼
-FRESH CYCLE
+FRESH ASSESSMENT CYCLE
    │
-   └──────────────► ASSESS AGAIN
+   └──────────────► repeat while justified
 ```
 
 The URACE lifecycle persists independently from individual executor lifetimes.
 
 A fresh cycle MUST NOT imply that another mutation is necessarily required.
+
+There is no fixed number of cycles.
+
+URACE MAY execute as many successive cycles as remain justified.
 
 A cycle MAY legitimately converge to `WAITING`, `BLOCKED`, `PAUSED` or `IDLE`.
 
@@ -763,9 +770,7 @@ Instead:
 URACE STATE
     │
     ▼
-CYCLE N
-    │
- executor
+CURRENT JUSTIFIED CYCLE
     │
     ▼
 checkpoint
@@ -773,7 +778,9 @@ checkpoint
     ▼
 URACE STATE
     │
-    ├────────────► CYCLE N+1
+    ├────────────► NEXT JUSTIFIED CYCLE
+    │                    │
+    │                    └────► repeat while justified
     │
     └────────────► IDLE / WAIT
 ```
@@ -819,6 +826,8 @@ PRODUCT / USER / MARKET / ENVIRONMENT EVIDENCE
                        │
                        ▼
                    REASSESS
+                       │
+                       └────► repeat while justified
 ```
 
 This is a semantic lifecycle pattern, not a mandatory implementation pipeline.
@@ -893,18 +902,22 @@ Before `IDLE`, URACE MUST perform an explicit completion/readiness assessment.
 
 # 15. Evidence
 
-Evidence is first-class lifecycle context.
+Evidence is a **first-class lifecycle primitive**.
+
+It is not merely transient executor context.
 
 Conceptually:
 
 ```text
 Evidence {
+    identity?
     source
     observation
     provenance
     timestamp?
     confidence?
     classification
+    references?
 }
 ```
 
@@ -921,7 +934,8 @@ Evidence MAY originate from:
 - operators;
 - files;
 - APIs;
-- experiments.
+- experiments;
+- previous lifecycle observations.
 
 Do not require a specific evidence source.
 
@@ -930,6 +944,108 @@ Evidence quality SHOULD influence confidence.
 Absence of evidence MUST NOT be silently converted into positive evidence.
 
 Evidence SHOULD be evaluated for relevance, recency, provenance and uncertainty where applicable.
+
+URACE MUST preserve meaningful distinctions between:
+
+```text
+EVIDENCE
+    =
+what is known or observed
+
+ASSUMPTION
+    =
+what is provisionally believed
+
+INFERENCE
+    =
+what is derived from available information
+
+HYPOTHESIS
+    =
+what remains to be tested
+
+DECISION
+    =
+what URACE chooses
+
+REQUIREMENT
+    =
+what justified Product gap should be addressed
+
+OBSERVATION
+    =
+what execution or the environment produced/revealed
+
+VALIDATION
+    =
+whether applicable acceptance criteria were satisfied
+```
+
+These concepts MUST NOT be collapsed merely for implementation convenience.
+
+In particular:
+
+```text
+EXECUTOR CLAIM
+      ≠
+EVIDENCE BY DEFAULT
+
+INFERENCE
+      ≠
+OBSERVATION
+
+HYPOTHESIS
+      ≠
+VALIDATED FACT
+```
+
+Material lifecycle decisions SHOULD preserve sufficient lineage to determine what justified them.
+
+This includes, where applicable:
+
+```text
+evidence
+intent
+constraints
+observations
+risk
+policy
+assumptions
+```
+
+The expected relationship is:
+
+```text
+EVIDENCE
+   │
+   ▼
+ASSESSMENT
+   │
+   ▼
+JUSTIFIED GAP
+   │
+   ▼
+REQUIREMENT / OBJECTIVE
+   │
+   ▼
+EXECUTION
+   │
+   ▼
+OBSERVATION
+   │
+   ▼
+VALIDATION
+   │
+   ▼
+CHECKPOINT
+   │
+   ▼
+NEW / UPDATED EVIDENCE
+```
+
+URACE SHOULD preserve this causal lineage without requiring a heavyweight evidence database, knowledge graph, RAG system or specialized evidence framework.
+
+Evidence storage, indexing and retrieval mechanisms remain implementation variants.
 
 ---
 
@@ -998,7 +1114,7 @@ URACE MAY delegate market analysis, research, requirement formulation and implem
 URACE remains authoritative over:
 
 ```text
-evidence provenance
+evidence provenance and lineage
 requirement/objective justification
 policy
 acceptance
@@ -1065,6 +1181,8 @@ ProductState {
 ```
 
 Exact serialization is an implementation detail.
+
+Evidence lineage MAY be represented directly or through durable references.
 
 Human-readable documents MUST NOT be the sole authoritative state store.
 
@@ -1358,6 +1476,8 @@ accept repair/reassess
 
 Passing implementation validation MUST NOT automatically imply overall Product readiness.
 
+Validation results MAY themselves become evidence for subsequent lifecycle assessment.
+
 ---
 
 # 20. Validation Discovery
@@ -1511,6 +1631,8 @@ Checkpoint {
 }
 ```
 
+Checkpoint evidence references SHOULD preserve sufficient lineage to reconstruct why the accepted increment occurred.
+
 Checkpoints MUST NOT require Git.
 
 If Git is available, a commit/revision MAY be referenced.
@@ -1558,6 +1680,8 @@ Why did the lifecycle continue, wait, block or become IDLE?
 ```
 
 History MUST survive executor replacement.
+
+Material lifecycle history SHOULD preserve causal links rather than only chronological logs.
 
 ---
 
@@ -1912,7 +2036,8 @@ Detect:
 - premature completion;
 - repeated speculative requirements;
 - repeated speculative objectives;
-- repeated reassessment without new evidence.
+- repeated reassessment without new evidence;
+- repeated self-modification without demonstrated lifecycle value.
 
 When progress cannot be justified:
 
@@ -1965,8 +2090,9 @@ On interruption:
 4. persist observations and diagnostics;
 5. preserve current objective;
 6. preserve constraint, budget and schedule state;
-7. release URACE-owned resources;
-8. leave unrelated external state untouched.
+7. preserve evidence and relevant lineage;
+8. release URACE-owned resources;
+9. leave unrelated external state untouched.
 
 ---
 
@@ -2020,6 +2146,8 @@ URACE MUST NOT require the Product itself to adopt a URACE-specific directory hi
 
 Persistence location, naming, hierarchy and storage mechanism are implementation variants.
 
+Evidence being first-class MUST NOT imply that evidence requires a dedicated physical directory, database, graph or service.
+
 ---
 
 # 40. No Mandatory Custom RAG
@@ -2032,11 +2160,15 @@ Do NOT make URACE dependent on:
 - symbol graphs;
 - repository maps;
 - context sharding;
-- custom RAG.
+- custom RAG;
+- evidence graphs;
+- dedicated knowledge databases.
 
 An executor MAY use any of them internally.
 
-URACE only persists lifecycle-relevant context.
+A deployment MAY use them as persistence/retrieval variants.
+
+URACE only requires enough durable lifecycle context and evidence lineage to preserve lifecycle correctness.
 
 ---
 
@@ -2128,31 +2260,114 @@ Likewise, do not encode software-specific definitions of Product quality or comp
 
 ---
 
-# 44. No Mandatory Self-Modification
+# 44. Conditional Self-Evolution
 
-URACE does not need a special self-improvement subsystem.
+URACE does not require a privileged self-improvement or self-modification subsystem.
 
-URACE itself MAY be managed as a Product.
+URACE itself MAY be acted upon through the same Product lifecycle when limitations in URACE materially constrain the Product lifecycle it is governing.
+
+The Product or user does NOT need to explicitly nominate URACE as the target before such a limitation can be identified.
+
+The justification originates from the governed lifecycle itself.
+
+Conceptually:
+
+```text
+PRODUCT EVOLUTION
+      │
+      ▼
+URACE LIMITATION OBSERVED
+      │
+      ▼
+EVIDENCE SHOWS MATERIAL
+LIFECYCLE CONSTRAINT
+      │
+      ▼
+JUSTIFIED GAP
+      │
+      ▼
+URACE-LEVEL REQUIREMENT /
+OBJECTIVE
+      │
+      ▼
+MODIFY URACE
+      │
+      ▼
+INDEPENDENT VALIDATION
+      │
+      ▼
+CHECKPOINT
+      │
+      ▼
+UPDATED EVIDENCE
+      │
+      ▼
+RESUME / REASSESS
+PRODUCT EVOLUTION
+```
+
+Examples of potentially justified URACE limitations MAY include deficiencies in:
+
+```text
+lifecycle control
+evidence handling
+executor abstraction
+validation
+recovery
+checkpointing
+constraint enforcement
+capacity handling
+readiness assessment
+```
+
+These examples MUST NOT become a mandatory self-improvement checklist.
+
+A URACE limitation becomes actionable only when its improvement is sufficiently justified under the same lifecycle rules governing ordinary Product evolution.
 
 Therefore:
 
 ```text
-URACE runtime
-     │
-     ▼
-URACE source/product
-     │
-     ▼
-normal lifecycle
+URACE CAN CHANGE ITSELF
+        ≠
+URACE SHOULD CONTINUOUSLY
+CHANGE ITSELF
 ```
 
-can eventually allow controlled self-development without giving self-modification privileged semantics.
+and:
 
-URACE itself MAY become a justified Product objective when limitations in URACE materially constrain the Product lifecycle.
+```text
+POSSIBLE URACE IMPROVEMENT
+        ≠
+JUSTIFIED URACE OBJECTIVE
+```
 
-The user does not need to explicitly declare URACE itself as the Product for a clearly lifecycle-relevant limitation to be identified.
+Any URACE-level change MUST remain subject to the same:
 
-Any such change remains subject to ordinary evidence, policy, constraints, budgets, validation and checkpointing.
+- evidence requirements;
+- justification;
+- HARD constraints;
+- policy;
+- budgets;
+- schedules;
+- safety controls;
+- validation;
+- checkpointing;
+- anti-churn rules;
+- convergence rules.
+
+Self-evolution MUST NOT bypass ordinary lifecycle governance.
+
+URACE MUST NOT modify itself merely because:
+
+- an executor proposes an improvement;
+- a different architecture is possible;
+- a speculative abstraction could be added;
+- autonomous mode remains enabled;
+- resources remain available.
+
+If changing URACE is not required or sufficiently valuable for advancing the governed Product lifecycle, URACE SHOULD leave itself unchanged.
+
+Conditional self-evolution is therefore an emergent application of the ordinary URACE lifecycle, not a separate privileged lifecycle.
 
 ---
 
@@ -2176,7 +2391,7 @@ Lifecycle
 Persistence
 ```
 
-Constraint, budget, schedule and readiness semantics SHOULD remain simple lifecycle data/policy rather than automatically becoming large independent frameworks.
+Constraint, budget, schedule, evidence-lineage and readiness semantics SHOULD remain simple lifecycle data/policy rather than automatically becoming large independent frameworks.
 
 Avoid turning every concept into a large framework.
 
@@ -2230,6 +2445,8 @@ Follow repository conventions when a better implementation exists.
 
 An implementation MAY combine, rename, relocate or differently represent these responsibilities.
 
+The conceptual `evidence/` responsibility does not require a dedicated physical subsystem.
+
 No directory name or hierarchy above is part of URACE core semantics.
 
 ---
@@ -2278,7 +2495,7 @@ Implement:
 
 - Product;
 - ProductState;
-- evidence;
+- evidence and sufficient lineage;
 - requirements/objectives;
 - lifecycle state;
 - history;
@@ -2363,6 +2580,8 @@ Persist accepted increments without assuming Git.
 
 Use Git when available and useful.
 
+Preserve enough evidence references and lineage to reconstruct material acceptance decisions.
+
 ---
 
 ## Step 10 — Implement `--plan`
@@ -2403,6 +2622,9 @@ while autonomous mode enabled:
         user/market evidence where applicable
         environmental evidence
 
+    preserve relevant evidence provenance
+    and lifecycle lineage
+
     determine current lifecycle condition
 
     evaluate applicable:
@@ -2419,6 +2641,11 @@ while autonomous mode enabled:
 
     formulate a requirement/objective only
     when the gap justifies action
+
+    if the material gap is caused by a limitation
+    in URACE itself:
+        allow that limitation to become a normal
+        justified objective when sufficiently valuable
 
     if no justified objective exists:
 
@@ -2478,6 +2705,10 @@ Autonomous execution does not require an endless active process.
 
 The lifecycle remains persistent while execution MAY become dormant.
 
+There is no predetermined cycle count.
+
+Each accepted increment MAY lead to another assessment cycle, and another justified cycle MAY follow for as long as meaningful Product evolution remains justified.
+
 ---
 
 # 48. Mandatory Agnosticism Tests
@@ -2501,12 +2732,14 @@ No multi-agent framework.
 ## Test B — Executor Replacement
 
 ```text
-Cycle N   → Executor A
+CURRENT CYCLE → Executor A
 Checkpoint
-Cycle N+1 → Executor B
+NEXT JUSTIFIED CYCLE → Executor B
 ```
 
 Product continuity MUST survive replacement.
+
+The test MUST NOT imply that only one subsequent cycle is permitted.
 
 ---
 
@@ -2820,6 +3053,9 @@ JUSTIFIED REQUIREMENT
 IMPLEMENT
    │
    ▼
+OBSERVE
+   │
+   ▼
 VALIDATE
    │
    ▼
@@ -2830,6 +3066,8 @@ UPDATED EVIDENCE
 ```
 
 The requirement MUST remain traceable to its justification.
+
+The resulting evidence MUST remain distinguishable from assumptions, inferences and hypotheses.
 
 ---
 
@@ -2864,9 +3102,84 @@ repository structure
 validation mechanism
 checkpoint mechanism
 scheduler
+evidence storage mechanism
 ```
 
 and prove that the Core Invariants remain true.
+
+---
+
+## Test W — Evidence Lineage
+
+Provide evidence that results in a material autonomous decision.
+
+Prove that URACE can reconstruct:
+
+```text
+SOURCE / OBSERVATION
+        │
+        ▼
+EVIDENCE
+        │
+        ▼
+ASSESSMENT
+        │
+        ▼
+JUSTIFIED GAP
+        │
+        ▼
+REQUIREMENT / OBJECTIVE
+        │
+        ▼
+DECISION / EXECUTION
+        │
+        ▼
+VALIDATION
+        │
+        ▼
+CHECKPOINT
+```
+
+without requiring a dedicated evidence database, knowledge graph or RAG system.
+
+---
+
+## Test X — Conditional Self-Evolution
+
+Provide a Product whose progress is materially constrained by a demonstrable URACE limitation.
+
+Do NOT explicitly instruct URACE to modify itself.
+
+Prove:
+
+```text
+PRODUCT LIFECYCLE
+        │
+        ▼
+URACE LIMITATION OBSERVED
+        │
+        ▼
+MATERIAL IMPACT ESTABLISHED
+        │
+        ▼
+JUSTIFIED URACE-LEVEL OBJECTIVE
+        │
+        ▼
+BOUNDED CHANGE
+        │
+        ▼
+VALIDATION
+        │
+        ▼
+CHECKPOINT
+        │
+        ▼
+PRODUCT LIFECYCLE CONTINUES
+```
+
+Then provide a merely speculative or cosmetic URACE improvement.
+
+Prove that no self-modification occurs solely because improvement is possible.
 
 ---
 
@@ -2902,7 +3215,7 @@ CHECKPOINT
 NEW EVIDENCE / ASSUMPTIONS
       │
       ▼
-NEXT REQUIREMENT / READINESS ASSESSMENT
+NEXT JUSTIFIED ASSESSMENT CYCLE
 ```
 
 The demonstration MUST preserve the distinction between:
@@ -2975,6 +3288,10 @@ no unresolved objective
 
 URACE MUST NOT repeatedly modify the Product simply because an executor remains available.
 
+The same rule applies to URACE itself.
+
+URACE MUST NOT repeatedly self-modify simply because improvements to its own implementation can be imagined.
+
 It MAY:
 
 - reassess later;
@@ -3036,7 +3353,7 @@ URACE is successfully bootstrapped when:
 18. It supports software and non-software/mixed artifacts.
 19. It independently validates executor results.
 20. It produces recoverable checkpoints.
-21. It preserves evidence and assumptions.
+21. It preserves evidence, provenance, lineage and assumptions sufficiently for lifecycle correctness.
 22. It can continue after capacity interruption.
 23. It can continue after process restart.
 24. It does not require custom RAG.
@@ -3071,6 +3388,13 @@ URACE is successfully bootstrapped when:
 53. Core invariants remain stable while implementation and strategy variants change.
 54. Product-specific readiness criteria can change without redefining URACE.
 55. Variants remain replaceable unless promoting one is required to preserve a Core Invariant.
+56. Evidence is a first-class lifecycle primitive without requiring a heavyweight evidence subsystem.
+57. Material lifecycle decisions preserve sufficient evidence lineage to reconstruct their justification.
+58. Observations, assumptions, inferences, hypotheses and validated evidence remain meaningfully distinguishable.
+59. URACE can identify a material limitation in its own lifecycle machinery without requiring the Product/user to explicitly nominate URACE as the target.
+60. URACE self-evolution follows ordinary lifecycle governance rather than privileged self-modification semantics.
+61. URACE does not self-modify merely because self-improvement is possible.
+62. Autonomous evolution supports an unbounded sequence of justified cycles rather than implying exactly one subsequent cycle.
 
 ---
 
@@ -3097,7 +3421,7 @@ The stack boundary is:
 │                                     │
 │ intent                              │
 │ state                               │
-│ evidence                            │
+│ evidence + lineage                  │
 │ requirements                        │
 │ objectives                          │
 │ policy                              │
@@ -3146,6 +3470,12 @@ REQUIREMENT / OBJECTIVE
 EXECUTION
    │
    ▼
+OBSERVATION
+   │
+   ▼
+VALIDATION
+   │
+   ▼
 VALIDATED PRODUCT CHANGE
    │
    ▼
@@ -3154,7 +3484,13 @@ NEW EVIDENCE
 
 URACE determines when Product evolution should continue and when the Product has sufficiently converged for active evolution to become `IDLE`.
 
-It does NOT own the implementation of the intelligence used to perform market analysis, formulate solutions, write code, conduct research or execute other domain-specific work.
+When a material limitation in URACE itself obstructs this lifecycle, that limitation MAY enter the same causal chain as an ordinary justified Product gap.
+
+This does not create a separate self-improvement architecture.
+
+It preserves one lifecycle.
+
+URACE does NOT own the implementation of the intelligence used to perform market analysis, formulate solutions, write code, conduct research or execute other domain-specific work.
 
 ---
 
@@ -3200,6 +3536,12 @@ If NO:
 
 It SHOULD remain policy, configuration or a variant.
 
+Before expanding evidence infrastructure, ask:
+
+> **Does lifecycle correctness require this evidence mechanism, or only sufficient provenance and lineage?**
+
+If sufficient lineage can be preserved more simply, prefer the simpler mechanism.
+
 Before turning a constraint into an enforcement mechanism, ask:
 
 > **Is this an actual invariant or HARD boundary, or a preference that should guide autonomous selection?**
@@ -3215,6 +3557,14 @@ Before generating a requirement, ask:
 Before beginning another autonomous objective, ask:
 
 > **Does this action have sufficient expected Product value relative to its cost, risk, uncertainty and opportunity cost?**
+
+Before modifying URACE itself, ask:
+
+> **Is a demonstrated limitation in URACE materially constraining the governed Product lifecycle, and is changing URACE the highest-value justified response?**
+
+If NO:
+
+Do not self-modify merely because improvement is possible.
 
 Before entering `IDLE`, ask:
 
@@ -3249,6 +3599,10 @@ Do not optimize for feature count.
 Do not reproduce capabilities available through external executors.
 
 Do not promote implementation variants into Core Invariants without necessity.
+
+Do not turn first-class evidence into a heavyweight evidence platform unless Product requirements independently justify one.
+
+Do not create a privileged self-improvement subsystem.
 
 Do not make OpenHands mandatory.
 
@@ -3318,18 +3672,25 @@ REQUIREMENT / OBJECTIVE
 IMPLEMENT
    │
    ▼
+OBSERVE
+   │
+   ▼
 VALIDATE
    │
    ▼
 CHECKPOINT
    │
    ▼
-NEW EVIDENCE
+NEW / UPDATED EVIDENCE
    │
-   └────────────► REPEAT
+   └────────────► REPEAT WHILE JUSTIFIED
 ```
 
-The evidence source, readiness criteria, implementation strategy and executor topology are variants.
+The evidence source, evidence storage mechanism, readiness criteria, implementation strategy and executor topology are variants.
+
+Evidence being first-class is invariant.
+
+A particular evidence subsystem is not.
 
 The lifecycle relationship is invariant.
 
@@ -3390,7 +3751,62 @@ NEW JUSTIFIED REQUIREMENT
 
 The lifecycle resumes.
 
+When the evidence instead reveals that URACE itself is materially constraining the lifecycle:
+
+```text
+PRODUCT LIFECYCLE
+      │
+      ▼
+URACE LIMITATION
+      │
+      ▼
+MATERIAL JUSTIFIED GAP
+      │
+      ▼
+URACE-LEVEL OBJECTIVE
+      │
+      ▼
+BOUNDED CHANGE
+      │
+      ▼
+VALIDATE
+      │
+      ▼
+CHECKPOINT
+      │
+      ▼
+RESUME PRODUCT LIFECYCLE
+```
+
+The Product does not need to explicitly instruct URACE to target itself.
+
+But the same justification threshold applies.
+
+URACE MUST NOT self-modify merely because it is capable of doing so.
+
 `--autonomous` therefore continues autonomous Product evolution until explicitly paused, blocked by policy or external dependency, waiting for required capacity/evidence/time, or placed into `IDLE` because the Product has passed applicable readiness assessment and no sufficiently valuable justified action currently remains.
+
+There is no predetermined number of autonomous cycles.
+
+Conceptually:
+
+```text
+CYCLE
+  │
+  ▼
+CHECKPOINT
+  │
+  ▼
+ASSESS
+  │
+  ├────► NEXT JUSTIFIED CYCLE
+  │              │
+  │              └────► repeat while justified
+  │
+  ├────► WAIT / BLOCK / PAUSE
+  │
+  └────► IDLE
+```
 
 `IDLE` MUST NOT be premature.
 
@@ -3403,6 +3819,8 @@ Technical completion alone is not sufficient when Product intent implies additio
 Perfection is not the completion criterion.
 
 The existence of another conceivable improvement is not sufficient reason to continue.
+
+This applies equally to the governed Product and to URACE itself.
 
 The governing convergence rule is:
 
@@ -3484,6 +3902,8 @@ Individual requirements may complete.
 
 Individual objectives may complete.
 
+Individual cycles may complete.
+
 Individual executors may terminate.
 
 Individual AI conversations may disappear.
@@ -3500,6 +3920,8 @@ Project structures may change.
 
 Artifact formats may change.
 
+Evidence storage mechanisms may change.
+
 Validation mechanisms may change.
 
 Schedulers may change.
@@ -3507,6 +3929,8 @@ Schedulers may change.
 Persistence mechanisms may change.
 
 Readiness criteria may change with Product intent.
+
+URACE itself may evolve when its limitations become materially relevant to the Product lifecycle.
 
 The Product may become `IDLE`.
 
@@ -3518,13 +3942,21 @@ The final invariant test is:
 
 > **If an executor, model, orchestrator, language, platform, structure, strategy or mechanism can be replaced while lifecycle correctness remains intact, it is a variant—not URACE's identity.**
 
+The final evidence principle is:
+
+> **Evidence is a first-class lifecycle primitive whose provenance and causal lineage justify autonomous decisions, without requiring URACE to become an evidence-management platform.**
+
+The final self-evolution principle is:
+
+> **URACE may evolve its own lifecycle machinery when evidence shows that a limitation in URACE materially constrains the governed Product lifecycle; such evolution requires no special invitation, receives no special privilege, and remains subject to the same justification, validation, checkpointing and convergence rules as every other change.**
+
 The final design principle is:
 
 > **URACE owns the persistent autonomous Product lifecycle; replaceable executors provide the intelligence and execution required to advance it.**
 
 The final evolution principle is:
 
-> **Evidence reveals justified Product gaps; gaps produce requirements and objectives; executors implement them; independent validation determines acceptance; resulting Product state creates new evidence; URACE repeats the cycle while further action remains justified.**
+> **Evidence reveals justified Product gaps; gaps produce requirements and objectives; executors implement them; observations and independent validation determine acceptance; resulting Product state creates new evidence; URACE repeats the cycle while further action remains justified.**
 
 And the final convergence principle is:
 
