@@ -4,7 +4,7 @@
 
 URACE is an executor-agnostic persistent autonomous product-evolution control plane.
 
-**At its core, URACE is an open-source and editable idea:** a specification and bootstrap architecture for making the autonomous Product lifecycle persistent, evidence-aware, validated, recoverable, and independent of any particular AI or executor.
+**At its core, URACE is an open-source and editable idea as blueprint:** a specification and bootstrap architecture for making the autonomous Product lifecycle persistent, evidence-aware, validated, recoverable, and independent of any particular AI or executor.
 
 The idea can be inspected, adapted, extended, and evolved while preserving its core lifecycle invariants. The idea is open and editable; the Product, its accumulated intelligence, and its implementation can remain proprietary.
 
