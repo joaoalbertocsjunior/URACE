@@ -74,7 +74,7 @@ When external Executors, Orchestrators, AI models, APIs, or services receive Pro
 
 ## Summary
 
-- **[What URACE Is](#URACE)** — A persistent autonomous product-evolution control plane that owns lifecycle navigation above replaceable intelligence and execution systems.
+- **[Introduction](#URACE)** — A persistent autonomous product-evolution control plane that owns lifecycle navigation above replaceable intelligence and execution systems.
 - **[Why URACE](#why-urace)** — Preserves continuous product evolution beyond individual AI sessions, models, agents, and orchestrators.
 - **[Core Model](#the-core-model)** — Separates Intent, Authority, Evidence, URACE navigation, executor capabilities, and Validation.
 - **[Authority](#you-decide-what-you-retain)** — You decide what remains authoritative; URACE autonomously drives what you delegate.
