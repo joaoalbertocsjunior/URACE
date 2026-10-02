@@ -1,12 +1,12 @@
-shorten versions landmarks precision!
-second positions are stronger 
-    and also harder to claim!
-line order determines landmarks priority!
+shorten versions landmarks precision;
+second positions are stronger,
+    also harder to claim;
+line order determines landmarks priority;
 
 ---
 
-innovational vs evolutionary
-applies vs adheres
+innovational vs evolutionary;
+applies vs adheres;
 
 ---
 
