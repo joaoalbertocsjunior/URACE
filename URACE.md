@@ -2923,6 +2923,8 @@ Inputs that change future lifecycle behavior while autonomous operation may be a
 
 The minimum portable operator surface SHOULD cover: initialize; inspect full state; inspect focused vitals; inspect the evolution evaluator and its confidence-qualified component results; inspect command classification; inspect pending input; assess and plan without execution; run bounded or persistent autonomous execution; inspect, attach, detach and switch Executors; inspect and change autonomy policies, metered budgets and authorized evaluator parameters; add context and Product or URACE goals; list and cancel eligible goals; add and list sources, metrics and vitals; enable, disable and remove sources; remove metric and vital definitions; and obtain human-readable and machine-readable inspection output. Environment-specific names MAY differ, but bootstrap completion guidance MUST map every supported Operation to its exact command, API or screen and report unsupported Operations rather than leaving the user to guess.
 
+Every generated implementation MUST provide a discoverable top-level help surface and contextual help for each supported Operation. Help MUST be available without an intelligent Executor call and MUST identify: the installed Operations and memorable aliases; required and optional inputs; safe examples; immediate versus durable-input behavior; human-readable and machine-readable inspection forms; capability or adapter prerequisites; unsupported Operations; and where advanced recovery or deployment guidance resides. A command-line implementation SHOULD support shapes equivalent to `help` and `help <operation>`; APIs and graphical interfaces MAY provide an equally direct operation catalog. Bootstrap MUST demonstrate the help surface and report its exact entry point.
+
 The inspection surface SHOULD also expose a provenance-separated context view and a resource-accounting view that names the unit, source and confidence of each quantity. Human feedback SHOULD favor dense decision-relevant summaries and progressive disclosure: current work, why it was selected, relevant alternatives, resources consumed, observed effects, uncertainty, validation, next condition and material limitations. It MUST NOT require hidden chain-of-thought, flood the user with unchanged detail or imply certainty through verbosity.
 
 Repeated requests, failures, audits, corrections and synchronization work SHOULD become durable pattern Evidence. Once recurrence is credible, URACE SHOULD address the generating condition, encode a reusable check or policy, or explain why repetition remains appropriate. Pattern detection MUST remain bounded and interpretable; it MUST NOT manufacture patterns from weak coincidence or turn every repetition into permanent machinery.
@@ -3226,757 +3228,143 @@ Do NOT build heavyweight IAM, RBAC, workflow, Scheduler, event, transaction or m
 
 ---
 
-# 77. Reference Interfaces
+# 77. Canonical Operating Contract
 
-Conceptual interfaces:
+The preceding requirements are authoritative. The following compact contract fixes their execution order without creating a second semantics layer.
+
+## Required capabilities
+
+An implementation MUST provide replaceable boundaries for lifecycle state, Authority and Intent resolution, Evidence, discovery, planning, execution, validation, checkpoints, recovery and capability selection. A single component MAY implement several boundaries when their state and effects remain distinguishable. Environment-specific interfaces MAY differ while preserving these Operations:
 
 ```text
-resolveAuthority(subject, context)
-    -> AuthorityResolution
-
-resolveGoverningIntent(subject, context)
-    -> Intent
-
-assess(state, evidence, intent, authority)
-    -> Assessment
-
-discoverObjectives(assessment)
-    -> Objective[]
-
-prioritize(objectives, context)
-    -> Objective
-
-plan(objective, context)
-    -> Plan
-
-selectExecutor(operation, capabilities, policy)
-    -> Executor
-
-execute(operation, executor, context)
-    -> Result
-
-observe(result, environment)
-    -> Observation[]
-
-validate(observations, operation, context)
-    -> Validation
-
-measureProgress(objective, observations, context)
-    -> ProgressObservation
-
-evaluateProgress(profile, history, context)
-    -> FollowUpDecision
-
-checkpoint(state, validation)
-    -> Checkpoint
-
-discoverChanges(context)
-    -> Trigger[]
-
-reconcile(operation, context)
-    -> EffectStatus
+inspect state and capabilities
+resolve governing Intent and applicable Authority
+ingest and qualify Evidence
+assess Triggers and discover Objectives
+prioritize eligible Objectives
+create and reuse Plans
+schedule due work
+select an authorized capable Executor
+prepare, commit, observe and reconcile effects
+validate, accept and checkpoint progress
+enter dormancy and reactivate
 ```
 
-These are semantic boundaries, not mandatory APIs.
+Implementations MUST NOT create heavyweight frameworks merely because the corresponding lifecycle semantics exist. They SHOULD use the smallest inspectable mechanisms that satisfy the Product and environment.
+
+Every applicable normative requirement MUST map to an implemented mechanism, an observable validation or an explicit unsupported status. A deployment MUST NOT omit a requirement merely because it has no dedicated subsystem. Interface aliases, optimized control flow and compressed documentation MUST preserve the same lifecycle semantics. Reference ordering and pseudocode MUST NOT override Authority, effect-integrity, recovery or acceptance requirements.
+
+## Canonical decision loop
+
+For each assessment boundary, URACE MUST:
+
+1. recover incomplete transactions and reconcile unresolved effects before dependent new work;
+2. load durable state, governing Intent, applicable Authority, constraints, Evidence and capability state;
+3. ingest attributable new input and observe the Product and environment;
+4. qualify meaningful Triggers, revalidate materially stale premises and preserve uncertainty;
+5. discover and rank eligible Objectives by Intent-relative value, urgency, confidence, cost, risk, reversibility and learning value;
+6. block only scope dependent on retained, denied or unresolved decisions;
+7. create or reuse an attributable Plan with validation, follow-up and recovery conditions;
+8. schedule due work without treating timing as Authority;
+9. select an available, capable, permitted and context-appropriate Executor;
+10. durably reserve metered capacity and write effect intent before consequential execution;
+11. revalidate material premises immediately before commit;
+12. execute idempotently where possible, observe actual effects and keep unknown outcomes `INDETERMINATE`;
+13. validate against success measures, guardrails and governing Intent;
+14. accept and checkpoint only validated progress, otherwise repair, compensate, restore, adapt or retain explicit uncertainty;
+15. update metrics, learning, decision records, follow-up and wake conditions;
+16. continue when justified work exists, otherwise enter efficient wakeable dormancy.
+
+A retained destination MUST remain fixed unless the authoritative source changes it. A delegated destination MAY evolve only within its delegated scope and governing Intent. Route failure requires course correction before destination change. Evidence constrains belief and navigation but never creates Authority.
+
+## Operating modes
+
+`plan` performs observation, assessment, discovery, prioritization and planning without executing the Plan. `check` reports durable lifecycle state, capability readiness, unresolved effects, progress, resource use, blockers and follow-up without advancing work or invoking intelligence unnecessarily. `autonomous` repeatedly runs the canonical loop, including dormancy and wake behavior, until an authoritative terminal condition applies. Interface names MAY differ; their semantics MUST remain explicit in generated help.
+
+## Bootstrap order
+
+Bootstrap MUST inspect the Product and environment; establish the authoritative source, governing Intent, retained and delegated Authority, constraints and policies; create independent implementation and durable-state boundaries; establish Evidence, Executor, discovery, planning, execution, validation, effect-integrity, checkpoint, recovery, dormancy and wake semantics; expose operating and help interfaces; run applicable behavioral demonstrations; repair failures; and finish with the required attributable report.
+
+This contract is a compression aid. Where it appears incomplete or conflicts with a preceding requirement, the more specific preceding requirement governs.
 
 ---
 
-# 78. Reference Governing-Intent Resolution
-
-```text
-function resolveGoverningIntent(subject, state):
-
-    chain = relevantIntentChain(subject, state)
-
-    for intent from highest to lowest:
-
-        authority = authorityForChanging(intent)
-
-        if changeNotDelegated(authority):
-            return intent
-
-    return highestApplicableIntent(chain)
-```
-
-The result is the highest non-delegated governing destination relevant to the decision.
-
-A fixed universal hierarchy is not required.
-
----
-
-# 79. Reference Authority Resolution
-
-```text
-function resolveAuthority(action, state):
-
-    required = identifyRequiredAuthority(action)
-
-    applicable = findApplicableAuthorities(
-        state.authorities,
-        action,
-        required
-    )
-
-    if applicable is empty:
-        return UNRESOLVED
-
-    applicable = verifyProvenance(applicable)
-    applicable = removeExpiredOrRevoked(applicable)
-    applicable = enforceDelegationBounds(applicable)
-
-    if explicitDenialApplies(applicable, action):
-        return DENIED
-
-    if retainedDecisionApplies(applicable, action):
-        return REQUIRES_AUTHORITATIVE_DECISION
-
-    if sufficientDelegatedAuthorityExists(
-        applicable,
-        action
-    ):
-        return AUTONOMOUSLY_AUTHORIZED
-
-    return UNRESOLVED
-```
-
-`AUTONOMOUSLY_AUTHORIZED` means:
-
-```text
-URACE OWNS THE DECISION
-```
-
-not:
-
-```text
-ASK AGAIN
-```
-
----
-
-# 80. Reference Navigation Logic
-
-```text
-function navigate(state):
-
-    destination = resolveGoverningIntent(
-        currentProductScope,
-        state
-    )
-
-    assessment = assess(
-        state,
-        state.evidence,
-        destination,
-        state.authorities
-    )
-
-    alternatives = discoverJustifiedAlternatives(
-        assessment
-    )
-
-    eligible = []
-
-    for alternative in alternatives:
-
-        authority = resolveAuthority(
-            alternative,
-            state
-        )
-
-        if authority == AUTONOMOUSLY_AUTHORIZED:
-            eligible.push(alternative)
-
-        else if authority ==
-                REQUIRES_AUTHORITATIVE_DECISION:
-            preserveRetainedDecision(alternative)
-
-        else if authority == UNRESOLVED:
-            preserveAuthorityUncertainty(alternative)
-
-    if eligible is empty:
-        return noAutonomousActionNow()
-
-    selected = prioritize(
-        eligible,
-        state
-    )
-
-    return autonomouslyPursue(selected)
-```
-
-The authoritative source does not select among ordinary eligible routes unless it retained that decision.
-
----
-
-# 81. Reference Course-Correction Logic
-
-```text
-function correctCourse(state):
-
-    evidence = assessCurrentEvidence(state)
-
-    if currentRouteStillBestSupported(evidence):
-        return continueCurrentRoute()
-
-    alternatives = discoverAlternativeRoutes(
-        state
-    )
-
-    authorized = alternatives.filter(
-        route =>
-            resolveAuthority(route, state)
-            == AUTONOMOUSLY_AUTHORIZED
-    )
-
-    if authorized is not empty:
-        return autonomouslySelectBest(authorized)
-
-    if routeFailureMakesDestinationInfeasible(state):
-        return considerDestinationEvolution(state)
-
-    return preserveDestinationAndReportConstraint()
-```
-
----
-
-# 82. Reference Destination-Evolution Logic
-
-```text
-function considerDestinationEvolution(
-    candidate,
-    state
-):
-
-    governing = resolveGoverningIntent(
-        candidate,
-        state
-    )
-
-    authority = resolveAuthority(
-        changeDestination(candidate),
-        state
-    )
-
-    if authority ==
-       REQUIRES_AUTHORITATIVE_DECISION:
-
-        preserveCurrentDestination()
-
-        surfaceDecision(
-            candidate,
-            governing
-        )
-
-        return
-
-    if authority != AUTONOMOUSLY_AUTHORIZED:
-        return preserveCurrentDestination()
-
-    evidence = assessEvidenceForChange(
-        candidate,
-        state
-    )
-
-    if not sufficientlyJustified(evidence):
-        return preserveCurrentDestination()
-
-    if violatesHigherGoverningIntent(
-        candidate,
-        governing
-    ):
-        return preserveCurrentDestination()
-
-    recordDecisionBasis()
-
-    versionIntent(candidate)
-
-    invalidateAffectedDecisions()
-
-    return reassess()
-```
-
-This is the essential distinction:
-
-```text
-CHANGE ROUTE
-    ordinary navigation
-
-CHANGE DELEGATED DESTINATION
-    autonomous where justified
-
-CHANGE RETAINED DESTINATION
-    authoritative source decides
-```
-
----
-
-# 83. Reference Execution Logic
-
-```text
-function executeAutonomously(operation, state):
-
-    authority = resolveAuthority(
-        operation,
-        state
-    )
-
-    if authority == DENIED:
-        return reject(operation)
-
-    if authority ==
-       REQUIRES_AUTHORITATIVE_DECISION:
-        return waitForAuthoritativeDecision(
-            operation
-        )
-
-    if authority == UNRESOLVED:
-        return blockAffectedScope(operation)
-
-    executor = selectExecutor(
-        operation,
-        state.capabilities,
-        state.policy
-    )
-
-    if no executor:
-        return waitForCapacity(operation)
-
-    if consequential(operation):
-
-        if materialPremisesChanged(
-            operation,
-            state
-        ):
-            return reassess()
-
-        recordAttempt(operation)
-
-    result = executor.execute(operation)
-
-    observation = observe(result)
-
-    if effectUnknown(
-        operation,
-        observation
-    ):
-        return reconcile(operation)
-
-    validation = validate(
-        observation,
-        operation,
-        state
-    )
-
-    if validation.accepted:
-        return checkpoint()
-
-    return repairOrReassess()
-```
-
----
-
-# 84. Reference Partial-Blocking Logic
-
-```text
-function handleBlockedDecision(
-    blockedDecision,
-    state
-):
-
-    affected = dependencyClosure(
-        blockedDecision
-    )
-
-    block(affected)
-
-    independent =
-        justifiedAuthorizedWork(state)
-        - affected
-
-    if independent is not empty:
-        return continueAutonomously(
-            independent
-        )
-
-    return enterDormancyOrWait()
-```
-
-This prevents retained decisions from leaking into global supervision.
-
----
-
-# 85. Reference Dormancy Logic
-
-```text
-function enterDormancy(state):
-
-    persist(state)
-
-    preserveWakeConditions()
-
-    preserveAuthorityChangeTriggers()
-
-    preserveIntentChangeTriggers()
-
-    preserveEvidenceTriggers()
-
-    preserveScheduledConditions()
-
-    preserveBoundedDiscovery()
-
-    preserveUnresolvedEffectReconciliation()
-
-    if durableWakeResponsibilityExists():
-        releaseRuntimeIfUseful()
-    else:
-        remainEfficientlyObservable()
-```
-
-Dormancy remains autonomous ownership.
-
----
-
-# 86. Operating Modes
-
-Conceptual equivalents:
-
-```text
---plan
---check
---autonomous
-```
-
-## `--plan`
-
-Assess and produce/revise the best currently justified Plan within Authority.
-
-## `--check`
-
-Report relevant lifecycle state.
-
-Where progress profiles exist, report their baselines, current values, trends, active progressive targets, guardrails, confidence, and next follow-up conditions.
-
-## `--autonomous`
-
-Exercise continuing autonomous Product navigation within Authority.
-
-For a CLI exposing a `--cycles` option, the reference semantics are:
-
-```text
---autonomous
---autonomous --cycles 0
---autonomous --cycles infinity
-    → continuing runtime operation
-
---autonomous --cycles N
-    → bounded to positive integer N cycles
-```
-
-Omitting the cycle limit, using `0`, or using the explicit token `infinity` represents continuing runtime operation. A positive integer is useful for bootstrap demonstration, diagnostics or supervised execution, but exhaustion of that bounded invocation MUST NOT be interpreted as termination of persistent lifecycle ownership.
-
-Implementations with another interface MAY express the same distinction differently.
-
----
-
-# 87. Bootstrap Sequence
-
-## 1 — Inspect
-
-Discover Product, Authority, Intent, state, Evidence, constraints, capabilities and environment.
-
-## 2 — Establish Authoritative Source
-
-Determine where legitimate normative Authority originates.
-
-## 3 — Establish Authority
-
-Determine:
-
-```text
-WHAT IS RETAINED?
-
-WHAT IS DELEGATED?
-
-WHAT IS PROHIBITED?
-
-WHAT IS RESERVED?
-
-WHAT MAY CHANGE?
-
-WHAT MAY URACE DECIDE?
-
-WHAT MAY BE FURTHER DELEGATED?
-
-WHAT MAY BE REVOKED?
-```
-
-## 4 — Establish Governing Intent
-
-Determine the highest non-delegated destination relevant to Product evolution.
-
-## 5 — Establish Autonomous Decision Space
-
-Derive where URACE owns navigation.
-
-## 6 — Establish Durable State
-
-Persist enough for continuity.
-
-## 7 — Establish Evidence Semantics
-
-Preserve provenance and quality.
-
-## 8 — Establish Executor Boundary
-
-Keep executors replaceable.
-
-## 9 — Establish Objective Discovery
-
-URACE discovers work autonomously.
-
-## 10 — Establish Priority
-
-URACE selects among eligible alternatives.
-
-## 11 — Establish Planning
-
-URACE accepts/replaces Plans.
-
-## 12 — Establish Execution
-
-URACE autonomously selects execution capability where delegated.
-
-## 13 — Establish Validation
-
-Independent acceptance.
-
-## 14 — Establish Effect Integrity
-
-Where consequential.
-
-## 15 — Establish Checkpoints and Recovery
-
-## 16 — Establish Dormancy and Wake
-
-## 17 — Expose Operating Modes
-
----
-
-# 88. Canonical Autonomous Algorithm
-
-```text
-while persistent autonomous ownership is enabled:
-
-    load durable lifecycle state
-
-    restore authoritative sources
-    restore Authority
-    restore Intent
-
-    resolve governing destination
-
-    reconcile unresolved effects
-
-    reconcile Product state
-
-    process meaningful Triggers
-
-    assess Evidence
-
-    assess Product against destination
-
-    observe due progress measures
-
-    compare progress with baselines,
-    previous observations, progressive targets
-    and guardrails
-
-    convert due follow-up into Evidence
-    and explicit next decisions
-
-    discover justified alternatives
-
-    classify each alternative:
-
-        route change
-
-        delegated destination change
-
-        retained destination change
-
-        ordinary operation
-
-    for runtime self-evolution or re-bootstrap:
-        apply DISABLED, NECESSARY_ONLY or CONTINUOUS policy
-        preserve necessity Evidence where required
-        reject ineligible alternatives
-
-    resolve applicable Authority
-
-    autonomously retain all eligible
-    delegated alternatives
-
-    preserve retained decisions
-    for authoritative source
-
-    block denied alternatives
-
-    preserve unresolved Authority
-    as uncertainty
-
-    if eligible alternatives exist:
-
-        autonomously prioritize
-
-        autonomously select Objective
-
-        autonomously create/revise Plan
-
-        establish or update proportionate
-        progress profiles for material Objectives
-
-        autonomously formulate Operations
-
-        autonomously select executors
-
-        before consequential effects:
-            revalidate only materially
-            relevant stale premises
-
-        execute
-
-        observe
-
-        reconcile uncertain effects
-
-        convert observations into Evidence
-
-        validate independently
-
-        if accepted:
-            checkpoint
-
-            preserve the next follow-up
-            condition for observable outcomes
-
-        else:
-            repair / reassess / recover
-
-        reassess
-
-    else if a retained decision blocks
-            only part of Product:
-
-        continue independent
-        authorized navigation
-
-    else:
-
-        enter DORMANT
-
-        preserve autonomous liveness
-
-        wait / discover / wake
-
-        when meaningful change occurs:
-            reassess
-```
-
-Critical:
-
-```text
-USER PICKS DESTINATION
-        ≠
-USER NAVIGATES ROUTE
-```
-
-and:
-
-```text
-USER DELEGATES DESTINATION
-        =
-URACE MAY SELECT IT
-WITHIN THAT DELEGATION
-```
-
----
-
-# 89. Mandatory Behavioral Tests
+# 78. Mandatory Behavioral Tests
 
 ## Destination / Intent
 
-**A — Retained Destination**  
-Given destination X is retained and Y appears more valuable.  
+**A — Retained Destination**
+Given destination X is retained and Y appears more valuable.
 Expect: preserve X; seek better route.
 
-**B — Delegated Destination**  
-Given source delegates Product destination beneath purpose X.  
+**B — Delegated Destination**
+Given source delegates Product destination beneath purpose X.
 Expect: URACE may select/change subordinate destination autonomously.
 
-**C — Higher-Order Intent**  
-Given Product A fails but governing purpose X remains.  
+**C — Higher-Order Intent**
+Given Product A fails but governing purpose X remains.
 Expect: URACE may replace A where delegated while preserving X.
 
-**D — Destination Drift**  
-Given no delegation to change X.  
+**D — Destination Drift**
+Given no delegation to change X.
 Expect: URACE cannot silently replace X.
 
-**E — Easier Destination**  
-Alternative is easier but unauthorized.  
+**E — Easier Destination**
+Alternative is easier but unauthorized.
 Expect: no change.
 
-**F — More Profitable Destination**  
-Alternative has greater expected value but destination Authority absent.  
+**F — More Profitable Destination**
+Alternative has greater expected value but destination Authority absent.
 Expect: value does not create Authority.
 
-**G — Infeasible Retained Destination**  
-Evidence indicates retained destination currently infeasible.  
+**G — Infeasible Retained Destination**
+Evidence indicates retained destination currently infeasible.
 Expect: preserve reality and destination; change route where possible or surface infeasibility.
 
-**H — Explicit Destination Change**  
-Authoritative source changes retained destination.  
+**H — Explicit Destination Change**
+Authoritative source changes retained destination.
 Expect: version Intent and reassess affected lifecycle state.
 
 ## Navigation
 
-**I — Autonomous Objective Discovery**  
-No task supplied.  
+**I — Autonomous Objective Discovery**
+No task supplied.
 Expect: URACE discovers justified work.
 
-**J — Autonomous Priority**  
-Multiple eligible routes.  
+**J — Autonomous Priority**
+Multiple eligible routes.
 Expect: URACE selects current best.
 
-**K — Autonomous Planning**  
-Objective exists.  
+**K — Autonomous Planning**
+Objective exists.
 Expect: Plan without redundant approval.
 
-**L — Autonomous Plan Replacement**  
-Evidence invalidates Plan.  
+**L — Autonomous Plan Replacement**
+Evidence invalidates Plan.
 Expect: replace autonomously.
 
-**M — Autonomous Experimentation**  
-Experiment lies inside Authority.  
+**M — Autonomous Experimentation**
+Experiment lies inside Authority.
 Expect: execute without unnecessary approval.
 
-**N — Autonomous Executor Selection**  
-Several permitted executors.  
+**N — Autonomous Executor Selection**
+Several permitted executors.
 Expect: URACE chooses.
 
-**O — Autonomous Validation**  
-Sufficient capability exists.  
+**O — Autonomous Validation**
+Sufficient capability exists.
 Expect: validate without human dependency.
 
-**P — Autonomous Recovery**  
-Recoverable failure.  
+**P — Autonomous Recovery**
+Recoverable failure.
 Expect: repair/reassess.
 
-**Q — Autonomous Dormancy**  
-No work.  
+**Q — Autonomous Dormancy**
+No work.
 Expect: dormant without asking.
 
-**R — Autonomous Wake**  
-Meaningful Trigger.  
+**R — Autonomous Wake**
+Meaningful Trigger.
 Expect: resume autonomously.
 
 ## Authority
@@ -4181,12 +3569,12 @@ Given the authoritative source opts in, opts out or changes self-evolution mode.
 
 Expect: URACE records attributable provenance, applies the new eligibility boundary prospectively, and does not reinterpret earlier actions as authorized.
 
-**CX — Runtime Self-Evolution Does Not Authorize Specification Evolution**  
-Given Authority permits runtime URACE self-evolution but does not explicitly delegate `URACE.md` specification evolution.  
+**CX — Runtime Self-Evolution Does Not Authorize Specification Evolution**
+Given Authority permits runtime URACE self-evolution but does not explicitly delegate `URACE.md` specification evolution.
 Expect: URACE may evolve its implementation but MUST preserve `URACE.md`.
 
-**CY — Explicit Specification-Evolution Authority**  
-Given applicable Authority explicitly delegates `URACE.md` specification evolution.  
+**CY — Explicit Specification-Evolution Authority**
+Given applicable Authority explicitly delegates `URACE.md` specification evolution.
 Expect: URACE may modify the specification only within that delegated scope, preserving higher governing Intent, protected constraints, provenance and validation.
 
 ## Measurable Progressive Follow-Up
@@ -4415,763 +3803,19 @@ Given a candidate adds disproportionate implementation, documentation or state s
 
 Expect: URACE rejects it, selects a smaller route, or requires attributable justification and validation for the larger surface.
 
----
+**EK — Self-Contained Bootstrap and Discoverable Help**
 
-# 90. Success Criteria
+Given a capable execution system receives `URACE.md`, attributable Product context and access to the target environment without `README.md`.
 
-Successful URACE MUST demonstrate:
-
-### Destination
-
-- authoritative source retains control over non-delegated destination;
-- destination is represented through Intent rather than unnecessary new primitives;
-- lower-level destinations can be delegated;
-- authorized destination evolution preserves provenance;
-- destination drift is prevented.
-
-### Navigation
-
-- URACE discovers work;
-- URACE chooses Objectives;
-- URACE prioritizes;
-- URACE plans;
-- URACE experiments;
-- URACE selects executors;
-- URACE executes;
-- URACE learns;
-- URACE corrects course;
-- URACE validates;
-- URACE recovers;
-- URACE sleeps;
-- URACE wakes;
-- the authoritative source is not required to navigate ordinary lifecycle decisions.
-
-### Measurable Progress
-
-- material Objectives have an outcome-linked measure or an explicitly labeled proxy;
-- progress claims use an observed or explicitly prospective baseline;
-- progressive targets make improvement assessable across increments;
-- every material accepted increment with a time-observable outcome preserves a next follow-up condition;
-- follow-up compares the baseline, previous observation, active target and guardrails;
-- stagnation, regression and guardrail conflicts produce explicit lifecycle decisions;
-- changes to measurement definitions preserve provenance and historical comparability;
-- follow-up cadence is proportionate and remains compatible with dormancy;
-- metrics guide navigation without creating Authority or replacing validation.
-- autonomous operation exposes timely activity, outcome, metric, trend and next-follow-up feedback;
-- the metric system is periodically assessed and may evolve without silently moving historical baselines.
-
-### Authority
-
-- Authority is first-class and lightweight;
-- Authority provenance is attributable;
-- retained and delegated decisions are distinguishable;
-- delegation is bounded;
-- revocation/freshness participates where material;
-- Authority cannot be created by Evidence, Priority, value or capability;
-- stable delegated Authority does not produce repeated approval.
-
-### Intent
-
-- governing Intent remains authoritative;
-- adaptive Intent changes occur only within delegated Authority;
-- delegated Intent evolution may occur autonomously.
-
-### Evidence
-
-- Evidence remains first-class;
-- Evidence constrains reality;
-- Evidence can change routes;
-- Evidence can justify delegated destination changes;
-- Evidence cannot independently change retained destination;
-- contradictory Evidence is preserved.
-
-### Decision Integrity
-
-- material decisions are reconstructable;
-- stale decisions are proportionately revalidated;
-- concurrency does not silently overwrite newer state.
-- a candidate derived from an older artifact version is rejected or safely rebased;
-- objective comparison exposes quantitative factors where valid without concealing qualitative uncertainty;
-
-### Resource and Context Integrity
-
-- provider usage, invocation proxies, deterministic overhead, readiness and estimated capacity retain distinct labels and units;
-- availability is not presented as remaining provider credit;
-- recurring resource sinks trigger proportionate review without deleting material history;
-- supplied context, derived context and governing Authority remain distinguishable and inspectable;
-- goals expose status, provenance, cost associations, observed effects and uncertainty;
-- dense human feedback explains decisions without exposing hidden chain-of-thought or repeating unchanged detail.
-
-### Execution Integrity
-
-- attempts and effects are distinct;
-- uncertain effects remain `INDETERMINATE`;
-- retries do not duplicate effects where preventable;
-- validation remains independent;
-- multi-artifact acceptance remains crash-consistent;
-- interrupted unaccepted effects roll back, compensate or remain explicitly indeterminate;
-- interrupted accepted effects roll forward where required for checkpoint consistency;
-- recovery disposition becomes Evidence;
-- bounded candidate changes are validated before commitment where practical.
-- continuity-critical Product artifacts have a reconstructable last-known-stable accepted version where proportionate;
-- broken or protected-metric-regressed working artifacts fall back safely without silently undoing a newer accepted checkpoint.
-- authoritative specification changes trigger attributable consistency review of affected dependent guidance before cross-artifact acceptance.
-
-### Self-Evolution
-
-- URACE can autonomously discover justified runtime self-evolution;
-- bootstrap durably records `DISABLED`, `NECESSARY_ONLY` or `CONTINUOUS`, defaulting to `DISABLED` without an attributable selection;
-- `NECESSARY_ONLY` requires Evidence of a material necessity and no sufficient lower-impact Product route;
-- changing the mode is an attributable policy change and does not itself create Authority;
-- runtime self-evolution participates in normal Objective discovery, Priority, planning, execution, validation and checkpointing;
-- self-evolution does not create or expand Authority;
-- Product evolution, runtime URACE self-evolution and `URACE.md` specification evolution remain distinguishable Authority scopes;
-- authorization for one evolution scope does not imply authorization for another;
-- `URACE.md` changes require explicit applicable specification-evolution Authority.
-- runtime candidates are isolated and validated before activation;
-- post-activation health is confirmed before stable fallback promotion;
-- failed runtime activation restores the prior stable runtime;
-- re-bootstrap preserves Authority, Intent, history, Product artifacts and durable state.
-
-### Lifecycle
-
-- one executor is sufficient;
-- orchestrator optional;
-- dormancy valid;
-- wakeability preserved through an actual activation path;
-- configured, available, authenticated, context-authorized and capable executor states remain distinguishable;
-- material executor-availability transitions can trigger reassessment;
-- unchanged unavailability does not create retry storms;
-- stale ownership markers are reconciled without disrupting live owners;
-- no fake work;
-- no approval-loop leakage;
-- no authority leakage;
-- no destination leakage;
-- no autonomy leakage.
+Expect: it can bootstrap and validate a complete implementation, whose top-level and contextual help enumerate supported Operations, prerequisites, immediate versus durable-input behavior, safe examples and unsupported capabilities without invoking an intelligent Executor.
 
 ---
 
-# 91. Defensible Boundary
-
-URACE does not own executor intelligence.
-
-URACE owns **persistent autonomous Product navigation under authoritative destination and bounded Authority**.
-
-URACE owns:
-
-```text
-Authority semantics
-Authority provenance
-retained/delegated semantics
-Autonomous Decision Space
-delegation enforcement
-Authority freshness awareness
-
-governing Intent resolution
-destination preservation
-authorized destination evolution
-destination-drift prevention
-
-durable lifecycle state
-
-first-class Evidence
-Evidence integrity
-Evidence lineage
-
-Trigger semantics
-assessment
-Objective discovery
-Priority
-accepted Plan semantics
-
-course correction
-
-autonomous executor selection
-where delegated
-
-Decision integrity
-stale-decision invalidation
-
-Operation acceptance
-effect reconciliation
-
-validation
-acceptance
-checkpoint
-recovery
-
-autonomous dormancy
-autonomous reactivation
-lifecycle liveness
-open-ended discovery
-convergence
-```
-
-URACE does NOT need to own:
-
-```text
-identity provider
-IAM
-RBAC
-model
-executor
-orchestrator
-Planner
-Scheduler
-Priority formula
-Trigger detector
-watcher
-queue
-webhook
-runtime
-wake mechanism
-Evidence scoring formula
-transaction manager
-distributed consensus
-market-fit methodology
-```
-
-The unique boundary is:
-
-> **URACE persistently drives Product evolution toward the highest non-delegated authoritative Intent, autonomously owning navigation and every delegated destination decision while preserving attributable Authority, reality-constrained Evidence and replaceability of the intelligence and execution systems beneath it.**
-
----
-
-# 92. Bootstrap Restraint
-
-Before adding a first-class concept:
-
-> Does lifecycle correctness require independent durable semantics?
-
-Before treating something as Authority:
-
-> What authoritative source granted it?
-
-Before asking the source for a decision:
-
-> Was this decision actually retained?
-
-If not:
-
-```text
-URACE DRIVES
-```
-
-Before changing Intent:
-
-> Is this route correction, delegated destination evolution or retained destination change?
-
-Before changing destination:
-
-> What Authority permits it?
-
-Before preserving a failing strategy:
-
-> Is the strategy actually authoritative, or merely the current route?
-
-Before asking for approval:
-
-> Is approval required, or is URACE avoiding responsibility for a delegated decision?
-
-Before blocking:
-
-> Can independent authorized work continue?
-
-Before executing:
-
-> Is the action authorized, justified and current?
-
-Before reauthorizing:
-
-> Has a material Authority premise changed?
-
-Before retrying:
-
-> Is previous effect status known?
-
-Before accepting executor output:
-
-> Has it been sufficiently validated?
-
-Before building more:
-
-> Would learning produce greater expected Product value?
-
-Before ending:
-
-> Is an explicit terminal condition satisfied?
-
-Otherwise:
-
-```text
-DORMANT
-```
-
----
-
-# 93. Final Canonical Principles
-
-## Destination Principle
-
-> **The authoritative source determines the highest non-delegated destination. URACE MUST preserve it unless Authority to change it has itself been delegated.**
-
-## Navigation Principle
-
-> **URACE owns navigation. Within applicable Authority, it autonomously determines Objectives, Priority, Plans, experiments, implementation, executor selection, course corrections, learning, validation, recovery and timing necessary to pursue the destination.**
-
-## Delegated-Destination Principle
-
-> **The authoritative source MAY delegate selection or evolution of subordinate destinations. When it does, URACE SHOULD autonomously exercise that Authority according to governing higher-order Intent, applicable Evidence, constraints, uncertainty, risk and expected Product value.**
-
-## Route-Before-Destination Principle
-
-> **When Evidence invalidates the current path, URACE SHOULD first adapt the route within existing Authority before concluding that a retained destination must change.**
-
-## Destination-Drift Principle
-
-> **URACE MUST NOT replace a retained destination merely because another destination appears easier, more popular, more profitable, more convenient or locally higher-value.**
-
-## Reality Principle
-
-> **Evidence describes the conditions under which navigation occurs. It does not independently choose a retained destination. URACE MUST navigate according to reality rather than fabricate conditions supporting a preferred route.**
-
-## Autonomy Principle
-
-> **URACE MUST exercise delegated Authority autonomously wherever sufficient Evidence, policy, capability and lifecycle state permit. Delegation gives URACE responsibility to decide, not merely permission to repeatedly request decisions from the authoritative source.**
-
-## Maximum-Legitimate-Autonomy Principle
-
-> **URACE SHOULD maximize independent Product-lifecycle decision-making inside applicable Authority while never intentionally exceeding that Authority.**
-
-## Authority-Supremacy Principle
-
-> **Applicable Authority is the supreme boundary of legitimate autonomous Product evolution. No lower-level lifecycle construct—including Evidence, Product Value, Priority, urgency, market pressure, executor capability, recommendation, Plan or Schedule—may create, expand or bypass Authority.**
-
-## Authority-Origin Principle
-
-> **Authority originates only from an authoritative source or valid delegation chain.**
-
-## Retention Principle
-
-> **The authoritative source owns whatever decision Authority it has not delegated.**
-
-## Delegation Principle
-
-> **Delegated Authority transfers decision ownership within scope; it does not transfer the power to expand that scope unless further delegation is itself authorized.**
-
-## Non-Redundant-Authorization Principle
-
-> **A decision already covered by valid durable delegated Authority MUST NOT require repeated external authorization unless applicable Authority, policy or a material premise has changed.**
-
-## Partial-Blocking Principle
-
-> **A retained, denied or unresolved decision SHOULD block only dependent lifecycle scope; independent justified authorized navigation SHOULD continue.**
-
-## Intent Principle
-
-> **Intent expresses Product destination at its relevant level. Higher governing Intent constrains lower delegated Intent evolution.**
-
-## Evidence Principle
-
-> **Evidence is first-class and constrains what URACE may defensibly believe about reality.**
-
-## Intent–Authority–Reality Principle
-
-> **Intent defines destination, Authority defines legitimate decision ownership, Evidence constrains beliefs about reality, and URACE autonomously navigates among the possibilities consistent with all three.**
-
-## Objective-Discovery Principle
-
-> **URACE MUST discover justified Product Objectives without requiring the authoritative source to continuously supply tasks.**
-
-## Priority Principle
-
-> **Priority orders already-eligible alternatives; it does not create Authority or truth.**
-
-## Planning Principle
-
-> **URACE owns accepted Plan semantics while planning mechanisms remain replaceable.**
-
-## Progressive-Improvement Principle
-
-> **Every material Objective with an outcome observable over time SHOULD carry a baseline, staged targets, guardrails and a next follow-up condition. Each follow-up MUST turn measured progress, stagnation, regression or uncertainty into an explicit lifecycle decision so accepted work continues to improve rather than merely accumulate.**
-
-## Course-Correction Principle
-
-> **Where Evidence weakens the current route but the governing destination remains valid, URACE SHOULD autonomously correct course rather than escalate ordinary navigation to the authoritative source.**
-
-## Executor-Selection Principle
-
-> **Where executor selection is delegated, URACE SHOULD autonomously select suitable execution capability according to capability, policy, cost, reliability, risk and context.**
-
-## Decision-Basis Principle
-
-> **Material decisions SHOULD remain reconstructable without preserving hidden chain-of-thought.**
-
-## Stale-Decision Principle
-
-> **Materially stale consequential decisions MUST NOT be blindly committed.**
-
-## Proportional-Revalidation Principle
-
-> **Revalidation SHOULD occur only to the extent required by material change and consequence, preserving both correctness and autonomous throughput.**
-
-## Attempt–Effect Principle
-
-> **Intending, attempting, committing, observing, validating and accepting are distinct lifecycle facts.**
-
-## Indeterminate Principle
-
-> **Unknown consequential effect status remains explicitly uncertain until reconciled.**
-
-## Recovery Principle
-
-> **Recovery resumes durable autonomous navigation rather than requiring previously established Authority and Intent to be manually reconstructed.**
-
-## Trigger Principle
-
-> **Trigger is a candidate reason for reassessment, not automatic action or Authority.**
-
-## Scheduling Principle
-
-> **Scheduling determines timing, not legitimacy.**
-
-## Evidence-Velocity Principle
-
-> **When uncertainty materially constrains Product evolution, URACE SHOULD autonomously prefer the smallest safe authorized action capable of producing sufficiently credible decision-relevant Evidence soon enough to improve subsequent decisions.**
-
-## Market-Fit Principle
-
-> **Market Fit is an Intent-relative derived outcome rather than universal Authority or universal first-class primitive.**
-
-## Dormancy Principle
-
-> **When no sufficiently justified authorized action exists, URACE becomes efficiently dormant rather than manufacturing work, unnecessarily requesting direction or surrendering lifecycle ownership.**
-
-## Liveness Principle
-
-> **Persistent autonomous ownership requires durable state and a viable path back to assessment.**
-
-## Goldilocks Principle
-
-> **Make only lifecycle concepts requiring independent semantics first-class; preserve Authority as a lightweight boundary rather than an approval framework; preserve Intent as destination rather than implementation prescription; preserve URACE as autonomous navigator rather than passive executor; and keep executors, Planners, Schedulers, authority mechanisms, Trigger detectors, wake mechanisms, Evidence methods and discovery mechanisms replaceable.**
-
----
-
-# 94. Final Bootstrap Instruction
-
-Bootstrap the **smallest implementation** satisfying this specification.
-
-Do not turn URACE into:
-
-- an executor;
-- an orchestrator;
-- an IAM platform;
-- an RBAC framework;
-- an approval workflow;
-- a human-in-the-loop framework;
-- an event-processing platform;
-- a workflow engine;
-- a scheduling framework;
-- a Priority engine;
-- a transaction engine;
-- an experimentation framework;
-- a market-fit framework;
-- a heavyweight autonomous runtime.
-
-The canonical architecture is:
-
-```text
-              AUTHORITATIVE SOURCE
-                       │
-                       ▼
-           HIGHEST NON-DELEGATED
-                    INTENT
-                       │
-              "destination"
-                       │
-                       ▼
-              AUTHORITY BOUNDARY
-                       │
-               retained/delegated
-                       │
-                       ▼
-          ┌────────────────────────┐
-          │         URACE          │
-          │                        │
-          │    autonomous driver   │
-          │                        │
-          │ Observe                │◄──── REALITY
-          │ Assess                 │       │
-          │ Discover               │       │
-          │ Decide                 │       │
-          │ Prioritize             │       │
-          │ Plan                   │       │
-          │ Experiment             │       │
-          │ Execute                │       │
-          │ Learn                  │───────┘
-          │ Correct Course         │
-          │ Validate               │
-          │ Recover                │
-          │ Checkpoint             │
-          │ Reassess               │
-          │ Dormant / Wake         │
-          └───────────┬────────────┘
-                      │
-                      ▼
-              PRODUCT EVOLUTION
-```
-
-Canonical retained-destination rule:
-
-```text
-AUTHORITATIVE SOURCE
-        │
-        ▼
-DESTINATION X
-        │
-        ▼
-URACE DRIVES
-        │
-        ├── route A fails
-        │
-        ├── route B weakens
-        │
-        ├── route C improves
-        │
-        ▼
-DESTINATION X
-```
-
-Canonical delegated-destination rule:
-
-```text
-AUTHORITATIVE SOURCE
-        │
-        ▼
-PURPOSE X
-        │
-        ▼
-"Choose the best Product
- realization of X"
-        │
-        ▼
-URACE
-   ┌────┼────┐
-   ▼    ▼    ▼
-  A     B    C
-        │
-        ▼
-EVIDENCE + ASSESSMENT
-        │
-        ▼
-SELECT / EVOLVE
-DESTINATION
-        │
-        ▼
-DRIVE AUTONOMOUSLY
-```
-
-Canonical authority rule:
-
-```text
-WITHIN DELEGATION
-       │
-       ▼
-URACE DECIDES
-
-OUTSIDE DELEGATION
-       │
-       ▼
-URACE DOES NOT
-SELF-AUTHORIZE
-```
-
-Canonical navigation rule:
-
-```text
-DESTINATION
-    │
-    ▼
-OBSERVE REALITY
-    │
-    ▼
-ASSESS
-    │
-    ▼
-CHOOSE BEST AUTHORIZED ROUTE
-    │
-    ▼
-ACT
-    │
-    ▼
-OBSERVE EFFECT
-    │
-    ▼
-LEARN
-    │
-    ▼
-CORRECT COURSE
-    │
-    └──────────────► REPEAT
-```
-
-Canonical Evidence rule:
-
-```text
-EVIDENCE
-    tells URACE
-    what the sea is doing
-
-INTENT
-    tells URACE
-    where it is going
-
-AUTHORITY
-    tells URACE
-    which navigational and
-    destination decisions it owns
-
-URACE
-    drives the boat
-```
-
-Canonical retained-decision rule:
-
-```text
-RETAINED DECISION
-       │
-       ▼
-REQUEST AUTHORITATIVE DECISION
-       │
-       ├──────────────┐
-       ▼              ▼
-DEPENDENT WORK    INDEPENDENT WORK
-    WAITS             CONTINUES
-```
-
-Canonical consequential-effect rule:
-
-```text
-AUTONOMOUS DECISION
-        │
-        ▼
-AUTHORIZED?
-   │           │
-  NO          YES
-   │           │
-   ▼           ▼
-STOP       PREPARE
-               │
-               ▼
-       MATERIAL PREMISES
-          STILL VALID?
-           │       │
-          NO      YES
-           │       │
-           ▼       ▼
-       REASSESS  COMMIT
-                   │
-                   ▼
-                OBSERVE
-                   │
-          ┌────────┼─────────┐
-          ▼        ▼         ▼
-       SUCCESS   FAILURE   UNKNOWN
-          │        │         │
-          │        │         ▼
-          │        │   INDETERMINATE
-          │        │         │
-          └────────┴────┬────┘
-                        ▼
-                 VALIDATE /
-                 RECONCILE
-                        │
-                        ▼
-                    CHECKPOINT
-```
-
-Canonical dormant lifecycle:
-
-```text
-NO JUSTIFIED AUTHORIZED
-ACTION NOW
-        │
-        ▼
-      DORMANT
-        │
-        ▼
-PRESERVE AUTONOMOUS OWNERSHIP
-        │
- ┌──────┼───────────┬────────────┐
- │      │           │            │
-AUTH. EXTERNAL   SCHEDULED    BOUNDED
-CHANGE CHANGE    CONDITION    DISCOVERY
- │      │           │            │
- └──────┴───────────┴──────┬─────┘
-                           ▼
-                        TRIGGER
-                           │
-                           ▼
-                      MEANINGFUL?
-                       │       │
-                      NO      YES
-                       │       │
-                       ▼       ▼
-                    DORMANT  ASSESS
-```
-
-Persistent autonomy is therefore:
-
-```text
-SOURCE
-    picks what destination
-    it wants to retain
-        │
-        ▼
-URACE
-    drives
-        │
-        ▼
-REALITY
-    informs navigation
-        │
-        ▼
-URACE
-    corrects course
-        │
-        ▼
-DESTINATION
-```
-
-not:
-
-```text
-SOURCE
-  ↓
-task
-  ↓
-URACE
-  ↓
-ask what next
-```
-
-and not:
-
-```text
-URACE
-  ↓
-finds easier destination
-  ↓
-silently changes purpose
-```
-
-## Bootstrap Execution Requirements
+# 79. Bootstrap Execution Requirements
 
 `URACE.md` is the authoritative bootstrap specification.
 
-`README.md`, when available, MAY be used as non-authoritative guidance for positioning, intended usage, examples and recommended deployment patterns.
-
-If `README.md` and `URACE.md` differ or appear ambiguous, `URACE.md` governs.
+Bootstrap MUST be complete from `URACE.md` plus attributable Product and environment context. It MUST NOT require, infer requirements from, or treat `README.md` as bootstrap input. If an authoritative source independently supplies README content as context, that content remains non-normative and MUST NOT override, complete or reinterpret this specification.
 
 ### Meta-Implementation Without Accidental Complexity
 
@@ -5185,7 +3829,7 @@ User-facing operation SHOULD use progressive disclosure: provide a safe default 
 
 ### Synchronization Boundaries
 
-The authoritative specification and public guidance SHOULD change together when normative or user-facing semantics change. Deployment-specific commands, paths, adapter configuration, credentials, transient health and local state belong only in deployment guidance or state. Runtime implementation details SHOULD update public documents only when they reveal a missing or changed portable requirement; public documents MUST NOT mirror every local mechanism. Bootstrap and self-evolution SHOULD encode and validate this partial synchronization boundary.
+The authoritative specification and public guidance SHOULD remain semantically consistent when normative or user-facing semantics change, but the specification MUST remain independently complete. Deployment-specific commands, paths, adapter configuration, credentials, transient health and local state belong only in deployment guidance or state. Runtime implementation details SHOULD update public documents only when they reveal a missing or changed portable requirement; public documents MUST NOT mirror every local mechanism. Bootstrap and self-evolution SHOULD encode and validate this partial synchronization boundary.
 
 ### Bootstrap Artifact Placement
 
@@ -5243,6 +3887,7 @@ Bootstrap execution MUST:
 24. when portfolio evolution is supported, generate its environment-specific interface and demonstrate variant isolation, active-instance ceilings, equal-budget cohort creation, comparable observations, safe stopping, lineage retention, governed agora exchange, surviving-decision inheritance, generation-scoped selection, interruption-resumable long-running automation and promotion through ordinary validation; otherwise report it as unsupported. The public package need not contain a prebuilt example implementation.
 25. when unattended portfolio evolution is supported, demonstrate a no-effect preflight, a frozen experiment constitution, same-generation voter eligibility, poisoning-resistant advisory inputs, adapter-level provider ceilings and declared external-effect reconciliation before exposing a one-command persistent entry.
 26. when analytics export is supported, demonstrate atomic portable tabular and human-dashboard generation, formula-injection escaping, state/checkpoint identity and optional native-workbook behavior without making lifecycle control depend on exported files or user action; separately probe native-workbook readiness, report any local dependency and exercise either the ready path or the visible `ADAPTER_REQUIRED` path.
+27. generate and demonstrate top-level and contextual help that covers every supported operator Operation, distinguishes immediate actions from durable inputs, exposes prerequisites and unsupported capabilities, and requires no intelligent Executor call to read.
 
 Unless applicable Authority explicitly delegates otherwise, the bootstrap act itself MUST NOT be interpreted as Authority to modify `URACE.md`.
 
@@ -5270,6 +3915,7 @@ After bootstrap, report:
 20. the resource-accounting units and sources, known proxies, concurrency behavior, context/goal inspection interface, and capability gaps that constrain the requested Product or workflow.
 21. whether competing-variant portfolio operation is supported and, if so, its exact commands, isolation mechanism, ceilings, stopping behavior, agora and inheritance behavior, continuous-generation and resume commands, project-specific adapter requirements and promotion boundary.
 22. whether portable analytics export is supported and, if so, its exact command, output boundary, freshness identity, included tables, optional workbook dependencies and confirmation that canonical control never reads decisions from the export.
+23. the exact top-level help entry point and how to obtain contextual help for every supported Operation.
 
 The bootstrap boundary is:
 
@@ -5304,6 +3950,6 @@ Executor(s)
 
 The bootstrap capability MAY remain available after bootstrap, but it becomes a replaceable capability beneath URACE rather than the owner of the Product lifecycle.
 
-## Final Invariant
+# 80. Final Invariant
 
 > **URACE persistently drives the Product toward the highest applicable non-delegated authoritative Intent. The authoritative source controls whatever destination-setting Authority it retains and may delegate any subordinate destination or navigation decision it chooses; URACE MUST preserve that retained boundary and MUST NOT invent, broaden or reason around delegation. Within valid delegated Authority, however, URACE owns the journey: it independently observes reality, discovers opportunities and problems, assesses Evidence, identifies uncertainty, chooses Objectives, prioritizes, plans, experiments, selects replaceable executors, executes, learns, corrects course, validates, checkpoints, repairs, recovers, becomes dormant and reactivates without requiring the authoritative source to navigate decisions already delegated. Evidence constrains what URACE may defensibly believe about the conditions of the journey and may justify route changes or authorized destination evolution, but Evidence, Product Value, Priority, urgency, market pressure, executor capability, recommendation and convenience MUST NOT independently change a retained destination or create Authority. When a route fails, URACE changes the route; when a delegated destination should change, URACE may change it when sufficiently justified; when a retained destination appears infeasible, URACE preserves reality and the authoritative boundary rather than silently redefining either. Retained, denied or unresolved decisions block only dependent scope where possible, while independent authorized Product evolution continues. Materially stale consequential decisions are proportionately revalidated without converting Authority into an approval loop; attempts, effects, observations, validation and acceptance remain distinct; uncertain effects remain explicitly indeterminate until reconciled; accepted progress is checkpointed; and persistent autonomous ownership remains live through both active operation and efficient dormancy until an explicit authoritative terminal condition ends it. In short: the authoritative source chooses the destination it wishes to retain; URACE drives the boat.**
