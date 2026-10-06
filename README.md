@@ -4,7 +4,7 @@
 
 > **It drives the boat. You pick the destination.**
 
-URACE is an open, implementation-agnostic blueprint for persistent autonomous Product evolution. It turns retained Intent into a continuous, measurable lifecycle that survives individual prompts, sessions, agents, models and runtimes.
+URACE is an open, implementation-agnostic blueprint for persistent, resource-efficient autonomous Product evolution. It turns retained Intent into a continuous, measurable lifecycle that survives individual prompts, sessions, agents, models and runtimes.
 
 The **Product** can be a project, service, process, research effort, business outcome or other governed endeavor. URACE does not default to improving itself. Its own evolution remains subordinate to the Product and happens only when separately authorized and justified.
 
