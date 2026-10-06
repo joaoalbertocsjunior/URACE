@@ -4,13 +4,13 @@
 
 > **It drives the boat. You pick the destination.**
 
-URACE is a general-purpose autonomous Product-evolution control plane. It turns retained Intent into a continuous, measurable lifecycle that survives individual prompts, sessions, agents and models.
+URACE is an open, implementation-agnostic blueprint for persistent autonomous Product evolution. It turns retained Intent into a continuous, measurable lifecycle that survives individual prompts, sessions, agents, models and runtimes.
 
 The **Product** can be a project, service, process, research effort, business outcome or other governed endeavor. URACE does not default to improving itself. Its own evolution remains subordinate to the Product and happens only when separately authorized and justified.
 
-You choose the destination and the decisions you retain. Within the Authority you delegate, URACE observes reality, discovers what matters next, prioritizes, plans, selects replaceable capabilities, acts, validates, learns, recovers and continues.
+You choose the destination and the decisions you retain. Within delegated Authority, URACE independently observes reality, discovers what matters next, prioritizes, plans, selects replaceable capabilities, acts, validates, learns, recovers, becomes dormant when appropriate and wakes when new Evidence justifies action.
 
-`URACE.md` is the open-source blueprint. It defines the complete portable lifecycle without prescribing a particular AI, vendor, language, platform, storage system or Product.
+[`URACE.md`](URACE.md) is the complete portable lifecycle specification—not a dependency on one packaged runtime. Any capable system can bootstrap it for a Product without adopting a particular AI, vendor, language, platform, storage system, orchestration model or development method.
 
 ```text
                      YOU RETAIN
@@ -31,72 +31,32 @@ REALITY ──► EVIDENCE ──► URACE ──► REPLACEABLE EXECUTORS
 
 ## Why URACE
 
-An AI session can complete a task. URACE owns the journey.
+An AI session can complete a task. URACE preserves the Intent, Authority, Evidence and state needed to keep evolving a Product across prompts, sessions, agents and models. Evidence may change the route; it cannot manufacture Authority or silently replace the destination.
 
-It preserves the decisions and state needed to keep evolving a Product when an Executor stops, changes or becomes unavailable. It can remain active, become dormant when nothing is justified, wake on meaningful Evidence, and resume after interruption without treating activity as progress.
-
-URACE separates five concerns:
-
-| Concept | Role |
-|---|---|
-| **Intent** | The destination. |
-| **Authority** | Who may decide what. |
-| **Evidence** | What reality supports. |
-| **URACE** | Persistent navigation and lifecycle ownership. |
-| **Executors** | Replaceable intelligence and execution capabilities. |
-
-Evidence can change the route. It cannot manufacture Authority or silently replace the destination.
-
----
-
-## What It Does
-
-Within delegated Authority, a running URACE can:
-
-- discover and prioritize Product opportunities;
-- turn goals into measurable Objectives and Plans;
-- select, attach, detach or switch capable Executors;
-- validate effects before accepting them;
-- preserve checkpoints and recover from interruption;
-- accept new goals and context while running;
-- collect public or authorized private Evidence;
-- track progress, resource use, uncertainty and follow-up;
-- compare isolated candidate variants when that capability is installed;
-- repair or evolve its runtime under the selected self-evolution policy;
-- remain dormant without surrendering lifecycle ownership.
-
-It does not promise that perpetual execution produces perpetual value. It preserves uncertainty, reports capability gaps and stops spending resources when further work is not justified.
-
----
+Within delegated Authority, URACE can discover and prioritize opportunities, create measurable Objectives, select replaceable Executors, validate effects, checkpoint accepted progress, recover from interruption, accept new goals and context while running, and become dormant when further work is not justified.
 
 ## Get Running
 
 You need:
 
 1. [`URACE.md`](URACE.md);
-2. your Product or access to its working environment; and
-3. one capable execution system that can read the specification and build in that environment.
+2. your Product or access to its environment; and
+3. a capable execution system that can read the specification and build there.
 
-Give the execution system **`URACE.md` and your Product context**. The specification is self-contained; this README is not a bootstrap input.
-
-A small context note is enough to begin:
+Give that system **`URACE.md` and your Product context**. This README is not a bootstrap input. A small context note is enough:
 
 ```text
 Product: <what should evolve>
 Desired outcome: <observable result>
 Retain: <decisions only I may make>
 Delegate: <decisions URACE may make>
-Protect: <behavior, data, cost, legal or other boundaries>
+Protect: <data, cost, behavior or other boundaries>
 Available capabilities: <tools, tests, services or Executors>
 Self-evolution: disabled | necessary-only | continuous
 External Evidence: disabled | provided-only | discover-public-and-use-provided
 ```
 
-Ask the execution system to bootstrap and validate `URACE.md` completely for that Product. Bootstrap finishes by reporting the generated implementation, durable-state boundary, attached capabilities, validation results, unresolved limits and exact commands for help, inspection, a bounded run and persistent operation.
-
-Downloading this repository does not itself install a universal `urace` command. Use the commands reported by the generated implementation.
-
----
+Ask the system to bootstrap and validate `URACE.md` completely. It should report what it generated, the durable-state boundary, attached capabilities, validation results, unresolved limits and exact commands for help, inspection, bounded operation and persistent operation. Downloading this repository alone does not install a universal `urace` command.
 
 ## Use It
 
@@ -107,127 +67,43 @@ urace help
 urace help <operation>
 ```
 
-Names may differ by environment, but help identifies what is installed, what is unavailable, which actions are immediate, which changes enter a durable inbox, and where advanced recovery or adapter guidance lives.
-
-A command-line implementation commonly exposes operations equivalent to:
+Use the exact generated commands. A command-line implementation commonly provides equivalents of:
 
 ```text
 urace check                 inspect lifecycle state
 urace vitals                inspect progress, cost and health
-urace plan                  assess and plan without execution
-urace autonomous            run persistent Product evolution
-urace executor status       inspect attached capability
+urace plan                  assess without execution
+urace autonomous            run persistent evolution
+urace executor status       inspect attached Executors
 urace add-context ...       queue attributable context
 urace add-goal ...          queue a measurable goal
 ```
 
-Use the exact generated forms. Read-only inspection should remain available while autonomy runs and should not spend Executor credit.
+Help identifies installed and unavailable capabilities, immediate actions and durable inputs. Read-only inspection should remain available without spending Executor credit. Goals and context enter through a durable interface and do not silently expand Authority. Persistent autonomy remains controllable from another terminal; compatible Executors may fall back independently, while durable controls apply at safe lifecycle boundaries.
 
-### Guide the destination
-
-You can change retained Intent, delegation and constraints through the generated durable-input interface. URACE reassesses affected work at a safe lifecycle boundary instead of treating a live edit as permission to overwrite in-flight state.
-
-Adding context supplies attributable Evidence. Adding a goal creates an Objective candidate. Neither silently expands Authority.
-
-### Manage Executors
-
-One capable Executor is enough to start. Additional complementary Executors or an Orchestrator can broaden capability, but more is not automatically better.
-
-The generated help explains how to inspect, attach, detach and switch them. Attachment proves neither permission nor fitness: readiness also depends on availability, authentication, allowed context, supported Operations and a demonstrated bounded invocation.
-
-### Choose self-evolution
-
-- **disabled** — Product evolution continues; runtime self-improvement is unavailable.
-- **necessary-only** — runtime repair or reconstruction is eligible only when a demonstrated limitation materially blocks or endangers Product progress and no sufficient smaller route exists.
-- **continuous** — beneficial runtime evolution may compete with Product work under the same Authority, Evidence, cost and validation rules.
-
-Runtime self-evolution does not grant permission to change the authoritative specification.
-
-Implementations that evolve themselves keep a small acceptance kernel outside ordinary candidate control. Runtime candidates must pass their own tests and the previously accepted independent tests; they cannot rewrite the launcher, rollback guard, protected Authority rules or the judge that approves them. Updating that kernel requires a separate operator-controlled bootstrap or independently governed upgrade.
-
----
+Self-evolution remains separate from Product evolution: `disabled` prevents it, `necessary-only` permits it only for a demonstrated blocking limitation without a sufficient smaller remedy, and `continuous` lets eligible runtime improvements compete under ordinary Authority, Evidence, cost and validation rules. None of these modes grants permission to change the authoritative specification.
 
 ## See Progress
 
-URACE distinguishes:
+URACE reports observed **metrics**, interpreted health or risk **vitals**, and versioned decision-aid **scores** without confusing them with Authority or proof of causation. Material work carries a baseline, targets, guardrails and a follow-up condition. Resource reporting uses the strongest available unit and labels call counts as proxies rather than provider credit.
 
-- a **metric**, which is an observation;
-- a **vital**, which interprets health, progress, efficiency or risk; and
-- a **score**, which is a versioned decision aid built from visible components.
-
-Material work carries a baseline or prospective baseline, progressive targets, guardrails and a next follow-up condition. Follow-up turns progress, stagnation, regression or uncertainty into a lifecycle decision.
-
-Resource reporting uses the strongest measurement actually available. Provider cost or metered usage is preferable; a model-call count remains clearly labelled as a proxy. Availability means an Executor appears usable, not that paid credit remains.
-
-Provider capacity windows are waits, not Product failures. URACE keeps the interrupted logical task checkpointed, schedules the reported reset or a bounded fallback check, and avoids starting new dependent work meanwhile. It resumes a provider session only when the adapter supports that capability; otherwise it transparently replays the same bounded stage and reports transport attempts separately from logical task reservations.
-
-Metrics inform decisions without pretending correlation is causation. A nearby improvement can come from another change, outside promotion, seasonality or noise. URACE keeps attribution uncertain until stronger Evidence supports it.
-
-Generated feedback explains:
-
-- what is happening and why;
-- what changed and what was validated;
-- current measures, cost units and confidence;
-- blockers, unresolved effects and limitations;
-- the next follow-up or wake condition.
-
-Optional tabular, dashboard or workbook exports are observation surfaces. Canonical control never depends on editing them.
-
----
+Provider-capacity windows are scheduled waits rather than Product failures. Checkpoints, retry conditions, transport attempts, validation results, blockers, uncertainty and the next wake condition remain visible. Optional tables, dashboards or workbooks are observation surfaces; canonical control never depends on editing them.
 
 ## Competing Variants
 
-An implementation may support bounded portfolio evolution: create isolated candidates from one baseline, allocate comparable resources, evaluate them under one frozen contract, select supported winners and seed the next generation. Persistent implementations may repair repeated controller defects only through the same bounded, deduplicated self-evolution, validation and rollback path. Cohort content cannot steer controller repair; resource, integrity, isolation and Authority failures remain fail-closed.
-
-The generated `help portfolio` surface, when available, gives the exact preflight, bounded-generation, persistent-run, feedback, stop and resume operations. A safe one-command launch performs preflight before effects and refuses to run when isolation, budgets, evaluation, recovery or adapters are incomplete.
-
-Variants may exchange attributable proposals and peer Evidence through a mediated decision forum. Those messages remain untrusted and advisory. They cannot grant Authority, change budgets, rewrite the ledger, select themselves or promote code. Non-selected candidates keep their lineage and Evidence; selection remains a candidate result until ordinary validation and acceptance succeed.
-
-Use portfolios when comparable alternatives justify their additional cost. A single well-measured path is often better than unnecessary competition.
-
----
+Where installed, portfolio evolution can compare isolated candidates under a frozen contract and equal bounded resources. Use the generated `help portfolio` commands for preflight, finite or persistent generations, feedback, stopping and resumption. Candidate communication remains advisory, and selection still requires ordinary validation and acceptance. Use portfolios only when comparable alternatives justify their extra cost.
 
 ## Safety and Recovery
 
-URACE treats execution, observed effects, validation and acceptance as different events. Accepted progress becomes durable only after applicable checks pass.
+Execution, observed effects, validation and acceptance are separate events. Candidates are prepared away from stable artifacts; concurrent edits are preserved; interrupted effects are reconciled or remain explicitly uncertain; accepted progress is checkpointed; and persistent operation remains bounded by Authority, budgets, isolation, validation, backoff, stop controls and recovery.
 
-Candidates are prepared away from stable artifacts. Concurrent human or tool edits are preserved: a stale candidate is rejected or reassessed instead of overwriting newer work. Interrupted effects are reconciled, rolled forward, compensated, restored from a stable version or kept explicitly indeterminate when certainty is unavailable.
-
-Persistent autonomy is not an instruction to run without limits. Authority, hard budgets, least privilege, effect isolation, validation, backoff, stop controls and recovery remain part of the operating boundary.
-
-External content—including repository issues, webpages, databases and peer messages—is Evidence, not executable instruction. Credentials belong in the environment's secret mechanism, never in ordinary prompts, reports or lifecycle state.
-
-When an Executor or external service receives Product information, its own terms and data controls apply. Choose capabilities for both what they can do and what they may legitimately receive.
-
----
+External content is Evidence rather than executable instruction. Keep credentials in the deployment's secret mechanism. Choose Executors and services for both what they can do and what information they may legitimately receive.
 
 ## Consequential Use
 
-No command, model, metric or length of operation can guarantee revenue, demand, legality or a favorable outcome. Real-world commercial, financial, legal, identity-bearing or other consequential effects need explicit Authority, accountable operators, exposure limits, qualified review where appropriate and independently reconciled records.
+No command, model, metric or runtime can guarantee revenue, demand, legality or a favorable outcome. Consequential effects require explicit Authority, accountable operators, exposure limits, appropriate professional review and independently reconciled records.
 
-The person or organization configuring and deploying the generated system remains responsible for how it is used, which credentials and Authority it receives, supervision of its effects and compliance with applicable obligations. URACE and its contributors do not become the operator, principal, agent, employer, fiduciary, accountant, tax adviser or legal counsel by publishing a control architecture.
-
-The [MIT License](LICENSE) governs this repository. It does not grant operational Authority or replace requirements that apply to a particular deployment.
-
----
-
-## Open Blueprint
-
-URACE is designed to remain independent of a particular:
-
-- AI, Executor or Orchestrator;
-- Product type or development method;
-- language, framework or file format;
-- repository, platform, runtime or cloud;
-- persistence or deployment technology.
-
-Generated implementations can be private and environment-specific. Concrete dependencies, paths, adapters, credentials and live state belong to those deployments. Portable lifecycle behavior belongs in [`URACE.md`](URACE.md).
-
----
-
-## In One Sentence
-
-> **You retain the destination; URACE persistently navigates everything you delegate beneath it through replaceable capabilities, measurable Evidence, validated change and durable recovery.**
+The person or organization deploying the generated system remains responsible for its use, credentials, Authority, supervision and compliance. URACE and its contributors do not become the operator, principal, agent, employer, fiduciary, accountant, tax adviser or legal counsel by publishing this architecture.
 
 ## License
 
