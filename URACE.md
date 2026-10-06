@@ -2657,6 +2657,10 @@ A dormant condition is wakeable only when a viable mechanism or durable responsi
 
 Where capability availability is lifecycle-relevant, its material transition MAY wake dormant operation. Availability observation MUST remain proportionate and MUST NOT require repeated costly executor invocation when a cheaper readiness probe exists.
 
+Executor authentication, command readiness and provider capacity MUST be represented separately. When a provider returns an attributable capacity or usage-window reset, URACE MUST treat it as scheduled unavailability rather than Product failure, candidate regression, guardrail failure or a reason for self-repair. It MUST durably retain the current logical task and its reservation, schedule the next eligible check or retry, suppress new dependent Executor work until that time, and emit compact transition and periodic waiting feedback rather than repeating error output.
+
+Logical task reservations and transport attempts MUST be accounted separately. If an adapter supports authenticated provider-session continuation, URACE SHOULD resume the accepted session from its durable continuation identity. If it does not, URACE MUST say so and MAY replay the same bounded logical stage after capacity returns without opening a second logical reservation; it MUST preserve a transport-attempt count and MUST NOT claim that replay is provider-side continuation or that rejected attempts consumed no provider resources without Evidence. Interruption, reset-window changes and repeated deferrals MUST remain bounded, observable and revocable.
+
 ---
 
 # 67. Runtime Lifetime vs Lifecycle Lifetime
@@ -3901,6 +3905,7 @@ Bootstrap execution MUST:
 26. when analytics export is supported, demonstrate atomic portable tabular and human-dashboard generation, formula-injection escaping, state/checkpoint identity and optional native-workbook behavior without making lifecycle control depend on exported files or user action; separately probe native-workbook readiness, report any local dependency and exercise either the ready path or the visible `ADAPTER_REQUIRED` path.
 27. generate and demonstrate top-level and contextual help that covers every supported operator Operation, distinguishes immediate actions from durable inputs, exposes prerequisites and unsupported capabilities, and requires no intelligent Executor call to read.
 28. when autonomous runtime evolution is supported, demonstrate that an ordinary candidate cannot modify the protected launcher or acceptance guard, add protected files to a mutable scope, weaken protected Authority or budget policy, replace the accepted-test baseline, or pass solely by changing its own tests; demonstrate independent pre-activation rejection and stable rollback.
+29. demonstrate that an attributable provider-capacity response becomes a durable scheduled wait rather than a candidate or Product failure; that no new dependent tasks start before the retry condition; that the same logical reservation is reused; that transport attempts remain visible; and that provider-session continuation is claimed only when the adapter actually supports it.
 
 Unless applicable Authority explicitly delegates otherwise, the bootstrap act itself MUST NOT be interpreted as Authority to modify `URACE.md`.
 

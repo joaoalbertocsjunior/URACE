@@ -159,6 +159,8 @@ Material work carries a baseline or prospective baseline, progressive targets, g
 
 Resource reporting uses the strongest measurement actually available. Provider cost or metered usage is preferable; a model-call count remains clearly labelled as a proxy. Availability means an Executor appears usable, not that paid credit remains.
 
+Provider capacity windows are waits, not Product failures. URACE keeps the interrupted logical task checkpointed, schedules the reported reset or a bounded fallback check, and avoids starting new dependent work meanwhile. It resumes a provider session only when the adapter supports that capability; otherwise it transparently replays the same bounded stage and reports transport attempts separately from logical task reservations.
+
 Metrics inform decisions without pretending correlation is causation. A nearby improvement can come from another change, outside promotion, seasonality or noise. URACE keeps attribution uncertain until stronger Evidence supports it.
 
 Generated feedback explains:
