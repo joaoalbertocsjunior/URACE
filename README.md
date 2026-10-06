@@ -143,6 +143,8 @@ The generated help explains how to inspect, attach, detach and switch them. Atta
 
 Runtime self-evolution does not grant permission to change the authoritative specification.
 
+Implementations that evolve themselves keep a small acceptance kernel outside ordinary candidate control. Runtime candidates must pass their own tests and the previously accepted independent tests; they cannot rewrite the launcher, rollback guard, protected Authority rules or the judge that approves them. Updating that kernel requires a separate operator-controlled bootstrap or independently governed upgrade.
+
 ---
 
 ## See Progress
@@ -173,7 +175,7 @@ Optional tabular, dashboard or workbook exports are observation surfaces. Canoni
 
 ## Competing Variants
 
-An implementation may support bounded portfolio evolution: create isolated candidates from one baseline, allocate comparable resources, evaluate them under one frozen contract, select supported winners and seed the next generation. Persistent implementations may repair repeated controller defects only through the same bounded self-evolution, validation and rollback path; resource, integrity, isolation and Authority failures remain fail-closed.
+An implementation may support bounded portfolio evolution: create isolated candidates from one baseline, allocate comparable resources, evaluate them under one frozen contract, select supported winners and seed the next generation. Persistent implementations may repair repeated controller defects only through the same bounded, deduplicated self-evolution, validation and rollback path. Cohort content cannot steer controller repair; resource, integrity, isolation and Authority failures remain fail-closed.
 
 The generated `help portfolio` surface, when available, gives the exact preflight, bounded-generation, persistent-run, feedback, stop and resume operations. A safe one-command launch performs preflight before effects and refuses to run when isolation, budgets, evaluation, recovery or adapters are incomplete.
 
