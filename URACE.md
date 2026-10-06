@@ -1946,12 +1946,14 @@ Executor MAY be:
 - CLI;
 - API;
 - script;
-- human-approved external system;
+- human-operated capability or human-approved external system;
 - future mechanism.
 
 Executors provide capability.
 
 URACE owns navigation.
+
+Executor implementation, orchestration, interchangeability, plurality or competition MUST NOT change URACE's lifecycle ownership or validation boundaries.
 
 Executor reasoning is not automatically authoritative.
 
