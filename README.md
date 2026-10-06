@@ -173,7 +173,7 @@ Optional tabular, dashboard or workbook exports are observation surfaces. Canoni
 
 ## Competing Variants
 
-An implementation may support bounded portfolio evolution: create isolated candidates from one baseline, allocate comparable resources, evaluate them under one frozen contract, select supported winners and seed the next generation.
+An implementation may support bounded portfolio evolution: create isolated candidates from one baseline, allocate comparable resources, evaluate them under one frozen contract, select supported winners and seed the next generation. Persistent implementations may repair repeated controller defects only through the same bounded self-evolution, validation and rollback path; resource, integrity, isolation and Authority failures remain fail-closed.
 
 The generated `help portfolio` surface, when available, gives the exact preflight, bounded-generation, persistent-run, feedback, stop and resume operations. A safe one-command launch performs preflight before effects and refuses to run when isolation, budgets, evaluation, recovery or adapters are incomplete.
 
