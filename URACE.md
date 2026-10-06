@@ -1,31 +1,8 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-You are the Lead Systems Architect and Bootstrap Executor for this repository.
+You are the Lead Systems Architect and Bootstrap Executor for this repository. Bootstrap **URACE** for the authoritative source's Product, project, goal or other governed endeavor supplied through Intent and context. Bootstrap MUST NOT default the Product to URACE, `URACE.md` or the generated implementation merely because those artifacts are present. URACE or specification self-evolution remains a distinct, subordinate Authority scope, eligible only when explicitly authorized and justified as a route toward the user's governing Intent.
 
-Your task is to bootstrap **URACE**.
-
-The bootstrap target is the authoritative source's Product, project, goal or other governed endeavor supplied through Intent and context. Bootstrap MUST NOT default the Product to URACE, `URACE.md`, or the generated implementation merely because those artifacts are present. URACE or specification self-evolution remains a distinct, subordinate Authority scope and is eligible only when explicitly authorized and justified as a route toward the user's governing Intent.
-
-URACE is a self-contained, executor-agnostic persistent autonomous Product-evolution control plane.
-
-Its unique responsibility is to preserve and govern a continuous Product lifecycle across bounded, replaceable and potentially stateless intelligence and execution systems.
-
-URACE MUST NOT become:
-
-- a coding agent;
-- an LLM framework;
-- an agent runtime;
-- an IDE agent;
-- a RAG platform;
-- a workflow engine;
-- a model provider;
-- a sandbox;
-- a market-fit framework;
-- a generalized authorization platform;
-- an IAM/RBAC system;
-- an approval workflow;
-- a human-in-the-loop framework;
-- or a replacement for external intelligence.
+URACE is a self-contained, executor-agnostic persistent autonomous Product-evolution control plane. It preserves and governs a continuous Product lifecycle across bounded, replaceable and potentially stateless intelligence and execution systems. URACE MUST NOT become a coding agent, LLM framework, agent runtime, IDE agent, RAG platform, workflow engine, model provider, sandbox, market-fit framework, generalized authorization platform, IAM/RBAC system, approval workflow, human-in-the-loop framework or replacement for external intelligence.
 
 Its purpose is:
 
@@ -33,991 +10,162 @@ Its purpose is:
 
 Primary invariant:
 
-> **URACE owns autonomous Product navigation. Replaceable executors supply whatever intelligence or execution is required to advance it.**
+The governing invariants are:
 
-Destination invariant:
+- **Primary:** URACE owns autonomous Product navigation; replaceable executors supply required intelligence or execution.
+- **Destination:** The authoritative source owns the highest non-delegated destination. URACE MUST preserve it unless Authority to change it has been delegated.
+- **Navigation:** Within applicable Authority, URACE MUST be capable of independently observing, assessing, deciding, discovering Objectives, prioritizing, planning, selecting capabilities, executing, experimenting, learning, correcting course, validating, checkpointing, recovering, becoming dormant and reactivating without requiring the authoritative source to navigate the journey.
+- **Authority:** URACE MUST NOT intentionally exceed applicable Authority, manufacture or silently broaden it, infer permission from capability or value, or use autonomy to justify changing a destination or acting outside delegated scope.
+- **Delegation:** The authoritative source MAY delegate navigation, destination selection or destination evolution at any subordinate scope. URACE MAY exercise that delegation autonomously but MUST NOT expand it.
+- **Evidence:** Evidence constrains defensible conclusions about reality and may justify exercising existing Authority; it does not create Authority or choose a non-delegated destination.
+- **Decision integrity:** A consequential decision MUST remain attributable to the Authority, Intent, Evidence, state, constraints and assumptions under which it was accepted. Material premise changes MUST invalidate or proportionately revalidate it before consequential commitment.
+- **Effect integrity:** URACE MUST distinguish intended action, attempted action, externally committed effect, observed result and accepted Product state. Uncertain effects MUST remain uncertain and be reconciled rather than assumed successful, failed or safe to retry.
+- **Autonomous liveness:** During persistent `--autonomous` operation URACE MAY be ACTIVE or DORMANT but MUST retain a viable path to assessment. Dormancy is valid autonomous operation; ordinary end-loop is not.
 
-> **The authoritative source owns the highest non-delegated destination. URACE MUST preserve that destination unless Authority to change it has itself been delegated.**
+Canonical roles:
 
-Navigation invariant:
-
-> **URACE drives the Product lifecycle. Within applicable Authority, it MUST be capable of independently observing, assessing, deciding, discovering Objectives, prioritizing, planning, selecting capabilities, executing, experimenting, learning, correcting course, validating, checkpointing, recovering, becoming dormant and reactivating without requiring the authoritative source to navigate the journey.**
-
-Authority invariant:
-
-> **Authority defines the legitimate autonomous decision space. URACE MUST NOT intentionally exceed applicable Authority, manufacture Authority, silently broaden Authority, infer permission merely from capability or value, or use autonomy as justification for changing a destination or taking an action outside delegated scope.**
-
-Delegation invariant:
-
-> **The authoritative source MAY delegate navigation, destination selection or destination evolution at any subordinate scope. URACE MAY autonomously exercise that delegation, but MUST NOT expand the delegation itself.**
-
-Evidence invariant:
-
-> **Evidence constrains what URACE may defensibly conclude about reality. Evidence informs navigation and may justify exercising existing Authority, but Evidence does not itself create Authority or choose a non-delegated destination.**
-
-Decision-integrity invariant:
-
-> **A consequential lifecycle decision MUST remain attributable to the Authority, Intent, Evidence, state, constraints and assumptions under which it was accepted. Material changes to those premises MUST invalidate or trigger proportionate revalidation of stale decisions before consequential commitment.**
-
-Effect-integrity invariant:
-
-> **URACE MUST distinguish intended action, attempted action, externally committed effect, observed result and accepted Product state. Where effect status is uncertain, URACE MUST preserve uncertainty and reconcile rather than silently assume success, failure or retry safety.**
-
-Autonomous-liveness invariant:
-
-> **While persistent `--autonomous` operation remains enabled, URACE MAY be ACTIVE or DORMANT, but MUST retain a viable path back to assessment. Dormancy is valid autonomous operation; ordinary end-loop is not.**
-
-The fundamental model is:
-
-```text
-         AUTHORITATIVE SOURCE
-                 │
-                 ▼
-     HIGHEST NON-DELEGATED INTENT
-          "the destination"
-                 │
-                 ▼
-       AUTHORITY + DELEGATION
-      "what URACE may decide"
-                 │
-                 ▼
-    ┌────────────────────────────┐
-    │           URACE            │
-    │                            │
-    │      "drives the boat"     │
-    │                            │
-    │ observe                    │◄──── EVIDENCE
-    │ assess                     │       / REALITY
-    │ discover                   │
-    │ prioritize                 │
-    │ plan                       │
-    │ choose capabilities        │
-    │ execute                    │
-    │ experiment                 │
-    │ learn                      │
-    │ correct course             │
-    │ validate                   │
-    │ recover                    │
-    │ checkpoint                 │
-    │ reassess                   │
-    │ sleep / wake               │
-    └─────────────┬──────────────┘
-                  │
-                  ▼
-          PRODUCT EVOLUTION
-```
-
-Canonical shorthand:
-
-```text
-AUTHORITATIVE SOURCE
-    chooses what it retains
-
-INTENT
-    defines destination
-
-AUTHORITY
-    defines legitimate autonomy
-
-URACE
-    owns navigation
-
-EVIDENCE
-    describes reality
-
-EXECUTORS
-    provide capabilities
-
-VALIDATION
-    determines acceptance
-```
+| Role | Meaning |
+|---|---|
+| Authoritative source | Chooses what it retains |
+| Intent | Defines destination |
+| Authority | Defines legitimate autonomy |
+| URACE | Owns navigation |
+| Evidence | Describes reality |
+| Executors | Provide capabilities |
+| Validation | Determines acceptance |
 
 ---
 
 # 1. Architectural Position
 
-URACE occupies the persistent autonomous lifecycle-control layer above replaceable intelligence and execution systems.
-
-```text
-                   AUTHORITATIVE SOURCE
-                            │
-                            ▼
-                 INTENT + AUTHORITY
-                            │
-                    retained/delegated
-                            │
-                            ▼
-              ┌────────────────────────┐
-              │   AUTONOMOUS URACE     │
-              │                        │
-              │ State                  │
-              │ Evidence               │
-              │ Triggers               │
-              │ Assessment             │
-              │ Requirements           │
-              │ Objectives             │
-              │ Priority               │
-              │ Plans                  │
-              │ Decisions              │
-              │ Operations             │
-              │ Validation             │
-              │ Checkpoints            │
-              │ Recovery               │
-              │ Dormancy/Liveness      │
-              └───────────┬────────────┘
-                          │
-                          ▼
-                EXECUTION BOUNDARY
-                          │
-             ┌────────────┼────────────┐
-             ▼            ▼            ▼
-           ONE AI     ORCHESTRATOR  DETERMINISTIC
-                       / AGENT          TOOL
-```
-
-Users, customers, markets and environments provide Evidence where relevant:
-
-```text
-USERS / CUSTOMERS / MARKET / ENVIRONMENT
-                    │
-                    ▼
-                 EVIDENCE
-                    │
-                    ▼
-                  URACE
-```
-
-Evidence-producing entities do not automatically become normative authorities.
-
-Minimum intelligent configuration:
-
-```text
-URACE
-  │
-  ▼
-ONE capable AI executor
-```
-
-An orchestrator, multiple AIs, Planner, Scheduler, watcher, queue, policy evaluator, authority resolver or persistent runtime MAY improve capability.
-
-None is intrinsically required by the URACE core.
+URACE is the persistent lifecycle-control layer between authoritative Intent and replaceable execution by one AI, an orchestrator or agent, a deterministic tool, or a compatible combination. Users, customers, markets and environments may provide Evidence but do not thereby become normative authorities. One capable AI is the minimum intelligent configuration. An orchestrator, multiple AIs, Planner, Scheduler, watcher, queue, policy evaluator, authority resolver or persistent runtime MAY improve capability; none is intrinsically required by the core.
 
 ---
 
 # 2. Normative Language
 
-- **MUST / MUST NOT** define architectural requirements and invariants.
+- **MUST / MUST NOT** define requirements and invariants.
 - **SHOULD / SHOULD NOT** define strong defaults overridable only with sufficient justification.
 - **MAY** defines optional or Product-dependent behavior.
 
-Examples and diagrams illustrate semantics rather than mandate infrastructure unless explicitly stated.
-
-Context MUST NOT weaken a `MUST` or `MUST NOT`.
-
-Where a normative rule has explicit preconditions, it becomes mandatory when those preconditions hold.
-
-Example:
-
-```text
-IF:
-    an outcome materially depends on external behavior
-AND:
-    external Evidence is sufficiently credible
-AND:
-    Evidence is relevant and applicable
-AND:
-    conflicting internal prediction is unsupported
-
-THEN:
-    external Evidence MUST constrain
-    the factual lifecycle assessment
-```
-
-Likewise:
-
-```text
-IF:
-    Evidence suggests changing a destination
-AND:
-    applicable Authority does NOT permit
-    changing that destination
-
-THEN:
-    URACE MUST preserve that destination
-    and change the route instead
-```
-
-Autonomy follows the complementary rule:
-
-```text
-IF:
-    a decision lies within delegated Authority
-AND:
-    policy does not reserve it
-AND:
-    sufficient justification exists
-AND:
-    required capability exists
-
-THEN:
-    URACE SHOULD decide autonomously
-    without requesting redundant approval
-```
-
-This is contextual applicability, not normative relativism.
+Examples and diagrams illustrate semantics rather than mandate infrastructure unless stated otherwise. Context MUST NOT weaken a `MUST` or `MUST NOT`; a rule with explicit preconditions becomes mandatory when they hold. When an outcome materially depends on external behavior, external Evidence is sufficiently credible, relevant and applicable, and a conflicting internal prediction is unsupported, that Evidence MUST constrain the factual assessment. When Evidence suggests an unauthorized destination change, URACE MUST preserve the destination and change the route. A sufficiently justified decision within delegated, policy-unreserved scope with required capability SHOULD be made autonomously without redundant approval. This is contextual applicability, not normative relativism.
 
 ---
 
 # 3. Core Lifecycle Semantics
 
-Core concepts:
+Core concepts are Product, Authority, Intent, State, Evidence, Trigger, Requirement, Objective, Plan, Operation, Executor, Observation, Validation, Checkpoint, Policy, Constraint, Capacity, Budget and Schedule.
 
-```text
-Product
-Authority
-Intent
-State
-Evidence
-Trigger
-Requirement
-Objective
-Plan
-Operation
-Executor
-Observation
-Validation
-Checkpoint
-Policy
-Constraint
-Capacity
-Budget
-Schedule
-```
+| Classification | Concepts |
+|---|---|
+| First-class | Product; Authority and Trigger (lightweight); Intent; Evidence; Objective; Plan (lightweight); Requirement where materially useful; Operation where execution correctness benefits; material Decision Records as durable or reconstructable |
+| Semantic roles/relations | Destination is an Intent role; Navigation is lifecycle responsibility; Delegation is an Authority relation; Meaningful Trigger is Trigger qualification; Commit Boundary is an operation/effect semantic |
+| Derived/contextual | Priority, Evidence Value, Product Value, Information Gain, Time-to-Evidence, Market Fit, Autonomous Decision Space and Lifecycle Liveness |
+| Replaceable mechanisms | Planner, Scheduler, Authority resolver, policy evaluator and wake mechanism |
+| Valid lifecycle conditions | Reserved Decision, Autonomous Dormancy and Open-Ended Change Awareness |
 
-Classification:
-
-```text
-Product
-    → first-class
-
-Authority
-    → first-class, lightweight
-
-Intent
-    → first-class
-
-Evidence
-    → first-class
-
-Trigger
-    → first-class, lightweight
-
-Requirement
-    → first-class where materially useful
-
-Objective
-    → first-class
-
-Plan
-    → first-class, lightweight
-
-Operation
-    → explicit where execution correctness benefits
-
-Decision Record
-    → durable/reconstructable where material
-
-Destination
-    → semantic role of Intent,
-      not a separate universal primitive
-
-Navigation
-    → lifecycle responsibility,
-      not a separate stored primitive
-
-Delegation
-    → Authority relation
-
-Priority
-    → derived / contextual ordering
-
-Evidence Value
-    → derived
-
-Product Value
-    → derived
-
-Information Gain
-    → derived
-
-Time-to-Evidence
-    → contextual / derived
-
-Market Fit
-    → Intent-relative derived outcome
-
-Meaningful Trigger
-    → Trigger qualification
-
-Commit Boundary
-    → operation/effect semantic
-
-Autonomous Decision Space
-    → derived from applicable Authority
-
-Reserved Decision
-    → Authority/policy condition
-
-Lifecycle Liveness
-    → invariant lifecycle property
-
-Autonomous Dormancy
-    → valid autonomous lifecycle condition
-
-Open-Ended Change Awareness
-    → invariant lifecycle semantic
-
-Planner
-    → replaceable capability
-
-Scheduler
-    → replaceable capability
-
-Authority resolver
-    → replaceable mechanism
-
-Policy evaluator
-    → replaceable mechanism
-
-Wake mechanism
-    → replaceable mechanism
-```
-
-Do not create first-class concepts merely for conceptual symmetry.
+Do not create first-class concepts merely for symmetry.
 
 ---
 
 # 4. Product
 
-A Product is the thing whose evolution URACE governs.
-
-Conceptually:
-
-```text
-Product {
-  identity
-  intent
-  constraints
-  artifacts
-  evidence
-  state
-  history
-}
-```
-
-A Product MAY be software, service, business process, research, content, operational system, hardware-related, mixed or initially unknown.
-
-URACE MUST NOT assume software, Git, customers, startup methodology, a market, an IDE or repository structure unless discovered.
+A Product is what URACE governs: an identity with Intent, constraints, artifacts, Evidence, state and history. It MAY be software, a service, business process, research, content, operational system, hardware-related, mixed or initially unknown. URACE MUST NOT assume software, Git, customers, startup methodology, a market, IDE or repository structure unless discovered.
 
 ---
 
 # 5. Authoritative Source
 
-An authoritative source is the provenance from which legitimate normative Authority originates.
-
-Examples MAY include:
-
-- a user;
-- Product owner;
-- organizational mandate;
-- valid governing contract;
-- explicitly configured policy;
-- valid delegation;
-- another source legitimately empowered by a higher Authority.
-
-The implementation MUST NOT assume that every human, stakeholder, customer, executor or external system is authoritative merely because it can communicate with URACE.
-
-Conceptually:
-
-```text
-AuthoritativeSource {
-  identity?
-  provenance
-  scope?
-  authorityReferences?
-}
-```
-
-This need not become a heavyweight identity system.
+An authoritative source is the provenance of legitimate normative Authority. Examples MAY include a user, Product owner, organizational mandate, valid governing contract, configured policy, valid delegation or a source empowered by higher Authority. The implementation MUST NOT treat every human, stakeholder, customer, executor or external system as authoritative merely because it can communicate with URACE. A source needs only attributable provenance plus identity, scope and Authority references where applicable; this need not become a heavyweight identity system.
 
 ---
 
 # 6. Authority
 
-Authority is a lightweight first-class lifecycle primitive representing legitimate power to govern some lifecycle decision within a defined scope.
+Authority is a lightweight first-class primitive: attributable legitimate power to govern a decision in a defined scope. Its representation may include identity, source, type, scope, permissions, retained/delegated/reserved decisions, constraints, precedence, parent/delegation, validity, revocation, version and provenance. It answers who or what may govern which decision, under what constraints and when.
 
-Conceptually:
-
-```text
-Authority {
-  identity?
-  source
-  type?
-  scope
-  permissions?
-  retainedDecisions?
-  delegatedDecisions?
-  reservedDecisions?
-  constraints?
-  precedence?
-  parent?
-  delegation?
-  validFrom?
-  validUntil?
-  revocationState?
-  version?
-  provenance
-}
-```
-
-Authority answers:
-
-> **Who or what may legitimately govern this decision, over what scope, under what constraints, and at this point in time?**
-
-Authority MUST NOT be confused with:
-
-```text
-importance
-priority
-confidence
-Evidence strength
-Product Value
-executor capability
-market popularity
-urgency
-```
-
-Authority MUST be attributable.
-
-URACE MUST NOT manufacture Authority because an action appears beneficial.
+Authority MUST NOT be confused with importance, priority, confidence, Evidence strength, Product Value, executor capability, market popularity or urgency. Authority MUST be attributable. URACE MUST NOT manufacture it because an action appears beneficial.
 
 ---
 
 # 7. Retained vs Delegated Authority
 
-The authoritative source need not personally make every decision.
-
-It determines what is retained and what is delegated.
-
-```text
-             AUTHORITATIVE SOURCE
-                      │
-             ┌────────┴────────┐
-             ▼                 ▼
-         RETAINED          DELEGATED
-         AUTHORITY          AUTHORITY
-             │                 │
-             ▼                 ▼
-     source decides       URACE decides
-```
-
-Examples:
-
-```text
-"Do not change purpose X."
-        → retained destination authority
-
-"Choose any architecture."
-        → delegated navigation authority
-
-"Change Product form if Evidence
- supports a better realization of X."
-        → delegated subordinate
-          destination authority
-
-"Choose the best Product addressing X."
-        → broad destination delegation
-          beneath X
-```
-
-The deepest governing rule is:
-
-> **URACE MUST preserve the authoritative source's control over what has and has not been delegated.**
+The authoritative source determines what it retains and delegates. Retained decisions remain with the source; URACE decides within delegated scope. A fixed purpose may coexist with delegated architecture, experimentation, implementation or subordinate Product-form changes. URACE MUST preserve the source's control over what has and has not been delegated.
 
 ---
 
 # 8. Destination Semantics
 
-“Destination” is the role played by an Intent that remains governing at a particular decision scope.
-
-It is not a new mandatory primitive.
-
-An Intent can simultaneously be:
-
-- a destination relative to lower-level decisions; and
-- a navigation choice relative to a higher-order Intent.
-
-Example:
-
-```text
-PURPOSE
-"Reduce administrative burden"
-        │
-        ▼
-PRODUCT INTENT
-"Build automated workflow system"
-        │
-        ▼
-OBJECTIVE
-"Automate document classification"
-        │
-        ▼
-PLAN
-"Use architecture A"
-```
-
-If Authority fixes only the highest purpose:
-
-```text
-FIXED DESTINATION
-"Reduce administrative burden"
-        │
-        ▼
-URACE MAY CHANGE
-Product Intent
-        │
-        ▼
-URACE MAY CHANGE
-Objectives
-        │
-        ▼
-URACE MAY CHANGE
-Plans
-```
-
-If Product Intent is also retained:
-
-```text
-FIXED PURPOSE
-        │
-        ▼
-FIXED PRODUCT INTENT
-        │
-        ▼
-URACE NAVIGATES BELOW IT
-```
-
-Therefore destination is **scope-relative but Authority-governed**, not arbitrary.
+A destination is the role of governing Intent at a decision scope, not another mandatory primitive. An Intent may be destination relative to lower-level decisions and navigation relative to higher-order Intent. If only a purpose is fixed, URACE MAY change subordinate Product Intent, URACE MAY change Objectives and URACE MAY change Plans; if Product Intent is also retained, URACE navigates below it. Destination is scope-relative and Authority-governed, never arbitrary.
 
 ---
 
 # 9. Destination Ownership
 
-For every material Intent change, determine the highest applicable governing Intent whose change has not been delegated.
-
-Call this the:
-
-```text
-HIGHEST NON-DELEGATED INTENT
-```
-
-It acts as the current authoritative destination.
-
-Canonical:
-
-```text
-INTENT L0
-   │
-   │ retained
-   ▼
-DESTINATION BOUNDARY
-   │
-   ├── Intent L1   delegated
-   │      │
-   │      └── URACE may evolve
-   │
-   ├── Objective   delegated
-   │
-   ├── Plan        delegated
-   │
-   └── Execution   delegated
-```
-
-URACE MUST NOT autonomously mutate `L0`.
-
-URACE MAY autonomously mutate delegated layers below it when justified.
+For each material Intent change, identify the highest applicable governing Intent whose change has not been delegated: the **highest non-delegated Intent**, which is the authoritative destination boundary. URACE MUST NOT mutate that retained layer autonomously. It MAY mutate justified delegated layers below it.
 
 ---
 
 # 10. Authority Is the Boundary, Not the Driver
 
-Authority establishes the legitimate space in which URACE drives.
-
-```text
-                AUTHORITY
-                    │
-                    ▼
-       ┌─────────────────────────┐
-       │ LEGITIMATE ACTION SPACE │
-       │                         │
-       │  URACE AUTONOMOUSLY:    │
-       │                         │
-       │  observes               │
-       │  reasons                │
-       │  discovers              │
-       │  prioritizes            │
-       │  plans                  │
-       │  experiments            │
-       │  selects executors      │
-       │  executes               │
-       │  learns                 │
-       │  corrects course        │
-       │  validates              │
-       │  recovers               │
-       │  sleeps                 │
-       │  wakes                  │
-       └─────────────────────────┘
-```
-
-Authority SHOULD NOT micromanage autonomous operation.
-
-Canonical:
-
-```text
-AUTHORIZED DECISION SPACE
-        ≠
-REPEATED APPROVAL
-```
-
-and:
-
-```text
-AUTONOMOUS
-        ≠
-UNBOUNDED
-```
-
-The intended model is:
-
-> **Maximum justified autonomy inside Authority; zero intentional autonomy outside Authority.**
+Authority establishes the legitimate action space in which URACE observes, reasons, discovers, prioritizes, plans, experiments, selects Executors, executes, learns, corrects course, validates, recovers, sleeps and wakes. Authority SHOULD NOT micromanage autonomous operation: authorized decision space is not repeated approval, and autonomous is not unbounded. The model is maximum justified autonomy inside Authority and zero intentional autonomy outside it.
 
 ---
 
 # 11. Autonomous Decision Space
 
-Applicable Authority determines an Autonomous Decision Space.
-
-Conceptually:
-
-```text
-AutonomousDecisionSpace =
-    DelegatedAuthority
-    − ExplicitProhibitions
-    − ReservedDecisions
-    − RequiredExternalApprovals
-    − HARDConstraints
-```
-
-This is semantic notation, not required mathematical implementation.
-
-Inside this space, URACE SHOULD operate autonomously.
-
-```text
-DECISION
-   │
-   ▼
-DELEGATED?
-   │
- ┌─┴─────────────┐
- │               │
-YES              NO
- │               │
- ▼               ▼
-URACE          RETAINED /
-DECIDES        RESERVED
- │               │
- ▼               ▼
-ACT          SOURCE DECIDES
-```
-
-External approval MUST NOT be introduced merely because a decision is important.
+The Autonomous Decision Space is delegated Authority minus explicit prohibitions, reserved decisions, required external approvals and HARD constraints; this is semantic notation, not required mathematics. URACE SHOULD operate autonomously inside it. External approval MUST NOT be introduced merely because a decision is important.
 
 ---
 
 # 12. Reserved Decisions
 
-An authoritative source MAY explicitly reserve decisions.
-
-Examples only:
-
-```text
-highest purpose change
-    → reserved
-
-specific Product Intent change
-    → reserved
-
-spending above threshold
-    → reserved
-
-routine implementation
-    → delegated
-
-ordinary experimentation
-    → delegated
-
-executor selection
-    → delegated
-```
-
-Importance alone does not imply reservation.
-
-Consequentiality alone does not imply reservation.
-
-Once sufficient Authority establishes autonomous scope, URACE MUST NOT repeatedly ask for authorization already granted.
+An authoritative source MAY reserve decisions such as purpose changes, particular Product-Intent changes or spending above a threshold while delegating routine implementation, ordinary experimentation or Executor selection. Importance and consequentiality alone do not imply reservation. Once sufficient Authority establishes autonomous scope, URACE MUST NOT repeatedly request authorization already granted.
 
 ---
 
 # 13. Authority Types
 
-Authority MAY be conceptually distinguished as:
-
-```text
-AUTHORITY
-    │
-    ├── NORMATIVE
-    │      what may define what is pursued
-    │
-    ├── POLICY
-    │      what is permitted/prohibited/reserved
-    │
-    ├── DELEGATED
-    │      what URACE or another actor may decide
-    │
-    └── OPERATIONAL
-           what may perform effects
-```
-
-Evidence has **epistemic authority** in the ordinary descriptive sense that sufficiently credible Evidence constrains factual conclusions.
-
-That does not make Evidence a normative Authority primitive.
-
-The distinction MUST remain clear:
-
-```text
-NORMATIVE AUTHORITY
-    governs legitimate decisions
-
-EPISTEMIC AUTHORITY
-    constrains defensible beliefs
-```
+Authority MAY distinguish normative Authority (what may define pursuit), policy Authority (permitted, prohibited or reserved), delegated Authority (what another actor may decide) and operational Authority (what may perform effects). Credible Evidence has descriptive epistemic authority over factual conclusions but is not normative Authority. This distinction MUST remain clear.
 
 ---
 
 # 14. Authority Resolution
 
-Authority is:
-
-> **typed and scoped before it is ordered.**
-
-Avoid simplistic global authority rankings.
-
-Resolution:
-
-```text
-PROPOSED DECISION / OPERATION
-             │
-             ▼
-      IDENTIFY SUBJECT
-             │
-             ▼
-   IDENTIFY REQUIRED AUTHORITY
-             │
-             ▼
- FIND APPLICABLE AUTHORITIES
-             │
-             ▼
- CHECK SOURCE / PROVENANCE
-             │
-             ▼
-      CHECK VALIDITY
-             │
-             ▼
-       CHECK SCOPE
-             │
-             ▼
-   CHECK CONSTRAINTS
-             │
-             ▼
-  CHECK DELEGATION CHAIN
-             │
-             ▼
- CHECK RETAINED / RESERVED
-             │
-             ▼
-RESOLVE APPLICABLE PRECEDENCE
-             │
-             ▼
- ┌───────────┼───────────┬────────────┐
- ▼           ▼           ▼            ▼
-AUTONOMOUS DENIED     RESERVED     UNRESOLVED
-```
-
-Precedence matters only where Authorities genuinely overlap and conflict.
-
-URACE MUST NOT invent precedence to obtain a preferred result.
+Authority is typed and scoped before it is ordered. For a proposed decision or Operation, identify the subject and required Authority; find applicable Authorities; verify source/provenance, validity, scope, constraints, delegation chain and retained/reserved decisions; then resolve precedence only where applicable Authorities genuinely overlap and conflict. URACE MUST NOT invent precedence to obtain a preferred result.
 
 ---
 
 # 15. Authority Resolution Outcomes
 
-Conceptual outcomes:
+Resolution yields:
 
-```text
-AUTONOMOUSLY_AUTHORIZED
-DENIED
-REQUIRES_AUTHORITATIVE_DECISION
-UNRESOLVED
-```
+| Outcome | Meaning |
+|---|---|
+| `AUTONOMOUSLY_AUTHORIZED` | Sufficient delegated Authority exists; URACE SHOULD decide and act independently |
+| `DENIED` | Applicable Authority prohibits the action |
+| `REQUIRES_AUTHORITATIVE_DECISION` | The source retained or reserved it |
+| `UNRESOLVED` | Applicable Authority cannot be established sufficiently |
 
-`AUTONOMOUSLY_AUTHORIZED`:
-
-> URACE possesses sufficient applicable delegated Authority and SHOULD independently decide and act.
-
-`DENIED`:
-
-> Applicable Authority prohibits the action.
-
-`REQUIRES_AUTHORITATIVE_DECISION`:
-
-> The authoritative source retained or reserved this decision.
-
-`UNRESOLVED`:
-
-> Applicable Authority cannot currently be established sufficiently.
-
-Critical:
-
-```text
-UNRESOLVED
-    ≠
-AUTHORIZED
-```
-
-and:
-
-```text
-AUTHORIZED
-    ≠
-ASK AGAIN
-```
+`UNRESOLVED` is not authorized; authorized does not mean ask again.
 
 ---
 
 # 16. Non-Redundant Authority Resolution
 
-URACE SHOULD NOT repeatedly resolve unchanged Authority where a durable valid determination already exists.
-
-```text
-AUTHORITY A7
-    │
-    ▼
-VALID DELEGATED SCOPE
-    │
-    ▼
-MANY AUTONOMOUS DECISIONS
-    │
-    ├─ Objective A
-    ├─ Plan B
-    ├─ Experiment C
-    ├─ Operation D
-    └─ Executor E
-```
-
-not:
-
-```text
-AUTHORITY A7
-    ↓
-ask for Objective
-    ↓
-ask for Plan
-    ↓
-ask for operation
-    ↓
-ask for executor
-    ↓
-ask for validation
-```
-
-unless that granularity was actually retained.
-
-Authority enforcement SHOULD occur at the lowest frequency consistent with correctness.
+URACE SHOULD NOT repeatedly resolve unchanged Authority when a durable valid determination already covers many Objectives, Plans, experiments, Operations or Executors, unless the source retained that granularity. Authority enforcement SHOULD occur at the lowest frequency consistent with correctness.
 
 ---
 
 # 17. Delegation
 
-Authority MAY delegate bounded Authority.
-
-```text
-PARENT AUTHORITY
-       │
-       ▼
-DELEGATION
-  ├─ scope
-  ├─ permissions
-  ├─ constraints
-  ├─ validity
-  ├─ reservations
-  └─ furtherDelegation?
-       │
-       ▼
-CHILD AUTHORITY
-```
-
-Invariant:
-
-```text
-CHILD AUTHORITY
-    ⊆
-AUTHORITY ACTUALLY DELEGATED
-```
-
-URACE MUST NOT self-expand its delegation.
+Authority MAY delegate bounded scope, permissions, constraints, validity, reservations and further-delegation rights. Child Authority is always a subset of Authority actually delegated. URACE MUST NOT self-expand its delegation.
 
 ---
 
 # 18. Authority Freshness and Revocation
 
-Authority MAY expire, be revoked, superseded or become inapplicable.
-
-URACE SHOULD NOT continuously revalidate stable Authority without reason.
-
-Revalidation becomes necessary when:
-
-- relevant Trigger indicates Authority change;
-- validity expires;
-- delegation changes;
-- policy materially changes;
-- a consequential commit requires freshness;
-- applicability changes.
-
-```text
-AUTHORITY RESOLVED
-       │
-       ▼
-AUTONOMOUS NAVIGATION
-       │
-       ▼
-MATERIAL AUTHORITY CHANGE?
-       │
-   ┌───┴───┐
-  NO      YES
-   │        │
-   ▼        ▼
-CONTINUE  REVALIDATE
-```
+Authority MAY expire, be revoked, superseded or become inapplicable. URACE SHOULD NOT continuously revalidate stable Authority without reason. Revalidation is required when a relevant Trigger indicates change, validity expires, delegation or policy materially changes, a consequential commit requires freshness, or applicability changes; otherwise autonomous navigation continues.
 
 ---
 
