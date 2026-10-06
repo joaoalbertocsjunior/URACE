@@ -35,7 +35,7 @@ An AI session can complete a task. URACE preserves the Intent, Authority, Eviden
 
 Within delegated Authority, URACE can discover and prioritize opportunities, create measurable Objectives, select replaceable Executors, validate effects, checkpoint accepted progress, recover from interruption, accept new goals and context while running, and become dormant when further work is not justified.
 
-Executors may be agentic, orchestrated, deterministic, human-operated, interchangeable, or competing (e.g., OpenHands or Caveman) without changing URACE's lifecycle model.
+Executors may be agentic, orchestrated, deterministic, human-operated, interchangeable, or competing (e.g., [OpenHands](https://github.com/OpenHands/OpenHands) or [Caveman](https://github.com/JuliusBrussee/caveman)) without changing URACE's lifecycle model.
 
 ## Get Running
 
