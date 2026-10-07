@@ -86,7 +86,7 @@ Generated help identifies unavailable capabilities, durable controls and safe in
 
 ## Update Safely
 
-Keep the accepted specification identifiable by commit, tag or content hash. Obtain the newer `URACE.md` from a trusted source and review the version diff:
+Keep the specification used to generate your implementation identifiable by commit, tag or content hash. Obtain the newer `URACE.md` from a trusted source and review what changed in the blueprint:
 
 ```sh
 # When both versions are Git commits available locally:
@@ -96,13 +96,13 @@ git diff ACCEPTED_COMMIT NEW_COMMIT -- URACE.md
 git diff --no-index accepted/URACE.md new/URACE.md
 ```
 
-Give the newer specification and version diff to your bootstrap system using separate review and update requests:
+Give the newer specification and version diff to your bootstrap system so it can assess and update your generated URACE implementation:
 
-1. **Explain:** “Explain this version diff. Identify changed requirements, affected local capabilities, compatibility risks and required migrations. Do not modify anything.”
+1. **Explain:** “Explain this version diff. Identify changed requirements, affected capabilities in my generated URACE implementation, compatibility risks and required migrations. Do not modify anything.”
 
-2. **Update:** “Update from this version diff. Create an isolated, backward-compatible migration candidate; preserve Product work and durable state; check state compatibility; run accepted and new validation; report the result; and activate only after health confirmation, with rollback available.”
+2. **Update:** “Update my generated URACE implementation to satisfy the newer specification. Use the version diff as bounded migration input; create an isolated, backward-compatible candidate; preserve Product work and durable state; check state compatibility; run accepted and new validation; report the result; and activate only after health confirmation, with rollback available.”
 
-Never apply the diff directly to runtime or state files. Use the generated update or re-bootstrap operation when available; otherwise use the candidate process above.
+The specification diff is reference input: do not apply it as a patch to the specification, runtime or state files. Use the generated update or re-bootstrap operation when available; otherwise use the candidate process above.
 
 ## See Progress
 
