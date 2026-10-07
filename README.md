@@ -86,7 +86,7 @@ Generated help identifies unavailable capabilities, durable controls and safe in
 
 ## Update Safely
 
-Keep the accepted specification identifiable by commit, tag or content hash. Obtain the newer `URACE.md` from a trusted source and review the version diff before updating your generated implementation:
+Keep the accepted specification identifiable by commit, tag or content hash. Obtain the newer `URACE.md` from a trusted source and review the version diff:
 
 ```sh
 # When both versions are Git commits available locally:
@@ -96,9 +96,15 @@ git diff ACCEPTED_COMMIT NEW_COMMIT -- URACE.md
 git diff --no-index accepted/URACE.md new/URACE.md
 ```
 
-Give the newer specification and version diff to your bootstrap system as bounded migration input. Ask it to create an isolated, backward-compatible migration candidate; preserve Product work and durable state; check state compatibility; run both accepted and new validation suites; and activate only after health confirmation, with rollback available.
+Give the newer specification and version diff to your bootstrap system using separate review and update requests:
 
-The diff is review input, not a patch for runtime or state files. Use generated help to find the update, self-evolution or re-bootstrap operation. If none exists, bootstrap the newer specification as a candidate and promote it through the same validation and rollback process.
+```text
+Explain this version diff: identify changed requirements, affected local capabilities, compatibility risks and required migrations. Do not modify anything.
+
+Update from this version diff: create an isolated, backward-compatible migration candidate; preserve Product work and durable state; check state compatibility; run accepted and new validation; report the result; and activate only after health confirmation, with rollback available.
+```
+
+Never apply the diff directly to runtime or state files. Use the generated update or re-bootstrap operation when available; otherwise use the candidate process above.
 
 ## See Progress
 
