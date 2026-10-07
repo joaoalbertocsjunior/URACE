@@ -82,7 +82,7 @@ urace add-goal ...          queue a measurable goal
 urace goal forecast         explain goal order and advisory completion ranges
 ```
 
-Help identifies installed and unavailable capabilities, immediate actions and durable inputs. Read-only inspection should remain available without spending Executor credit. Goals and context enter through a durable interface and do not silently expand Authority; goal priority, pinning, deferral, resumption, disabling and cancellation apply at safe lifecycle boundaries. Persistent autonomy remains controllable from another terminal; compatible Executors may fall back independently.
+Help identifies installed and unavailable capabilities, immediate actions and durable inputs. Read-only inspection should remain available without spending Executor credit. Goals and context enter through a durable interface and do not silently expand Authority; goal priority, scheduling, pinning, deferral, resumption, disabling, cancellation and tombstone deletion apply at safe lifecycle boundaries. Persistent autonomy remains controllable from another terminal; compatible Executors may fall back independently.
 
 Self-evolution remains separate from Product evolution: `disabled` prevents it, `necessary-only` permits it only for a demonstrated blocking limitation without a sufficient smaller remedy, and `continuous` lets eligible runtime improvements compete under ordinary Authority, Evidence, cost and validation rules. None of these modes grants permission to change the authoritative specification.
 
