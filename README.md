@@ -98,11 +98,9 @@ git diff --no-index accepted/URACE.md new/URACE.md
 
 Give the newer specification and version diff to your bootstrap system using separate review and update requests:
 
-```text
-Explain this version diff: identify changed requirements, affected local capabilities, compatibility risks and required migrations. Do not modify anything.
+1. **Explain:** “Explain this version diff. Identify changed requirements, affected local capabilities, compatibility risks and required migrations. Do not modify anything.”
 
-Update from this version diff: create an isolated, backward-compatible migration candidate; preserve Product work and durable state; check state compatibility; run accepted and new validation; report the result; and activate only after health confirmation, with rollback available.
-```
+2. **Update:** “Update from this version diff. Create an isolated, backward-compatible migration candidate; preserve Product work and durable state; check state compatibility; run accepted and new validation; report the result; and activate only after health confirmation, with rollback available.”
 
 Never apply the diff directly to runtime or state files. Use the generated update or re-bootstrap operation when available; otherwise use the candidate process above.
 
