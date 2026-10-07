@@ -82,21 +82,33 @@ urace add-goal ...          queue a measurable goal
 urace goal forecast         explain goal order and advisory completion ranges
 ```
 
-Help identifies installed and unavailable capabilities, immediate actions and durable inputs. Read-only inspection should remain available without spending Executor credit. Goals and context enter through a durable interface and do not silently expand Authority; goal priority, scheduling, pinning, deferral, resumption, disabling, cancellation and tombstone deletion apply at safe lifecycle boundaries. Persistent autonomy remains controllable from another terminal; compatible Executors may fall back independently.
+Generated help identifies unavailable capabilities, durable controls and safe inspection without an Executor call. Use it for goals, policies, Executors and recovery rather than editing runtime state.
 
-Self-evolution remains separate from Product evolution: `disabled` prevents it, `necessary-only` permits it only for a demonstrated blocking limitation without a sufficient smaller remedy, and `continuous` lets eligible runtime improvements compete under ordinary Authority, Evidence, cost and validation rules. None of these modes grants permission to change the authoritative specification.
+## Update Safely
+
+Keep the accepted specification identifiable by commit, tag or content hash. Obtain the newer `URACE.md` from a trusted source and review the version diff before updating your generated implementation:
+
+```sh
+# When both versions are Git commits available locally:
+git diff ACCEPTED_COMMIT NEW_COMMIT -- URACE.md
+
+# When comparing two independent files:
+git diff --no-index accepted/URACE.md new/URACE.md
+```
+
+Give the newer specification and version diff to your bootstrap system as bounded migration input. Ask it to create an isolated, backward-compatible migration candidate; preserve Product work and durable state; check state compatibility; run both accepted and new validation suites; and activate only after health confirmation, with rollback available.
+
+The diff is review input, not a patch for runtime or state files. Use generated help to find the update, self-evolution or re-bootstrap operation. If none exists, bootstrap the newer specification as a candidate and promote it through the same validation and rollback process.
 
 ## See Progress
 
-URACE reports observed **metrics**, interpreted health or risk **vitals**, and versioned decision-aid **scores** without confusing them with Authority or proof of causation. Material work carries a baseline, targets, guardrails and a follow-up condition. Resource reporting uses the strongest available unit and labels call counts as proxies rather than provider credit.
+Use generated `check`, `vitals`, goal forecast and portfolio feedback operations. They distinguish observed **metrics**, interpreted **vitals**, decision-aid **scores**, resource proxies, blockers, retry conditions and accepted progress without treating any of them as Authority or proof of causation.
 
-Provider-capacity windows are scheduled waits rather than Product failures. Checkpoints, retry conditions, transport attempts, validation results, blockers, uncertainty and the next wake condition remain visible. Optional tables, dashboards or workbooks are observation surfaces; canonical control never depends on editing them.
+## Compare Alternatives Safely
 
-## Competing Variants
+Where installed, portfolio evolution tests isolated alternatives under one frozen contract and equal bounded resources. Use `help portfolio` for preflight, finite or persistent runs, feedback, stopping and resumption. Shared findings remain advisory; a winner still requires ordinary validation and acceptance. Use this mode only when comparison justifies its extra cost.
 
-Where installed, portfolio evolution can compare isolated candidates under a frozen contract and equal bounded resources. Use the generated `help portfolio` commands for preflight, finite or persistent generations, feedback, stopping and resumption. Candidate communication remains advisory, and selection still requires ordinary validation and acceptance. Use portfolios only when comparable alternatives justify their extra cost.
-
-## Safety and Recovery
+## Stay Safe and Recover
 
 Execution, observed effects, validation and acceptance are separate events. Candidates are prepared away from stable artifacts; concurrent edits are preserved; interrupted effects are reconciled or remain explicitly uncertain; accepted progress is checkpointed; and persistent operation remains bounded by Authority, budgets, isolation, validation, backoff, stop controls and recovery.
 
