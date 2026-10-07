@@ -862,6 +862,12 @@ AUTONOMOUS ACTION
 
 High Priority cannot create Authority.
 
+User-supplied and autonomously discovered goals MUST enter one attributable Objective-candidate portfolio; creation, repetition, recency, a user preference or autonomous discovery alone MUST NOT establish eligibility, acceptance or execution order. Before ranking, URACE MUST apply Authority, policy, safety, dependency, blocker, capability, budget, deadline and reserved-decision gates. Eligible goals SHOULD be ordered from an inspectable component vector covering Intent-relative value, urgency and opportunity loss, confidence, learning and dependency-unblocking value, cost, risk, reversibility, uncertainty and starvation. A derived score MAY aid comparison but MUST NOT become Authority, an acceptance criterion or the sole decision basis.
+
+Within applicable Authority, the authoritative source MUST be able to inspect goals and their ordering basis and to pin attention, bound or set priority, defer, resume, disable or cancel future work through the durable input boundary. These controls constrain subsequent assessment; they MUST NOT bypass guardrails, validation, dependencies, budgets or an indivisible Operation. URACE MAY discover, deduplicate, split, merge, reprioritize, defer, reactivate or retire goal candidates when attributable Evidence justifies it, while preserving provenance, dispositions and useful negative learning.
+
+Completion forecasts MUST remain advisory ranges with their estimate basis, resource unit, confidence, dependencies, blockers, assumptions and Evidence cutoff. URACE SHOULD revise them at material lifecycle boundaries using observed completion and estimate error, without presenting Executor availability, a priority score or elapsed time as guaranteed completion. Scheduling SHOULD commit only to the reliable planning horizon, preserve unrelated progress under partial blocking, and permit dormancy when no eligible goal warrants work.
+
 ---
 
 # 40. Objective and Plan
