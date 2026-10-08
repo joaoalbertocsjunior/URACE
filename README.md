@@ -4,20 +4,20 @@
 
 > **It drives the boat. You pick the destination.**
 
-URACE is an open, implementation-agnostic blueprint for persistent, resource-efficient autonomous long-running Product evolution. It turns retained Intent into a continuous, measurable lifecycle that survives individual prompts, sessions, agents, models and runtimes.
+URACE is an open blueprint for continuously improving a **Product** over time. It works autonomously, measures progress, manages resources and continues across prompts, sessions, agents, models and runtimes.
 
-The **Product** can be a project, service, process, research effort, business outcome or other governed endeavor. URACE does not default to improving itself. Its own evolution remains subordinate to the Product and happens only when separately authorized and justified.
+The Product can be a project, service, process, research effort or other goal. You set the destination, the decisions you keep and the boundaries URACE must respect. URACE handles only the work you delegate.
 
-You choose the destination and the decisions you retain. Within delegated Authority, URACE independently observes reality, discovers what matters next, prioritizes, plans, selects replaceable capabilities, acts, validates, learns, recovers, becomes dormant when appropriate and wakes when new Evidence justifies action.
+Within those boundaries, URACE observes, decides what matters next, plans, chooses replaceable workers, acts, checks results, learns and recovers. It waits when no useful work is justified and starts again when something meaningful changes. Improving URACE itself is separate and requires your permission.
 
-[`URACE.md`](URACE.md) is the complete portable lifecycle specification—not a dependency on one packaged runtime. Any capable system can bootstrap it for a Product without adopting a particular AI, vendor, language, platform, storage system, orchestration model or development method.
+[`URACE.md`](URACE.md) contains the complete portable design. A capable system can use it without locking you into one AI, vendor, language, platform or development method.
 
 ```text
                      YOU RETAIN
-                 INTENT + AUTHORITY
+                GOAL + BOUNDARIES
                          │
                          ▼
-REALITY ──► EVIDENCE ──► URACE ──► REPLACEABLE EXECUTORS
+REALITY ──► EVIDENCE ──► URACE ──► REPLACEABLE WORKERS
    ▲                     │                    │
    │                     ▼                    ▼
    └────────────── PRODUCT ◄── VALIDATED CHANGE
@@ -47,7 +47,7 @@ You need [`URACE.md`](URACE.md), access to your Product and a [capable Executor]
 2. Say **“Bootstrap.”**
 3. Follow the generated setup to define the Product, desired outcome, retained decisions, delegation and protected boundaries.
 
-`URACE.md` is the complete bootstrap input. Setup keeps unspecified choices conservative and visible, validates the generated implementation and reports the commands available in your environment. This repository does not install a universal `urace` command by itself.
+`URACE.md` is the complete bootstrap input. Setup keeps unspecified choices conservative and visible, validates the generated implementation and can expose a repository-local `urace` command while your terminal is inside that Product folder. It must not replace or conflict with another repository's command.
 
 ## Use It
 
@@ -64,13 +64,19 @@ A command-line implementation commonly provides these essentials:
 ```text
 urace check                 inspect lifecycle state
 urace vitals                inspect progress, cost and health
-urace plan                  assess without execution
-urace autonomous            run persistent evolution
-urace executor status       inspect attached Executors
+
 urace add-context ...       add attributable context
 urace add-goal ...          add a measurable goal
 urace goal forecast         explain goal order and timing
-urace portfolio ...         test competing approaches under equal controls
+
+urace executor status       inspect attached Executors
+urace executor attach ...   connect a compatible Executor
+urace executor detach ...   disconnect an Executor safely
+
+urace plan                  assess without execution
+urace autonomous            run persistent evolution
+urace portfolio ...         compare promising approaches under equal controls
+
 urace update download ...   obtain a candidate specification
 urace update explain ...    review its effect without changes
 urace update apply ...      validate and activate a migration
@@ -78,23 +84,21 @@ urace update apply ...      validate and activate a migration
 
 Generated help contains the complete operation catalog, including policies, recovery and advanced capabilities. Use these controls instead of editing runtime state.
 
+Progress reports separate observed metrics, interpreted vitals, decision-aid scores, resource proxies, blockers, retries and accepted changes; none creates Authority or proves causation.
+
 ## Update Safely
 
-Keep the accepted specification identifiable by commit, tag or content hash. Use the generated update flow:
+Keep a record of the `URACE.md` version your system currently uses. Then update in three steps:
 
-1. **Download** an attributable candidate and record its identity and hash without changing the implementation.
-2. **Explain** the version delta, affected capabilities, compatibility risks and required migration without modifying anything.
-3. **Apply** only through an isolated candidate that preserves Product work and durable state, passes accepted and new validation, confirms health and can roll back.
+1. **Download** gets the new specification without changing your working system.
+2. **Explain** shows what changed, what may be affected and any compatibility risks.
+3. **Apply** builds and tests a separate updated version. It preserves recorded local choices; if one conflicts, it applies no files, explains the effects and options, then waits for your decision through the generated update-resolution operation. It resumes the same candidate and switches only after validation and a health check, with rollback if activation fails.
 
-Never apply a specification diff directly to runtime or state files. Use `urace help update` for manual review and compatibility procedures.
-
-## See Progress
-
-Use generated `check`, `vitals`, goal forecast and portfolio feedback operations. They separate observed **metrics**, interpreted **vitals**, decision-aid **scores**, resource proxies, blockers, retries and accepted progress. None creates Authority or proves causation by itself.
+Never copy specification changes directly into runtime or state files. Run `urace help update` for the exact commands.
 
 ## Compare Alternatives
 
-Where installed, `urace portfolio ...` tests competing approaches in separate workspaces under the same success measures, safety rules and bounded resources. Use `urace help portfolio` for preflight, runs, feedback, stopping and resumption. Shared findings remain advisory, and a selected approach still requires ordinary validation and acceptance. Use comparison only when its added cost is justified.
+Portfolio comparison is adaptive by default during `urace autonomous`. When several approaches look promising, URACE compares them separately under the same goal, safety rules and resource limit. It sleeps when comparison is not worth the added time and Executor cost, wakes after a meaningful change, and never stops an active comparison halfway. The best result is still validated before acceptance. Run `urace help portfolio` to inspect it or choose adaptive, always or off.
 
 ## Stay Safe and Recover
 
