@@ -67,69 +67,11 @@ Autonomous-liveness invariant:
 
 > **While persistent `--autonomous` operation remains enabled, URACE MAY be ACTIVE or DORMANT, but MUST retain a viable path back to assessment. Dormancy is valid autonomous operation; ordinary end-loop is not.**
 
-The fundamental model is:
+Canonical model:
 
 ```text
-         AUTHORITATIVE SOURCE
-                 │
-                 ▼
-     HIGHEST NON-DELEGATED INTENT
-          "the destination"
-                 │
-                 ▼
-       AUTHORITY + DELEGATION
-      "what URACE may decide"
-                 │
-                 ▼
-    ┌────────────────────────────┐
-    │           URACE            │
-    │                            │
-    │      "drives the boat"     │
-    │                            │
-    │ observe                    │◄──── EVIDENCE
-    │ assess                     │       / REALITY
-    │ discover                   │
-    │ prioritize                 │
-    │ plan                       │
-    │ choose capabilities        │
-    │ execute                    │
-    │ experiment                 │
-    │ learn                      │
-    │ correct course             │
-    │ validate                   │
-    │ recover                    │
-    │ checkpoint                 │
-    │ reassess                   │
-    │ sleep / wake               │
-    └─────────────┬──────────────┘
-                  │
-                  ▼
-          PRODUCT EVOLUTION
-```
-
-Canonical shorthand:
-
-```text
-AUTHORITATIVE SOURCE
-    chooses what it retains
-
-INTENT
-    defines destination
-
-AUTHORITY
-    defines legitimate autonomy
-
-URACE
-    owns navigation
-
-EVIDENCE
-    describes reality
-
-EXECUTORS
-    provide capabilities
-
-VALIDATION
-    determines acceptance
+AUTHORITATIVE SOURCE → retained INTENT (destination) → AUTHORITY (legitimate autonomy)
+EVIDENCE (reality) → URACE (navigation) → EXECUTORS (capabilities) → VALIDATION → PRODUCT EVOLUTION
 ```
 
 ---
@@ -2845,6 +2787,8 @@ Availability observation MAY participate in resource-versus-efficiency evaluatio
 
 Credit protection MUST cover every metered stage, including discovery, planning assistance, execution, validation assistance, retries and failed calls; counting only successful or discovery calls is insufficient. A call reservation MUST become durable before invocation so interruption cannot silently reopen spent budget. Before discovery, an implementation SHOULD reserve enough remaining budget for the likely completion path so it does not spend credit identifying work that it cannot carry through. It MUST enforce attributable hard bounds at the applicable task, stage, generation, deployment or provider boundary, coalesce equivalent triggers, and avoid automatic retries that repeat the same context and expected result. Short- and long-window transport ceilings MAY supplement those bounds where justified; their presence, absence and units MUST be explicit rather than inferred from Executor readiness.
 
+An interrupted in-progress stage MUST resume or replay its existing logical reservation rather than consume a new one. Exhausting a stage or generation hard bound MUST terminate and retain that bounded unit, but MUST NOT terminate a persistent autonomous owner when a separately attributable later unit can proceed within unchanged Authority and budgets.
+
 Long-run scheduling SHOULD adapt to observed marginal value. Repeated no-action, ineligible, failed or no-effect calls SHOULD progressively lengthen the opportunity-audit interval up to a declared bound; material new Evidence MAY wake reassessment without erasing an applicable usage ceiling. A productive accepted result MAY reset the value backoff. Prompt context MUST be bounded, deduplicated and selected for decision relevance while retaining the Authority, constraints and Evidence needed for a sound decision. Feedback SHOULD distinguish calls by stage and outcome and report configured window use, suppression reason, unproductive streak and the next eligible reassessment. These controls are guardrails rather than a claim of mathematically optimal spending: an implementation MUST make its policy configurable and measurable so observed value per call can improve it without weakening applicable hard bounds.
 
 Executor cost versus measurable progress MUST be a core vital in both a short operational window and a longer sustainability window. At minimum it SHOULD expose total metered cost, productive-call yield, accepted changes, cost per accepted change, and associated metric improvements and regressions. Implementations SHOULD use provider-reported token or monetary usage when available and an explicitly labelled call-count proxy otherwise. Cost/outcome association MUST remain `UNATTRIBUTED` unless the ordinary causal-evidence standard is satisfied; this vital guides scheduling and investigation but does not prove that an Executor caused a metric movement.
@@ -2949,9 +2893,11 @@ Implementations MUST distinguish immediate commands from durable lifecycle input
 
 Inputs that change future lifecycle behavior while autonomous operation may be active MUST use the durable input boundary. This includes new context or goals; Executor attach, detach or switch requests; connector add, enable, disable or remove requests; metric and vital changes; and cancellation of pending goals. Listing these resources is immediate and read-only. Applying a queued control MUST preserve attributable history, be idempotent, and occur at a safe cycle boundary. Implementations MUST expose pending input and a command catalog or equally clear help that identifies which actions are immediate and which are queued.
 
-The minimum portable operator surface SHOULD cover: initialize; inspect full state; inspect focused vitals; inspect the evolution evaluator and its confidence-qualified component results; inspect command classification; inspect pending input; assess and plan without execution; run bounded or persistent autonomous execution; inspect, attach, detach and switch Executors; inspect and change autonomy policies, metered budgets and authorized evaluator parameters; add context and Product or URACE goals; list and cancel eligible goals; add and list sources, metrics and vitals; enable, disable and remove sources; remove metric and vital definitions; and obtain human-readable and machine-readable inspection output. Environment-specific names MAY differ, but bootstrap completion guidance MUST map every supported Operation to its exact command, API or screen and report unsupported Operations rather than leaving the user to guess.
+The minimum portable operator surface SHOULD cover: initialize; inspect full state; inspect focused vitals; inspect the evolution evaluator and its confidence-qualified component results; inspect command classification; inspect pending input; assess and plan without execution; run bounded or persistent autonomous execution; inspect, attach, detach and switch Executors; inspect and change autonomy policies, metered budgets and authorized evaluator parameters; add context and Product or URACE goals; list and cancel eligible goals; add and list sources, metrics and vitals; enable, disable and remove sources; remove metric and vital definitions; safely download, explain, apply and resolve specification updates; and obtain human-readable and machine-readable inspection output. Environment-specific names MAY differ, but bootstrap completion guidance MUST map every supported Operation to its exact command, API or screen and report unsupported Operations rather than leaving the user to guess.
 
 Every generated implementation MUST provide a discoverable top-level help surface and contextual help for each supported Operation. Help MUST be available without an intelligent Executor call and MUST identify: the installed Operations and memorable aliases; required and optional inputs; safe examples; immediate versus durable-input behavior; human-readable and machine-readable inspection forms; capability or adapter prerequisites; unsupported Operations; and where advanced recovery or deployment guidance resides. A command-line implementation SHOULD support shapes equivalent to `help` and `help <operation>`; APIs and graphical interfaces MAY provide an equally direct operation catalog. Bootstrap MUST demonstrate the help surface and report its exact entry point.
+
+A generated command-line interface SHOULD use the repository-scoped `urace <operation>` shape. Where specification updates are supported, it SHOULD expose stable `urace update download`, `explain`, `apply` and `resolve` operations with the semantics defined by the update lifecycle. An accepted update MUST preserve existing supported command calls, aliases, queued inputs and checkpoint identities, or provide tested compatibility forwarding through a declared deprecation interval. A directory migration MUST keep the accepted command surface active until the new launcher passes health confirmation; it MUST NOT require the new layout merely to download, explain, apply, resolve or roll back that migration.
 
 The default help view SHOULD be a short user-facing operation list rather than a parser grammar dump; internal controller Operations SHOULD be omitted. Configuration controls SHOULD be discoverable through one configuration surface, with memorable aliases permitted for frequent policies. Where self-evolution is configurable, user-facing `auto`, `always` and `never` aliases SHOULD map explicitly to necessary-only, continuous and disabled semantics without weakening protected invariants.
 
@@ -3218,47 +3164,7 @@ URACE MUST NOT fundamentally depend on a particular:
 
 # 76. Minimal Implementation
 
-Possible logical structure:
-
-```text
-core/
-  lifecycle
-  state
-  authority
-  intent
-  trigger
-  objective
-  plan
-  decision
-  policy
-
-execution/
-  executor
-  operation
-  capabilities
-
-evidence/
-  evidence
-  lineage
-
-validation/
-  validation
-
-checkpoint/
-  checkpoint
-
-persistence/
-  persistence
-
-discovery/
-  product
-  capabilities
-
-cli/
-  commands
-```
-
-Do NOT build heavyweight IAM, RBAC, workflow, Scheduler, event, transaction or market-fit systems merely because URACE has corresponding semantics.
+An implementation MUST keep lifecycle state, Authority/Intent resolution, Evidence, discovery, planning, execution, validation, checkpoints, recovery and capability selection distinguishable and replaceable. One component MAY implement several boundaries when their state and effects remain distinguishable; environment-specific interfaces MAY differ while preserving their Operations. It SHOULD use the smallest inspectable structure that satisfies the Product and environment and MUST NOT build heavyweight IAM, RBAC, workflow, Scheduler, event, transaction or market-fit systems merely because URACE defines corresponding semantics.
 
 ---
 
@@ -3266,25 +3172,7 @@ Do NOT build heavyweight IAM, RBAC, workflow, Scheduler, event, transaction or m
 
 The preceding requirements are authoritative. The following compact contract fixes their execution order without creating a second semantics layer.
 
-## Required capabilities
-
-An implementation MUST provide replaceable boundaries for lifecycle state, Authority and Intent resolution, Evidence, discovery, planning, execution, validation, checkpoints, recovery and capability selection. A single component MAY implement several boundaries when their state and effects remain distinguishable. Environment-specific interfaces MAY differ while preserving these Operations:
-
-```text
-inspect state and capabilities
-resolve governing Intent and applicable Authority
-ingest and qualify Evidence
-assess Triggers and discover Objectives
-prioritize eligible Objectives
-create and reuse Plans
-schedule due work
-select an authorized capable Executor
-prepare, commit, observe and reconcile effects
-validate, accept and checkpoint progress
-enter dormancy and reactivate
-```
-
-Implementations MUST NOT create heavyweight frameworks merely because the corresponding lifecycle semantics exist. They SHOULD use the smallest inspectable mechanisms that satisfy the Product and environment.
+## Required mapping
 
 Every applicable normative requirement MUST map to an implemented mechanism, an observable validation or an explicit unsupported status. A deployment MUST NOT omit a requirement merely because it has no dedicated subsystem. Interface aliases, optimized control flow and compressed documentation MUST preserve the same lifecycle semantics. Reference ordering and pseudocode MUST NOT override Authority, effect-integrity, recovery or acceptance requirements.
 
@@ -3855,7 +3743,7 @@ Bootstrap MUST be complete from `URACE.md` plus attributable Product and environ
 
 URACE specifies lifecycle contracts, invariants and observable behavior before choosing environment-specific mechanisms. Bootstrap SHOULD implement those contracts with the smallest understandable components supported by the environment. It SHOULD prefer replaceable adapters, declarative policy and capability discovery over provider-specific logic in the lifecycle core.
 
-The public specification MUST express portable capability contracts, observable states and required properties rather than prescribe a particular package, vendor, executable, storage layout, operating system or cryptographic product solely because one deployment uses it. Concrete dependency names, commands, paths and mechanism limitations belong in the attributable local bootstrap report. Examples MUST remain non-normative and MUST NOT be treated as capability or readiness Evidence.
+The public specification MUST express portable capability contracts, observable states and required properties rather than prescribe a particular package, vendor, executable, operating system or cryptographic product solely because one deployment uses it. Apart from the portable artifact boundary defined below, concrete dependency names, commands, paths and mechanism limitations belong in the attributable local bootstrap report. Examples MUST remain non-normative and MUST NOT be treated as capability or readiness Evidence.
 
 Meta-implementation does not require generating a framework for every hypothetical environment. A concrete deployment MAY begin with one Executor, one persistence mechanism and one interface when those satisfy current requirements, while preserving explicit seams for replacement. New abstraction becomes justified when a second real implementation, repeated change pressure, or a protected invariant requires it.
 
@@ -3867,20 +3755,30 @@ The authoritative specification and public guidance SHOULD remain semantically c
 
 ### Bootstrap Artifact Placement
 
-Where URACE is bootstrapped inside the same repository or artifact tree as its authoritative specification, the generated implementation SHOULD by default occupy a clearly named child or otherwise independent boundary.
-
-Conceptually:
+Where URACE is bootstrapped inside the Product's top-level repository or artifact tree, its implementation, state and output MUST occupy one top-level `urace/` boundary. Bootstrap and update MUST use these independently governed children:
 
 ```text
-AUTHORITATIVE SPECIFICATION
-GENERATED IMPLEMENTATION
-DURABLE LIFECYCLE STATE
-USER PRODUCT ARTIFACTS
+urace/
+├── .urace/     repository-scoped launcher and activation metadata
+├── runtime/    replaceable implementation
+├── state/      canonical durable state, checkpoints and secrets
+└── generated/  noncanonical output
+    ├── temporary/           runtime-created temporary directories
+    ├── portfolio/           active comparison workspaces
+    ├── retired-portfolios/  retained retired comparison bundles
+    ├── reports/             derived reports
+    └── updates/             downloaded update candidates
 ```
 
-This placement is a strong default, not a universal filesystem prescription. A separate repository, installed package, service, container, existing application layout or non-filesystem deployment MAY provide the boundary differently.
+Product artifacts and an authoritative `URACE.md` MAY remain outside this boundary. URACE MUST NOT create additional top-level implementation or output directories. Runtime-created temporary directories MUST remain in `generated/temporary/` and be removed after use or recovered after interruption. Active portfolio workspaces MUST remain separate from retained retired bundles; retirement MUST preserve attributable identity and retention status. `generated/` MUST NOT become canonical state, grant Authority or be required to recover accepted state. Runtime replacement MUST preserve `state/`; cleanup MAY remove retained `generated/` content only after reconciling active references and applicable retention.
 
-Regardless of placement, bootstrap MUST make the following scopes independently identifiable and governable:
+The Product top level SHOULD expose a repository-scoped `urace` invocation through an environment-appropriate launcher or directory activation. It MUST resolve that Product's own `urace/runtime` and `urace/state` without requiring a system-wide executable or colliding with another Product's URACE installation. A minimal environment-activation file MAY remain at the Product top level when the environment requires it; implementation code and generated directories remain confined to `urace/`.
+
+A non-filesystem deployment or an environment that cannot represent this tree MAY use an equivalent single system boundary with the same four roles and MUST report the mapping. This exception does not permit several unrelated Product-level implementation directories.
+
+An update from an older layout MUST treat placement as a state migration, not as fresh bootstrap or direct copying. It MUST inventory and identify the accepted runtime, durable state, generated artifacts, launchers, active workspaces, command calls and local adaptations; prepare the new boundary without overwriting Product work; preserve permissions, secrets, update checkpoints and command compatibility; rewrite and validate owned references; and switch launchers only at a safe checkpoint after old and new validation plus health confirmation. The migration MUST be idempotent, interruption-resumable, backwards-compatible and rollback-capable. A collision, unresolved reference or material local conflict MUST leave the accepted layout and commands active and await resolution. Legacy directories or forwarding launchers MAY be removed only after the new layout is accepted and no live reference depends on them.
+
+Bootstrap MUST keep these scopes independently identifiable and governable:
 
 ```text
 AUTHORITATIVE SPECIFICATION
@@ -3912,7 +3810,7 @@ Bootstrap execution MUST:
 15. establish crash-consistent acceptance across Product effects and lifecycle-state persistence, including multi-artifact increments where applicable;
 16. test interruption before effects, during partial application, after effects but before accepted checkpoint persistence, and after accepted checkpoint persistence but before cleanup, repairing or explicitly reporting any inapplicable case;
 17. establish safe reconciliation of stale locks, leases or ownership markers where the implementation uses them;
-18. establish and report clear boundaries among authoritative specification, generated runtime implementation, durable lifecycle state and Product artifacts, using a dedicated child implementation boundary by default when they share an artifact tree.
+18. establish and report clear boundaries among authoritative specification, runtime, durable state, generated artifacts and Product artifacts; use and validate the unified `urace/` layout or an explicitly mapped non-filesystem equivalent, including repository-scoped invocation from the Product top level.
 19. establish and demonstrate proportionate bloat controls for duplicate observations and checkpoints, external polling, active-state growth and candidate implementation or documentation growth without discarding material history or recovery Evidence.
 20. establish a versioned, inspectable and confidence-qualified evolution evaluator; demonstrate short-run and long-run component results, separate goal/context/Product/URACE cost-outcome views, and an interruption-safe authorized revision path.
 21. demonstrate that a concurrent edit to a governed artifact is preserved and causes stale candidate rejection or safe rebase rather than overwrite.
@@ -3923,13 +3821,14 @@ Bootstrap execution MUST:
 26. when analytics export is supported, demonstrate atomic portable tabular and human-dashboard generation, formula-injection escaping, state/checkpoint identity and optional native-workbook behavior without making lifecycle control depend on exported files or user action; separately probe native-workbook readiness, report any local dependency and exercise either the ready path or the visible `ADAPTER_REQUIRED` path.
 27. generate and demonstrate top-level and contextual help that covers every supported operator Operation, distinguishes immediate actions from durable inputs, exposes prerequisites and unsupported capabilities, and requires no intelligent Executor call to read.
 28. when autonomous runtime evolution is supported, demonstrate that an ordinary candidate cannot modify the protected launcher or acceptance guard, add protected files to a mutable scope, weaken protected Authority or budget policy, replace the accepted-test baseline, or pass solely by changing its own tests; demonstrate independent pre-activation rejection and stable rollback.
-29. demonstrate that an attributable provider-capacity response becomes a durable scheduled wait rather than a candidate or Product failure; that no new dependent tasks start before the retry condition; that the same logical reservation is reused; that transport attempts remain visible; and that provider-session continuation is claimed only when the adapter actually supports it.
+29. demonstrate that an attributable provider-capacity response becomes a durable scheduled wait rather than a candidate or Product failure; that no new dependent tasks start before the retry condition; that interrupted work reuses the same logical reservation; that transport attempts remain visible; that provider-session continuation is claimed only when the adapter actually supports it; and that exhausting one bounded stage or generation preserves its record while persistent autonomy proceeds only through a separately attributed eligible unit.
 30. when dynamic scope weighting is supported, demonstrate its use by ordinary non-portfolio prioritization and, separately where supported, portfolio allocation; show semantic-to-environment mapping, attributable versioned inputs, bounded influence, starvation resistance, human-readable feedback and candidate inability to change weights, Authority, guardrails, budgets, evaluation scores or selection.
 31. when multiple Executors are supported, demonstrate per-Executor capability and capacity state, fallback to a compatible available Executor under one logical reservation, preservation of independent validation and budgets, non-bypass of refusals and guardrails, truthful replay-versus-continuation feedback, and a scheduled wait when all compatible Executors are unavailable.
 32. when persistent autonomy is supported, demonstrate concurrent read-only inspection and atomic live control submission from another process; exactly-once application at safe boundaries without owner restart; visible pending, applied and rejected status; and continued exclusion of direct concurrent mutation.
 33. demonstrate source-Product reconciliation by preserving a valid concurrent external edit as a new version, rejecting a stale candidate without overwrite, and preserving an invalid external state for repair rather than silently restoring over it.
 34. demonstrate that every Executor-assisted change retains a stable change ID, decision and artifact links, exact Executor route, fallback attempts and validation result, and remains listable after restart.
 35. demonstrate manual change explanation with automatic generation disabled by default, deterministic or already-retained explanation reuse before another Executor call, and bounded `auto` and `enabled` modes.
+36. demonstrate that fresh bootstrap creates no URACE-owned top-level directory except `urace/`; that runtime replacement preserves canonical `urace/state`; that temporary, active-portfolio and retired-portfolio output remains in its dedicated `urace/generated` child; and that an interrupted legacy-layout update resumes or rolls back without losing state, Product work, secrets, local adaptations, update checkpoints, accepted commands or the accepted launcher.
 
 Unless applicable Authority explicitly delegates otherwise, the bootstrap act itself MUST NOT be interpreted as Authority to modify `URACE.md`.
 

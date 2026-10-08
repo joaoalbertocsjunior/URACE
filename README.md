@@ -39,7 +39,7 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 2. Say **“Bootstrap.”**
 3. Follow the setup to define the outcome, delegation and protected boundaries.
 
-`URACE.md` is the only required bootstrap document. Setup validates the result and may provide a local `urace` command for that Product folder.
+`URACE.md` is the only required bootstrap document. Setup validates the result, keeps its system files under `urace/`, and provides a local `urace` command from the Product folder when the environment supports it.
 
 ## Use It
 
@@ -58,9 +58,7 @@ urace update apply ...      validate and activate the new version
 urace update resolve ...    resolve a blocked update conflict
 ```
 
-You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Change URACE-managed state through its commands.
-
-You can also change URACE configuration from another terminal while URACE runs.
+You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Change URACE-managed state and configuration only through its commands; you can run them from another terminal while URACE runs.
 
 Inspect more commands with `urace` or `urace help`.
 
