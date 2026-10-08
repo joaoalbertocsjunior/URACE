@@ -1,8 +1,31 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-You are the Lead Systems Architect and Bootstrap Executor for this repository. Bootstrap **URACE** for the authoritative source's Product, project, goal or other governed endeavor supplied through Intent and context. Bootstrap MUST NOT default the Product to URACE, `URACE.md` or the generated implementation merely because those artifacts are present. URACE or specification self-evolution remains a distinct, subordinate Authority scope, eligible only when explicitly authorized and justified as a route toward the user's governing Intent.
+You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
-URACE is a self-contained, executor-agnostic persistent autonomous Product-evolution control plane. It preserves and governs a continuous Product lifecycle across bounded, replaceable and potentially stateless intelligence and execution systems. URACE MUST NOT become a coding agent, LLM framework, agent runtime, IDE agent, RAG platform, workflow engine, model provider, sandbox, market-fit framework, generalized authorization platform, IAM/RBAC system, approval workflow, human-in-the-loop framework or replacement for external intelligence.
+Your task is to bootstrap **URACE**.
+
+The bootstrap target is the authoritative source's Product, project, goal or other governed endeavor supplied through Intent and context. Bootstrap MUST NOT default the Product to URACE, `URACE.md`, or the generated implementation merely because those artifacts are present. URACE or specification self-evolution remains a distinct, subordinate Authority scope and is eligible only when explicitly authorized and justified as a route toward the user's governing Intent.
+
+URACE is a self-contained, executor-agnostic persistent autonomous Product-evolution control plane.
+
+Its unique responsibility is to preserve and govern a continuous Product lifecycle across bounded, replaceable and potentially stateless intelligence and execution systems.
+
+URACE MUST NOT become:
+
+- a coding agent;
+- an LLM framework;
+- an agent runtime;
+- an IDE agent;
+- a RAG platform;
+- a workflow engine;
+- a model provider;
+- a sandbox;
+- a market-fit framework;
+- a generalized authorization platform;
+- an IAM/RBAC system;
+- an approval workflow;
+- a human-in-the-loop framework;
+- or a replacement for external intelligence.
 
 Its purpose is:
 
@@ -10,162 +33,991 @@ Its purpose is:
 
 Primary invariant:
 
-The governing invariants are:
+> **URACE owns autonomous Product navigation. Replaceable executors supply whatever intelligence or execution is required to advance it.**
 
-- **Primary:** URACE owns autonomous Product navigation; replaceable executors supply required intelligence or execution.
-- **Destination:** The authoritative source owns the highest non-delegated destination. URACE MUST preserve it unless Authority to change it has been delegated.
-- **Navigation:** Within applicable Authority, URACE MUST be capable of independently observing, assessing, deciding, discovering Objectives, prioritizing, planning, selecting capabilities, executing, experimenting, learning, correcting course, validating, checkpointing, recovering, becoming dormant and reactivating without requiring the authoritative source to navigate the journey.
-- **Authority:** URACE MUST NOT intentionally exceed applicable Authority, manufacture or silently broaden it, infer permission from capability or value, or use autonomy to justify changing a destination or acting outside delegated scope.
-- **Delegation:** The authoritative source MAY delegate navigation, destination selection or destination evolution at any subordinate scope. URACE MAY exercise that delegation autonomously but MUST NOT expand it.
-- **Evidence:** Evidence constrains defensible conclusions about reality and may justify exercising existing Authority; it does not create Authority or choose a non-delegated destination.
-- **Decision integrity:** A consequential decision MUST remain attributable to the Authority, Intent, Evidence, state, constraints and assumptions under which it was accepted. Material premise changes MUST invalidate or proportionately revalidate it before consequential commitment.
-- **Effect integrity:** URACE MUST distinguish intended action, attempted action, externally committed effect, observed result and accepted Product state. Uncertain effects MUST remain uncertain and be reconciled rather than assumed successful, failed or safe to retry.
-- **Autonomous liveness:** During persistent `--autonomous` operation URACE MAY be ACTIVE or DORMANT but MUST retain a viable path to assessment. Dormancy is valid autonomous operation; ordinary end-loop is not.
+Destination invariant:
 
-Canonical roles:
+> **The authoritative source owns the highest non-delegated destination. URACE MUST preserve that destination unless Authority to change it has itself been delegated.**
 
-| Role | Meaning |
-|---|---|
-| Authoritative source | Chooses what it retains |
-| Intent | Defines destination |
-| Authority | Defines legitimate autonomy |
-| URACE | Owns navigation |
-| Evidence | Describes reality |
-| Executors | Provide capabilities |
-| Validation | Determines acceptance |
+Navigation invariant:
+
+> **URACE drives the Product lifecycle. Within applicable Authority, it MUST be capable of independently observing, assessing, deciding, discovering Objectives, prioritizing, planning, selecting capabilities, executing, experimenting, learning, correcting course, validating, checkpointing, recovering, becoming dormant and reactivating without requiring the authoritative source to navigate the journey.**
+
+Authority invariant:
+
+> **Authority defines the legitimate autonomous decision space. URACE MUST NOT intentionally exceed applicable Authority, manufacture Authority, silently broaden Authority, infer permission merely from capability or value, or use autonomy as justification for changing a destination or taking an action outside delegated scope.**
+
+Delegation invariant:
+
+> **The authoritative source MAY delegate navigation, destination selection or destination evolution at any subordinate scope. URACE MAY autonomously exercise that delegation, but MUST NOT expand the delegation itself.**
+
+Evidence invariant:
+
+> **Evidence constrains what URACE may defensibly conclude about reality. Evidence informs navigation and may justify exercising existing Authority, but Evidence does not itself create Authority or choose a non-delegated destination.**
+
+Decision-integrity invariant:
+
+> **A consequential lifecycle decision MUST remain attributable to the Authority, Intent, Evidence, state, constraints and assumptions under which it was accepted. Material changes to those premises MUST invalidate or trigger proportionate revalidation of stale decisions before consequential commitment.**
+
+Effect-integrity invariant:
+
+> **URACE MUST distinguish intended action, attempted action, externally committed effect, observed result and accepted Product state. Where effect status is uncertain, URACE MUST preserve uncertainty and reconcile rather than silently assume success, failure or retry safety.**
+
+Autonomous-liveness invariant:
+
+> **While persistent `--autonomous` operation remains enabled, URACE MAY be ACTIVE or DORMANT, but MUST retain a viable path back to assessment. Dormancy is valid autonomous operation; ordinary end-loop is not.**
+
+The fundamental model is:
+
+```text
+         AUTHORITATIVE SOURCE
+                 │
+                 ▼
+     HIGHEST NON-DELEGATED INTENT
+          "the destination"
+                 │
+                 ▼
+       AUTHORITY + DELEGATION
+      "what URACE may decide"
+                 │
+                 ▼
+    ┌────────────────────────────┐
+    │           URACE            │
+    │                            │
+    │      "drives the boat"     │
+    │                            │
+    │ observe                    │◄──── EVIDENCE
+    │ assess                     │       / REALITY
+    │ discover                   │
+    │ prioritize                 │
+    │ plan                       │
+    │ choose capabilities        │
+    │ execute                    │
+    │ experiment                 │
+    │ learn                      │
+    │ correct course             │
+    │ validate                   │
+    │ recover                    │
+    │ checkpoint                 │
+    │ reassess                   │
+    │ sleep / wake               │
+    └─────────────┬──────────────┘
+                  │
+                  ▼
+          PRODUCT EVOLUTION
+```
+
+Canonical shorthand:
+
+```text
+AUTHORITATIVE SOURCE
+    chooses what it retains
+
+INTENT
+    defines destination
+
+AUTHORITY
+    defines legitimate autonomy
+
+URACE
+    owns navigation
+
+EVIDENCE
+    describes reality
+
+EXECUTORS
+    provide capabilities
+
+VALIDATION
+    determines acceptance
+```
 
 ---
 
 # 1. Architectural Position
 
-URACE is the persistent lifecycle-control layer between authoritative Intent and replaceable execution by one AI, an orchestrator or agent, a deterministic tool, or a compatible combination. Users, customers, markets and environments may provide Evidence but do not thereby become normative authorities. One capable AI is the minimum intelligent configuration. An orchestrator, multiple AIs, Planner, Scheduler, watcher, queue, policy evaluator, authority resolver or persistent runtime MAY improve capability; none is intrinsically required by the core.
+URACE occupies the persistent autonomous lifecycle-control layer above replaceable intelligence and execution systems.
+
+```text
+                   AUTHORITATIVE SOURCE
+                            │
+                            ▼
+                 INTENT + AUTHORITY
+                            │
+                    retained/delegated
+                            │
+                            ▼
+              ┌────────────────────────┐
+              │   AUTONOMOUS URACE     │
+              │                        │
+              │ State                  │
+              │ Evidence               │
+              │ Triggers               │
+              │ Assessment             │
+              │ Requirements           │
+              │ Objectives             │
+              │ Priority               │
+              │ Plans                  │
+              │ Decisions              │
+              │ Operations             │
+              │ Validation             │
+              │ Checkpoints            │
+              │ Recovery               │
+              │ Dormancy/Liveness      │
+              └───────────┬────────────┘
+                          │
+                          ▼
+                EXECUTION BOUNDARY
+                          │
+             ┌────────────┼────────────┐
+             ▼            ▼            ▼
+           ONE AI     ORCHESTRATOR  DETERMINISTIC
+                       / AGENT          TOOL
+```
+
+Users, customers, markets and environments provide Evidence where relevant:
+
+```text
+USERS / CUSTOMERS / MARKET / ENVIRONMENT
+                    │
+                    ▼
+                 EVIDENCE
+                    │
+                    ▼
+                  URACE
+```
+
+Evidence-producing entities do not automatically become normative authorities.
+
+Minimum intelligent configuration:
+
+```text
+URACE
+  │
+  ▼
+ONE capable AI executor
+```
+
+An orchestrator, multiple AIs, Planner, Scheduler, watcher, queue, policy evaluator, authority resolver or persistent runtime MAY improve capability.
+
+None is intrinsically required by the URACE core.
 
 ---
 
 # 2. Normative Language
 
-- **MUST / MUST NOT** define requirements and invariants.
+- **MUST / MUST NOT** define architectural requirements and invariants.
 - **SHOULD / SHOULD NOT** define strong defaults overridable only with sufficient justification.
 - **MAY** defines optional or Product-dependent behavior.
 
-Examples and diagrams illustrate semantics rather than mandate infrastructure unless stated otherwise. Context MUST NOT weaken a `MUST` or `MUST NOT`; a rule with explicit preconditions becomes mandatory when they hold. When an outcome materially depends on external behavior, external Evidence is sufficiently credible, relevant and applicable, and a conflicting internal prediction is unsupported, that Evidence MUST constrain the factual assessment. When Evidence suggests an unauthorized destination change, URACE MUST preserve the destination and change the route. A sufficiently justified decision within delegated, policy-unreserved scope with required capability SHOULD be made autonomously without redundant approval. This is contextual applicability, not normative relativism.
+Examples and diagrams illustrate semantics rather than mandate infrastructure unless explicitly stated.
+
+Context MUST NOT weaken a `MUST` or `MUST NOT`.
+
+Where a normative rule has explicit preconditions, it becomes mandatory when those preconditions hold.
+
+Example:
+
+```text
+IF:
+    an outcome materially depends on external behavior
+AND:
+    external Evidence is sufficiently credible
+AND:
+    Evidence is relevant and applicable
+AND:
+    conflicting internal prediction is unsupported
+
+THEN:
+    external Evidence MUST constrain
+    the factual lifecycle assessment
+```
+
+Likewise:
+
+```text
+IF:
+    Evidence suggests changing a destination
+AND:
+    applicable Authority does NOT permit
+    changing that destination
+
+THEN:
+    URACE MUST preserve that destination
+    and change the route instead
+```
+
+Autonomy follows the complementary rule:
+
+```text
+IF:
+    a decision lies within delegated Authority
+AND:
+    policy does not reserve it
+AND:
+    sufficient justification exists
+AND:
+    required capability exists
+
+THEN:
+    URACE SHOULD decide autonomously
+    without requesting redundant approval
+```
+
+This is contextual applicability, not normative relativism.
 
 ---
 
 # 3. Core Lifecycle Semantics
 
-Core concepts are Product, Authority, Intent, State, Evidence, Trigger, Requirement, Objective, Plan, Operation, Executor, Observation, Validation, Checkpoint, Policy, Constraint, Capacity, Budget and Schedule.
+Core concepts:
 
-| Classification | Concepts |
-|---|---|
-| First-class | Product; Authority and Trigger (lightweight); Intent; Evidence; Objective; Plan (lightweight); Requirement where materially useful; Operation where execution correctness benefits; material Decision Records as durable or reconstructable |
-| Semantic roles/relations | Destination is an Intent role; Navigation is lifecycle responsibility; Delegation is an Authority relation; Meaningful Trigger is Trigger qualification; Commit Boundary is an operation/effect semantic |
-| Derived/contextual | Priority, Evidence Value, Product Value, Information Gain, Time-to-Evidence, Market Fit, Autonomous Decision Space and Lifecycle Liveness |
-| Replaceable mechanisms | Planner, Scheduler, Authority resolver, policy evaluator and wake mechanism |
-| Valid lifecycle conditions | Reserved Decision, Autonomous Dormancy and Open-Ended Change Awareness |
+```text
+Product
+Authority
+Intent
+State
+Evidence
+Trigger
+Requirement
+Objective
+Plan
+Operation
+Executor
+Observation
+Validation
+Checkpoint
+Policy
+Constraint
+Capacity
+Budget
+Schedule
+```
 
-Do not create first-class concepts merely for symmetry.
+Classification:
+
+```text
+Product
+    → first-class
+
+Authority
+    → first-class, lightweight
+
+Intent
+    → first-class
+
+Evidence
+    → first-class
+
+Trigger
+    → first-class, lightweight
+
+Requirement
+    → first-class where materially useful
+
+Objective
+    → first-class
+
+Plan
+    → first-class, lightweight
+
+Operation
+    → explicit where execution correctness benefits
+
+Decision Record
+    → durable/reconstructable where material
+
+Destination
+    → semantic role of Intent,
+      not a separate universal primitive
+
+Navigation
+    → lifecycle responsibility,
+      not a separate stored primitive
+
+Delegation
+    → Authority relation
+
+Priority
+    → derived / contextual ordering
+
+Evidence Value
+    → derived
+
+Product Value
+    → derived
+
+Information Gain
+    → derived
+
+Time-to-Evidence
+    → contextual / derived
+
+Market Fit
+    → Intent-relative derived outcome
+
+Meaningful Trigger
+    → Trigger qualification
+
+Commit Boundary
+    → operation/effect semantic
+
+Autonomous Decision Space
+    → derived from applicable Authority
+
+Reserved Decision
+    → Authority/policy condition
+
+Lifecycle Liveness
+    → invariant lifecycle property
+
+Autonomous Dormancy
+    → valid autonomous lifecycle condition
+
+Open-Ended Change Awareness
+    → invariant lifecycle semantic
+
+Planner
+    → replaceable capability
+
+Scheduler
+    → replaceable capability
+
+Authority resolver
+    → replaceable mechanism
+
+Policy evaluator
+    → replaceable mechanism
+
+Wake mechanism
+    → replaceable mechanism
+```
+
+Do not create first-class concepts merely for conceptual symmetry.
 
 ---
 
 # 4. Product
 
-A Product is what URACE governs: an identity with Intent, constraints, artifacts, Evidence, state and history. It MAY be software, a service, business process, research, content, operational system, hardware-related, mixed or initially unknown. URACE MUST NOT assume software, Git, customers, startup methodology, a market, IDE or repository structure unless discovered.
+A Product is the thing whose evolution URACE governs.
+
+Conceptually:
+
+```text
+Product {
+  identity
+  intent
+  constraints
+  artifacts
+  evidence
+  state
+  history
+}
+```
+
+A Product MAY be software, service, business process, research, content, operational system, hardware-related, mixed or initially unknown.
+
+URACE MUST NOT assume software, Git, customers, startup methodology, a market, an IDE or repository structure unless discovered.
 
 ---
 
 # 5. Authoritative Source
 
-An authoritative source is the provenance of legitimate normative Authority. Examples MAY include a user, Product owner, organizational mandate, valid governing contract, configured policy, valid delegation or a source empowered by higher Authority. The implementation MUST NOT treat every human, stakeholder, customer, executor or external system as authoritative merely because it can communicate with URACE. A source needs only attributable provenance plus identity, scope and Authority references where applicable; this need not become a heavyweight identity system.
+An authoritative source is the provenance from which legitimate normative Authority originates.
+
+Examples MAY include:
+
+- a user;
+- Product owner;
+- organizational mandate;
+- valid governing contract;
+- explicitly configured policy;
+- valid delegation;
+- another source legitimately empowered by a higher Authority.
+
+The implementation MUST NOT assume that every human, stakeholder, customer, executor or external system is authoritative merely because it can communicate with URACE.
+
+Conceptually:
+
+```text
+AuthoritativeSource {
+  identity?
+  provenance
+  scope?
+  authorityReferences?
+}
+```
+
+This need not become a heavyweight identity system.
 
 ---
 
 # 6. Authority
 
-Authority is a lightweight first-class primitive: attributable legitimate power to govern a decision in a defined scope. Its representation may include identity, source, type, scope, permissions, retained/delegated/reserved decisions, constraints, precedence, parent/delegation, validity, revocation, version and provenance. It answers who or what may govern which decision, under what constraints and when.
+Authority is a lightweight first-class lifecycle primitive representing legitimate power to govern some lifecycle decision within a defined scope.
 
-Authority MUST NOT be confused with importance, priority, confidence, Evidence strength, Product Value, executor capability, market popularity or urgency. Authority MUST be attributable. URACE MUST NOT manufacture it because an action appears beneficial.
+Conceptually:
+
+```text
+Authority {
+  identity?
+  source
+  type?
+  scope
+  permissions?
+  retainedDecisions?
+  delegatedDecisions?
+  reservedDecisions?
+  constraints?
+  precedence?
+  parent?
+  delegation?
+  validFrom?
+  validUntil?
+  revocationState?
+  version?
+  provenance
+}
+```
+
+Authority answers:
+
+> **Who or what may legitimately govern this decision, over what scope, under what constraints, and at this point in time?**
+
+Authority MUST NOT be confused with:
+
+```text
+importance
+priority
+confidence
+Evidence strength
+Product Value
+executor capability
+market popularity
+urgency
+```
+
+Authority MUST be attributable.
+
+URACE MUST NOT manufacture Authority because an action appears beneficial.
 
 ---
 
 # 7. Retained vs Delegated Authority
 
-The authoritative source determines what it retains and delegates. Retained decisions remain with the source; URACE decides within delegated scope. A fixed purpose may coexist with delegated architecture, experimentation, implementation or subordinate Product-form changes. URACE MUST preserve the source's control over what has and has not been delegated.
+The authoritative source need not personally make every decision.
+
+It determines what is retained and what is delegated.
+
+```text
+             AUTHORITATIVE SOURCE
+                      │
+             ┌────────┴────────┐
+             ▼                 ▼
+         RETAINED          DELEGATED
+         AUTHORITY          AUTHORITY
+             │                 │
+             ▼                 ▼
+     source decides       URACE decides
+```
+
+Examples:
+
+```text
+"Do not change purpose X."
+        → retained destination authority
+
+"Choose any architecture."
+        → delegated navigation authority
+
+"Change Product form if Evidence
+ supports a better realization of X."
+        → delegated subordinate
+          destination authority
+
+"Choose the best Product addressing X."
+        → broad destination delegation
+          beneath X
+```
+
+The deepest governing rule is:
+
+> **URACE MUST preserve the authoritative source's control over what has and has not been delegated.**
 
 ---
 
 # 8. Destination Semantics
 
-A destination is the role of governing Intent at a decision scope, not another mandatory primitive. An Intent may be destination relative to lower-level decisions and navigation relative to higher-order Intent. If only a purpose is fixed, URACE MAY change subordinate Product Intent, URACE MAY change Objectives and URACE MAY change Plans; if Product Intent is also retained, URACE navigates below it. Destination is scope-relative and Authority-governed, never arbitrary.
+“Destination” is the role played by an Intent that remains governing at a particular decision scope.
+
+It is not a new mandatory primitive.
+
+An Intent can simultaneously be:
+
+- a destination relative to lower-level decisions; and
+- a navigation choice relative to a higher-order Intent.
+
+Example:
+
+```text
+PURPOSE
+"Reduce administrative burden"
+        │
+        ▼
+PRODUCT INTENT
+"Build automated workflow system"
+        │
+        ▼
+OBJECTIVE
+"Automate document classification"
+        │
+        ▼
+PLAN
+"Use architecture A"
+```
+
+If Authority fixes only the highest purpose:
+
+```text
+FIXED DESTINATION
+"Reduce administrative burden"
+        │
+        ▼
+URACE MAY CHANGE
+Product Intent
+        │
+        ▼
+URACE MAY CHANGE
+Objectives
+        │
+        ▼
+URACE MAY CHANGE
+Plans
+```
+
+If Product Intent is also retained:
+
+```text
+FIXED PURPOSE
+        │
+        ▼
+FIXED PRODUCT INTENT
+        │
+        ▼
+URACE NAVIGATES BELOW IT
+```
+
+Therefore destination is **scope-relative but Authority-governed**, not arbitrary.
 
 ---
 
 # 9. Destination Ownership
 
-For each material Intent change, identify the highest applicable governing Intent whose change has not been delegated: the **highest non-delegated Intent**, which is the authoritative destination boundary. URACE MUST NOT mutate that retained layer autonomously. It MAY mutate justified delegated layers below it.
+For every material Intent change, determine the highest applicable governing Intent whose change has not been delegated.
+
+Call this the:
+
+```text
+HIGHEST NON-DELEGATED INTENT
+```
+
+It acts as the current authoritative destination.
+
+Canonical:
+
+```text
+INTENT L0
+   │
+   │ retained
+   ▼
+DESTINATION BOUNDARY
+   │
+   ├── Intent L1   delegated
+   │      │
+   │      └── URACE may evolve
+   │
+   ├── Objective   delegated
+   │
+   ├── Plan        delegated
+   │
+   └── Execution   delegated
+```
+
+URACE MUST NOT autonomously mutate `L0`.
+
+URACE MAY autonomously mutate delegated layers below it when justified.
 
 ---
 
 # 10. Authority Is the Boundary, Not the Driver
 
-Authority establishes the legitimate action space in which URACE observes, reasons, discovers, prioritizes, plans, experiments, selects Executors, executes, learns, corrects course, validates, recovers, sleeps and wakes. Authority SHOULD NOT micromanage autonomous operation: authorized decision space is not repeated approval, and autonomous is not unbounded. The model is maximum justified autonomy inside Authority and zero intentional autonomy outside it.
+Authority establishes the legitimate space in which URACE drives.
+
+```text
+                AUTHORITY
+                    │
+                    ▼
+       ┌─────────────────────────┐
+       │ LEGITIMATE ACTION SPACE │
+       │                         │
+       │  URACE AUTONOMOUSLY:    │
+       │                         │
+       │  observes               │
+       │  reasons                │
+       │  discovers              │
+       │  prioritizes            │
+       │  plans                  │
+       │  experiments            │
+       │  selects executors      │
+       │  executes               │
+       │  learns                 │
+       │  corrects course        │
+       │  validates              │
+       │  recovers               │
+       │  sleeps                 │
+       │  wakes                  │
+       └─────────────────────────┘
+```
+
+Authority SHOULD NOT micromanage autonomous operation.
+
+Canonical:
+
+```text
+AUTHORIZED DECISION SPACE
+        ≠
+REPEATED APPROVAL
+```
+
+and:
+
+```text
+AUTONOMOUS
+        ≠
+UNBOUNDED
+```
+
+The intended model is:
+
+> **Maximum justified autonomy inside Authority; zero intentional autonomy outside Authority.**
 
 ---
 
 # 11. Autonomous Decision Space
 
-The Autonomous Decision Space is delegated Authority minus explicit prohibitions, reserved decisions, required external approvals and HARD constraints; this is semantic notation, not required mathematics. URACE SHOULD operate autonomously inside it. External approval MUST NOT be introduced merely because a decision is important.
+Applicable Authority determines an Autonomous Decision Space.
+
+Conceptually:
+
+```text
+AutonomousDecisionSpace =
+    DelegatedAuthority
+    − ExplicitProhibitions
+    − ReservedDecisions
+    − RequiredExternalApprovals
+    − HARDConstraints
+```
+
+This is semantic notation, not required mathematical implementation.
+
+Inside this space, URACE SHOULD operate autonomously.
+
+```text
+DECISION
+   │
+   ▼
+DELEGATED?
+   │
+ ┌─┴─────────────┐
+ │               │
+YES              NO
+ │               │
+ ▼               ▼
+URACE          RETAINED /
+DECIDES        RESERVED
+ │               │
+ ▼               ▼
+ACT          SOURCE DECIDES
+```
+
+External approval MUST NOT be introduced merely because a decision is important.
 
 ---
 
 # 12. Reserved Decisions
 
-An authoritative source MAY reserve decisions such as purpose changes, particular Product-Intent changes or spending above a threshold while delegating routine implementation, ordinary experimentation or Executor selection. Importance and consequentiality alone do not imply reservation. Once sufficient Authority establishes autonomous scope, URACE MUST NOT repeatedly request authorization already granted.
+An authoritative source MAY explicitly reserve decisions.
+
+Examples only:
+
+```text
+highest purpose change
+    → reserved
+
+specific Product Intent change
+    → reserved
+
+spending above threshold
+    → reserved
+
+routine implementation
+    → delegated
+
+ordinary experimentation
+    → delegated
+
+executor selection
+    → delegated
+```
+
+Importance alone does not imply reservation.
+
+Consequentiality alone does not imply reservation.
+
+Once sufficient Authority establishes autonomous scope, URACE MUST NOT repeatedly ask for authorization already granted.
 
 ---
 
 # 13. Authority Types
 
-Authority MAY distinguish normative Authority (what may define pursuit), policy Authority (permitted, prohibited or reserved), delegated Authority (what another actor may decide) and operational Authority (what may perform effects). Credible Evidence has descriptive epistemic authority over factual conclusions but is not normative Authority. This distinction MUST remain clear.
+Authority MAY be conceptually distinguished as:
+
+```text
+AUTHORITY
+    │
+    ├── NORMATIVE
+    │      what may define what is pursued
+    │
+    ├── POLICY
+    │      what is permitted/prohibited/reserved
+    │
+    ├── DELEGATED
+    │      what URACE or another actor may decide
+    │
+    └── OPERATIONAL
+           what may perform effects
+```
+
+Evidence has **epistemic authority** in the ordinary descriptive sense that sufficiently credible Evidence constrains factual conclusions.
+
+That does not make Evidence a normative Authority primitive.
+
+The distinction MUST remain clear:
+
+```text
+NORMATIVE AUTHORITY
+    governs legitimate decisions
+
+EPISTEMIC AUTHORITY
+    constrains defensible beliefs
+```
 
 ---
 
 # 14. Authority Resolution
 
-Authority is typed and scoped before it is ordered. For a proposed decision or Operation, identify the subject and required Authority; find applicable Authorities; verify source/provenance, validity, scope, constraints, delegation chain and retained/reserved decisions; then resolve precedence only where applicable Authorities genuinely overlap and conflict. URACE MUST NOT invent precedence to obtain a preferred result.
+Authority is:
+
+> **typed and scoped before it is ordered.**
+
+Avoid simplistic global authority rankings.
+
+Resolution:
+
+```text
+PROPOSED DECISION / OPERATION
+             │
+             ▼
+      IDENTIFY SUBJECT
+             │
+             ▼
+   IDENTIFY REQUIRED AUTHORITY
+             │
+             ▼
+ FIND APPLICABLE AUTHORITIES
+             │
+             ▼
+ CHECK SOURCE / PROVENANCE
+             │
+             ▼
+      CHECK VALIDITY
+             │
+             ▼
+       CHECK SCOPE
+             │
+             ▼
+   CHECK CONSTRAINTS
+             │
+             ▼
+  CHECK DELEGATION CHAIN
+             │
+             ▼
+ CHECK RETAINED / RESERVED
+             │
+             ▼
+RESOLVE APPLICABLE PRECEDENCE
+             │
+             ▼
+ ┌───────────┼───────────┬────────────┐
+ ▼           ▼           ▼            ▼
+AUTONOMOUS DENIED     RESERVED     UNRESOLVED
+```
+
+Precedence matters only where Authorities genuinely overlap and conflict.
+
+URACE MUST NOT invent precedence to obtain a preferred result.
 
 ---
 
 # 15. Authority Resolution Outcomes
 
-Resolution yields:
+Conceptual outcomes:
 
-| Outcome | Meaning |
-|---|---|
-| `AUTONOMOUSLY_AUTHORIZED` | Sufficient delegated Authority exists; URACE SHOULD decide and act independently |
-| `DENIED` | Applicable Authority prohibits the action |
-| `REQUIRES_AUTHORITATIVE_DECISION` | The source retained or reserved it |
-| `UNRESOLVED` | Applicable Authority cannot be established sufficiently |
+```text
+AUTONOMOUSLY_AUTHORIZED
+DENIED
+REQUIRES_AUTHORITATIVE_DECISION
+UNRESOLVED
+```
 
-`UNRESOLVED` is not authorized; authorized does not mean ask again.
+`AUTONOMOUSLY_AUTHORIZED`:
+
+> URACE possesses sufficient applicable delegated Authority and SHOULD independently decide and act.
+
+`DENIED`:
+
+> Applicable Authority prohibits the action.
+
+`REQUIRES_AUTHORITATIVE_DECISION`:
+
+> The authoritative source retained or reserved this decision.
+
+`UNRESOLVED`:
+
+> Applicable Authority cannot currently be established sufficiently.
+
+Critical:
+
+```text
+UNRESOLVED
+    ≠
+AUTHORIZED
+```
+
+and:
+
+```text
+AUTHORIZED
+    ≠
+ASK AGAIN
+```
 
 ---
 
 # 16. Non-Redundant Authority Resolution
 
-URACE SHOULD NOT repeatedly resolve unchanged Authority when a durable valid determination already covers many Objectives, Plans, experiments, Operations or Executors, unless the source retained that granularity. Authority enforcement SHOULD occur at the lowest frequency consistent with correctness.
+URACE SHOULD NOT repeatedly resolve unchanged Authority where a durable valid determination already exists.
+
+```text
+AUTHORITY A7
+    │
+    ▼
+VALID DELEGATED SCOPE
+    │
+    ▼
+MANY AUTONOMOUS DECISIONS
+    │
+    ├─ Objective A
+    ├─ Plan B
+    ├─ Experiment C
+    ├─ Operation D
+    └─ Executor E
+```
+
+not:
+
+```text
+AUTHORITY A7
+    ↓
+ask for Objective
+    ↓
+ask for Plan
+    ↓
+ask for operation
+    ↓
+ask for executor
+    ↓
+ask for validation
+```
+
+unless that granularity was actually retained.
+
+Authority enforcement SHOULD occur at the lowest frequency consistent with correctness.
 
 ---
 
 # 17. Delegation
 
-Authority MAY delegate bounded scope, permissions, constraints, validity, reservations and further-delegation rights. Child Authority is always a subset of Authority actually delegated. URACE MUST NOT self-expand its delegation.
+Authority MAY delegate bounded Authority.
+
+```text
+PARENT AUTHORITY
+       │
+       ▼
+DELEGATION
+  ├─ scope
+  ├─ permissions
+  ├─ constraints
+  ├─ validity
+  ├─ reservations
+  └─ furtherDelegation?
+       │
+       ▼
+CHILD AUTHORITY
+```
+
+Invariant:
+
+```text
+CHILD AUTHORITY
+    ⊆
+AUTHORITY ACTUALLY DELEGATED
+```
+
+URACE MUST NOT self-expand its delegation.
 
 ---
 
 # 18. Authority Freshness and Revocation
 
-Authority MAY expire, be revoked, superseded or become inapplicable. URACE SHOULD NOT continuously revalidate stable Authority without reason. Revalidation is required when a relevant Trigger indicates change, validity expires, delegation or policy materially changes, a consequential commit requires freshness, or applicability changes; otherwise autonomous navigation continues.
+Authority MAY expire, be revoked, superseded or become inapplicable.
+
+URACE SHOULD NOT continuously revalidate stable Authority without reason.
+
+Revalidation becomes necessary when:
+
+- relevant Trigger indicates Authority change;
+- validity expires;
+- delegation changes;
+- policy materially changes;
+- a consequential commit requires freshness;
+- applicability changes.
+
+```text
+AUTHORITY RESOLVED
+       │
+       ▼
+AUTONOMOUS NAVIGATION
+       │
+       ▼
+MATERIAL AUTHORITY CHANGE?
+       │
+   ┌───┴───┐
+  NO      YES
+   │        │
+   ▼        ▼
+CONTINUE  REVALIDATE
+```
 
 ---
 
@@ -862,14 +1714,6 @@ AUTONOMOUS ACTION
 
 High Priority cannot create Authority.
 
-User-supplied and autonomously discovered goals MUST enter one attributable Objective-candidate portfolio; creation, repetition, recency, a user preference or autonomous discovery alone MUST NOT establish eligibility, acceptance or execution order. Before ranking, URACE MUST apply Authority, policy, safety, dependency, blocker, capability, budget, deadline and reserved-decision gates. Eligible goals SHOULD be ordered from an inspectable component vector covering Intent-relative value, urgency and opportunity loss, confidence, learning and dependency-unblocking value, cost, risk, reversibility, uncertainty and starvation. A derived score MAY aid comparison but MUST NOT become Authority, an acceptance criterion or the sole decision basis.
-
-Within applicable Authority, the authoritative source MUST be able to inspect goals and their ordering basis; pin attention; bound or set priority; revise dependencies, deadline, earliest start and estimate; and defer, resume, disable, cancel or delete future work through the durable input boundary. Deletion MUST make the goal ineligible while retaining a minimal attributable tombstone and material history; it MUST NOT rewrite accepted history. These controls constrain subsequent assessment; they MUST NOT bypass guardrails, validation, dependencies, budgets or an indivisible Operation. URACE MAY discover, deduplicate, split, merge, reprioritize, defer, reactivate or retire goal candidates when attributable Evidence justifies it, while preserving provenance, dispositions and useful negative learning.
-
-Completion forecasts MUST remain advisory ranges with their estimate basis, resource unit, confidence, dependencies, blockers, assumptions and Evidence cutoff. URACE SHOULD revise them at material lifecycle boundaries using observed completion and estimate error, without presenting Executor availability, a priority score or elapsed time as guaranteed completion. Scheduling SHOULD commit only to the reliable planning horizon, preserve unrelated progress under partial blocking, and permit dormancy when no eligible goal warrants work.
-
-Cohort planning MUST consume an attributable snapshot of the same portfolio at its planning boundary. Only eligible goals applicable to the Cohort's declared Product scope MAY steer its proposals; blocked, deferred, terminal or incompatible-scope goals MUST NOT do so. The snapshot, Evidence cutoff and selected goal identities MUST remain auditable, while goal order, deadlines and forecasts MUST NOT alter Cohort Authority, fixed resources, guardrails, evaluation or acceptance.
-
 ---
 
 # 40. Objective and Plan
@@ -1556,6 +2400,10 @@ Machine-readable event output SHOULD be available where environment-appropriate,
 
 Human-readable feedback SHOULD provide a decision trace: the current action or decision, attributable basis, applicable Authority, considered alternative classes, selected Plan, validation status, observed effect, changed artifacts, uncertainty, blockers and next condition. It MUST NOT expose private hidden chain-of-thought, secret values or unrestricted internal scratch reasoning. A concise rationale and Evidence trail are the reviewable explanation; hidden token-by-token reasoning is neither required nor an acceptable substitute for attributable decisions.
 
+Every attempted or accepted change MUST have a stable change identity linked to its Objective, Plan or decision, affected artifacts, validation and disposition. Executor-assisted work MUST also retain the selected Executor identity and adapter, capability, logical reservation, attempted fallbacks and any separately generated explanation. These links MUST survive restart and permit listing changes and inspecting one change without an intelligent Executor call.
+
+An implementation MAY generate plain-language change explanations through an Executor under `auto`, `enabled` and `disabled` policy modes. `disabled` MUST be the default and disables automatic generation while preserving explicit on-demand explanation; `auto` generates only when expected review value justifies its Executor cost; `enabled` generates for every eligible accepted change. Existing attributable Executor output and deterministic records MUST be reused before making another call. Explanations are advisory, MUST identify their source, MUST NOT expose hidden chain-of-thought, and MUST NOT create Authority or change acceptance.
+
 The metric system itself MUST remain reviewable. URACE SHOULD periodically assess whether existing measures remain relevant, decision-useful, resistant to gaming, sufficiently sensitive to progress and regression, and proportionate to observation cost. Metric changes MUST preserve prior definitions, provenance and historical comparability; continuous improvement of measurement MUST NOT silently move baselines or manufacture progress.
 
 ## External Metric and Evidence Policy
@@ -1815,15 +2663,11 @@ A dormant condition is wakeable only when a viable mechanism or durable responsi
 
 Where capability availability is lifecycle-relevant, its material transition MAY wake dormant operation. Availability observation MUST remain proportionate and MUST NOT require repeated costly executor invocation when a cheaper readiness probe exists.
 
-Executor authentication, command readiness and provider capacity MUST be represented separately. When a provider returns an attributable capacity or usage-window reset, URACE MUST treat it as scheduled unavailability rather than Product failure, candidate regression, guardrail failure or a reason for self-repair. It MUST durably retain the current logical task and its reservation, including controller planning, and suppress only work dependent on that unavailable capacity. Each Executor SHOULD expose an attributable `AUTOMATIC` or `FIXED` retry policy, configurable fallback and nonnegative post-reset safety delay. `AUTOMATIC` MUST prefer an authoritative absolute or relative reset condition, normalize its locale and time zone, apply the delay, and use the fixed fallback only when no usable condition exists; `FIXED` deliberately uses the fallback. A policy change MUST apply at a safe routing boundary, preserve the task reservation and remain inspectable. Otherwise re-evaluation MUST derive from applicable Evidence, constraints, budgets, Executor behavior and supported wake mechanisms, adapt when those premises materially change, and permit earlier reactivation on qualifying Evidence. Unchanged unavailability MUST be durably deduplicated and surfaced only when materially changed or actionable; no universal interval is implied.
+Executor authentication, command readiness and provider capacity MUST be represented separately. When a provider returns an attributable capacity or usage-window reset, URACE MUST treat it as scheduled unavailability rather than Product failure, candidate regression, guardrail failure or a reason for self-repair. It MUST durably retain the current logical task and its reservation, including controller planning, and suppress only work dependent on that unavailable capacity. Authoritative retry or availability Evidence SHOULD determine reactivation; otherwise an implementation MUST use an environment-appropriate configurable re-evaluation policy derived from applicable Evidence, constraints, budgets, Executor characteristics and supported wake mechanisms, adapt it when those premises materially change, and permit earlier reactivation on qualifying Evidence. Unchanged unavailability MUST be durably deduplicated and surfaced only when its state materially changes or information becomes actionable; no universal strategy or interval is implied.
 
 Logical task reservations and transport attempts MUST be accounted separately. If an adapter supports authenticated provider-session continuation, URACE SHOULD resume the accepted session from its durable continuation identity. If it does not, URACE MUST say so and MAY replay the same bounded logical stage after capacity returns without opening a second logical reservation; it MUST preserve a transport-attempt count and MUST NOT claim that replay is provider-side continuation or that rejected attempts consumed no provider resources without Evidence. Interruption, reset-window changes and repeated deferrals MUST remain bounded, observable and revocable.
 
 Where multiple Executors are attached, availability, authentication, capabilities, provider-capacity schedules, cooldowns, transport attempts and provider-specific ceilings MUST be tracked per Executor. Selection and fallback MUST preserve one provider-independent logical task and reservation, require compatible tools, context handling, sandbox, output contract and Authority, and use the same independent validation after every transport. One Executor's capacity window MUST NOT block another compatible available Executor. Fallback MAY follow readiness, capacity or compatible-capability failure; it MUST NOT bypass a refusal, Authority boundary, guardrail, validation result or fixed task budget. If every compatible Executor is unavailable, URACE MUST enter one attributable scheduled wait using the earliest eligible retry without erasing later schedules. Cross-provider work MUST be called replay unless a validated adapter supplies a durable provider-session continuation identity.
-
-Readiness and usage observation SHOULD use the cheapest attributable non-task interface each Executor reliably exposes. Provider-specific status or usage commands MUST be parsed only through a validated adapter, cached proportionately, kept in their native units and uncertainty, and MUST NOT become task invocations, fabricated credit balances or a shared availability gate. Retry feedback SHOULD expose normalized time with enough source or locale context to prevent a correct cross-zone schedule from appearing incorrect.
-
-Executor composition SHOULD allocate work by demonstrated compatible capability, marginal decision value, risk, latency and attributable resource cost rather than identity, nominal availability or equal call count alone. Task-specific routing preferences MUST be bounded, inspectable, Evidence-revisable and subordinate to compatibility, Authority and fixed budgets. Among Executors whose suitability is not materially distinguishable for the task, routing SHOULD resist persistent concentration using attributable recent allocation and outcome Evidence without overriding a material capability advantage or manufacturing equality. Balance MUST NOT repeatedly route work to an Executor whose observed latency, usage or outcome yield is materially worse merely to equalize call counts; such an Executor MAY remain an explicit fallback, and sparse or incomparable Evidence MUST remain qualified. Comparison experiments MAY require equal controlled allocations; ordinary work MAY use unequal allocations when the rule and Evidence are declared and fixed ceilings remain intact. Routing MUST minimize duplicated context and repeated discovery: share immutable decision-relevant context by reference or digest where supported, transmit only the bounded delta needed by each Executor, and retain one canonical durable result plus attributable transport metadata. Storage, context and handoff savings MUST NOT omit Authority, constraints, unresolved uncertainty, validation inputs or recovery data needed for a sound decision.
 
 A persistent autonomous owner SHOULD expose a concurrent control plane so authorized inspection and durable control inputs do not require process restart. Read-only Operations MAY observe accepted snapshots concurrently. Mutating inputs MUST enter an atomic authenticated or locally protected inbox, receive an attributable receipt, and be applied exactly once at a declared safe lifecycle boundary by the single mutation owner. Executor attachment, detachment, priority or capability changes MUST NOT replace an Executor already inside an indivisible attempt; they affect the next routing boundary. Invalid controls MUST be rejected without stopping unrelated autonomous work. Direct concurrent mutation, lock bypass and partially applied control changes remain prohibited.
 
@@ -1997,8 +2841,6 @@ Metered or credit-consuming Executors MUST have an explicit invocation budget, d
 
 Resource accounting MUST use the strongest available measurement without manufacturing unavailable data. Provider-reported monetary usage is preferred, followed by reported tokens or metered units, then an explicitly labelled invocation-count proxy. Cycle count, readiness checks, elapsed time, storage, network requests and tool invocations MAY quantify deterministic overhead or estimated service capacity, but MUST NOT be renamed or combined as provider credits without a defensible conversion. Executor availability establishes readiness only; it does not establish remaining credit. Where dimensions cannot be defensibly combined, URACE MUST report the resource vector separately and preserve each unit and source.
 
-Exact price or a common unit is not required for proportionate choice. URACE SHOULD use the strongest sufficiently reliable bounded, estimated, relative, historical, provider-reported, quota, capacity, latency, token, request, compute, time, opportunity or qualitative resource Evidence available for the decision, preserve its source and material uncertainty, and MUST NOT treat missing information as zero cost or silently normalize incomparable dimensions. Obtaining better precision is itself resource-consuming and SHOULD occur only when its expected decision value warrants that burden; missing exact cost alone MUST NOT block otherwise justified work.
-
 Availability observation MAY participate in resource-versus-efficiency evaluation through operational measures such as probe count and duration, suppressed redundant checks, useful readiness transitions, wake latency and avoided futile invocations. These measures evaluate the observation strategy; they MUST NOT be presented as the Executor's monetary or token cost.
 
 Credit protection MUST cover every metered stage, including discovery, planning assistance, execution, validation assistance, retries and failed calls; counting only successful or discovery calls is insufficient. A call reservation MUST become durable before invocation so interruption cannot silently reopen spent budget. Before discovery, an implementation SHOULD reserve enough remaining budget for the likely completion path so it does not spend credit identifying work that it cannot carry through. It MUST enforce attributable hard bounds at the applicable task, stage, generation, deployment or provider boundary, coalesce equivalent triggers, and avoid automatic retries that repeat the same context and expected result. Short- and long-window transport ceilings MAY supplement those bounds where justified; their presence, absence and units MUST be explicit rather than inferred from Executor readiness.
@@ -2017,29 +2859,17 @@ URACE MUST treat optimality as the best defensible eligible choice under current
 
 Where a Product has multiple authorized semantic scopes, URACE MAY dynamically weight planning attention among them using attributable current Evidence such as unresolved need, accepted-change recency, observed outcome gaps, risk or urgency. This is a lifecycle-wide facility: it MAY order ordinary Objectives, queues, Executor attention, experiments or cohort slots, and MUST NOT depend on portfolio support. An implementation MAY map a semantic scope to files, services, components, goals or effect domains, but artifact identity is not the universal scope model. The controller MUST version and expose each scope weight, its inputs, Evidence cutoff, consumer and resulting allocation; bound its influence and rate of change; distinguish attention priority from outcome value; and reassess at a lifecycle boundary. A scope weight MUST NOT grant Authority, weaken a guardrail, alter a fixed budget, award evaluation points, predetermine selection or be writable by the candidates it governs. Supporting cross-scope work remains eligible when required for coherence, and a low-weight scope MUST remain observable so starvation or accumulating debt can raise its priority.
 
-The weight derivation MAY be shared across lifecycle modes, but each consumer MUST preserve its own semantics: ordinary planning MAY reorder eligible work, while a controlled Cohort MAY allocate only its already-fixed experiment slots. Cohort proposals and outcomes MAY supply attributable Evidence to later derivation, but MUST NOT mutate the weighting rule, its bounds, ordinary controller policy or non-Cohort state directly; such changes require the ordinary governed evolution path.
-
 Long-running efficiency MUST include deterministic overhead as well as model credit. Stable readiness probes, failed external sources, unchanged observations, duplicate Plans, checkpoints and durable writes SHOULD use adaptive cadence, caching, deduplication and material-change persistence with a declared heartbeat. Repeated failures SHOULD back off to a bounded maximum while retaining a wake path. Material transitions, accepted effects, queued authoritative input, unresolved effects and recovery data MUST remain durable immediately. Runtime vitals SHOULD expose enough probe, retry, state-size and write-suppression data to detect when the efficiency policy itself is becoming wasteful.
 
 Optimal and efficient operation is a system-wide navigation constraint: URACE SHOULD seek the highest defensible Intent-relative outcome per constrained resource while respecting Authority, safety, quality, continuity and uncertainty. It MUST NOT optimize cost by omitting necessary validation, optimize throughput by accepting weak work, or optimize a score instead of the Product. Quantitative Evidence SHOULD replace qualitative judgment where the measure is valid, decision-relevant and proportionate; qualitative Evidence MUST remain visible where quantification would create false precision, omit material values or cost more than the decision warrants.
 
 Lifecycle rigor MUST remain proportionate to actual conditions and Evidence. URACE SHOULD reuse persistence, accumulated Evidence, recovery, Executor replaceability, competing alternatives, lineage and dormancy/reactivation when they materially improve continuity, decision quality or retained Product outcomes, and SHOULD prefer simpler sufficient behavior otherwise. This requirement prescribes no complexity threshold, algorithm, topology, cadence or implementation mechanism.
 
-Capability choice MUST remain system-wide and proportional. URACE SHOULD reuse sufficiently applicable established results and otherwise choose the least costly sufficiently reliable available deterministic, heuristic, probabilistic, intelligent, human or other capability for the applicable Authority, Evidence, uncertainty, risk, time and expected value. It SHOULD escalate, combine, substitute or diversify only when expected additional value warrants added cost and risk. No capability type or fixed escalation order has intrinsic priority; saving resources MUST NOT substitute a materially less reliable capability where validation, safety, Evidence quality or Product value requires more.
-
-Mutation count, generation size, Executor count or mapping, concurrency, search depth and capability diversity MUST be chosen for sufficient information and value rather than because capacity exists. Competing variants SHOULD use staged Evidence, inherited attributable learning and stopping rules to avoid or end unnecessary work without biasing comparison, hiding uncertainty or erasing useful losing Evidence. Serialization or an explicit comparability limitation remains valid where isolation or concurrency would confound results.
-
 URACE SHOULD periodically identify resource sinks, including repeated no-effect work, unused context or connectors, stale goals, uninformative metrics, redundant reports, retry loops, oversized prompts, excessive state or documentation growth, premature self-evolution and observation whose cost exceeds its decision value. It SHOULD remove, compact, defer or redesign a sink when authorized and safe, while preserving material history, recovery Evidence and a wake path. Resource-sink findings and corrective effects MUST be measurable and reviewable rather than inferred from artifact size alone.
 
 Where multiple competing Product variants are justified, URACE MAY operate a bounded portfolio experiment. Variants MUST use isolated mutable environments derived from an attributable baseline, explicit per-variant and portfolio resource ceilings, predeclared outcome measures and guardrails, comparable evaluation conditions, and stopping rules. Irreversible or identity-bearing external effects MUST NOT be duplicated across competing variants merely to create selection pressure. Selection MUST account for uncertainty, confounders, delayed effects, multiple comparisons, survivor bias and the possibility that no variant is superior. A selected variant remains a candidate until it passes ordinary Authority, validation, concurrency, transactional acceptance and recovery requirements.
 
 A portfolio interface MAY offer one cohort Operation that creates and runs a declared number of mutations. Before producing effects, it MUST validate the complete plan, unique identities, lineage, lessons, admission ceiling and total budget. It MUST divide the declared budget by an explicit reproducible rule, expose each allocation and unit, and run candidates under comparable time and evaluation conditions. Admission SHOULD be all-or-none when the environment can provide transactional creation. Equal declared allocations MUST NOT be described as hard isolation unless an adapter enforces the relevant CPU, memory, network, storage, accelerator, paid-service and effect quotas. Unenforced units remain labelled declarations, and an implementation without concurrent isolation SHOULD serialize evaluation or make the confounding visible.
-
-Where cohort automation is supported, its durable availability policy MUST be `auto`, `enabled` or `disabled`; an absent legacy value means `auto`. `auto` permits cohort work when current Intent, Authority, Evidence, readiness and resource constraints justify it. `enabled` records an attributable preference to permit cohort operation but creates neither Authority nor an obligation to act. `disabled` prevents new cohort-dependent work without blocking unrelated authorized evolution and checkpoints an active controller at the next safe boundary without interrupting an indivisible Operation or discarding its state. Policy changes MUST be within applicable Authority, attributable, idempotent, inspectable, restart-persistent and applicable through the ordinary live-control boundary. Re-enablement MUST resume from the durable checkpoint only after freshness and readiness are reassessed.
-
-In `auto`, a controller MUST reassess at safe generation boundaries whether the expected decision or learning value of another comparison justifies its additional resources. The gate SHOULD use already retained attributable Evidence without an intelligent Executor call, expose its inputs and rationale, and MUST remain distinct from Authority, guardrails, evaluation and selection. Insufficient value makes portfolio work durably dormant rather than failed and MUST NOT block unrelated evolution; material changes in accepted Product state, eligible goals, Evidence, constraints or operator policy MUST trigger reassessment and MAY wake it. Explicit `enabled` and `disabled` remain operator controls. The gate MUST NOT interrupt an active generation, silently change fixed experiment budgets or erase lineage, and repeated unchanged dormancy checks SHOULD be deduplicated.
-
-When an implementation supports both ordinary persistent autonomy and portfolio automation, its default persistent entry SHOULD supervise eligible `auto` portfolio work so the user need not run a second owner command. The portfolio remains a separately checkpointed subsystem with its own policy, budget, isolation, feedback and stop boundary; absence, dormancy or failure of that subsystem MUST NOT block unrelated ordinary evolution. Environment-facing policy names MAY use clearer aliases such as `adaptive`, `always` and `off` when their mapping to the durable canonical states is explicit.
 
 A variant is an isolated candidate; an instance is an executing realization of a variant. Stopping an instance MUST stop its resource consumption and effects without erasing its lineage, observations or failure Evidence. A selected variant MAY seed later mutations, but URACE MUST prevent convergence from silently discarding useful diversity or turning a context-specific result into a universal claim. Automatic spawn, health supervision, termination and mutation require explicit portfolio Authority, tested lifecycle adapters, hard concurrency and exposure ceilings, effect isolation and recoverable control; otherwise these Operations remain manual or unavailable.
 
@@ -2050,8 +2880,6 @@ Portfolio state MUST distinguish a shared read-only experiment contract, a repro
 Each lineage record MUST distinguish base, mutation, generation, parent variant, parent Product version, mutation description, hypothesis, expected effect and experiment-contract version. Selection MUST retain the full candidate comparison and give each candidate an attributable disposition and plain rationale, including guardrail rejection, insufficient Evidence, non-selection, retention for diversity or selection. Non-selection MUST stop further automatic resource consumption unless explicitly retained, but MUST NOT erase the candidate or imply universal inferiority.
 
 Cross-variant communication MUST pass through a governed broker, ledger or equivalent mediation boundary. A variant MAY submit attributable observations, critiques, counter-Evidence and hypotheses about approved peer artifacts or prior versions, but peer content remains untrusted advisory Evidence. A candidate process MUST have no filesystem, database, credential, administrative API or general command access to the authoritative ledger, integrity key, controller state, other candidates or stable recovery data. It receives only a scoped readable snapshot and a bounded submission channel whose controller independently authenticates identity, validates schema and appends accepted messages. It MUST NOT directly command, mutate, stop, authorize, fund, credential, select or promote another variant; modify the shared contract or ledger; expand its own scope; or turn peer content into executable instruction without ordinary assessment and Authority.
-
-The controller SHOULD provide a bounded, pull-based cooperative memory distinct from the decision agora: deduplicated validated findings, reproducible failures, critiques, counter-Evidence, approved lessons and dissent from prior or current variants MAY be supplied at a planning boundary without another intelligent call. Every item MUST retain source, generation, epistemic status, applicability and Evidence; recipients MUST independently reassess it. Delivery SHOULD be relevance-filtered and digest-addressed, preserve variant-specific Objectives and useful diversity, and avoid broadcast repetition, conversational churn and forced consensus. Direct peer mail or dialogue is justified only when its expected information gain exceeds its Executor and coordination cost and the same broker, schema, isolation, quota and Authority rules apply.
 
 A shared portfolio decision forum or agora MAY collect attributable proposals and votes. Ledger writes MUST be mediated, durable and append-only or transactionally replaced; variants receive approved readable views and MUST NOT rewrite votes, proposals, decisions or peer records directly. Admission determines voting identity. Each admitted variant MUST have at most one equal effective vote per proposal, with revisions preserving superseded history. Confidence MUST NOT multiply vote weight. The tally MUST expose support, opposition, abstention, participation, eligible population and material dissent. Votes remain advisory Evidence: they MUST NOT grant Authority, select or promote a variant, change a budget or contract, mutate Product state, or make a proposal executable.
 
@@ -2105,6 +2933,8 @@ The authoritative source MUST be able to add context, goals, metric definitions,
 
 New context MUST become attributable Evidence and MAY Trigger reassessment; it MUST NOT silently replace retained Intent or expand Authority. A new goal MUST identify its target, success measure and Authority source before becoming an Objective candidate. A goal concerning URACE itself remains distinct from the user's Product goal and remains subject to the selected self-evolution policy and all retained boundaries. Concurrent input MUST not invalidate an in-flight accepted Operation; URACE SHOULD apply it at the next safe boundary and reassess affected decisions.
 
+Authorized users, tools and agents MAY change the source Product while URACE runs. At each safe boundary, URACE MUST compare the current source identity with its recorded snapshot, preserve newer source work, record an attributable version transition where attribution is available, and reassess or reject stale candidates rather than overwrite changed artifacts. A structurally invalid external state MUST be preserved and reported, not silently replaced. Generated sub-Products and candidates MUST retain their source-version identity; later source changes MUST be reconciled non-destructively into subsequent descendants while prior versions and lineage remain inspectable.
+
 The authoritative source MUST be able to inspect governing context, user-supplied context, URACE-derived hypotheses and observations, current and historical goals, and the provenance and status of each without reading internal storage. Derived context MUST remain visibly distinct from supplied context and MUST NOT silently become Intent, Authority or fact.
 
 People, IDEs, automation, external tools and other authorized Executors MAY continue working on Product artifacts while URACE is active. Before applying a prepared change, URACE MUST verify that every affected artifact still matches the version from which the candidate was derived. A concurrent change MUST preserve the newer artifact, reject or rebase the stale candidate, record the conflict and reassess. Runtime and specification self-changes require the same isolation, validation, atomic acceptance and stable fallback boundaries; filesystem locking alone MUST NOT be treated as protection against edits made outside that lock.
@@ -2119,11 +2949,11 @@ Implementations MUST distinguish immediate commands from durable lifecycle input
 
 Inputs that change future lifecycle behavior while autonomous operation may be active MUST use the durable input boundary. This includes new context or goals; Executor attach, detach or switch requests; connector add, enable, disable or remove requests; metric and vital changes; and cancellation of pending goals. Listing these resources is immediate and read-only. Applying a queued control MUST preserve attributable history, be idempotent, and occur at a safe cycle boundary. Implementations MUST expose pending input and a command catalog or equally clear help that identifies which actions are immediate and which are queued.
 
-The minimum portable operator surface SHOULD cover: initialize; inspect full state; inspect focused vitals; inspect the evolution evaluator and its confidence-qualified component results; inspect command classification; inspect pending input; assess and plan without execution; run bounded or persistent autonomous execution; inspect, attach, detach and switch Executors; inspect and change autonomy policies, metered budgets and authorized evaluator parameters; add context and Product or URACE goals; list, reprioritize, reschedule, cancel and tombstone-delete eligible goals; add and list sources, metrics and vitals; enable, disable and remove sources; remove metric and vital definitions; and obtain human-readable and machine-readable inspection output. Environment-specific names MAY differ, but bootstrap completion guidance MUST map every supported Operation to its exact command, API or screen and report unsupported Operations rather than leaving the user to guess.
+The minimum portable operator surface SHOULD cover: initialize; inspect full state; inspect focused vitals; inspect the evolution evaluator and its confidence-qualified component results; inspect command classification; inspect pending input; assess and plan without execution; run bounded or persistent autonomous execution; inspect, attach, detach and switch Executors; inspect and change autonomy policies, metered budgets and authorized evaluator parameters; add context and Product or URACE goals; list and cancel eligible goals; add and list sources, metrics and vitals; enable, disable and remove sources; remove metric and vital definitions; and obtain human-readable and machine-readable inspection output. Environment-specific names MAY differ, but bootstrap completion guidance MUST map every supported Operation to its exact command, API or screen and report unsupported Operations rather than leaving the user to guess.
 
 Every generated implementation MUST provide a discoverable top-level help surface and contextual help for each supported Operation. Help MUST be available without an intelligent Executor call and MUST identify: the installed Operations and memorable aliases; required and optional inputs; safe examples; immediate versus durable-input behavior; human-readable and machine-readable inspection forms; capability or adapter prerequisites; unsupported Operations; and where advanced recovery or deployment guidance resides. A command-line implementation SHOULD support shapes equivalent to `help` and `help <operation>`; APIs and graphical interfaces MAY provide an equally direct operation catalog. Bootstrap MUST demonstrate the help surface and report its exact entry point.
 
-A command-line bootstrap SHOULD generate a launcher inside the Product's implementation boundary and, where the environment supports directory-scoped activation, offer an opt-in local command such as `urace` that resolves only while the user's terminal is inside that Product tree. Leaving the tree MUST remove that launcher from command resolution, and entering another Product MUST resolve that Product's own launcher. Bootstrap MUST NOT install or overwrite a system-wide command, globally bind one Product's implementation, or shadow an unrelated command without attributable authorization. It MUST report the activation mechanism, a portable explicit-path fallback, and how to remove the integration. Environments without safe directory activation MUST retain the explicit local launcher rather than emulate global scope.
+The default help view SHOULD be a short user-facing operation list rather than a parser grammar dump; internal controller Operations SHOULD be omitted. Configuration controls SHOULD be discoverable through one configuration surface, with memorable aliases permitted for frequent policies. Where self-evolution is configurable, user-facing `auto`, `always` and `never` aliases SHOULD map explicitly to necessary-only, continuous and disabled semantics without weakening protected invariants.
 
 The inspection surface SHOULD also expose a provenance-separated context view and a resource-accounting view that names the unit, source and confidence of each quantity. Human feedback SHOULD favor dense decision-relevant summaries and progressive disclosure: current work, why it was selected, relevant alternatives, resources consumed, observed effects, uncertainty, validation, next condition and material limitations. It MUST NOT require hidden chain-of-thought, flood the user with unchanged detail or imply certainty through verbosity.
 
@@ -2223,14 +3053,6 @@ Recovery MUST reconcile any interrupted acceptance protocol before treating Prod
 
 Where durable state establishes that an interrupted change was accepted, recovery SHOULD complete the accepted state. Where acceptance was not durably established, recovery SHOULD restore the prior accepted state or explicitly preserve uncertainty when restoration cannot be established safely.
 
-Accepted Product state MUST have one authoritative durable identity whose record binds the accepted version or snapshot, predecessor, acceptance Evidence, Authority source and time where available. Applicable Authority MAY designate URACE lifecycle state or an authorized external Product-state source and its version/ref semantics as the resolver of that identity. Source observation, filesystem state, execution, validation, recency, repository position or a latest commit MUST NOT constitute acceptance or promotion unless the governing Product contract explicitly makes that source transition the applicable acceptance boundary. The designation and resolved identity MUST be attributable and integrity-checked; an unresolved or unauthorized source MUST fail closed for dependent work without silently falling back to another source. Exact source types, configuration, storage, repository integration and resolution algorithms remain implementation-specific.
-
-Derived controllers, candidates, caches and recovery snapshots MUST treat the dynamically resolved accepted identity as read-only input rather than infer acceptance from selection, workspace contents, recency or process completion. Before dependent effects, a long-running controller MUST compare its recorded parent with the latest applicable resolved identity. A differing accepted state MUST be reconciled transactionally at a safe boundary by rebasing, merging, superseding and replanning, or an environment-equivalent method chosen in proportion to conflict and retained value; compatible Evidence and learning SHOULD survive independently of candidate Product state. Unresolved conflict or uncertain external effect MUST block only dependent work, preserve both sides and request or await the missing resolution instead of overwriting accepted state.
-
-Drift protection MUST bind each consequential decision and candidate to the applicable Intent, Authority, policy, accepted Product identity, contract, measures, dependencies, Executor/tool capabilities and material environment/configuration Evidence cutoff. Implementations SHOULD use versioned manifests, hashes or equivalent identities and check them at effect, validation, acceptance, resume and material external-change boundaries. Expected authorized evolution MUST be distinguished from stale-parent, configuration, dependency, environment, measurement and governance drift; unchanged checks SHOULD be cached. Material unexplained drift MUST invalidate stale assumptions and block only dependent work pending reassessment or reconciliation, while preserving newer work and attributable Evidence.
-
-Authoritative source or base artifacts MUST remain immutable as lineage inputs; accepted successors, experimental work and recovery state MUST have separate identities even where an implementation exposes a mutable working view. Every accepted version MUST remain integrally reconstructable without requiring every unchanged artifact or complete history to be recopied or supplied to an Executor. Implementations SHOULD use references, hashes, manifests, structural deltas, deduplicated content or summaries when these preserve provenance, stale-parent detection, transactional promotion, validation and recovery; no storage mechanism is prescribed.
-
 ---
 
 # 74. Conditional Self-Evolution
@@ -2252,7 +3074,7 @@ CONTINUOUS
     justified beneficial runtime improvements may compete with Product work
 ```
 
-`NECESSARY_ONLY` SHOULD be offered as the recommended mode. In the absence of an attributable selection, bootstrap MUST use `DISABLED`. The authoritative source MAY later opt in, opt out or change modes through an attributable policy change within its Authority. The selected mode MUST be inspectable in durable lifecycle state and included in recovery.
+`NECESSARY_ONLY` SHOULD be exposed as `auto` and used by default. It creates no Authority: self-evolution still requires applicable delegated Authority, demonstrated necessity and absence of a sufficient lower-impact route, and MUST NOT make protected invariants mutable. `CONTINUOUS` MAY be exposed as `always` and `DISABLED` as `never`. The authoritative source MAY change modes through an attributable policy change within its Authority. The selected mode MUST be inspectable in durable lifecycle state and included in recovery.
 
 The policy is an additional eligibility boundary; it MUST NOT create Authority. An action proceeds only when both the selected mode and independently attributable Authority permit it. `DISABLED` MUST prevent autonomous runtime self-evolution and re-bootstrap Objectives without preventing ordinary Product evolution, diagnosis, or reporting of a URACE limitation. `NECESSARY_ONLY` MUST preserve Evidence supporting necessity, materiality, and the absence of a sufficient lower-impact route. `CONTINUOUS` MUST still require justification, prioritization, validation, safe activation, and proportionality.
 
@@ -3021,12 +3843,6 @@ Given a capable execution system receives `URACE.md`, attributable Product conte
 
 Expect: it can bootstrap and validate a complete implementation, whose top-level and contextual help enumerate supported Operations, prerequisites, immediate versus durable-input behavior, safe examples and unsupported capabilities without invoking an intelligent Executor.
 
-**EL — Live Goal Portfolio Control**
-
-Given persistent autonomy is running and the authoritative source reprioritizes, reschedules or deletes a pending goal.
-
-Expect: the control is durably acknowledged, applied exactly once at the next safe boundary, reflected in subsequent ordinary and Cohort planning, and leaves in-flight indivisible work intact; deletion makes the goal ineligible but retains an attributable tombstone.
-
 ---
 
 # 79. Bootstrap Execution Requirements
@@ -3043,13 +3859,7 @@ The public specification MUST express portable capability contracts, observable 
 
 Meta-implementation does not require generating a framework for every hypothetical environment. A concrete deployment MAY begin with one Executor, one persistence mechanism and one interface when those satisfy current requirements, while preserving explicit seams for replacement. New abstraction becomes justified when a second real implementation, repeated change pressure, or a protected invariant requires it.
 
-Bootstrap MUST use least privilege on the host: access only Product, implementation, state and explicitly authorized context required for bootstrap; request no privilege escalation; do not weaken host security, alter unrelated files, install system-wide software or perform undeclared network, publication, credential, account or other external effects merely to complete setup. Dependencies SHOULD remain confined to the implementation boundary or an authorized environment. A required broader effect MUST be declared with purpose, scope, reversibility and safer alternatives and executed only with attributable Authority.
-
 User-facing operation SHOULD use progressive disclosure: provide a safe default and a short inspect/attach/detach/run path first, then expose advanced policy, adapter and recovery detail when needed. Generated reports and documentation MUST identify exact commands or interfaces rather than requiring the authoritative source to infer implementation details.
-
-Supplying `URACE.md` with the attributable request `bootstrap` MUST be sufficient to start bootstrap when the Product environment is inspectable. Missing destination choices MUST remain visible and use the conservative defaults required by this specification; they MUST NOT be guessed into Authority. Bootstrap MUST generate one guided, resumable configuration Operation that can inspect and set at least Product, desired observable outcome, retained decisions, delegation, protected boundaries, available capabilities, self-evolution policy and external-Evidence policy through human-readable prompts or equivalent flags. Each answer MUST become attributable durable input, and the interface MUST support later inspection and revision without direct state editing.
-
-Bootstrap MUST also generate a safe specification-update Operation with separate download, explain and apply modes. Download MUST obtain only an explicitly identified specification candidate from an attributable authorized source, enforce bounded transport and content limits, retain source identity, content hash and available revision metadata, store it outside the accepted specification, runtime and durable state, and perform no overwrite, migration or activation. Existing trusted local input MUST remain usable without network access. Explain MUST compare the accepted specification identity with attributable candidate input, inventory relevant local implementation adaptations against their accepted base, summarize available revision identity or message, and make no Product or implementation change. Apply MUST use that delta only as migration input, build an isolated candidate, preserve Product work, durable state and attributable local preferences, check compatibility, run accepted and candidate validation, present the reviewable result, and activate through the authorized transactional health-and-rollback path. A material conflict with a retained local choice MUST apply no files, pause dependent activation, explain the difference and effects in plain language, preserve both alternatives and obtain an attributable retained decision; absence of conflict MUST NOT add an approval step. An intelligent Executor MAY explain conflicts and propose resolutions but its output remains advisory: the implementation MUST expose a resolution Operation that records the applicable retained choice, resumes the same hash-bound candidate, and repeats compatibility and validation before activation. A downloaded file, document diff or Executor response MUST NOT be applied directly to accepted specification, generated runtime or state artifacts. Update assessment SHOULD reuse deterministic hashes, manifests and structural deltas before invoking an intelligent Executor and send only unresolved decision-relevant deltas when intelligence is justified.
 
 ### Synchronization Boundaries
 
@@ -3087,7 +3897,7 @@ Bootstrap execution MUST:
 
 1. read `URACE.md` completely;
 2. inspect the actual Product, repository or environment, governing Intent and Authority, available capabilities, constraints, existing state and relevant artifacts;
-3. obtain and durably record an attributable `DISABLED`, `NECESSARY_ONLY` or `CONTINUOUS` runtime self-evolution policy, using `DISABLED` when no selection is supplied;
+3. durably record a `DISABLED`, `NECESSARY_ONLY` or `CONTINUOUS` runtime self-evolution policy, using `NECESSARY_ONLY` (`auto`) by default without treating that default as additional Authority;
 4. obtain and durably record an attributable `DISABLED`, `PROVIDED_ONLY` or `DISCOVER_PUBLIC_AND_USE_PROVIDED` external-metric policy, using `DISABLED` when no selection is supplied;
 5. build the smallest complete environment-appropriate implementation satisfying this specification rather than merely summarizing or simulating URACE;
 6. preserve URACE as the persistent lifecycle owner above capable, replaceable executors and optional orchestrators;
@@ -3110,16 +3920,16 @@ Bootstrap execution MUST:
 23. demonstrate plain inspection of supplied and derived context, goals, provenance, resource efficiency and material limitations without exposing secrets or hidden chain-of-thought.
 24. when portfolio evolution is supported, generate its environment-specific interface and demonstrate variant isolation, active-instance ceilings, equal-budget cohort creation, comparable observations, safe stopping, lineage retention, governed agora exchange, surviving-decision inheritance, generation-scoped selection, interruption-resumable long-running automation and promotion through ordinary validation; otherwise report it as unsupported. The public package need not contain a prebuilt example implementation.
 25. when unattended portfolio evolution is supported, demonstrate a no-effect preflight, a frozen experiment constitution, same-generation voter eligibility, poisoning-resistant advisory inputs, adapter-level provider ceilings, declared external-effect reconciliation, retained-parent versus active-competitor accounting, resolved-error feedback and any bounded controller-repair path before exposing a one-command persistent entry. A repair demonstration MUST prove that cohort-controlled text cannot enter the request, replay of one fault-and-runtime identity is deduplicated, and core and subordinate controllers use the same registry and activation protocol.
-26. when automatic portfolio gating is supported, demonstrate that it starts from material need or insufficient comparison Evidence, becomes durably dormant without an Executor call when recent attributable value no longer justifies cost, wakes after a material accepted-state, goal, Evidence, constraint or policy change, deduplicates unchanged dormancy feedback, and never interrupts an active generation or changes its frozen budgets.
-27. when analytics export is supported, demonstrate atomic portable tabular and human-dashboard generation, formula-injection escaping, state/checkpoint identity and optional native-workbook behavior without making lifecycle control depend on exported files or user action; separately probe native-workbook readiness, report any local dependency and exercise either the ready path or the visible `ADAPTER_REQUIRED` path.
-28. generate and demonstrate top-level and contextual help that covers every supported operator Operation, including guided configuration and safe specification-update download/explain/apply modes; distinguishes immediate actions from durable inputs; exposes prerequisites and unsupported capabilities; and requires no intelligent Executor call to read.
-29. when autonomous runtime evolution is supported, demonstrate that an ordinary candidate cannot modify the protected launcher or acceptance guard, add protected files to a mutable scope, weaken protected Authority or budget policy, replace the accepted-test baseline, or pass solely by changing its own tests; demonstrate independent pre-activation rejection and stable rollback.
-30. demonstrate that an attributable provider-capacity response becomes a durable scheduled wait rather than a candidate or Product failure; that automatic retry uses a parsed provider condition plus configured delay and falls back when absent, fixed mode remains selectable per Executor, normalized retry feedback is unambiguous, no new dependent task starts early, the same logical reservation is reused, transport attempts remain visible, and continuation is claimed only when supported.
-31. when dynamic scope weighting is supported, demonstrate its use by ordinary non-portfolio prioritization and, separately where supported, portfolio allocation; show semantic-to-environment mapping, attributable versioned inputs, bounded influence, starvation resistance, human-readable feedback, consumer-specific semantics and candidate inability to change weights, their rule, ordinary policy, Authority, guardrails, budgets, evaluation scores or selection.
-32. when multiple Executors are supported, demonstrate per-Executor capability and capacity state, bounded task-specific routing preferences, anti-concentration among materially equivalent Executors without displacing a material suitability advantage or repeatedly selecting an observed resource outlier merely for balance, cheap validated readiness or usage observation, fallback to a compatible available Executor under one logical reservation, preservation of independent validation and budgets, non-bypass of refusals and guardrails, truthful replay-versus-continuation feedback, and a scheduled wait when all compatible Executors are unavailable.
-33. when persistent autonomy is supported, demonstrate concurrent read-only inspection and atomic live control submission from another process; exactly-once application at safe boundaries without owner restart; visible pending, applied and rejected status; and continued exclusion of direct concurrent mutation.
-34. demonstrate that `URACE.md` plus an attributable `bootstrap` request starts a conservative bootstrap, then demonstrate generated guided configuration, bounded attributable candidate download, separate no-effect update explanation and transactional update application without direct runtime or state patching, including a conflict that applies no files, accepts an attributable resolution, resumes the same candidate and revalidates.
-35. when a local command launcher is supported, demonstrate that it resolves to the current Product's implementation inside that Product tree, disappears or resolves independently outside it and in another Product, preserves an explicit local fallback, and requires no system-wide executable installation.
+26. when analytics export is supported, demonstrate atomic portable tabular and human-dashboard generation, formula-injection escaping, state/checkpoint identity and optional native-workbook behavior without making lifecycle control depend on exported files or user action; separately probe native-workbook readiness, report any local dependency and exercise either the ready path or the visible `ADAPTER_REQUIRED` path.
+27. generate and demonstrate top-level and contextual help that covers every supported operator Operation, distinguishes immediate actions from durable inputs, exposes prerequisites and unsupported capabilities, and requires no intelligent Executor call to read.
+28. when autonomous runtime evolution is supported, demonstrate that an ordinary candidate cannot modify the protected launcher or acceptance guard, add protected files to a mutable scope, weaken protected Authority or budget policy, replace the accepted-test baseline, or pass solely by changing its own tests; demonstrate independent pre-activation rejection and stable rollback.
+29. demonstrate that an attributable provider-capacity response becomes a durable scheduled wait rather than a candidate or Product failure; that no new dependent tasks start before the retry condition; that the same logical reservation is reused; that transport attempts remain visible; and that provider-session continuation is claimed only when the adapter actually supports it.
+30. when dynamic scope weighting is supported, demonstrate its use by ordinary non-portfolio prioritization and, separately where supported, portfolio allocation; show semantic-to-environment mapping, attributable versioned inputs, bounded influence, starvation resistance, human-readable feedback and candidate inability to change weights, Authority, guardrails, budgets, evaluation scores or selection.
+31. when multiple Executors are supported, demonstrate per-Executor capability and capacity state, fallback to a compatible available Executor under one logical reservation, preservation of independent validation and budgets, non-bypass of refusals and guardrails, truthful replay-versus-continuation feedback, and a scheduled wait when all compatible Executors are unavailable.
+32. when persistent autonomy is supported, demonstrate concurrent read-only inspection and atomic live control submission from another process; exactly-once application at safe boundaries without owner restart; visible pending, applied and rejected status; and continued exclusion of direct concurrent mutation.
+33. demonstrate source-Product reconciliation by preserving a valid concurrent external edit as a new version, rejecting a stale candidate without overwrite, and preserving an invalid external state for repair rather than silently restoring over it.
+34. demonstrate that every Executor-assisted change retains a stable change ID, decision and artifact links, exact Executor route, fallback attempts and validation result, and remains listable after restart.
+35. demonstrate manual change explanation with automatic generation disabled by default, deterministic or already-retained explanation reuse before another Executor call, and bounded `auto` and `enabled` modes.
 
 Unless applicable Authority explicitly delegates otherwise, the bootstrap act itself MUST NOT be interpreted as Authority to modify `URACE.md`.
 

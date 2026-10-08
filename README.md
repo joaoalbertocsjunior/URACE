@@ -23,7 +23,7 @@ YOU + URACE.md + PRODUCT                 YOU — choose the Product and outcome
 
 ## Why URACE
 
-URACE keeps goals, permissions, evidence and progress across sessions and workers without provider lock-in. Evidence may change the route, never your authority or destination.
+URACE automates replaceable Executors to improve the Product continuously, measurably and recoverably. It adapts its plans without changing what you control.
 
 ## What Is a Product?
 
@@ -39,55 +39,54 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 2. Say **“Bootstrap.”**
 3. Follow the setup to define the outcome, delegation and protected boundaries.
 
-`URACE.md` is the only required bootstrap document. Setup keeps missing choices conservative, validates the result and may provide a local `urace` command for that Product folder.
+`URACE.md` is the only required bootstrap document. Setup validates the result and may provide a local `urace` command for that Product folder.
 
 ## Use It
 
 Generated help lists the commands supported by your implementation.
 
 ```text
-urace help
-urace help <operation>
-urace configure
-
 urace check                 inspect lifecycle state
 urace vitals                inspect progress, cost and health
-urace add-context ...       add attributable context
-urace add-goal ...          add a measurable goal
-urace goal forecast         explain goal order and timing
-urace executor status       inspect attached Executors
-urace executor attach ...   connect a compatible Executor
-urace executor detach ...   disconnect an Executor safely
-urace plan                  assess without execution
 urace autonomous            run persistent evolution
-urace portfolio ...         build several solutions for one problem and compare them fairly
-urace update download ...   obtain a candidate specification
-urace update explain ...    review its effect without changes
-urace update apply ...      validate and activate a migration
+urace help executor         learn how to inspect, attach or detach Executors
+urace help configuration    learn how to inspect or change configuration
+urace add-goal ...          queue a measurable goal
+urace change list           list changes with their IDs and Executors
+urace change explain ID     explain one change in plain language
+urace update download ...   store a new version without changing the system
+urace update explain ...    review its local effects without changing files
+urace update apply ...      validate and activate the new version
+urace update resolve ...    resolve a blocked update conflict
 ```
 
 You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Change URACE-managed state through its commands.
 
+You can also change URACE configuration from another terminal while URACE runs.
+
+Inspect more commands with `urace` or `urace help`.
+
 ## Update Safely
 
-Keep the current `URACE.md` version identifiable, then:
+Keep the current `URACE.md` version identifiable, then use `urace update`:
 
-1. **Download** a candidate without changing the working system.
-2. **Explain** its changes and risks.
-3. **Apply** it separately; switch only after validation and a health check.
+1. `download` stores the identified new version separately without changing the working system.
+2. `explain` reports the new version's changes, local effects and risks without changing files.
+3. `apply` preserves compatible tracked changes and activates the new version only after validation and a health check.
+4. `resolve`, only after a conflict, records your decision and resumes the same update.
 
-Explain and Apply check tracked configuration and implementation files for local changes, including changes that may have been made by other agents. Explain reports effects without changing files. Apply preserves compatible changes or, on conflict, changes no files, explains the options and waits for your decision. It revalidates before activation and rolls back on failure. Never copy specification changes into runtime or state files; use `urace help update`.
+The `explain` and `apply` commands detect tracked configuration and implementation changes, including changes made by other agents. A conflict applies no files and waits for your decision; failed activation rolls back. Never edit generated state files or copy specification changes into runtime files; use `urace help update`.
 
-## Compare Solutions
+The `apply` and `resolve` commands require permission to update URACE. They are queued for the next safe checkpoint; run `urace autonomous` to process them.
 
-During `urace autonomous`, adaptive portfolio mode can build and fairly compare several solutions to one problem. It runs only when the likely value justifies the cost, and every result still requires validation. Use `urace help portfolio` to inspect it or choose adaptive, always or off.
+## See Progress
 
-## Safety and Responsibility
+URACE reports observed **metrics**, system-health **vitals** and decision **scores**. Inspect them with `urace check`, `urace vitals` and `urace change list`; use `urace help` for details.
 
-URACE isolates candidates, preserves concurrent edits and checkpoints accepted progress. Limit each Executor's access, protect credentials and treat external content as evidence, not instructions.
+## Competing Variants
 
-No command, model or metric guarantees revenue, legality or favorable results. Whoever deploys the system remains responsible for its use, access, supervision and compliance. Publishing URACE does not make its contributors the operator, agent, fiduciary or legal or financial adviser.
+The portfolio feature compares different approaches to the same goal under equal resource limits. Use `urace help portfolio` for usage.
 
-## License
+## Consequential Use
 
-[MIT](LICENSE)
+URACE cannot guarantee revenue, legality or favorable results. Whoever deploys it remains responsible for access, supervision and compliance. Publishing URACE does not make its contributors the operator or a professional adviser. URACE uses the [MIT License](LICENSE).
