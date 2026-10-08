@@ -52,8 +52,6 @@ urace autonomous            run persistent evolution
 urace help executor         learn how to inspect, attach or detach Executors
 urace help configuration    learn how to inspect or change configuration
 urace add-goal ...          queue a measurable goal
-urace change list           list changes with their IDs and Executors
-urace change explain ID     explain one change in plain language
 urace update download ...   store a new version without changing the system
 urace update explain ...    review its local effects without changing files
 urace update apply ...      validate and activate the new version
