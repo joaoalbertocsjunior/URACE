@@ -11,7 +11,7 @@ You set the goal and boundaries. URACE handles delegated work, validates results
 ```text
 BEFORE BOOTSTRAP                         AFTER BOOTSTRAP
 
-YOU + URACE.md + PRODUCT                 YOU
+YOU + URACE.md + PRODUCT                 YOU — choose the Product and outcome
            │                              │ RETAINS GOAL + AUTHORITY + BOUNDARIES
            ▼                              ▼
        EXECUTOR ── builds ───────► URACE SYSTEM ◄── RESULTS + EVIDENCE ◄── PRODUCT
