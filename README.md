@@ -39,7 +39,7 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 2. Say **“Bootstrap.”**
 3. Follow the setup to define the outcome, delegation and protected boundaries.
 
-`URACE.md` is the only required bootstrap document. Setup validates the result, keeps its system files under `urace/`, and provides a local `urace` command from the Product folder when the environment supports it.
+`URACE.md` is the only required bootstrap document. Setup validates the result, keeps its system files under `urace/`, and activates a repository-local `urace` command from the Product folder. If `direnv` is installed, the command loads automatically whenever you enter the folder and is removed from `PATH` when you leave; otherwise run it directly as `./urace/.urace/bin/urace` or `python3 -m urace` from within `urace/runtime/`.
 
 ## Use It
 
@@ -58,7 +58,7 @@ urace update apply ...      validate and activate the new version
 urace update resolve ...    resolve a blocked update conflict
 ```
 
-You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Change URACE-managed state and configuration only through its commands; you can run them from another terminal while URACE runs.
+You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Read-only commands (`check`, `vitals`, `commands`, `inbox list`, `goal list`, `change list`, and all `help` operations) load an atomic state snapshot and can run freely from a second terminal while `urace autonomous` owns the lifecycle. Mutating commands (`add-goal`, `update apply`, `configuration`, and similar) write to an atomic inbox and are applied exactly once at the next safe lifecycle boundary; they never conflict with each other or with an active autonomous run.
 
 Inspect more commands with `urace` or `urace help`.
 
