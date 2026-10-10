@@ -2650,6 +2650,7 @@ Rule {
 ```
 
 Uses TemporalFields: active_since (as created_at), active_until, updated_at, deleted_at, expires_at.
+Uses canonical: Identifier (id), ProductScope (scope entries), UnitFloat (confidence).
 ```
 
 **`level` derivation contract.** The level of a rule MUST be derived from its `kind` at read time: PURPOSE → 0; DIRECTIVE, PERMISSION, PROHIBITION → 1; OBJECTIVE, POLICY → 2. Storing `level` as a persistent field is prohibited; any stored `level` field MUST be ignored and recomputed.
@@ -2675,11 +2676,13 @@ Change {
   state_after_digest    REQUIRED  SHA-256 of the product state immediately after this change; null for REJECTED
   delta_to_rules        REQUIRED  list of rule_ids that were themselves added, superseded, or deactivated
                                   by this operation; empty list for changes that did not mutate the Ledger
-  executor              REQUIRED  {id, route} identifying the Executor that produced this change
-  validation            REQUIRED  {verdict: ACCEPTED|REJECTED|ROLLED_BACK, checks: [...]} outcome record
-  value_delta           REQUIRED  net metric movement (count of improved dimensions minus regressed dimensions)
+  executor              REQUIRED  ExecutorAttribution; the executor that produced this change
+  validation            REQUIRED  ChangeValidation; lifecycle disposition record
+  value_delta           REQUIRED  float; net metric movement (improved dimensions minus regressed)
 }
 ```
+
+Uses canonical: DigestValue (rule_snapshot_digest, state_before_digest, state_after_digest), ExecutorAttribution (executor), ChangeValidation (validation), TemporalFields (at as created_at).
 
 **`rule_snapshot_digest` contract.** The digest MUST be computed as the SHA-256 of the JSON-serialised list of `{id, kind, statement}` for every active rule, sorted lexicographically by `id`, with no whitespace. This algorithm is fixed; an implementation MUST NOT vary the serialisation.
 
@@ -2897,7 +2900,7 @@ Objective {
 }
 ```
 
-Uses TemporalFields: created_at, updated_at, completed_at, cancelled_at, deleted_at.
+Uses TemporalFields: created_at, updated_at, completed_at, cancelled_at, deleted_at. Uses canonical: Identifier (id), ProductScope (scope), UnitFloat (expected_value, estimated_cost, risk, urgency).
 ```
 
 **Status transition contract.** `planned → active` requires authority resolution to pass. `active → completed` requires an ACCEPTED Operation and successful validation. `active → needs_reassessment` is triggered by evidence that the success measure can no longer be evaluated. Status MUST NOT regress from `completed` or `cancelled`.
@@ -2963,7 +2966,7 @@ Operation {
 }
 ```
 
-Uses TemporalFields: attempted_at (as created_at), updated_at, accepted_at, rejected_at, rolled_back_at.
+Uses TemporalFields: attempted_at (as created_at), updated_at, accepted_at, rejected_at, rolled_back_at. Uses canonical: Identifier (id), ProductScope (scope), ExecutorAttribution (executor post-dispatch), ValidationResult (independent_validation), MetricEffect (observed_metric_effect), MetricSnapshot (before_metrics, after_metrics).
 
 **Status finality contract.** `ACCEPTED`, `REJECTED_ROLLED_BACK`, and `REJECTED_INDEPENDENT_VALIDATION` are terminal. An Operation in a terminal status MUST NOT be retried; a new Operation MUST be created for any retry attempt.
 
@@ -3015,11 +3018,13 @@ Checkpoint {
   id           REQUIRED  stable identifier
   at           REQUIRED  timestamp
   kind         REQUIRED  bootstrap | accepted-product-change | assessment
-  digest       REQUIRED  SHA-256 of the product file tree (see §62c Digest Computation)
+  digest       REQUIRED  DigestValue; SHA-256 of the product file tree (see §62c Digest Computation)
   operation    OPTIONAL  Operation id; REQUIRED when kind = accepted-product-change
   transaction  OPTIONAL  Transaction id; REQUIRED when kind = accepted-product-change
 }
 ```
+
+Uses canonical: Identifier (id), DigestValue (digest), TemporalFields (at as created_at).
 
 **Sequential integrity contract.** The `digest` of a `accepted-product-change` Checkpoint MUST equal the `state_after_digest` of the corresponding Change binding in the Rule Ledger. A divergence MUST be surfaced as a named integrity gap.
 
@@ -3193,7 +3198,7 @@ ConnectorSource {
 }
 ```
 
-Uses TemporalFields: created_at, updated_at, deleted_at.
+Uses TemporalFields: created_at, updated_at, deleted_at. Uses canonical: Identifier (id), StatusTransition (status_history entries).
 
 **Status progression contract.** Status MUST progress forward through the defined states. A source MUST NOT transition directly from `CONFIGURED` to `OBSERVED` without passing through `AVAILABLE`, `AUTHENTICATED`, and `AUTHORIZED`. Each status transition MUST be appended to `status_history`.
 
@@ -3427,7 +3432,7 @@ ExecutorCall {
 }
 ```
 
-Uses TemporalFields: at (as created_at), last_transport_attempt_at (as last_call_at), completed_at.
+Uses TemporalFields: at (as created_at), last_transport_attempt_at (as last_call_at), completed_at. Uses canonical: Identifier (id), ExecutorAttribution (executor_attribution), MetricEffect (observed_metric_effect), UsageRecord (usage).
 
 ## Executor State
 
@@ -3439,14 +3444,16 @@ ExecutorState {
   last_operation_at         REQUIRED  timestamp | null
   last_availability_check   REQUIRED  timestamp | null
   available                 REQUIRED  bool | null
-  failures                  REQUIRED  list of {at, reason, executor_id}
+  failures                  REQUIRED  list[FailureRecord]
   executor_calls            REQUIRED  list[ExecutorCall] (rolling, bounded by config)
   discovery_calls           REQUIRED  int; total discovery calls this lifecycle
-  provider_pool             REQUIRED  dict[provider_id → {status, last_probe_at, ...}]
+  provider_pool             REQUIRED  dict[string → ProviderStatus]; keyed by provider_id
   discovery_trigger         OPTIONAL  {reason: string, signature: string}; set when new
                                       context forces discovery
 }
 ```
+
+Uses canonical: FailureRecord (failures entries), ProviderStatus (provider_pool values).
 
 ## External Metric State
 
@@ -3459,8 +3466,8 @@ ExternalMetricState {
   source                       REQUIRED  string
   provenance                   REQUIRED  string
   last_collection              REQUIRED  timestamp | null
-  latest                       REQUIRED  list of observation dicts
-  errors                       REQUIRED  list of {source, error, kind}
+  latest                       REQUIRED  list[ObservationRecord]
+  errors                       REQUIRED  list[ErrorRecord]
   failure_streak               OPTIONAL  int; consecutive failed collections
   next_collection_at           OPTIONAL  timestamp
   last_known_good              OPTIONAL  dict; last successful observation values
@@ -3479,13 +3486,7 @@ ProgressProfile {
   id                  REQUIRED  string (e.g. "blueprint-verification")
   objective_reference REQUIRED  string
   intended_outcome    REQUIRED  string
-  measures            REQUIRED  dict[metric_name → {
-                                  baseline:   float
-                                  current:    float
-                                  previous:   float | null
-                                  target:     float
-                                  direction:  nondecreasing | nonincreasing
-                                }]
+  measures            REQUIRED  dict[metric_name → MeasureEntry]
   guardrails          REQUIRED  list[string]; invariants that MUST NOT regress
   cadence             REQUIRED  string; how often measures are updated
   next_follow_up      REQUIRED  timestamp | string
@@ -3495,7 +3496,7 @@ ProgressProfile {
 }
 ```
 
-Uses TemporalFields: created_at, updated_at.
+Uses TemporalFields: created_at, updated_at. Uses canonical: Identifier (id), MeasureEntry (measures dict values).
 
 **Guardrail contract.** Each guardrail name in `guardrails` corresponds to a measure key in `measures`. An accepted Operation MUST NOT leave any guardrail measure worse than its baseline. If it does, the Operation MUST be rejected.
 
@@ -3548,22 +3549,11 @@ ScopePrioritySystem {
   evidence_cutoff             REQUIRED  timestamp; evidence older than this was not considered
   max_weight_step_per_revision REQUIRED float; maximum change in normalized_weight per revision
   basis                       REQUIRED  string; human-readable derivation basis
-  scopes                      REQUIRED  dict[scope_name → {
-                                          label:                  string
-                                          raw_weight:             float
-                                          normalized_weight:      float
-                                          previous_weight:        float | null
-                                          change_limited:         bool
-                                          base_weight:            float
-                                          min_weight:             float
-                                          max_weight:             float
-                                          backlog:                int
-                                          unresolved_markers:     int
-                                          days_since_accepted_change: float
-                                          artifacts:              list[string]
-                                        }]
+  scopes                      REQUIRED  dict[ProductScope → ScopePriorityEntry]
 }
 ```
+
+Uses canonical: ProductScope (scopes keys), ScopePriorityEntry (scopes values), UnitFloat (max_weight_step_per_revision), TemporalFields (computed_at as created_at, evidence_cutoff).
 
 **Normalization contract.** The sum of `normalized_weight` across all active scopes MUST equal 1.0 (±floating-point tolerance). A scope with `change_limited: true` has had its weight clamped by `max_weight_step_per_revision`.
 
@@ -3916,6 +3906,446 @@ ON LIFECYCLE CYCLE START:
 **Acknowledgement contract.** When `governance-anchor-drift` is active, the operator MUST explicitly acknowledge the change via an authenticated lifecycle command (`urace intent acknowledge-drift` or equivalent). The acknowledgement MUST update `destination_anchor` to the new digest and MUST be recorded as an Evidence record with the old and new digests. Autonomous inference of operator acceptance MUST NOT substitute for an explicit acknowledgement command.
 
 **Immutability contract.** Once established, `destination_anchor` MUST NOT be updated by any autonomous operation other than the explicit acknowledgement path. A runtime that updates `destination_anchor` without an attributable operator command MUST be treated as a governance integrity failure.
+
+---
+
+# 62d. Canonical Primitives
+
+Canonical primitives are named types that appear in two or more citizen schemas, mechanism contracts, or infrastructure schemas. Defining each once establishes a single authority for its semantics, invariants, and valid values — the same design principle as §62b TemporalFields. A schema that uses a canonical primitive MUST declare `Uses canonical: [...]` and MUST honor its invariants at every use site.
+
+## Identifier
+
+A collision-resistant string identifier for any citizen or infrastructure record.
+
+```
+Identifier {
+  format  {prefix}-{10-char-lowercase-hex-uuid}
+          prefix encodes citizen type (obj, pla, ope, evi, chk, inp, rul, rel, dec, trg, ...)
+  example "obj-3f2a8c1d0b"
+}
+```
+
+**Immutability contract.** An Identifier MUST NOT change after the record is created. **Uniqueness contract.** An Identifier MUST be unique within its namespace for all time, including superseded and deactivated records. Two records sharing the same Identifier within the same namespace is a Ledger integrity violation. **Prefix contract.** The prefix is informational; enforcement MUST NOT depend on it, but all implementations SHOULD use consistent prefixes to aid manual inspection.
+
+## DigestValue
+
+A 64-character lowercase hexadecimal string representing a SHA-256 hash.
+
+```
+DigestValue {
+  format    64-char lowercase hexadecimal
+  algorithm SHA-256 (fixed; no substitution permitted)
+  example   "e3b0c44298fc1c149afb...b855"  (SHA-256 of empty input)
+}
+```
+
+**Comparison contract.** DigestValues MUST be compared case-insensitively; lowercase is canonical at rest. **Truncation contract.** An implementation MUST NOT truncate or abbreviate a DigestValue. A truncated digest is not a valid DigestValue. **Determinism contract.** The same input MUST always produce the same DigestValue. An implementation that non-deterministically hashes the same data violates this contract.
+
+Used in: Checkpoint.digest, Change.state_before_digest, Change.state_after_digest, Change.rule_snapshot_digest, DestinationAnchor.digest, Transaction recovery (expected_file_hashes).
+
+## UnitFloat
+
+A float in the closed interval [0.0, 1.0] used to express scores, probabilities, and normalized weights.
+
+```
+UnitFloat {
+  range  [0.0, 1.0] inclusive
+  type   IEEE 754 double precision
+}
+```
+
+**Validity contract.** UnitFloat fields MUST NOT accept NaN, infinity, or values outside [0.0, 1.0]. **Normalization contract.** When UnitFloat fields serve as normalized weights across a group (e.g. ScopePrioritySystem.scopes[*].normalized_weight), their sum MUST equal 1.0 (±1e-9 tolerance).
+
+Used in: Objective.expected_value, Objective.estimated_cost, Objective.risk, Objective.urgency, Rule.confidence, ScopePrioritySystem scope weights, EvaluationSystem.weights.
+
+## ProductScope
+
+An enumeration of the four product scope values.
+
+```
+ProductScope {
+  documentation  the spec and human-facing product artifacts
+  runtime        the URACE lifecycle controller
+  metrics        external metric collection and evaluation
+  rebootstrap    the bootstrap installation file (URACE.md)
+}
+```
+
+The wildcard `"*"` in Rule.scope means all four ProductScope values. An implementation MUST NOT define additional scope values without updating this enumeration. Used in: Operation.scope, Objective.scope, Rule.scope, ScopePrioritySystem.scopes keys, VelocityCheckpoint.scope.
+
+## StatusTransition
+
+A single status change event in an append-only status history list.
+
+```
+StatusTransition {
+  status  REQUIRED  string; the new status value after this transition
+  at      REQUIRED  timestamp
+  reason  OPTIONAL  string; why the transition occurred
+  source  OPTIONAL  string; Input id or system component that triggered it
+}
+```
+
+**Append-only contract.** A StatusTransition MUST NOT be modified after appended. **Ordering contract.** Transitions MUST be stored in chronological order. Used in: ConnectorSource.status_history. Implementations SHOULD apply StatusTransition to any citizen that tracks multiple status values over time.
+
+## MetricEffect
+
+The net metric outcome of a single Operation.
+
+```
+MetricEffect {
+  improved   REQUIRED  int ≥ 0; count of metric dimensions that improved
+  regressed  REQUIRED  int ≥ 0; count of metric dimensions that regressed
+}
+```
+
+The sum `improved + regressed` MUST NOT exceed the total number of tracked metrics. A MetricEffect of `{improved: 0, regressed: 0}` is valid (neutral operation). Used in: Operation.observed_metric_effect, ExecutorCall.observed_metric_effect, Value Trajectory recording.
+
+## MetricSnapshot
+
+A point-in-time capture of all tracked metric values.
+
+```
+MetricSnapshot
+  dict[metric_name → float]
+```
+
+All keys MUST be known MetricDefinition names at the time of capture. `before_metrics` and `after_metrics` in the same Operation MUST use the same set of keys. Used in: Operation.before_metrics, Operation.after_metrics.
+
+## ExecutorAttribution
+
+The routing and attribution record for a single Executor dispatch.
+
+```
+ExecutorAttribution {
+  executor_id         REQUIRED  string; the resolved provider id that handled the call
+  adapter             REQUIRED  string; adapter kind (codex-cli, claude-cli, ...)
+  capability          REQUIRED  string; capability exercised (discovery, execution, ...)
+  attempted_executors REQUIRED  list[string]; all providers tried in dispatch order
+  logical_reservation REQUIRED  string; ExecutorCall id that reserved this slot
+}
+```
+
+**Consistency contract.** The ExecutorAttribution stored in Operation.executor and in ExecutorCall.executor_attribution for the same dispatch MUST be structurally identical. An implementation MUST NOT diverge the two representations. Used in: Operation.executor (post-dispatch), ExecutorCall.executor_attribution.
+
+## ValidationCheck
+
+A single check record within a ValidationResult.
+
+```
+ValidationCheck {
+  check   REQUIRED  string; machine-readable check identifier
+                    (e.g. "metric_guardrail:coverage", "file_presence:README.md")
+  result  REQUIRED  PASS | FAIL
+  detail  REQUIRED  string; human-readable explanation of the outcome
+}
+```
+
+Used in: ValidationResult.checks, ValidationResult.fails, ChangeValidation.checks.
+
+## ValidationResult
+
+The outcome record returned by the independent validation gate.
+
+```
+ValidationResult {
+  verdict      REQUIRED  VALIDATED | REJECTED | PENDING_CAPABILITY
+  checks       REQUIRED  list[ValidationCheck]; all checks, pass and fail
+  fails        REQUIRED  list[ValidationCheck]; subset where result = FAIL
+  basis        REQUIRED  string; description of which checks this gate applies
+  validated_at REQUIRED  timestamp
+}
+```
+
+- `VALIDATED`: all checks passed; the Operation MAY be accepted.
+- `REJECTED`: at least one check failed; the Operation MUST be rolled back.
+- `PENDING_CAPABILITY`: validation infra is temporarily unavailable; the Operation MUST be queued as PendingValidation, NOT auto-accepted.
+
+**Separation contract.** `ValidationResult.verdict` uses `VALIDATED|REJECTED|PENDING_CAPABILITY` — the process result. `ChangeValidation.verdict` uses `ACCEPTED|REJECTED|ROLLED_BACK` — the lifecycle disposition. These MUST NOT be conflated.
+
+Used in: Operation.independent_validation.
+
+## ChangeValidation
+
+The lifecycle disposition record stored on a Change binding. Distinct from ValidationResult.
+
+```
+ChangeValidation {
+  verdict  REQUIRED  ACCEPTED | REJECTED | ROLLED_BACK
+  checks   REQUIRED  list[ValidationCheck]; checks from ValidationResult that informed this disposition
+}
+```
+
+`ACCEPTED`: the Operation was committed to Product state. `REJECTED`: the Operation was rejected (rolled back or independently invalidated). `ROLLED_BACK`: the Operation was explicitly rolled back by the Transaction mechanism.
+
+Used in: Change.validation.
+
+## ErrorRecord
+
+A structured error or failure observation from any subsystem.
+
+```
+ErrorRecord {
+  source  REQUIRED  string; component or data source that reported the error
+  error   REQUIRED  string; human-readable error message or code
+  kind    REQUIRED  string; machine-readable error category
+  at      OPTIONAL  timestamp; when error occurred
+}
+```
+
+Used in: ExternalMetricState.errors, ProviderStatus failure context.
+
+## FailureRecord
+
+A deduplicated failure entry for recurring fault patterns.
+
+```
+FailureRecord {
+  at      REQUIRED  timestamp; first occurrence
+  last_at REQUIRED  timestamp; most recent occurrence (= at on first occurrence)
+  stage   REQUIRED  string; lifecycle stage or component where failure occurred
+  error   REQUIRED  string; error message or exception description
+  count   REQUIRED  int ≥ 1; total occurrences
+}
+```
+
+**Deduplication contract.** A FailureRecord with the same stage and error signature MUST be updated (`count`, `last_at`) rather than appended as a new record. Used in: ExecutorState.failures.
+
+## ChangeHistoryEntry
+
+A single entry in an append-only configuration change log.
+
+```
+ChangeHistoryEntry {
+  at      REQUIRED  timestamp; when the change occurred
+  version OPTIONAL  int; the new version after this change
+  before  REQUIRED  dict; state before the change (structure is schema-specific)
+  after   REQUIRED  dict; state after the change (structure is schema-specific)
+  input   OPTIONAL  string; Input id or authority basis that authorized the change
+}
+```
+
+**Append-only contract.** ChangeHistoryEntry lists MUST NOT be modified or compacted after written. Used in: MetricSystem.change_history, EvaluationSystem.change_history.
+
+## FaultDescriptor
+
+Structured identification of a recurring lifecycle controller fault.
+
+```
+FaultDescriptor {
+  component        REQUIRED  string; subsystem where fault occurred
+  code             REQUIRED  string; short machine-readable fault code
+  operation        OPTIONAL  string; lifecycle operation or phase at fault time
+  exception_class  OPTIONAL  string; Python exception class name
+  -- additional fields MAY be present for implementation-specific fault context --
+}
+```
+
+**Stability contract.** A FaultDescriptor with identical `component` + `code` + `operation` + `exception_class` MUST be treated as the same fault for deduplication purposes in SystemRepairEntry. Used in: SystemRepairEntry.fault.
+
+## UsageRecord
+
+Token and cost accounting from an Executor call.
+
+```
+UsageRecord {
+  source                       REQUIRED  string; provider or tool that reported usage
+  observed_at                  REQUIRED  timestamp
+  input_tokens                 OPTIONAL  int ≥ 0
+  output_tokens                OPTIONAL  int ≥ 0
+  cache_creation_input_tokens  OPTIONAL  int ≥ 0
+  cache_read_input_tokens      OPTIONAL  int ≥ 0
+  reported_cost_usd            OPTIONAL  float ≥ 0.0
+}
+```
+
+**Absence contract.** An absent token field means the provider did not report it; it MUST NOT be treated as 0. `total_tokens` in ExecutorCall.usage is a derived sum `input_tokens + output_tokens`; a provider that reports only `total_tokens` MUST be treated as non-decomposable. Used in: ExecutorCall.usage.
+
+## ScopePriorityEntry
+
+A single scope's computed weight record within ScopePrioritySystem.
+
+```
+ScopePriorityEntry {
+  label                       REQUIRED  string; human-readable scope label
+  raw_weight                  REQUIRED  float ≥ 0; pre-normalization computed weight
+  normalized_weight           REQUIRED  UnitFloat; raw_weight / sum(all raw_weights)
+  previous_weight             REQUIRED  UnitFloat | null; normalized_weight from prior revision
+  change_limited              REQUIRED  bool; true = weight was clamped by max_weight_step_per_revision
+  base_weight                 REQUIRED  float; configured static base weight for this scope
+  min_weight                  REQUIRED  float; minimum allowed normalized weight
+  max_weight                  REQUIRED  float; maximum allowed normalized weight
+  backlog                     REQUIRED  int ≥ 0; count of open Objectives for this scope
+  unresolved_markers          REQUIRED  int ≥ 0; open integrity gaps or blockers for this scope
+  days_since_accepted_change  REQUIRED  float ≥ 0; staleness measure
+  artifacts                   REQUIRED  list[string]; tracked file paths for this scope
+}
+```
+
+Used in: ScopePrioritySystem.scopes (dict values). Uses canonical: UnitFloat.
+
+## MeasureEntry
+
+A single metric's progress baseline and current reading within a ProgressProfile.
+
+```
+MeasureEntry {
+  baseline   REQUIRED  float; value at Objective creation; immutable after set
+  current    REQUIRED  float; most recently observed value
+  previous   REQUIRED  float | null; value before the most recent update; null on first update
+  target     REQUIRED  float; desired endpoint value
+  direction  REQUIRED  nondecreasing | nonincreasing
+}
+```
+
+**Baseline immutability.** Once set, `baseline` MUST NOT change for the lifetime of the ProgressProfile. Used in: ProgressProfile.measures (dict values).
+
+## ObservationRecord
+
+A single collected observation from a ConnectorSource.
+
+```
+ObservationRecord {
+  source      REQUIRED  ConnectorSource id
+  at          REQUIRED  timestamp; when observation was collected
+  visibility  REQUIRED  public | private
+  values      REQUIRED  dict[metric_name → any]; raw observed values keyed by metric name
+  events      OPTIONAL  list; discrete timestamped events associated with this observation
+}
+```
+
+Used in: ExternalMetricState.latest. Uses canonical: TemporalFields (at as created_at).
+
+## ProviderStatus
+
+The operational status record for a single Executor provider, accumulated via probe cycles.
+
+```
+ProviderStatus {
+  available          REQUIRED  bool | null; null = never probed
+  authenticated      OPTIONAL  bool | null; null = not applicable
+  last_probe_at      OPTIONAL  timestamp | null
+  reason             OPTIONAL  string; last availability reason or message
+  retry_at           OPTIONAL  timestamp | null; earliest retry after capacity exhaustion
+  cooldown_until     OPTIONAL  timestamp | null; earliest retry after probe failure cooldown
+  failures           OPTIONAL  int ≥ 0; consecutive or cumulative probe failure count
+  last_success_at    OPTIONAL  timestamp | null
+  last_capacity_at   OPTIONAL  timestamp | null; when capacity ceiling was last hit
+  calls_24h          OPTIONAL  int ≥ 0; dispatched calls in rolling 24h window
+  calls_30d          OPTIONAL  int ≥ 0; dispatched calls in rolling 30d window
+  limit_24h          OPTIONAL  int ≥ 1; configured 24h ceiling
+  limit_30d          OPTIONAL  int ≥ 1; configured 30d ceiling
+  attempt_history    OPTIONAL  list[timestamp]; rolling dispatch timestamps for budget computation
+  transport_attempts OPTIONAL  int ≥ 0; total transport-level attempts for this provider
+}
+```
+
+**Accumulation contract.** ProviderStatus is NOT recreated on each probe; it is updated in place. Fields absent before a probe are not retroactively populated. **Budget window contract.** `calls_24h` and `calls_30d` MUST be computed from `attempt_history` by counting entries within the respective rolling window, not from a stored counter, to survive restarts correctly. Used in: ExecutorState.provider_pool (dict values).
+
+## WakeCondition
+
+The condition descriptor stored in a WakeRegistration that defines when the registration fires.
+
+```
+WakeCondition {
+  scheduled_at   REQUIRED  timestamp; the canonical trigger time
+  -- additional fields MAY be present for TRIGGERED or CONDITIONAL kinds --
+}
+```
+
+For `SCHEDULED` kind registrations, `scheduled_at` is the only required field. For `TRIGGERED` and `CONDITIONAL` kinds, implementations MAY extend WakeCondition with additional observable criteria. `scheduled_at` MUST always be present regardless of kind and is the field used by the scheduler. Used in: WakeRegistration.condition.
+
+---
+
+# 62e. Infrastructure Schemas
+
+Infrastructure schemas document data structures used to connect lifecycle subsystems (the "glue"). They are not produced by Executor calls; they are written by the lifecycle controller itself as part of persistence, locking, crash recovery, and condition surfacing.
+
+## Transaction
+
+The on-disk journal that enables crash-consistent rollback for any Operation. The Transaction exists as a JSON file on disk between the `PREPARED` and `VALIDATED` phases.
+
+```
+Transaction {
+  id          REQUIRED  Identifier
+  operation   REQUIRED  string; Operation id this transaction serves
+  created_at  REQUIRED  timestamp; when journal was first written
+  phase       REQUIRED  PREPARED | APPLYING | APPLIED | VALIDATED
+  before      REQUIRED  dict[relative_path → file_content]; snapshot before mutation
+  after       REQUIRED  dict[relative_path → file_content]; intended content after mutation
+  applied     REQUIRED  list[relative_path]; files successfully written so far (grows during APPLYING)
+}
+```
+
+Uses canonical: Identifier, TemporalFields (created_at).
+
+**Journal durability contract.** The journal MUST be written atomically to disk at each phase transition before the transition takes effect. A phase that is not durably recorded is not complete. **Recovery contract.** On lifecycle start, if a Transaction journal exists on disk, the lifecycle MUST recover it per the phase rules in §62c Transaction Mechanism before any new work begins. **Removal contract.** The journal file MAY be removed only after phase `VALIDATED` is durably recorded in lifecycle state. Removing it before `VALIDATED` is a recovery condition.
+
+## OwnershipMarker
+
+The content of the exclusive state lock file (`{state_path}.lock`). Guarantees single-writer access to the state file.
+
+```
+OwnershipMarker {
+  pid         REQUIRED  int; OS process ID of the owning lifecycle process
+  started_at  REQUIRED  timestamp; when the lock was acquired
+}
+```
+
+Uses canonical: TemporalFields (started_at as established_at).
+
+**Write contract.** MUST be written as a JSON object using `O_CREAT|O_EXCL` to guarantee atomicity. `O_EXCL` ensures only one process can create the file; a `FileExistsError` means another process holds the lock. **Liveness contract.** If the PID in the marker is not a live OS process, the marker is stale and MAY be removed after appending a StaleLockObservation record. **Legacy compatibility.** If JSON parsing of the marker file fails, the file content MUST be treated as a decimal PID string (legacy plain-text format) for backward compatibility.
+
+## StaleLockObservation
+
+An audit record appended to `stale-lock-observations.jsonl` when a stale OwnershipMarker is removed.
+
+```
+StaleLockObservation {
+  at           REQUIRED  timestamp; when stale marker was detected
+  stale_pid    REQUIRED  int; the PID read from the stale marker
+  lock         REQUIRED  string; absolute file path of the removed lock file
+  disposition  REQUIRED  string; always "removed" in current implementation
+}
+```
+
+Uses canonical: TemporalFields (at as recorded_at). Stored as append-only JSONL (one JSON object per line).
+
+## IntegrityGap
+
+A named surfaced condition record representing a detected violation of a lifecycle invariant. IntegrityGaps MUST be surfaced in `urace check` and `urace vitals` output. BLOCKING gaps MUST halt all autonomous Operations until resolved.
+
+```
+IntegrityGap {
+  id           REQUIRED  Identifier
+  kind         REQUIRED  string; machine-readable condition code (see known kinds below)
+  at           REQUIRED  timestamp; when gap was first detected
+  description  REQUIRED  string; human-readable explanation
+  severity     REQUIRED  WARNING | BLOCKING
+  source       REQUIRED  string; subsystem that detected this gap
+  active       REQUIRED  bool; true = condition is still present
+  resolved_at  OPTIONAL  timestamp | null; when cleared
+  evidence_id  OPTIONAL  string; Evidence id if a parallel Evidence record was emitted
+}
+```
+
+Uses canonical: Identifier, TemporalFields (at as created_at, resolved_at).
+
+**Known IntegrityGap kinds:**
+
+| kind | severity | triggering condition |
+|------|----------|----------------------|
+| `governance-anchor-drift` | BLOCKING | DestinationAnchor digest mismatch at cycle start |
+| `ledger-integrity-violation` | BLOCKING | Rule Ledger structural invariant broken |
+| `transaction-recovery-required` | BLOCKING | Unresolved Transaction journal found at start |
+| `wake-integrity-gap` | WARNING | WakeRegistration cannot be verified in environment |
+| `stale-validation` | WARNING | PendingValidation record exceeded expires_at |
+| `reconciliation-stalled` | BLOCKING | RECONCILING hit declared attempt ceiling |
+| `repair-exhausted` | BLOCKING | REPAIRING hit declared attempt ceiling |
+| `ownership-boundary-indeterminate` | BLOCKING | Lock liveness cannot be established |
+| `state-digest-divergence` | BLOCKING | Checkpoint/Change digest chain is broken |
+
+**Resolution contract.** An IntegrityGap in `active: true` state MUST remain in the State Document until an explicit resolution event clears it. Clearing MUST set `active: false` and `resolved_at`. Autonomous inference of resolution without an attributable event MUST NOT be used to clear a BLOCKING gap.
 
 ---
 
