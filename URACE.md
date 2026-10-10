@@ -2638,12 +2638,18 @@ Rule {
   source           REQUIRED  identifier of who or what created this rule (input id, bootstrap, system)
   derived_from     REQUIRED  list of rule_ids this rule was derived from; empty list for root rules
   superseded_by    REQUIRED  rule_id of the superseding rule, or null if still active
-  active_since     REQUIRED  timestamp when this rule became active
+  active_since     REQUIRED  timestamp when this rule became active (serves as created_at)
   active_until     REQUIRED  timestamp when this rule was deactivated or superseded, or null
+  updated_at       REQUIRED  timestamp of last mutation to any mutable field on this rule
+  deleted_at       OPTIONAL  timestamp | null; explicit soft-delete; null = not deleted
+                             (a superseded rule is NOT deleted; deleted_at is only set by deactivate_rule)
   expires_at       OPTIONAL  timestamp for time-bounded OBJECTIVE rules; null if unbounded
   governed_changes REQUIRED  list of change_ids accepted while this rule was active and governing
   tags             OPTIONAL  list of string labels for grouping or filtering
 }
+```
+
+Uses TemporalFields: active_since (as created_at), active_until, updated_at, deleted_at, expires_at.
 ```
 
 **`level` derivation contract.** The level of a rule MUST be derived from its `kind` at read time: PURPOSE → 0; DIRECTIVE, PERMISSION, PROHIBITION → 1; OBJECTIVE, POLICY → 2. Storing `level` as a persistent field is prohibited; any stored `level` field MUST be ignored and recomputed.
@@ -2800,6 +2806,55 @@ All named citizens produced or consumed by a URACE lifecycle MUST conform to the
 
 The schemas in §62a (Rule, Change) and in this section together form the complete citizen contract set. Any bootstrap from `URACE.md` that produces these structures MUST be schema-conformant for the system to be considered reproducible.
 
+## TemporalFields
+
+The TemporalFields vocabulary is the single authoritative definition of every timestamp and date-history primitive used across citizen schemas. It is a **composition vocabulary** — not a base type, not a class. No citizen inherits from it. Each citizen schema declares which subset of fields from this vocabulary it uses; fields not declared are not part of that citizen's contract.
+
+```
+TemporalFields {
+  -- Creation and modification --
+  created_at        timestamp          when the record was first written; immutable after creation
+  updated_at        timestamp          last mutation of any mutable field; updated on every write
+  deleted_at        timestamp | null   soft-delete marker; null = not deleted; set = logically deleted
+                                       (record MUST be preserved; physical removal is prohibited)
+
+  -- Activation window --
+  active_since      timestamp          when the record became effective; MAY equal created_at
+  active_until      timestamp | null   when deactivated or superseded; null = currently active
+  expires_at        timestamp | null   time-based natural expiry; distinct from active_until
+  superseded_at     timestamp | null   when a newer version of this record replaced it
+
+  -- Lifecycle transitions --
+  completed_at      timestamp | null   terminal successful completion
+  rejected_at       timestamp | null   terminal rejection
+  resolved_at       timestamp | null   when a condition, blocker, or open decision was resolved/closed
+  archived_at       timestamp | null   when archived; preserved but no longer operationally active
+  acknowledged_at   timestamp | null   explicit operator acknowledgement
+
+  -- Audit and processing --
+  established_at    timestamp          when formally established (anchors, policies, containers)
+  recorded_at       timestamp          when durably persisted to an append-only audit store
+  queued_at         timestamp          when placed in a processing queue
+  scheduled_at      timestamp          due time for a scheduled or triggered condition
+  satisfied_at      timestamp | null   when a scheduled or conditional trigger was satisfied
+
+  -- Operational accounting --
+  last_verified_at  timestamp | null   last time integrity was actively verified
+  last_failure_at   timestamp | null   most recent observed failure
+  last_call_at      timestamp | null   most recent invocation or outbound call
+  repaired_at       timestamp | null   when a repair or recovery operation completed
+}
+```
+
+**Conventions.**
+- `at` is a valid alias for `created_at` in append-only records (Evidence, Checkpoint, Input, Change). Append-only records MUST NOT expose `updated_at` — they cannot be modified.
+- `first_at` + `last_at` together serve as `created_at` + `updated_at` for records that are deduplicated by identity (Blocker, SystemRepairEntry).
+- A timestamp field absent or null means the event has not yet occurred. A REQUIRED timestamp MUST be set on creation. An OPTIONAL timestamp MAY be null until its triggering event.
+- `deleted_at` and `active_until` have different semantics. `active_until` marks end of active window (may be set by supersession or system deactivation). `deleted_at` marks an explicit operator-initiated soft-delete. A superseded rule carries `active_until` but NOT `deleted_at`. A deactivated rule carries both.
+- `completed_at` and `archived_at` are distinct. Completion is a terminal success state. Archival is an administrative action that may occur on records in any terminal state.
+
+**Declaration syntax.** Each citizen schema that uses fields from this vocabulary adds a note: `Uses TemporalFields: [field, ...]`. Fields listed there MUST follow the semantics defined above.
+
 ## Objective
 
 An Objective is a named, measurable unit of work that the lifecycle plans and executes toward. Every Objective MUST have an attributable authority basis and a machine-readable success measure.
@@ -2825,6 +2880,7 @@ Objective {
   dependencies                  REQUIRED  list of Objective ids that must complete first
   pinned                        REQUIRED  bool; true = priority protected from autonomous demotion
   created_at                    REQUIRED  timestamp
+  updated_at                    REQUIRED  timestamp; updated on every status transition or field mutation
   authority_basis               REQUIRED  string describing delegation basis
   deadline                      OPTIONAL  ISO-8601 timestamp | null
   not_before                    OPTIONAL  ISO-8601 timestamp | null
@@ -2835,10 +2891,13 @@ Objective {
   source_input                  OPTIONAL  Input id when created from a queued input
   completed_at                  OPTIONAL  timestamp; set when status → completed
   cancelled_at                  OPTIONAL  timestamp; set when status → cancelled
-  deleted_at                    OPTIONAL  timestamp; set when tombstoned
+  deleted_at                    OPTIONAL  timestamp | null; soft-delete marker; null = not deleted
   tombstone                     OPTIONAL  bool; true = logically deleted, preserved for history
   update_candidate              OPTIONAL  dict; present when scope = rebootstrap
 }
+```
+
+Uses TemporalFields: created_at, updated_at, completed_at, cancelled_at, deleted_at.
 ```
 
 **Status transition contract.** `planned → active` requires authority resolution to pass. `active → completed` requires an ACCEPTED Operation and successful validation. `active → needs_reassessment` is triggered by evidence that the success measure can no longer be evaluated. Status MUST NOT regress from `completed` or `cancelled`.
@@ -2858,8 +2917,12 @@ Plan {
   next_review_condition   REQUIRED  condition that triggers plan reassessment
   status                  REQUIRED  ready | completed
   created_at              REQUIRED  timestamp
+  updated_at              REQUIRED  timestamp; updated on status transition or step revision
+  completed_at            OPTIONAL  timestamp | null; set when status → completed
 }
 ```
+
+Uses TemporalFields: created_at, updated_at, completed_at.
 
 **Plan–Objective binding contract.** A Plan MUST reference exactly one active Objective. An Objective MUST NOT have more than one Plan in `ready` status simultaneously. A completed Plan MUST be retained in history.
 
@@ -2877,7 +2940,8 @@ Operation {
                                      | DEFERRED_PROVIDER_CAPACITY | AWAITING_OPERATOR_DECISION
                                      | CONCURRENT_CHANGE | REJECTED_ROLLED_BACK
                                      | REJECTED_INDEPENDENT_VALIDATION
-  attempted_at             REQUIRED  timestamp
+  attempted_at             REQUIRED  timestamp; when execution was initiated (serves as created_at)
+  updated_at               REQUIRED  timestamp; updated on every status transition
   authority_basis          REQUIRED  string
   executor                 REQUIRED  {executor_id: string, adapter: string, ...}
   before_metrics           REQUIRED  dict[name → float]; product metrics before mutation
@@ -2886,7 +2950,11 @@ Operation {
   independent_validation   REQUIRED  {verdict: ACCEPTED|REJECTED, passes: [...], fails: [...]}
   changed_files            REQUIRED  list of relative file paths affected
   transaction              REQUIRED  Transaction id (set on ACCEPTED)
-  accepted_at              OPTIONAL  timestamp; set when status → ACCEPTED
+  accepted_at              OPTIONAL  timestamp | null; set when status → ACCEPTED
+  rejected_at              OPTIONAL  timestamp | null; set when status → REJECTED_ROLLED_BACK
+                                     or REJECTED_INDEPENDENT_VALIDATION
+  rolled_back_at           OPTIONAL  timestamp | null; set when transaction was rolled back;
+                                     always equal to rejected_at when rollback caused rejection
   decision                 OPTIONAL  Objective title at time of operation
   decision_basis           OPTIONAL  Objective reason at time of operation
   executor_source_summary  OPTIONAL  string ≤ 4000 chars; Executor-provided change description
@@ -2894,6 +2962,8 @@ Operation {
   conflicting_files        OPTIONAL  list; set when status = CONCURRENT_CHANGE
 }
 ```
+
+Uses TemporalFields: attempted_at (as created_at), updated_at, accepted_at, rejected_at, rolled_back_at.
 
 **Status finality contract.** `ACCEPTED`, `REJECTED_ROLLED_BACK`, and `REJECTED_INDEPENDENT_VALIDATION` are terminal. An Operation in a terminal status MUST NOT be retried; a new Operation MUST be created for any retry attempt.
 
@@ -2992,12 +3062,17 @@ ExecutorProvider {
   capacity_retry_mode      REQUIRED  automatic | dynamic | fixed
   capacity_retry_delay_ms  REQUIRED  int ≥ 0
   capacity_fallback_seconds REQUIRED int ≥ 60
+  registered_at            REQUIRED  timestamp; when this provider was first registered
   adapter                  OPTIONAL  string; adapter kind (e.g. codex-cli, claude-cli)
   command                  OPTIONAL  string | null; override executable path
   capability_priorities    OPTIONAL  dict[capability → int]; routing weight per capability
   priority                 OPTIONAL  int; global routing priority among registered providers
+  last_call_at             OPTIONAL  timestamp | null; most recent dispatched call
+  last_failure_at          OPTIONAL  timestamp | null; most recent call failure
 }
 ```
+
+Uses TemporalFields: registered_at (as created_at), last_call_at, last_failure_at.
 
 **Budget contract.** The lifecycle MUST NOT dispatch a call to a provider whose rolling 24h or 30d call count has reached its configured ceiling. A provider at ceiling MUST be treated as capacity-exhausted, not detached.
 
@@ -3038,13 +3113,17 @@ A Blocker is a named limitation that prevents the lifecycle from advancing in a 
 
 ```
 Blocker {
-  at      REQUIRED  timestamp when this blocker was first recorded
-  last_at REQUIRED  timestamp of most recent recurrence
-  scope   REQUIRED  string; which lifecycle scope is blocked
-  reason  REQUIRED  string; human-readable description of the blocking condition
-  count   REQUIRED  int ≥ 1; number of times this blocker has been recorded
+  id          REQUIRED  stable identifier; used for explicit resolution references
+  at          REQUIRED  timestamp when this blocker was first recorded (serves as created_at)
+  last_at     REQUIRED  timestamp of most recent recurrence (serves as updated_at)
+  scope       REQUIRED  string; which lifecycle scope is blocked
+  reason      REQUIRED  string; human-readable description of the blocking condition
+  count       REQUIRED  int ≥ 1; number of times this blocker has been recorded
+  resolved_at OPTIONAL  timestamp | null; set when blocker is cleared; null = still active
 }
 ```
+
+Uses TemporalFields: at (as created_at), last_at (as updated_at), resolved_at.
 
 **Deduplication contract.** A Blocker with the same `scope` MUST be updated (incrementing `count` and `last_at`) rather than appended as a new record. A resolved Blocker MUST be removed from the active blockers list; it MUST NOT accumulate indefinitely.
 
@@ -3103,6 +3182,9 @@ ConnectorSource {
   status         REQUIRED  CONFIGURED | AVAILABLE | AUTHENTICATED | AUTHORIZED | OBSERVED
                            | DISABLED | REMOVED | ADAPTER_REQUIRED
   status_history REQUIRED  list of {status: string, at: timestamp}; append-only
+  created_at     REQUIRED  timestamp; when source was first registered
+  updated_at     REQUIRED  timestamp; updated on every status mutation
+  deleted_at     OPTIONAL  timestamp | null; set when status → REMOVED; null = not removed
   location       OPTIONAL  URL or file path; REQUIRED when kind ≠ github_repository
   repository     OPTIONAL  repository identifier; REQUIRED when kind = github_repository
   visibility     OPTIONAL  public | private
@@ -3110,6 +3192,8 @@ ConnectorSource {
   values         OPTIONAL  dict[metric_name → json_path]; metric path registrations
 }
 ```
+
+Uses TemporalFields: created_at, updated_at, deleted_at.
 
 **Status progression contract.** Status MUST progress forward through the defined states. A source MUST NOT transition directly from `CONFIGURED` to `OBSERVED` without passing through `AVAILABLE`, `AUTHENTICATED`, and `AUTHORIZED`. Each status transition MUST be appended to `status_history`.
 
@@ -3119,14 +3203,19 @@ A Metric Definition maps a named metric to a path within a Connector Source.
 
 ```
 MetricDefinition {
-  id        REQUIRED  stable identifier (Input id of the registering input)
-  name      REQUIRED  unique metric name within this lifecycle
-  source    REQUIRED  ConnectorSource id
-  path      REQUIRED  JSON path expression resolving to a numeric value
-  direction REQUIRED  nondecreasing | nonincreasing
-  target    OPTIONAL  float; desired threshold value
+  id           REQUIRED  stable identifier (Input id of the registering input)
+  name         REQUIRED  unique metric name within this lifecycle
+  source       REQUIRED  ConnectorSource id
+  path         REQUIRED  JSON path expression resolving to a numeric value
+  direction    REQUIRED  nondecreasing | nonincreasing
+  created_at   REQUIRED  timestamp; when this definition was registered
+  updated_at   REQUIRED  timestamp; updated when definition is replaced or modified
+  target       OPTIONAL  float; desired threshold value
+  deprecated_at OPTIONAL timestamp | null; set when this metric is retired; null = active
 }
 ```
+
+Uses TemporalFields: created_at, updated_at, deprecated_at (as archived_at).
 
 **Uniqueness contract.** Metric names MUST be unique within the lifecycle. Registering a metric with a name that already exists MUST replace the prior definition and append a record to the Evidence log.
 
@@ -3136,13 +3225,19 @@ A Vital is a derived health indicator computed from one or two Metric Definition
 
 ```
 VitalDefinition {
-  id          REQUIRED  stable identifier (Input id of the registering input)
-  name        REQUIRED  unique vital name within this lifecycle
-  numerator   REQUIRED  MetricDefinition name
-  denominator OPTIONAL  MetricDefinition name; when present, vital = numerator / denominator
-  window      REQUIRED  string; observation window description (e.g. "current", "7d")
-  description OPTIONAL  string; human-readable explanation
+  id            REQUIRED  stable identifier (Input id of the registering input)
+  name          REQUIRED  unique vital name within this lifecycle
+  numerator     REQUIRED  MetricDefinition name
+  denominator   OPTIONAL  MetricDefinition name; when present, vital = numerator / denominator
+  window        REQUIRED  string; observation window description (e.g. "current", "7d")
+  created_at    REQUIRED  timestamp; when this definition was registered
+  updated_at    REQUIRED  timestamp; updated when definition is replaced
+  description   OPTIONAL  string; human-readable explanation
+  deprecated_at OPTIONAL  timestamp | null; set when this vital is retired; null = active
 }
+```
+
+Uses TemporalFields: created_at, updated_at, deprecated_at (as archived_at).
 ```
 
 ## Config Document
@@ -3327,9 +3422,12 @@ ExecutorCall {
   change_id                 OPTIONAL  Operation id; set on accepted
   trigger_signature         OPTIONAL  string | null; deduplication key for triggered discovery
   last_transport_attempt_at OPTIONAL  timestamp; set when transport_attempts > 1
+  completed_at              OPTIONAL  timestamp | null; when execution finished (accepted or failed)
   usage                     OPTIONAL  {total_tokens: int, cost: float}; provider-reported
 }
 ```
+
+Uses TemporalFields: at (as created_at), last_transport_attempt_at (as last_call_at), completed_at.
 
 ## Executor State
 
@@ -3392,8 +3490,12 @@ ProgressProfile {
   cadence             REQUIRED  string; how often measures are updated
   next_follow_up      REQUIRED  timestamp | string
   status              REQUIRED  active | archived
+  created_at          REQUIRED  timestamp; when this profile was established
+  updated_at          REQUIRED  timestamp; updated on every measure update
 }
 ```
+
+Uses TemporalFields: created_at, updated_at.
 
 **Guardrail contract.** Each guardrail name in `guardrails` corresponds to a measure key in `measures`. An accepted Operation MUST NOT leave any guardrail measure worse than its baseline. If it does, the Operation MUST be rejected.
 
@@ -3406,11 +3508,14 @@ WakeRegistration {
   id           REQUIRED  stable identifier
   scheduled_at REQUIRED  timestamp; when this registration is due to trigger
   condition    REQUIRED  dict; the observable criterion that satisfies this registration
-  kind         REQUIRED  SCHEDULED | TRIGGERED | CONDITIONAL
-  scope        OPTIONAL  string; which lifecycle scope this registration serves
-  established_at REQUIRED timestamp
+  kind           REQUIRED  SCHEDULED | TRIGGERED | CONDITIONAL
+  scope          OPTIONAL  string; which lifecycle scope this registration serves
+  established_at REQUIRED  timestamp; when this registration was created
+  satisfied_at   OPTIONAL  timestamp | null; when the condition was met and registration fired
 }
 ```
+
+Uses TemporalFields: established_at (as created_at), scheduled_at, satisfied_at.
 
 **Integrity contract.** On lifecycle restart, every WakeRegistration in `wake_registry` MUST be verified as still active in the current environment. A registration that cannot be verified MUST be surfaced as a wake-integrity gap (see §62 and README). A verified registration MUST NOT be discarded.
 
@@ -3490,8 +3595,13 @@ PendingValidation {
   reason           REQUIRED  string
   status           REQUIRED  PENDING_CAPABILITY
   note             REQUIRED  string; human-readable explanation
+  validated_at     OPTIONAL  timestamp | null; set when validation completes
+  expires_at       OPTIONAL  timestamp | null; backlog timeout; if exceeded without capability
+                             restoration, record MUST be surfaced as a named stale-validation gap
 }
 ```
+
+Uses TemporalFields: queued_at, validated_at (as resolved_at), expires_at.
 
 **Validation backlog contract.** When a validation capability is restored after being unavailable, URACE MUST process all PendingValidation records in `queued_at`-ascending order before accepting new work. No pending record MAY be silently discarded.
 
@@ -3503,10 +3613,13 @@ The Destination Anchor is a tamper-evident digest of the lifecycle's core purpos
 DestinationAnchor {
   purpose       REQUIRED  string; copy of Config.intent.purpose
   retained      REQUIRED  list[string]; sorted copy of Config.intent.retained
-  digest        REQUIRED  SHA-256 of JSON({purpose, retained}, sort_keys=True, no whitespace)
-  established_at REQUIRED timestamp
+  digest           REQUIRED  SHA-256 of JSON({purpose, retained}, sort_keys=True, no whitespace)
+  established_at   REQUIRED  timestamp; when anchor was first written
+  last_verified_at OPTIONAL  timestamp | null; last cycle-start at which anchor passed verification
 }
 ```
+
+Uses TemporalFields: established_at (as created_at), last_verified_at.
 
 **Drift detection contract.** On every lifecycle cycle start, URACE MUST recompute the Destination Anchor digest and compare it to the stored `digest`. A divergence MUST be surfaced as a named governance-drift condition and MUST block all autonomous operations until the operator acknowledges the change.
 
@@ -3553,10 +3666,13 @@ SystemRepairEntry {
   runtime_version  REQUIRED  string; SHA-256 digest of the runtime file set at detection time
   count            REQUIRED  int ≥ 1; times this fault has recurred
   status           REQUIRED  OBSERVED | REPAIR_QUEUED | REPAIRED | REPAIR_FAILED
-  first_at         REQUIRED  timestamp
-  last_at          REQUIRED  timestamp
+  first_at         REQUIRED  timestamp; when fault was first observed (serves as created_at)
+  last_at          REQUIRED  timestamp; most recent recurrence (serves as updated_at)
+  repaired_at      OPTIONAL  timestamp | null; set when status → REPAIRED
 }
 ```
+
+Uses TemporalFields: first_at (as created_at), last_at (as updated_at), repaired_at.
 
 ---
 
