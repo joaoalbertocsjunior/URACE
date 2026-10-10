@@ -1,5 +1,7 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
+**Specification version: 2025-10-10-r1**
+
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
 Your task is to bootstrap **URACE**.
@@ -2235,6 +2237,41 @@ ASSESSMENT
     ▼
 PRIORITY
 ```
+
+## Value Production Velocity
+
+URACE SHOULD track the rate at which accepted operations produce net positive metric movement over elapsed time. This is the value production rate: the number of net-improved metric dimensions per unit of real execution time.
+
+Over a rolling window of recent checkpoints, URACE SHOULD compute:
+
+- **current velocity** — mean value rate over the most recent N accepted operations;
+- **baseline velocity** — mean value rate over the earliest N accepted operations;
+- **acceleration** — whether current velocity is higher, lower, or stable relative to baseline;
+- **yield rate** — fraction of accepted operations that produced net positive metric movement.
+
+When the system is decelerating — when current velocity has dropped materially relative to its baseline — URACE SHOULD surface this as an alert and MAY autonomously inject a strategic reassessment Objective to recover value production rate. Self-correction authority for injecting such an Objective derives from existing delegated Authority; value deceleration is Evidence, not Authority to act outside delegated scope.
+
+```text
+ACCEPTED OPERATION
+        │
+        ▼
+MEASURE NET VALUE DELTA
+(improved metrics − regressed metrics)
+        │
+        ▼
+VALUE RATE = DELTA / ELAPSED TIME
+        │
+        ▼
+ROLLING VELOCITY WINDOW
+        │
+        ▼
+ACCELERATING?  STABLE?  DECELERATING?
+        │                     │
+     CONTINUE          REASSESS SCOPE
+                         AND PRIORITY
+```
+
+Value production velocity tracks lifecycle health across time; it does not create Authority or bypass validation, Checkpoint or constraint requirements.
 
 ---
 
