@@ -2608,6 +2608,107 @@ Where durable wake registrations have been established under §67, `wakeState` M
 
 ---
 
+# 62a. Rule Ledger
+
+URACE MUST maintain a **Rule Ledger** — a persistent, inspectable, traceable record of every rule governing the lifecycle: what the system MAY do, MUST do, and MUST NOT do.
+
+## Three Irreducible Concepts
+
+Every governance event reduces to one of three primitives:
+
+| Primitive | Description |
+|-----------|-------------|
+| **RULE**   | A named, versioned, first-class governance statement |
+| **STATE**  | The current active set of rules and their relationships |
+| **CHANGE** | An accepted product or runtime operation, bound to the rules that governed it |
+
+## Rule Kinds
+
+Rules are grouped into three immutability levels:
+
+| Level | Kind | Meaning |
+|-------|------|---------|
+| L0 | **PURPOSE** | Immutable mission statement — the reason the system exists |
+| L1 | **DIRECTIVE** | Durable operator intent — what to pursue |
+| L1 | **PERMISSION** | Explicit delegation — what the system is authorised to do autonomously |
+| L1 | **PROHIBITION** | Hard constraint — what the system MUST NOT do |
+| L2 | **OBJECTIVE** | Operational goal with success measure — what to achieve next |
+| L2 | **POLICY** | Operational mode setting — how to operate |
+
+L0 rules are immutable. L1 rules require attributable operator action to change. L2 rules may be created, updated, or closed by the lifecycle within delegated authority.
+
+## Relationships
+
+Rules form a DAG via five relationship types:
+
+| Type | Meaning |
+|------|---------|
+| `derived_from` | This rule is a more specific form of a parent rule |
+| `governed_by` | This rule operates within the bounds of another |
+| `governed_changes` | This rule has governed specific accepted changes |
+| `superseded_by` | This rule has been replaced by a newer version |
+| `conflicts_with` | This rule overlaps or contradicts another |
+
+## System-Inferred Rules
+
+URACE MAY infer rules from existing rules (e.g. an explicit PROHIBITION implies a scoped PROHIBITION). Inferred rules:
+
+- carry `derivation: SYSTEM_INFERRED` and a `confidence` score (0.0–1.0)
+- are **advisory** until confirmed (confidence ≥ `INFER_SURFACE` surfaces for inspection; ≥ `INFER_BLOCKING` may influence eligibility)
+- carry a traceable `derived_from` link to the source rule(s)
+- decay if the source rules are deactivated
+
+## Temporal Change Binding
+
+When an operation is **ACCEPTED**, URACE MUST:
+1. compute a snapshot digest (SHA-256 of the active rule set at that moment)
+2. record the list of governing rule IDs alongside the accepted change
+
+This allows any future inspection to answer: *"what rules were active and governing when this change was made?"*
+
+```
+ACCEPTED OPERATION
+  → active rules snapshot digest
+  → governing rule IDs
+  → stored in change_bindings
+```
+
+## Bootstrap Seeding
+
+At `init`, the Rule Ledger is seeded from the bootstrap configuration:
+
+| Config field | Rule kind |
+|---|---|
+| `intent.purpose` | PURPOSE |
+| `intent.retained` | PROHIBITION (L1) |
+| `authority.delegated` | PERMISSION (L1) |
+| `authority.reserved` | PROHIBITION (L1) |
+| `constraints[]` | PROHIBITION (L1) |
+| `self_evolution_policy` | POLICY (L2) |
+| `external_metrics.mode` | POLICY (L2) |
+
+The Ledger becomes the single source of truth; bootstrap config fields are not re-read per cycle.
+
+## User Interface
+
+Three commands expose the Rule Ledger:
+
+| Command | Effect |
+|---------|--------|
+| `urace intent add "…"` | Add a DIRECTIVE rule |
+| `urace intent list` | List active DIRECTIVE rules |
+| `urace constraint add "…"` | Add a PROHIBITION rule |
+| `urace constraint add "…" --allow` | Add a PERMISSION rule |
+| `urace rules list` | List all active rules |
+| `urace rules inspect <id>` | Full rule record with derivation chain |
+| `urace rules graph` | Full rule graph with relationships |
+| `urace rules conflicts` | Surface detected rule conflicts |
+| `urace rules changes <id>` | List changes governed by a rule |
+
+The Ledger is append-only with supersession: rules are never deleted, only deactivated or superseded, preserving the full historical chain.
+
+---
+
 # 63. Concurrency
 
 Where multiple runtimes MAY operate:
