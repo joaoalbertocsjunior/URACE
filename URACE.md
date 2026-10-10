@@ -2794,6 +2794,504 @@ Three commands expose the Rule Ledger:
 
 ---
 
+# 62b. Citizen Schemas
+
+All named citizens produced or consumed by a URACE lifecycle MUST conform to the schemas defined in this section. An implementation that omits a REQUIRED field or misrepresents its type violates this contract and MUST surface the violation as a named integrity gap on load. Fields marked OPTIONAL MAY be omitted when not applicable; an absent OPTIONAL field MUST be treated as its stated default.
+
+The schemas in §62a (Rule, Change) and in this section together form the complete citizen contract set. Any bootstrap from `URACE.md` that produces these structures MUST be schema-conformant for the system to be considered reproducible.
+
+## Objective
+
+An Objective is a named, measurable unit of work that the lifecycle plans and executes toward. Every Objective MUST have an attributable authority basis and a machine-readable success measure.
+
+```
+Objective {
+  id                            REQUIRED  stable identifier
+  title                         REQUIRED  human-readable goal statement
+  reason                        REQUIRED  justification; default "authoritative user goal" if absent from input
+  success_measure               REQUIRED  observable, falsifiable criterion for completion
+  scope                         REQUIRED  documentation | runtime | metrics | rebootstrap
+  target                        REQUIRED  product | urace
+  priority                      REQUIRED  integer 0–100; higher = more urgent
+  status                        REQUIRED  planned | active | completed | cancelled | disabled
+                                          | deferred | deferred_budget | needs_reassessment
+                                          | awaiting_operator_decision | policy_blocked
+  expected_value                REQUIRED  float 0.0–1.0; estimated net benefit if completed
+  estimated_cost                REQUIRED  float 0.0–1.0; estimated resource fraction
+  risk                          REQUIRED  float 0.0–1.0; probability of adverse outcome
+  urgency                       REQUIRED  float 0.0–1.0; time-sensitivity
+  necessity_evidence            REQUIRED  string; empty when not applicable
+  lower_impact_route_sufficient REQUIRED  bool; true = a lower-impact path may satisfy the goal
+  dependencies                  REQUIRED  list of Objective ids that must complete first
+  pinned                        REQUIRED  bool; true = priority protected from autonomous demotion
+  created_at                    REQUIRED  timestamp
+  authority_basis               REQUIRED  string describing delegation basis
+  deadline                      OPTIONAL  ISO-8601 timestamp | null
+  not_before                    OPTIONAL  ISO-8601 timestamp | null
+  estimate                      OPTIONAL  {min_hours: float, max_hours: float}
+  estimate_confidence           OPTIONAL  low | medium | high
+  priority_floor                OPTIONAL  integer | null; autonomous priority floor
+  priority_ceiling              OPTIONAL  integer | null; autonomous priority ceiling
+  source_input                  OPTIONAL  Input id when created from a queued input
+  completed_at                  OPTIONAL  timestamp; set when status → completed
+  cancelled_at                  OPTIONAL  timestamp; set when status → cancelled
+  deleted_at                    OPTIONAL  timestamp; set when tombstoned
+  tombstone                     OPTIONAL  bool; true = logically deleted, preserved for history
+  update_candidate              OPTIONAL  dict; present when scope = rebootstrap
+}
+```
+
+**Status transition contract.** `planned → active` requires authority resolution to pass. `active → completed` requires an ACCEPTED Operation and successful validation. `active → needs_reassessment` is triggered by evidence that the success measure can no longer be evaluated. Status MUST NOT regress from `completed` or `cancelled`.
+
+**Priority contract.** If `priority_floor` and `priority_ceiling` are both set, `priority_floor` MUST be ≤ `priority_ceiling`. Autonomous priority adjustment MUST NOT move `priority` below `priority_floor` or above `priority_ceiling`.
+
+## Plan
+
+A Plan is the execution strategy produced for an active Objective. One Plan exists per Objective at a time; completing or replacing a Plan MUST be recorded.
+
+```
+Plan {
+  id                      REQUIRED  stable identifier
+  objective_reference     REQUIRED  Objective id this plan serves
+  steps                   REQUIRED  ordered list of execution step descriptions
+  validation_strategy     REQUIRED  human-readable description of the validation approach
+  next_review_condition   REQUIRED  condition that triggers plan reassessment
+  status                  REQUIRED  ready | completed
+  created_at              REQUIRED  timestamp
+}
+```
+
+**Plan–Objective binding contract.** A Plan MUST reference exactly one active Objective. An Objective MUST NOT have more than one Plan in `ready` status simultaneously. A completed Plan MUST be retained in history.
+
+## Operation
+
+An Operation is a single attempt to mutate the Product or runtime under a Plan. It is the atomic unit of change.
+
+```
+Operation {
+  id                       REQUIRED  stable identifier
+  objective_reference      REQUIRED  Objective id
+  plan_reference           REQUIRED  Plan id
+  scope                    REQUIRED  documentation | runtime | metrics | rebootstrap
+  status                   REQUIRED  ATTEMPTED | ACCEPTED | OBSERVED_NO_EFFECT
+                                     | DEFERRED_PROVIDER_CAPACITY | AWAITING_OPERATOR_DECISION
+                                     | CONCURRENT_CHANGE | REJECTED_ROLLED_BACK
+                                     | REJECTED_INDEPENDENT_VALIDATION
+  attempted_at             REQUIRED  timestamp
+  authority_basis          REQUIRED  string
+  executor                 REQUIRED  {executor_id: string, adapter: string, ...}
+  before_metrics           REQUIRED  dict[name → float]; product metrics before mutation
+  after_metrics            REQUIRED  dict[name → float]; product metrics after mutation
+  observed_metric_effect   REQUIRED  {improved: int, regressed: int}
+  independent_validation   REQUIRED  {verdict: ACCEPTED|REJECTED, passes: [...], fails: [...]}
+  changed_files            REQUIRED  list of relative file paths affected
+  transaction              REQUIRED  Transaction id (set on ACCEPTED)
+  accepted_at              OPTIONAL  timestamp; set when status → ACCEPTED
+  decision                 OPTIONAL  Objective title at time of operation
+  decision_basis           OPTIONAL  Objective reason at time of operation
+  executor_source_summary  OPTIONAL  string ≤ 4000 chars; Executor-provided change description
+  explanation              OPTIONAL  string; human-readable explanation of what changed and why
+  conflicting_files        OPTIONAL  list; set when status = CONCURRENT_CHANGE
+}
+```
+
+**Status finality contract.** `ACCEPTED`, `REJECTED_ROLLED_BACK`, and `REJECTED_INDEPENDENT_VALIDATION` are terminal. An Operation in a terminal status MUST NOT be retried; a new Operation MUST be created for any retry attempt.
+
+**Metrics contract.** `before_metrics` MUST be captured immediately before the Executor call. `after_metrics` MUST be captured immediately after the Transaction is validated. Both MUST use the same metric names and measurement method.
+
+## Evidence
+
+Evidence is the append-only audit log of every significant lifecycle event. It is the primary traceability surface.
+
+```
+Evidence (base) {
+  id    REQUIRED  stable identifier
+  at    REQUIRED  timestamp
+  kind  REQUIRED  string; identifies the evidence sub-type (see kinds below)
+  -- kind-specific fields follow --
+}
+```
+
+Evidence MUST be append-only. An Evidence record MUST NOT be modified or deleted after creation. The following kinds MUST be supported; implementations MAY define additional kinds for events not listed here.
+
+| Kind | Required additional fields |
+|------|---------------------------|
+| `authoritative-input-consumed` | `input`: Input id, `input_kind`: string |
+| `authoritative-input-rejected` | `input`: Input id, `reason`: string |
+| `rule-added` | `rule_id`: string, `rule_kind`: string, `source_input`: Input id |
+| `rule-superseded` | `old_rule_id`: string, `new_rule_id`: string, `source_input`: Input id |
+| `rule-deactivated` | `rule_id`: string, `source_input`: Input id |
+| `transaction-recovery` | `transaction`: Transaction id, `disposition`: string |
+| `self-evolution-policy-decision` | `outcome`: string, `mode`: string, `scope`: string, `reason`: string |
+| `self-evolution-necessity-justification` | `necessity`: string, `policy_mode`: string, `disposition`: string |
+| `executor-capacity-deferred` | `reason`: string, `capacity_observation_signature`: string |
+| `executor-availability` | `available`: bool, `provenance`: string |
+| `concurrent-product-change` | `operation`: Operation id, `files`: list, `disposition`: string |
+| `update-customization-conflict` | `operation`: string, `candidate`: string, `explanation`: string |
+| `value-deceleration-self-correction` | `trigger`: string, `direction`: string, `value_amplification`: float, `yield_rate`: float |
+| `lifecycle-paused` | `prior_state`: string, `disposition`: string |
+| `lifecycle-resumed` | `disposition`: string |
+| `authority-resolution-denied` | `reason`: string |
+| `live-control-boundary` | `applied_inputs`: int, `outcome`: string |
+
+**Append-only contract.** A new Evidence record MUST be created for every event; prior records MUST NOT be edited. An implementation that truncates or compacts the Evidence log MUST preserve at minimum the most recent 1 000 records and MUST NOT discard records for events within the current Objective's lifecycle.
+
+## Checkpoint
+
+A Checkpoint is a durable integrity marker that binds a product state digest to a lifecycle moment.
+
+```
+Checkpoint {
+  id           REQUIRED  stable identifier
+  at           REQUIRED  timestamp
+  kind         REQUIRED  bootstrap | accepted-product-change | assessment
+  digest       REQUIRED  SHA-256 of the product file tree (see §62c Digest Computation)
+  operation    OPTIONAL  Operation id; REQUIRED when kind = accepted-product-change
+  transaction  OPTIONAL  Transaction id; REQUIRED when kind = accepted-product-change
+}
+```
+
+**Sequential integrity contract.** The `digest` of a `accepted-product-change` Checkpoint MUST equal the `state_after_digest` of the corresponding Change binding in the Rule Ledger. A divergence MUST be surfaced as a named integrity gap.
+
+**Bootstrap checkpoint contract.** A `bootstrap` Checkpoint MUST be the first record in the checkpoint list. Its digest MUST reflect the product state at the moment `init` completed.
+
+## Input
+
+An Input is an operator instruction queued durably in the atomic inbox for application at the next safe lifecycle boundary.
+
+```
+Input {
+  id       REQUIRED  stable collision-resistant identifier
+  at       REQUIRED  timestamp of enqueueing
+  kind     REQUIRED  context | goal | source | metric | vital
+                     | source_control | metric_control | vital_control | goal_control
+                     | executor_control | policy_control | budget_control
+                     | evaluation_control | intent_control | constraint_control
+  payload  REQUIRED  dict; structure is kind-specific
+  status   REQUIRED  QUEUED (only valid value at rest; consumed inputs are removed)
+}
+```
+
+**Idempotency contract.** An Input id that appears in `processed_input_ids` MUST NOT be applied a second time. This list MUST be checked before processing any Input.
+
+**Ordering contract.** Inputs MUST be applied in the order they were enqueued (oldest first by `at`). No Input MUST be reordered relative to another Input of any kind.
+
+**Removal contract.** An Input file MUST be removed from the inbox atomically with the state write that records its application. An Input that is removed without a corresponding state write MUST be treated as a recovery condition.
+
+## Executor Provider Record
+
+An Executor Provider Record describes a registered Executor and its operational limits.
+
+```
+ExecutorProvider {
+  id                       REQUIRED  stable identifier (default: "codex-primary")
+  enabled                  REQUIRED  bool
+  capabilities             REQUIRED  list of: discovery | planning | mutation | evaluation | execution
+  max_calls_per_24h        REQUIRED  int ≥ 1
+  max_calls_per_30d        REQUIRED  int ≥ max_calls_per_24h
+  capacity_retry_mode      REQUIRED  automatic | dynamic | fixed
+  capacity_retry_delay_ms  REQUIRED  int ≥ 0
+  capacity_fallback_seconds REQUIRED int ≥ 60
+  adapter                  OPTIONAL  string; adapter kind (e.g. codex-cli, claude-cli)
+  command                  OPTIONAL  string | null; override executable path
+  capability_priorities    OPTIONAL  dict[capability → int]; routing weight per capability
+  priority                 OPTIONAL  int; global routing priority among registered providers
+}
+```
+
+**Budget contract.** The lifecycle MUST NOT dispatch a call to a provider whose rolling 24h or 30d call count has reached its configured ceiling. A provider at ceiling MUST be treated as capacity-exhausted, not detached.
+
+## Decision
+
+A Decision is a durable record of a lifecycle planning judgment that commits the system to a course of action.
+
+```
+Decision {
+  id              REQUIRED  stable identifier
+  at              REQUIRED  timestamp
+  kind            REQUIRED  plan | operator
+  outcome         REQUIRED  string; the chosen course of action (e.g. Plan id)
+  authority_basis REQUIRED  string describing the delegation basis for this decision
+  justification   REQUIRED  string; reasoning that led to this outcome
+}
+```
+
+## Trigger
+
+A Trigger is an event record that signals a condition change requiring lifecycle reassessment.
+
+```
+Trigger {
+  id          REQUIRED  stable identifier
+  at          REQUIRED  timestamp
+  kind        REQUIRED  EXECUTOR_AVAILABLE | EXECUTOR_UNAVAILABLE
+                        | EXTERNAL_REPOSITORY_UPDATE | LIFECYCLE_EVENT
+  source      REQUIRED  string; origin of the trigger signal
+  provenance  REQUIRED  string; how the signal was detected
+  disposition REQUIRED  string; required lifecycle response (e.g. REASSESS)
+}
+```
+
+## Blocker
+
+A Blocker is a named limitation that prevents the lifecycle from advancing in a specific scope. Blockers MUST be surfaced in `urace check` output.
+
+```
+Blocker {
+  at      REQUIRED  timestamp when this blocker was first recorded
+  last_at REQUIRED  timestamp of most recent recurrence
+  scope   REQUIRED  string; which lifecycle scope is blocked
+  reason  REQUIRED  string; human-readable description of the blocking condition
+  count   REQUIRED  int ≥ 1; number of times this blocker has been recorded
+}
+```
+
+**Deduplication contract.** A Blocker with the same `scope` MUST be updated (incrementing `count` and `last_at`) rather than appended as a new record. A resolved Blocker MUST be removed from the active blockers list; it MUST NOT accumulate indefinitely.
+
+## Value Trajectory
+
+The Value Trajectory tracks whether the lifecycle is producing value at an accelerating, stable, or decelerating rate. It is the primary signal for autonomous self-correction.
+
+```
+ValueTrajectory {
+  checkpoints      REQUIRED  list of VelocityCheckpoint (max 100, rolling window)
+  acceleration     REQUIRED  AccelerationReport | null; null until 2+ checkpoints exist
+  established_at   REQUIRED  timestamp when trajectory tracking began
+  cumulative_value REQUIRED  float; sum of positive net_value_delta across all checkpoints
+  peak_velocity    REQUIRED  float; highest current_velocity observed
+  updated_at       OPTIONAL  timestamp of last checkpoint addition
+}
+
+VelocityCheckpoint {
+  operation_id       REQUIRED  Operation id
+  at                 REQUIRED  timestamp
+  elapsed_seconds    REQUIRED  float; wall-clock time from operation start to acceptance
+  net_value_delta    REQUIRED  float; improved_metrics minus regressed_metrics
+  improved_metrics   REQUIRED  int; count of metric dimensions that improved
+  regressed_metrics  REQUIRED  int; count of metric dimensions that regressed
+  value_rate         REQUIRED  float; net_value_delta / (elapsed_seconds / 60); value per minute
+  scope              REQUIRED  string; Operation scope
+  objective_title    OPTIONAL  string
+}
+
+AccelerationReport {
+  status              REQUIRED  computed | no_data | establishing_baseline
+  direction           OPTIONAL  accelerating | stable | decelerating; present when status=computed
+  current_velocity    OPTIONAL  float; mean value_rate over recent window (last 5)
+  baseline_velocity   OPTIONAL  float; mean value_rate over baseline window (first 5)
+  trend_slope         OPTIONAL  float; second-half mean minus first-half mean
+  value_amplification OPTIONAL  float | "unbounded"; current_velocity / baseline_velocity
+  yield_rate          OPTIONAL  float 0.0–1.0; fraction of operations with net_value_delta > 0
+  sample_size         OPTIONAL  int; number of checkpoints used
+  scope_velocity      OPTIONAL  dict[scope → float]; per-scope mean value_rate
+  alerts              OPTIONAL  list of string; active threshold violations
+  cumulative_value    OPTIONAL  float; positive-only cumulative value from checkpoints
+  checkpoints_needed  OPTIONAL  int; present when status ≠ computed
+}
+```
+
+**Window contract.** `current_velocity` MUST use the most recent 5 checkpoints. `baseline_velocity` MUST use the first 5 checkpoints in the window. Both windows MUST be computed from the same rolling list of at most 100 checkpoints.
+
+## Connector Source
+
+A Connector Source is a registered external data provider from which metrics are observed.
+
+```
+ConnectorSource {
+  id             REQUIRED  stable identifier
+  kind           REQUIRED  json_file | http_json | github_repository
+  status         REQUIRED  CONFIGURED | AVAILABLE | AUTHENTICATED | AUTHORIZED | OBSERVED
+                           | DISABLED | REMOVED | ADAPTER_REQUIRED
+  status_history REQUIRED  list of {status: string, at: timestamp}; append-only
+  location       OPTIONAL  URL or file path; REQUIRED when kind ≠ github_repository
+  repository     OPTIONAL  repository identifier; REQUIRED when kind = github_repository
+  visibility     OPTIONAL  public | private
+  credential_env OPTIONAL  string; env var name holding credentials
+  values         OPTIONAL  dict[metric_name → json_path]; metric path registrations
+}
+```
+
+**Status progression contract.** Status MUST progress forward through the defined states. A source MUST NOT transition directly from `CONFIGURED` to `OBSERVED` without passing through `AVAILABLE`, `AUTHENTICATED`, and `AUTHORIZED`. Each status transition MUST be appended to `status_history`.
+
+## Metric Definition
+
+A Metric Definition maps a named metric to a path within a Connector Source.
+
+```
+MetricDefinition {
+  id        REQUIRED  stable identifier (Input id of the registering input)
+  name      REQUIRED  unique metric name within this lifecycle
+  source    REQUIRED  ConnectorSource id
+  path      REQUIRED  JSON path expression resolving to a numeric value
+  direction REQUIRED  nondecreasing | nonincreasing
+  target    OPTIONAL  float; desired threshold value
+}
+```
+
+**Uniqueness contract.** Metric names MUST be unique within the lifecycle. Registering a metric with a name that already exists MUST replace the prior definition and append a record to the Evidence log.
+
+## Vital Definition
+
+A Vital is a derived health indicator computed from one or two Metric Definitions.
+
+```
+VitalDefinition {
+  id          REQUIRED  stable identifier (Input id of the registering input)
+  name        REQUIRED  unique vital name within this lifecycle
+  numerator   REQUIRED  MetricDefinition name
+  denominator OPTIONAL  MetricDefinition name; when present, vital = numerator / denominator
+  window      REQUIRED  string; observation window description (e.g. "current", "7d")
+  description OPTIONAL  string; human-readable explanation
+}
+```
+
+---
+
+# 62c. Mechanism Contracts
+
+Mechanisms are the interlinking processes that move citizens from one state to another. Each mechanism MUST behave according to the contracts in this section regardless of implementation language, Executor type, or runtime environment.
+
+## Input Queue Mechanism
+
+The Input Queue is the sole safe path for operator instructions to enter the lifecycle. It guarantees atomicity, ordering, and idempotency.
+
+```
+OPERATOR COMMAND
+  → queue_input() creates Input record with stable id
+  → written as atomic file to inbox directory
+  → lifecycle reads inbox at next safe boundary
+  → processed_input_ids checked for idempotency
+  → Input applied to state
+  → Input file removed atomically with state write
+  → Input id appended to processed_input_ids
+```
+
+**Atomicity contract.** The removal of an Input file and the state write that records its application MUST be atomic from the perspective of recovery: after a crash, either the Input is still present (not yet applied) or the state reflects its effect (already applied). A partially applied Input is a recovery condition.
+
+**Ordering contract.** Inputs MUST be applied in `at`-ascending order. No Input MUST be promoted, demoted, or skipped based on its kind, content, or source.
+
+**Idempotency contract.** `processed_input_ids` MUST be persisted in durable state. Before applying any Input, its `id` MUST be checked against this list. A match MUST skip the Input. `processed_input_ids` MUST NOT be truncated while any pending Input in the inbox shares an id with an entry that would be discarded.
+
+**Boundary contract.** Inputs MUST NOT be applied mid-cycle. Application MUST occur only at a safe lifecycle boundary where the full state write can be committed atomically.
+
+## Transaction Mechanism
+
+A Transaction wraps the file mutations of a single Operation, providing a rollback capability and a durable record for crash recovery.
+
+```
+Transaction {
+  id          REQUIRED  stable identifier
+  operation   REQUIRED  Operation id
+  created_at  REQUIRED  timestamp
+  phase       REQUIRED  PREPARED | APPLYING | APPLIED | VALIDATED
+  before      REQUIRED  dict[relative_path → file_content]; snapshot before mutation
+  after       REQUIRED  dict[relative_path → file_content]; intended content after mutation
+  applied     REQUIRED  list of relative_path; files successfully written
+}
+```
+
+**Phase progression contract.**
+
+```
+PREPARED  →  APPLYING  →  APPLIED  →  VALIDATED
+             (files written)    (validation passed)
+```
+
+Each phase MUST be written to the transaction journal on disk before transitioning. A transition that is not durably recorded is not complete.
+
+**Rollback contract.** If a crash or failure is detected at any phase before `VALIDATED`, the transaction MUST be rolled back: all files in `before` MUST be restored to their snapshot content. The Operation MUST be marked `REJECTED_ROLLED_BACK`. The transaction journal MUST then be removed.
+
+**Commit contract.** A transaction reaches `VALIDATED` only after independent validation passes (§60). A `VALIDATED` transaction MUST NOT be rolled back. The transaction journal MAY be removed after `VALIDATED` is durably written to lifecycle state.
+
+**Recovery contract.** On lifecycle start, if a transaction journal exists:
+- Phase `PREPARED` or `APPLYING`: roll back unconditionally.
+- Phase `APPLIED`: re-run independent validation; if it passes, commit; if it fails, roll back.
+- Phase `VALIDATED`: treat as already committed; do not re-apply.
+
+## Authority Resolution Mechanism
+
+Every proposed Operation MUST pass authority resolution before execution. Authority resolution consults the active Rule Ledger to determine whether the proposed scope and action are permitted.
+
+```
+PROPOSED OPERATION (scope, objective)
+  → load active rules from Rule Ledger
+  → check: scope within at least one active PERMISSION rule
+  → check: no active PROHIBITION rule applies to this scope/action
+  → check: action is consistent with active DIRECTIVE rules
+  → if all pass: AUTHORIZED → proceed to Transaction
+  → if any fail: DENIED → record Evidence(authority-resolution-denied) → block
+```
+
+**PERMISSION check contract.** An Operation MUST match at least one active PERMISSION rule whose scope includes the Operation's scope. A scope of `*` in a PERMISSION rule covers all scopes. If no matching PERMISSION rule exists, the Operation MUST be DENIED.
+
+**PROHIBITION check contract.** If any active PROHIBITION rule applies to the Operation's scope and the operation's content overlaps with the prohibition's statement, the Operation MUST be DENIED. A PROHIBITION MUST NOT be bypassed by a PERMISSION of equal or lower level.
+
+**L0 override contract.** No authority resolution path MAY authorize an Operation that would mutate, supersede, or deactivate a PURPOSE (L0) rule. Such an attempt MUST be DENIED unconditionally and recorded as Evidence.
+
+**Denial record contract.** Every DENIED Operation MUST produce an Evidence record of kind `authority-resolution-denied` with a human-readable reason. The Operation MUST NOT proceed silently.
+
+## Digest Computation
+
+Three distinct digest computations are used across the citizen schemas. All three MUST be deterministic: the same inputs MUST always produce the same digest.
+
+### Product Digest
+
+Used in: Checkpoint.digest, Change.state_before_digest, Change.state_after_digest.
+
+```
+Algorithm:
+  digest = SHA-256()
+  for each file_path in sorted(product_files):
+    digest.update(file_path.encode("utf-8"))
+    digest.update(file_content_bytes)
+  result = digest.hexdigest()
+```
+
+`product_files` MUST be the same set used by §61 Checkpoint. Sorting MUST be lexicographic on the relative file path string. An empty product file set MUST produce a deterministic digest of the empty input.
+
+### Rule Snapshot Digest
+
+Used in: Change.rule_snapshot_digest.
+
+```
+Algorithm:
+  active = [{"id": r.id, "kind": r.kind, "statement": r.statement}
+            for r in active_rules sorted by r.id]
+  payload = JSON(active, sort_keys=True, separators=(",", ":"))
+  result = SHA-256(payload.encode("utf-8")).hexdigest()
+```
+
+Serialisation MUST use no whitespace. Sorting MUST be lexicographic on `id`. This algorithm is fixed; an implementation MUST NOT vary the field set or sort order.
+
+### State Digest Consistency Contract
+
+`Change.state_after_digest` for change N MUST equal `Change.state_before_digest` for change N+1 in sequence, and MUST equal `Checkpoint.digest` for the `accepted-product-change` Checkpoint that records the same Operation. A divergence between any two of these three values for the same product state MUST be surfaced as a named integrity gap.
+
+## Value Trajectory Self-Correction Mechanism
+
+The Value Trajectory mechanism continuously measures whether the lifecycle is producing value faster, slower, or at a stable rate. When deceleration is detected below a threshold, it MUST trigger an autonomous self-correction injection.
+
+```
+ACCEPTED OPERATION
+  → record VelocityCheckpoint (value_rate = net_value_delta / elapsed_minutes)
+  → recompute AccelerationReport over rolling 100-checkpoint window
+  → if direction == "decelerating":
+      if value_amplification < 0.5 OR yield_rate < 0.4:
+        SEVERE DECELERATION → inject strategic reassessment Objective
+      else:
+        MODERATE DECELERATION → surface VELOCITY_DECLINING alert in vitals
+  → if yield_rate < 0.5 AND sample_size ≥ 4:
+      surface LOW_YIELD_RATE alert in vitals
+```
+
+**Injection contract.** When `self_correct_now` is true, URACE MUST inject a strategic reassessment Objective at the next safe lifecycle boundary. This Objective MUST have `scope: documentation`, `authority_basis: "value-deceleration-self-correction"`, and MUST appear in the Evidence log with kind `value-deceleration-self-correction`.
+
+**Alert surfacing contract.** All active alerts from the AccelerationReport MUST be surfaced in `urace vitals` output. URACE MUST NOT suppress deceleration alerts because the lifecycle is otherwise making forward progress.
+
+**Baseline contract.** Acceleration MUST NOT be computed until at least 2 checkpoints exist. Direction MUST NOT be labelled until at least 4 checkpoints exist. `AccelerationReport.status` MUST reflect this: `no_data` (0–1 checkpoints), `establishing_baseline` (2–3 checkpoints), `computed` (4+ checkpoints).
+
+---
+
 # 63. Concurrency
 
 Where multiple runtimes MAY operate:
