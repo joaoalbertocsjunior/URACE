@@ -33,6 +33,16 @@ A **Product** is whatever URACE improves: a project, service, process, research 
 
 An **Executor** is an AI agent, orchestrator, program or person that can inspect the Product, change it and run checks. You need one to bootstrap URACE; compatible Executors can then be added, removed, combined or compared. [OpenHands](https://github.com/OpenHands/OpenHands) and [Caveman](https://github.com/JuliusBrussee/caveman) are examples.
 
+## How You Stay in Control
+
+URACE keeps a **Rule Ledger** — a persistent, inspectable record of every rule governing what the system may, must, and must not do. Rules are organized into three immutability levels:
+
+- **L0 PURPOSE** — immutable; defines why the system exists
+- **L1 DIRECTIVE / PERMISSION / PROHIBITION** — durable; only you can add or change these
+- **L2 OBJECTIVE / POLICY** — operational; the lifecycle manages these within your delegated boundaries
+
+Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time without an Executor call.
+
 ## Get Running
 
 1. Give [`URACE.md`](URACE.md) to a capable Executor with access to your Product.
@@ -50,16 +60,21 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 Generated help lists the commands supported by your implementation.
 
 ```text
-urace check                 inspect lifecycle state
-urace vitals                inspect progress, cost and health
-urace autonomous            run persistent evolution
-urace help executor         learn how to inspect, attach or detach Executors
-urace help configuration    learn how to inspect or change configuration
-urace add-goal ...          queue a measurable goal
-urace update download ...   store a new version without changing the system
-urace update explain ...    review its local effects without changing files
-urace update apply ...      validate and activate the new version
-urace update resolve ...    resolve a blocked update conflict
+urace check                     inspect lifecycle state
+urace vitals                    inspect progress, cost and health
+urace autonomous                run persistent evolution
+urace help executor             learn how to inspect, attach or detach Executors
+urace help configuration        learn how to inspect or change configuration
+urace add-goal ...              queue a measurable goal
+urace intent add "…"            add a durable directive (what to pursue)
+urace constraint add "…"        add a hard constraint (what not to do)
+urace constraint add "…" --allow add an explicit permission (what is delegated)
+urace rules list                list all active governance rules
+urace rules conflicts           surface detected rule conflicts
+urace update download ...       store a new version without changing the system
+urace update explain ...        review its local effects without changing files
+urace update apply ...          validate and activate the new version
+urace update resolve ...        resolve a blocked update conflict
 ```
 
 You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Read-only commands (`check`, `vitals`, `commands`, `inbox list`, `goal list`, `change list`, and all `help` operations) load an atomic state snapshot and can run freely from a second terminal while `urace autonomous` owns the lifecycle. Mutating commands (`add-goal`, `update apply`, `configuration`, and similar) write to an atomic inbox and are applied exactly once at the next safe lifecycle boundary; they never conflict with each other or with an active autonomous run.

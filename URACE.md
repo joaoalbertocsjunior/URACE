@@ -2610,7 +2610,7 @@ Where durable wake registrations have been established under §67, `wakeState` M
 
 # 62a. Rule Ledger
 
-URACE MUST maintain a **Rule Ledger** — a persistent, inspectable, traceable record of every rule governing the lifecycle: what the system MAY do, MUST do, and MUST NOT do.
+URACE MUST maintain a **Rule Ledger** — a persistent, inspectable, traceable record of every rule governing the lifecycle: what the system MAY do, MUST do, and MUST NOT do. The Rule Ledger is durable state subject to the same persistence and integrity requirements as §62.
 
 ## Three Irreducible Concepts
 
@@ -2628,18 +2628,24 @@ Rules are grouped into three immutability levels:
 
 | Level | Kind | Meaning |
 |-------|------|---------|
-| L0 | **PURPOSE** | Immutable mission statement — the reason the system exists |
+| L0 | **PURPOSE** | Mission statement — the reason the system exists |
 | L1 | **DIRECTIVE** | Durable operator intent — what to pursue |
 | L1 | **PERMISSION** | Explicit delegation — what the system is authorised to do autonomously |
 | L1 | **PROHIBITION** | Hard constraint — what the system MUST NOT do |
 | L2 | **OBJECTIVE** | Operational goal with success measure — what to achieve next |
 | L2 | **POLICY** | Operational mode setting — how to operate |
 
-L0 rules are immutable. L1 rules require attributable operator action to change. L2 rules may be created, updated, or closed by the lifecycle within delegated authority.
+## Immutability Contracts
+
+**L0 (PURPOSE).** URACE MUST NOT modify, supersede, or deactivate a PURPOSE rule under any condition, including self-evolution. A PURPOSE rule is immutable for the lifetime of the lifecycle. An attempt to supersede or deactivate a PURPOSE rule MUST be rejected and surfaced as a named violation.
+
+**L1 (DIRECTIVE, PERMISSION, PROHIBITION).** URACE MUST NOT add, supersede, or deactivate an L1 rule without an attributable operator input. No autonomous or self-evolution path MAY produce a net change to the active L1 rule set without that attribution. A self-evolution operation that would require an L1 change MUST be blocked and surfaced as a named blocker requiring operator action.
+
+**L2 (OBJECTIVE, POLICY).** URACE MAY create, update, close, or supersede L2 rules while operating within delegated authority under §11 and §12. L2 mutations MUST be recorded in lifecycle Evidence with attribution.
 
 ## Relationships
 
-Rules form a DAG via five relationship types:
+Rules form a directed acyclic graph (DAG) via five relationship types:
 
 | Type | Meaning |
 |------|---------|
@@ -2649,37 +2655,55 @@ Rules form a DAG via five relationship types:
 | `superseded_by` | This rule has been replaced by a newer version |
 | `conflicts_with` | This rule overlaps or contradicts another |
 
+Cycles in the derivation or governance graph are not permitted. An implementation that would introduce a derivation cycle MUST reject the new rule and surface the cycle as a named error.
+
+## Conflict Contract
+
+URACE MUST detect and surface conflicts between active rules. A conflict exists when a PERMISSION and a PROHIBITION overlap in scope and subject with sufficient specificity to produce contradictory governing conditions. Detected conflicts MUST appear in the inspection output as named conditions; they MUST NOT be silently tolerated or used as justification to bypass either conflicting rule. An operation governed by conflicting rules MUST be held pending operator resolution unless one rule explicitly supersedes the other via a `superseded_by` relationship.
+
 ## System-Inferred Rules
 
-URACE MAY infer rules from existing rules (e.g. an explicit PROHIBITION implies a scoped PROHIBITION). Inferred rules:
+URACE MAY infer rules from existing rules (e.g. an explicit PROHIBITION in a broad scope implies a scoped PROHIBITION for a specific subject). Inferred rules:
 
-- carry `derivation: SYSTEM_INFERRED` and a `confidence` score (0.0–1.0)
-- are **advisory** until confirmed (confidence ≥ `INFER_SURFACE` surfaces for inspection; ≥ `INFER_BLOCKING` may influence eligibility)
-- carry a traceable `derived_from` link to the source rule(s)
-- decay if the source rules are deactivated
+- MUST carry `derivation: SYSTEM_INFERRED` and a `confidence` score (0.0–1.0)
+- MUST NOT block, gate, or reject operations until their confidence meets the `INFER_BLOCKING` threshold — they are strictly advisory below that threshold
+- MUST carry a traceable `derived_from` link to the source rule or rules
+- MUST decay when the source rule is deactivated or superseded; an inferred rule MUST NOT remain active after its entire derivation chain is deactivated
+- At `INFER_BLOCKING` confidence, MUST carry a complete derivation chain traceable to at least one explicit L1 rule
+
+URACE MUST NOT promote a SYSTEM_INFERRED rule to L1 status without explicit operator confirmation supplied via authoritative input.
 
 ## Temporal Change Binding
 
 When an operation is **ACCEPTED**, URACE MUST:
-1. compute a snapshot digest (SHA-256 of the active rule set at that moment)
-2. record the list of governing rule IDs alongside the accepted change
+
+1. compute a **snapshot digest** — the SHA-256 of the lexicographically sorted active rule set at the moment of acceptance
+2. record the list of **governing rule IDs** alongside the accepted change
+
+These two records MUST be stored atomically with the accepted change and MUST NOT be modified after acceptance. The snapshot digest MUST be computable from the current active rule set at any point without reference to prior digests.
 
 This allows any future inspection to answer: *"what rules were active and governing when this change was made?"*
 
 ```
 ACCEPTED OPERATION
-  → active rules snapshot digest
+  → snapshot digest (SHA-256 of active rule set)
   → governing rule IDs
-  → stored in change_bindings
+  → stored atomically in change_bindings
 ```
+
+If the Rule Ledger is unavailable at acceptance time, URACE MUST surface this as a named integrity gap and MUST NOT silently accept a change without its binding.
+
+## Append-Only Invariant
+
+The Rule Ledger MUST be append-only with supersession. Rules MUST NOT be deleted from the Ledger. A rule that is no longer active MUST be marked deactivated or superseded with an attributed timestamp and reason, preserving the full historical chain. Any query against the Ledger MUST be able to reconstruct the complete active rule set at any prior accepted change by replaying the binding record.
 
 ## Bootstrap Seeding
 
-At `init`, the Rule Ledger is seeded from the bootstrap configuration:
+At `init`, URACE MUST seed the Rule Ledger from the bootstrap configuration before persisting initial state. The seeding mapping is:
 
 | Config field | Rule kind |
 |---|---|
-| `intent.purpose` | PURPOSE |
+| `intent.purpose` | PURPOSE (L0) |
 | `intent.retained` | PROHIBITION (L1) |
 | `authority.delegated` | PERMISSION (L1) |
 | `authority.reserved` | PROHIBITION (L1) |
@@ -2687,7 +2711,7 @@ At `init`, the Rule Ledger is seeded from the bootstrap configuration:
 | `self_evolution_policy` | POLICY (L2) |
 | `external_metrics.mode` | POLICY (L2) |
 
-The Ledger becomes the single source of truth; bootstrap config fields are not re-read per cycle.
+After seeding, the Ledger MUST be the single source of truth for active governance rules. Bootstrap config fields MUST NOT be re-read per cycle as a substitute for querying the Ledger. A lifecycle that lacks a Rule Ledger in durable state after `init` MUST surface this as a named integrity gap on next load.
 
 ## User Interface
 
@@ -2695,17 +2719,20 @@ Three commands expose the Rule Ledger:
 
 | Command | Effect |
 |---------|--------|
-| `urace intent add "…"` | Add a DIRECTIVE rule |
+| `urace intent add "…"` | Add a DIRECTIVE rule (queued; applied at next safe boundary) |
 | `urace intent list` | List active DIRECTIVE rules |
+| `urace intent supersede "…" --id <id>` | Replace an existing DIRECTIVE with a new one |
+| `urace intent deactivate --id <id>` | Deactivate a DIRECTIVE rule |
 | `urace constraint add "…"` | Add a PROHIBITION rule |
 | `urace constraint add "…" --allow` | Add a PERMISSION rule |
+| `urace constraint deactivate --id <id>` | Deactivate a constraint rule |
 | `urace rules list` | List all active rules |
 | `urace rules inspect <id>` | Full rule record with derivation chain |
 | `urace rules graph` | Full rule graph with relationships |
 | `urace rules conflicts` | Surface detected rule conflicts |
-| `urace rules changes <id>` | List changes governed by a rule |
+| `urace rules changes <id>` | List accepted changes governed by a rule |
 
-The Ledger is append-only with supersession: rules are never deleted, only deactivated or superseded, preserving the full historical chain.
+`intent` and `constraint` mutations are queued inputs applied at the next safe lifecycle boundary under the same atomicity guarantees as §62. They MUST NOT be applied mid-cycle.
 
 ---
 
