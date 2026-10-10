@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2025-10-10-r1**
+**Specification version: 2025-10-10-r3**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -1874,7 +1874,7 @@ DecisionRecord {
 }
 ```
 
-This records decision basis, not hidden chain-of-thought.
+This records decision basis, not hidden chain-of-thought. The formal canonical schema for DecisionRecord — including all field types, required/optional status, invariant contracts and provenance lifecycle — is defined in §62d. The loose notation above is a navigational reference; the §62d definition is authoritative for any implementation.
 
 When Evidence referenced by a Decision Record as primary justification is later found to have been fabricated, provably incorrect, or formally retracted by its source with material bearing on the decision outcome, URACE MUST flag the affected Decision Record as provenance-revised, MUST preserve the original record intact with an attributed revision notice, and MUST trigger proportionate revalidation of any active Objectives, Plans or Operations that relied on that Evidence as primary justification. A provenance-revised Decision Record MUST NOT silently continue as current authorization for ongoing uncommitted work; it MUST surface in the inspection output with an identified revalidation requirement. Where the affected Decision Record authorized an already-committed externally observable effect, §53 Effect Reconciliation governs the response. Where revalidation cannot proceed due to temporarily unavailable capability, the dependent work MUST be preserved as explicitly blocked on revalidation-pending state rather than abandoned or silently continued.
 
@@ -4109,7 +4109,7 @@ FailureRecord {
 }
 ```
 
-**Deduplication contract.** A FailureRecord with the same stage and error signature MUST be updated (`count`, `last_at`) rather than appended as a new record. Used in: ExecutorState.failures.
+**Deduplication contract.** A FailureRecord with the same stage and error signature MUST be updated (`count`, `last_at`) rather than appended as a new record. **Growth contract.** Deduplication bounds growth by fault identity; when failure diversity is high (many distinct `stage` + `error` combinations) the list may still grow substantially. An implementation MAY define a RetentionPolicy for this field. If no RetentionPolicy exists and the list exceeds 500 entries, the lifecycle MUST emit a `retention-policy-violated` WARNING IntegrityGap. Used in: ExecutorState.failures.
 
 ## ChangeHistoryEntry
 
@@ -4125,7 +4125,7 @@ ChangeHistoryEntry {
 }
 ```
 
-**Append-only contract.** ChangeHistoryEntry lists MUST NOT be modified or compacted after written. Used in: MetricSystem.change_history, EvaluationSystem.change_history.
+**Append-only contract.** ChangeHistoryEntry lists carry `compaction_mode: PROHIBITED`. They MUST NOT be modified, compacted, summarized, or replaced with CompactionSummary entries. Where storage pressure requires relief, entries MAY be transferred to an ARCHIVE file via a `urace compact` command using ARCHIVE mode only; the entries MUST remain intact in the archive file and a CompactionSummary with `is_decompactable: true` MUST be placed in the live list. ROLLING_EVICTION of ChangeHistoryEntry records is permanently prohibited regardless of any RetentionPolicy. Used in: MetricSystem.change_history, EvaluationSystem.change_history.
 
 ## FaultDescriptor
 
@@ -4216,7 +4216,7 @@ ObservationRecord {
 }
 ```
 
-Used in: ExternalMetricState.latest. Uses canonical: TemporalFields (at as created_at).
+**Retention contract.** `ExternalMetricState.latest` is a rolling observation window. Implementations MUST bound its growth: the default ceiling is 1000 entries under ROLLING_EVICTION mode. The ceiling MAY be reconfigured via a RetentionPolicy, and the mode MAY be changed to ARCHIVE when observation replay is required. Exceeding the ceiling without a compaction event MUST emit a `retention-policy-violated` WARNING IntegrityGap. Used in: ExternalMetricState.latest. Uses canonical: TemporalFields (at as created_at).
 
 ## ProviderStatus
 
@@ -4242,7 +4242,7 @@ ProviderStatus {
 }
 ```
 
-**Accumulation contract.** ProviderStatus is NOT recreated on each probe; it is updated in place. Fields absent before a probe are not retroactively populated. **Budget window contract.** `calls_24h` and `calls_30d` MUST be computed from `attempt_history` by counting entries within the respective rolling window, not from a stored counter, to survive restarts correctly. Used in: ExecutorState.provider_pool (dict values).
+**Accumulation contract.** ProviderStatus is NOT recreated on each probe; it is updated in place. Fields absent before a probe are not retroactively populated. **Budget window contract.** `calls_24h` and `calls_30d` MUST be computed from `attempt_history` by counting entries within the respective rolling window, not from a stored counter, to survive restarts correctly. **Rolling-window contract.** `attempt_history` entries older than `max(limit_30d_window + 5 days, 35 days)` are eligible for integral rolling eviction at each probe cycle. An implementation MUST evict eligible entries in-place without emitting a CompactionEvent or CompactionSummary, as this is an integral part of the rolling-window computation contract and not a policy-triggered compaction. Used in: ExecutorState.provider_pool (dict values).
 
 ## WakeCondition
 
@@ -4256,6 +4256,161 @@ WakeCondition {
 ```
 
 For `SCHEDULED` kind registrations, `scheduled_at` is the only required field. For `TRIGGERED` and `CONDITIONAL` kinds, implementations MAY extend WakeCondition with additional observable criteria. `scheduled_at` MUST always be present regardless of kind and is the field used by the scheduler. Used in: WakeRegistration.condition.
+
+## DecisionRecord
+
+A structured record of the complete basis for a consequential lifecycle decision, enabling attributability, revalidation and provenance tracking as required by the Decision-integrity invariant (line 62). This is the authoritative canonical schema referenced by §45.
+
+```
+DecisionRecord {
+  id                    REQUIRED  Identifier; prefix "dec"
+  kind                  REQUIRED  OBJECTIVE_SELECTION | OPERATION_AUTHORIZATION |
+                                  CHECKPOINT_ACCEPTANCE | RULE_CREATION |
+                                  NAVIGATION_ASSESSMENT | AUTHORITY_EXERCISE |
+                                  DESTINATION_EVOLUTION
+  subject               REQUIRED  string; brief description of what was decided
+  outcome               REQUIRED  string; the decision result (e.g. "selected", "authorized", "accepted")
+  authority_basis       OPTIONAL  string; the Rule id or Authority clause that authorized this decision
+  governing_intent_ref  REQUIRED  string; Intent version id or snapshot reference at decision time
+  state_digest          REQUIRED  DigestValue; SHA-256 of URACE state at the moment of decision
+  evidence_refs         OPTIONAL  list[string]; Evidence record ids that were determinative
+  constraints           OPTIONAL  list[string]; active constraint ids or descriptions that shaped this
+  assumptions           OPTIONAL  list[string]; explicit assumptions relied upon; each MUST be stated
+                                  as a positive belief, not as absence of evidence
+  uncertainty           OPTIONAL  UnitFloat; assessed decision uncertainty (0.0 = certain, 1.0 = maximal)
+  objective_ref         OPTIONAL  string; Objective id when this decision concerns an Objective
+  plan_ref              OPTIONAL  string; Plan id when this decision concerns a Plan
+  operation_ref         OPTIONAL  string; Operation id when this decision concerns an Operation
+  alternatives          OPTIONAL  list[AlternativeConsidered]; paths that were considered and rejected
+  justification_summary OPTIONAL  string; concise human-readable justification; MUST NOT expose
+                                  hidden chain-of-thought; is the reviewable basis, not a
+                                  post-hoc rationalization
+  executor              REQUIRED  ExecutorAttribution; the Executor that reasoned this decision
+  provenance_status     REQUIRED  CURRENT | PROVENANCE_REVISED | SUPERSEDED
+  revision_notice       OPTIONAL  string; attributed revision notice; REQUIRED when provenance_status
+                                  is PROVENANCE_REVISED or SUPERSEDED; absent when CURRENT
+  validity_conditions   OPTIONAL  list[string]; conditions under which this decision remains valid;
+                                  a material change that falsifies any listed condition MUST trigger
+                                  proportionate revalidation
+  prior_decision_refs   OPTIONAL  list[string]; DecisionRecord ids whose reasoning this record
+                                  extends, depends upon, or revises; enables reasoning chain traversal
+  completeness          OPTIONAL  UnitFloat; subjective completeness of the justification
+                                  (0.0 = minimal viable justification, 1.0 = exhaustive);
+                                  advisory only — not a quality gate unless policy sets one
+  reasoning_steps       OPTIONAL  list[ReasoningStep]; ordered structured reasoning trail that
+                                  produced the outcome; MUST NOT expose hidden chain-of-thought;
+                                  each step is the reviewable basis, not reasoning detail
+  outcome_feedback      OPTIONAL  OutcomeFeedback; post-decision observation once outcome is known;
+                                  absent until outcome is observable
+  decided_at            REQUIRED  timestamp
+}
+```
+
+**Durable contract.** A DecisionRecord for a consequential decision MUST be written before or coincident with the operation it authorizes; a record written retroactively to rationalize an already-committed effect does not satisfy the Decision-integrity invariant. **Immutability contract.** A DecisionRecord MUST NOT be modified after `provenance_status: CURRENT` is established. A provenance revision MUST add `revision_notice` and change `provenance_status`; the original fields MUST remain intact. **Provenance-revised contract.** A provenance-revised record MUST surface in `urace check` output with an identified revalidation requirement for any active Objectives, Plans or Operations it authorized. **Kind contract.** `kind` MUST accurately reflect the lifecycle action this record authorizes. Misdeclaring kind to bypass applicable Authority checks is a Ledger integrity violation. **Assumptions positive-statement contract.** Each assumption MUST assert a concrete belief ("the target API rate limit is 1000 req/min") not an absence of evidence. Absence-of-evidence assumptions may expire without triggering revalidation; positive belief assumptions do not. **Reasoning-chain contract.** `prior_decision_refs` MUST reference only existing DecisionRecord ids; a dangling reference is a Ledger integrity violation. A cycle in the reasoning chain (A → B → A) MUST be surfaced as a WARNING IntegrityGap. **Outcome-feedback contract.** `outcome_feedback` MUST NOT be written in the same operation that creates the record; it is populated by a separate subsequent update after the outcome is observable. **Retention.** DecisionRecord lists are governed by Compaction and Retention (§62f): default ceiling 2000 entries under ARCHIVE mode.
+
+Used in: Objective (on selection), Operation (on authorization), Checkpoint (on acceptance), and any lifecycle action subject to the Decision-integrity invariant. Uses canonical: Identifier (id), DigestValue (state_digest), UnitFloat (uncertainty, completeness), ExecutorAttribution (executor), AlternativeConsidered (alternatives entries), ReasoningStep (reasoning_steps entries), OutcomeFeedback (outcome_feedback), TemporalFields (decided_at as created_at). Cross-reference: §62g Justification System documents reasoning-chain traversal and `urace why`.
+
+## AlternativeConsidered
+
+A structured record of a decision path that was considered and rejected. Used within DecisionRecord to make the decision reasoning auditable and non-arbitrary.
+
+```
+AlternativeConsidered {
+  description   REQUIRED  string; brief description of the alternative path or option
+  rejected_why  REQUIRED  string; specific, stated reason for rejection; MUST NOT be circular
+                          (e.g. "not this because we chose the other" is not a valid reason);
+                          MUST identify a specific property that is inadequate given current
+                          Authority, Intent, Evidence, or constraints
+  evidence_refs OPTIONAL  list[string]; Evidence record ids that informed or drove the rejection
+}
+```
+
+**Non-arbitrariness contract.** `rejected_why` MUST contain a falsifiable claim about the alternative. A circular reason or preference statement without basis does not satisfy this contract and MUST be flagged as a Ledger integrity violation on load. Used in: DecisionRecord.alternatives entries.
+
+## ReasoningStep
+
+A single structured step in the ordered reasoning trail that produced a DecisionRecord outcome. Used to make multi-step reasoning auditable, traversable, and machine-queryable without requiring full decompaction or Executor re-invocation.
+
+```
+ReasoningStep {
+  step_index   REQUIRED  int ≥ 0; zero-based position in the ordered trail
+  kind         REQUIRED  OBSERVATION | INFERENCE | CONSTRAINT_CHECK | AUTHORITY_CHECK |
+                         ALTERNATIVE_EVALUATION | SYNTHESIS
+  description  REQUIRED  string; the claim, inference, or check performed at this step;
+                          MUST be stated as a positive factual claim, not raw reasoning narrative
+  evidence_ref OPTIONAL  string; Evidence record id that grounds this step, if any
+  outcome      REQUIRED  PASS | FAIL | INCONCLUSIVE; result of this step's evaluation
+  detail       OPTIONAL  string; additional machine-readable detail; MAY be omitted for brevity
+}
+```
+
+**Step integrity contract.** `step_index` MUST be unique within a DecisionRecord's `reasoning_steps` list and MUST form a contiguous sequence from 0 to N−1 with no gaps. **No-narrative contract.** `description` and `detail` MUST NOT expose hidden chain-of-thought; they are the reviewable basis for a step, not reasoning detail. A step that references prior in-process memory not present in durable state violates the stateless-resumable contract (§75). **Kind contract.** `kind` MUST accurately reflect the logical operation performed at this step. Used in: DecisionRecord.reasoning_steps entries.
+
+## OutcomeFeedback
+
+A post-decision observation record that closes the reasoning loop by recording whether the outcome materialized as expected. Written by the lifecycle controller once the outcome of a DecisionRecord is observable, not at decision time.
+
+```
+OutcomeFeedback {
+  observed_at       REQUIRED  timestamp; when the outcome was observed
+  materialized      REQUIRED  bool; true = outcome matches decision prediction; false = diverged
+  divergence_note   OPTIONAL  string; if not materialized, a falsifiable description of how outcome
+                               differed from prediction; REQUIRED when materialized is false
+  evidence_ref      OPTIONAL  string; Evidence record id that substantiates the observation
+  triggers_revision REQUIRED  bool; true = this feedback warrants a provenance revision of the
+                               DecisionRecord; lifecycle controller MUST flag PROVENANCE_REVISED
+                               when true and the record is still CURRENT
+}
+```
+
+**Immutability contract.** Once written, an OutcomeFeedback MUST NOT be modified; a revised assessment MUST be recorded as a provenance revision of the DecisionRecord itself, not an in-place update of OutcomeFeedback. **Causal contract.** `observed_at` MUST be after `DecisionRecord.decided_at`; an OutcomeFeedback with `observed_at` ≤ `decided_at` is a Ledger integrity violation. **Auto-revision contract.** When `triggers_revision` is true, the lifecycle controller MUST set `provenance_status: PROVENANCE_REVISED` on the associated DecisionRecord and MUST add a `revision_notice` referencing the OutcomeFeedback observation. Used in: DecisionRecord.outcome_feedback. Uses canonical: TemporalFields (observed_at as created_at).
+
+## RetentionPolicy
+
+A configurable policy governing maximum growth and compaction eligibility for an accumulating list field in URACE persistent state. Establishes the authorization for policy-triggered compaction (§62f).
+
+```
+RetentionPolicy {
+  id               REQUIRED  Identifier; prefix "rtp"
+  target_field     REQUIRED  string; dot-path of the governed list field
+                             (e.g. "executor_state.failures", "external_metric_state.latest")
+  max_entries      OPTIONAL  int ≥ 1; list length ceiling; entries beyond this are eligible for
+                             compaction at the next safe lifecycle boundary
+  max_age_days     OPTIONAL  float > 0; entries older than this duration are eligible for compaction
+  compaction_mode  REQUIRED  PROHIBITED | ARCHIVE | ROLLING_EVICTION
+  archive_subpath  OPTIONAL  string; relative path under state_path for the archive file;
+                             REQUIRED when compaction_mode is ARCHIVE; absent otherwise
+}
+```
+
+**Mode semantics.** `PROHIBITED`: no compaction of any kind is permitted; any operation that would compact this field MUST be rejected as a policy violation. `ARCHIVE`: eligible records are moved to `archive_subpath` intact and replaced in the live list by a CompactionSummary with `is_decompactable: true`; decompaction restores originals. This is the **lossless-reversible** mode. `ROLLING_EVICTION`: eligible records are discarded without archive; MUST be used only for fields whose individual historical values have no residual analytical value (e.g. raw timestamps outside a budget window); decompaction is impossible.
+
+**Minimum-trigger contract.** At least one of `max_entries` or `max_age_days` MUST be present. A RetentionPolicy with neither field is structurally invalid. **Override contract.** A RetentionPolicy MUST NOT change the mode of a field whose schema defines `compaction_mode: PROHIBITED`. **Establishment contract.** A RetentionPolicy MUST be established through an attributable operator input during bootstrap or via `urace govern`; it MUST NOT be created autonomously. Uses canonical: Identifier (id).
+
+## CompactionSummary
+
+A structured in-place replacement for a segment of compacted records within a governed list field. Preserves a cryptographic commitment to the original records and a reference to the archive, enabling lossless decompaction when the archive is present.
+
+```
+CompactionSummary {
+  compaction_event_id  REQUIRED  Identifier; the CompactionEvent (§62e) that produced this entry
+  record_count         REQUIRED  int ≥ 0; number of original records this entry represents
+  time_range           REQUIRED  {from: timestamp, to: timestamp}; temporal span of compacted records
+  original_digest      REQUIRED  DigestValue; SHA-256 of the canonical serialization of the originals
+  is_decompactable     REQUIRED  bool; true = originals are in the archive and restorable via
+                                 urace decompact <compaction_event_id>; false = ROLLING_EVICTION
+  record_ids           OPTIONAL  list[string]; ids of the original records in their original order;
+                                 enables O(1) existence-check and single-record lookup without
+                                 full decompaction; MUST be populated for ARCHIVE-mode compactions
+                                 unless the records have no id field
+  kinds                OPTIONAL  dict[string → list[string]]; map of record kind (or schema type)
+                                 to list of matching record ids; enables type-indexed scan without
+                                 decompaction; keys MUST be from the governed schema's kind enum
+  summary_text         OPTIONAL  string; human-readable description of the compacted period; advisory
+}
+```
+
+**Integrity contract.** `original_digest` MUST be computed before any records are removed. A CompactionSummary whose `original_digest` does not match the archive is a `compaction-manifest-divergence` BLOCKING IntegrityGap. **Position contract.** A CompactionSummary MUST be placed at the position in the list where the first of the compacted records appeared; compacted records are then removed. The relative ordering of live (non-compacted) records MUST NOT change. **Prohibited-field contract.** A CompactionSummary MUST NOT be inserted into a field with `compaction_mode: PROHIBITED`. **Aggregation contract.** Any query or inspection command that aggregates over a governed list MUST account for CompactionSummary entries: `record_count` and `time_range` MUST be used for aggregate statistics, not skipped or treated as zero. **Lookup contract.** `record_ids` and `kinds` MUST be populated for ARCHIVE-mode compactions on governed lists whose records carry an `id` field. An implementation that omits them on ARCHIVE-mode compaction is non-conformant for the purposes of incremental decompaction. Uses canonical: Identifier (compaction_event_id), DigestValue (original_digest), TemporalFields (time_range timestamps).
 
 ---
 
@@ -4346,8 +4501,258 @@ Uses canonical: Identifier, TemporalFields (at as created_at, resolved_at).
 | `repair-exhausted` | BLOCKING | REPAIRING hit declared attempt ceiling |
 | `ownership-boundary-indeterminate` | BLOCKING | Lock liveness cannot be established |
 | `state-digest-divergence` | BLOCKING | Checkpoint/Change digest chain is broken |
+| `compaction-manifest-divergence` | BLOCKING | CompactionManifest version or digest inconsistency, or ARCHIVE-mode archive file missing or unreadable |
+| `retention-policy-violated` | WARNING | Governed list exceeds configured or default ceiling without a CompactionEvent |
+| `cognitive-resume-stale` | WARNING | CognitiveResumeContext.state_digest does not match current state on Executor initialization |
+| `decision-record-provenance-revised` | WARNING | Active Objectives or Operations rely on a DecisionRecord with provenance_status = PROVENANCE_REVISED |
+| `decision-reasoning-cycle`           | WARNING | A cycle detected in DecisionRecord.prior_decision_refs chain (A → … → A) |
 
 **Resolution contract.** An IntegrityGap in `active: true` state MUST remain in the State Document until an explicit resolution event clears it. Clearing MUST set `active: false` and `resolved_at`. Autonomous inference of resolution without an attributable event MUST NOT be used to clear a BLOCKING gap.
+
+## CompactionEvent
+
+An infrastructure record documenting a single compaction act on an accumulating list field. Written by the lifecycle controller and appended to the CompactionManifest. CompactionEvent records form the authoritative audit trail for all compaction that has occurred in the state space.
+
+```
+CompactionEvent {
+  id                   REQUIRED  Identifier; prefix "cmp"
+  target_state_path    REQUIRED  string; relative path of the state file being compacted
+  target_field         REQUIRED  string; dot-path of the list field compacted (e.g. "failures")
+  compacted_at         REQUIRED  timestamp; when compaction was executed
+  record_count_before  REQUIRED  int ≥ 0; count of entries in the field before compaction
+  record_count_after   REQUIRED  int ≥ 0; count of entries after (includes any CompactionSummary)
+  compaction_mode      REQUIRED  ARCHIVE | ROLLING_EVICTION
+  archive_path         OPTIONAL  string; relative path to the archive file; REQUIRED when
+                                 compaction_mode is ARCHIVE; absent when ROLLING_EVICTION
+  original_digest      REQUIRED  DigestValue; SHA-256 of the canonical serialization of the records
+                                 removed; MUST match the corresponding CompactionSummary.original_digest
+  authorized_by        REQUIRED  string; operator Input id for explicit compact; or
+                                 "retention_policy:{RetentionPolicy.id}" for policy-triggered
+  executor             OPTIONAL  ExecutorAttribution; present only if an Executor assisted with
+                                 summarization during this compaction (e.g. to produce summary_text)
+}
+```
+
+Uses canonical: Identifier (id), DigestValue (original_digest), ExecutorAttribution (executor), TemporalFields (compacted_at as created_at).
+
+**Append-only contract.** CompactionEvent records MUST NOT be removed from the CompactionManifest after written. The manifest is the durable audit log of all compaction acts. **Digest-match contract.** `original_digest` in a CompactionEvent MUST equal `original_digest` in the corresponding CompactionSummary in the live list. A mismatch is a `compaction-manifest-divergence` BLOCKING IntegrityGap. **Archive durability contract.** When `compaction_mode` is ARCHIVE, the archive file MUST be written and fsynced before the CompactionEvent is appended to the manifest, and the manifest MUST be updated before the live list is mutated. A process interrupted between archive write and list mutation MUST be recovered via the manifest: the lifecycle detects the orphan archive and restores the list from it rather than treating the archive as garbage.
+
+## CompactionManifest
+
+The authoritative on-disk registry of all CompactionEvents that have occurred in this lifecycle state space. Stored at `{state_path}/compaction-manifest.json`. Loaded at cycle start for integrity verification.
+
+```
+CompactionManifest {
+  id          REQUIRED  Identifier; prefix "man"
+  version     REQUIRED  int ≥ 1; monotonically incremented on each event appended
+  updated_at  REQUIRED  timestamp
+  events      REQUIRED  list[CompactionEvent]; append-only ordered log of all compaction acts
+}
+```
+
+Uses canonical: Identifier (id), TemporalFields (updated_at).
+
+**Initialization contract.** A lifecycle state space that has never been compacted MUST NOT have a manifest file; the file's absence means no compaction has occurred. Creating an empty manifest proactively is not permitted. **Append-only contract.** The `events` list MUST NOT be modified; only appended. Modifying, removing, or reordering a CompactionEvent is a Ledger integrity violation. **Version contract.** `version` MUST equal `len(events)`; a manifest where this invariant is broken is corrupt and MUST be surfaced as a `compaction-manifest-divergence` BLOCKING IntegrityGap. **Startup verification contract.** At cycle start, if a manifest exists, the lifecycle MUST verify that each ARCHIVE-mode CompactionEvent has an accessible archive file at `archive_path`. A missing archive is a `compaction-manifest-divergence` BLOCKING IntegrityGap unless all CompactionSummary entries governed by that event have `is_decompactable: false`.
+
+## CognitiveResumeContext
+
+The minimum structured context required to resume a lifecycle cycle after an Executor cognitive reset — the loss of an Executor's working context through replacement, context-window eviction, restart, or any mechanism that discards in-process reasoning without modifying durable state. Written by the lifecycle controller at each cycle boundary and injected as structured input to any Executor that is initialized or reinitialized.
+
+```
+CognitiveResumeContext {
+  id                   REQUIRED  Identifier; prefix "crc"
+  generated_at         REQUIRED  timestamp; when this context was written
+  cycle_phase          REQUIRED  ASSESSING | PLANNING | EXECUTING | VALIDATING | DORMANT;
+                                 the lifecycle phase at time of generation
+  active_objective_id  OPTIONAL  string | null; Objective id in progress; null if none
+  active_operation_id  OPTIONAL  string | null; Operation id in progress; null if none
+  pending_transaction  OPTIONAL  Identifier | null; Transaction id awaiting recovery; null if none
+  pending_validations  REQUIRED  list[string]; Observation ids currently awaiting validation
+  blocking_gaps        REQUIRED  list[string]; IntegrityGap ids with severity BLOCKING and active=true
+  state_digest         REQUIRED  DigestValue; SHA-256 of the full URACE state document at generation
+  resume_summary       OPTIONAL  string; executor-agnostic natural-language summary of current
+                                 lifecycle context; MUST NOT expose hidden chain-of-thought;
+                                 MUST be the reviewable basis for resumption, not reasoning detail
+}
+```
+
+Uses canonical: Identifier (id, pending_transaction), DigestValue (state_digest), TemporalFields (generated_at as created_at).
+
+**Generation contract.** The lifecycle controller MUST generate a fresh CognitiveResumeContext at every cycle boundary: assessment start, planning start, execution start, validation complete, dormancy entry. A CRC whose `state_digest` does not match current state MUST NOT be injected; doing so is a `cognitive-resume-stale` WARNING IntegrityGap. **Injection contract.** The lifecycle controller MUST inject the current CRC alongside the state document as structured input whenever an Executor is initialized or reinitialized. The Executor MUST NOT be required to infer current lifecycle phase from the state document alone. **Stateless-resumable contract.** An Executor invocation MUST be resumable from the injected CRC plus current durable state without any in-process memory from a prior invocation. An Executor that requires recapitulation of prior reasoning not present in durable state violates this contract and is not replaceable per §75. **No-duplication contract.** The CRC MUST NOT substitute for a DecisionRecord. Reasoning behind a decision MUST still be written to a DecisionRecord (§62d); the CRC is a reconstitution aid, not an authorization record.
+
+## CompactionIndex
+
+A per-archive searchable index persisted as `{archive_path}.idx.json`. Enables O(1) record lookup by id, kind, and time-bucket without reading or parsing the full archive file. Written atomically alongside the archive at compaction time and updated atomically at decompaction time or amendment time.
+
+```
+CompactionIndex {
+  compaction_event_id  REQUIRED  Identifier; the CompactionEvent this index serves
+  archive_path         REQUIRED  string; absolute path to the archive file indexed
+  generated_at         REQUIRED  timestamp; when the index was last written or updated
+  record_count         REQUIRED  int ≥ 0; must match the archive's record count
+  id_to_offset         REQUIRED  dict[string → int]; map of record id to byte offset in archive
+                                  JSON array; enables O(1) seek to a single record
+  kind_to_ids          REQUIRED  dict[string → list[string]]; map of kind to list of ids in archive
+  time_buckets         OPTIONAL  dict[string → list[string]]; map of ISO-date ("YYYY-MM") to ids;
+                                 enables time-range narrowing without full scan
+}
+```
+
+**Atomicity contract.** The index MUST be written to a `.tmp` file and renamed atomically after the archive is fsynced. An index that diverges from its archive (different `record_count`, stale `generated_at`) is advisory-stale and MUST be regenerated before any incremental decompaction. **Read-optional contract.** The index is a performance aid, not a correctness prerequisite. All operations that use it MUST fall back to a sequential archive scan if the index is absent or stale. **No-independent-state contract.** The index MUST NOT be the authoritative source for any lifecycle decision; the archive file and CompactionManifest are authoritative. Uses canonical: Identifier (compaction_event_id), TemporalFields (generated_at as created_at).
+
+## ArchiveAmendment
+
+A single amendment record appended to `{archive_path}.amendments.jsonl` when a record in an archive is modified in place (e.g., flagging a DecisionRecord as PROVENANCE_REVISED) without a full decompaction round-trip. The amendment log is the only permitted mechanism for modifying archived records under ARCHIVE mode.
+
+```
+ArchiveAmendment {
+  id              REQUIRED  Identifier; prefix "amd"
+  archive_path    REQUIRED  string; absolute path to the amended archive file
+  record_id       REQUIRED  string; id of the record within the archive that was amended
+  amended_at      REQUIRED  timestamp; when this amendment was written
+  amendment_kind  REQUIRED  PROVENANCE_REVISED | SUPERSEDED | CUSTOM
+  amendment_note  REQUIRED  string; human-readable description of what changed and why
+  authorized_by   REQUIRED  string; inbox Input id or "operator:{id}" of who authorized this
+  before_digest   REQUIRED  DigestValue; SHA-256 of the record's canonical JSON before amendment
+  after_digest    REQUIRED  DigestValue; SHA-256 of the record's canonical JSON after amendment
+}
+```
+
+**Append-only contract.** Amendment records MUST NOT be removed or modified after being written. The amendment log is an audit trail. **No-CompactionSummary-mutation contract.** An ArchiveAmendment modifies a record within an archive file; it does NOT modify the CompactionSummary in the live list, the CompactionEvent in the manifest, or the `original_digest`. The `original_digest` remains a commitment to the pre-compaction snapshot, not the post-amendment state. **Amendment vs decompaction contract.** ArchiveAmendment is appropriate for lightweight status changes (e.g., provenance revision). For structural changes that would alter `original_digest` verification, full decompaction (`urace decompact`) is required. Uses canonical: Identifier (id), DigestValue (before_digest, after_digest), TemporalFields (amended_at as created_at).
+
+---
+
+# 62f. Compaction and Retention
+
+The Compaction and Retention system governs growth management for accumulating list fields in URACE persistent state. It defines which lists may be bounded, how compaction is authorized and sequenced, how lossless decompaction is guaranteed for ARCHIVE-mode compactions, and what information must survive any compaction mode.
+
+## Governed fields
+
+A list field is governed by this system when it: appears in a citizen or infrastructure schema defined in §62b–§62e; accumulates entries over the lifecycle lifetime without a natural closure condition; and does not have a fixed maximum cardinality established by its schema.
+
+Default governance table:
+
+| Field | Schema | Default ceiling | Default mode |
+|-------|--------|----------------|-------------|
+| `ExternalMetricState.latest` | §62b | 1 000 entries | ROLLING_EVICTION |
+| `ExecutorState.failures` | §62b | 500 entries | ARCHIVE |
+| `ProviderStatus.attempt_history` | §62d | 35-day rolling window | ROLLING_EVICTION (integral) |
+| `StaleLockObservation` JSONL | §62e | 10 MB file | ARCHIVE |
+| `CompactionManifest.events` | §62e | — | PROHIBITED |
+| `ChangeHistoryEntry` lists | §62d | — | PROHIBITED |
+| `DecisionRecord` lists | §62d | 2 000 entries | ARCHIVE |
+| `StatusTransition` lists | §62d | 500 per citizen | ARCHIVE |
+
+Implementations MAY configure different ceilings via RetentionPolicy records established through an attributable operator input. A RetentionPolicy MUST NOT change the mode of a PROHIBITED field.
+
+## Lossless-decompaction guarantee
+
+For any ARCHIVE-mode compaction the following sequence MUST be observed:
+
+1. Original records are serialized canonically, their SHA-256 is computed as `original_digest`.
+2. Originals are written intact to `archive_path` and fsynced.
+3. A CompactionEvent is appended to the CompactionManifest (creating the manifest if absent).
+4. A CompactionSummary with `is_decompactable: true` and matching `original_digest` is inserted into the live list at the position of the first compacted record.
+5. The compacted records are removed from the live list.
+
+`urace decompact <compaction_event_id>` reverses this sequence: loads the archive, verifies the digest against `CompactionSummary.original_digest`, removes the CompactionSummary, inserts the original records at the same position, and appends an inverse CompactionEvent to the manifest. A decompacted list is semantically identical to its pre-compaction state. A decompaction that fails digest verification MUST surface as a `compaction-manifest-divergence` BLOCKING IntegrityGap and MUST NOT partially modify the live list.
+
+## Semantic minimum preservation
+
+Regardless of compaction mode, the following MUST survive any compaction and MUST be queryable without decompaction:
+
+- Count of original records (`CompactionSummary.record_count`)
+- Temporal span covered (`CompactionSummary.time_range`)
+- Cryptographic commitment to the originals (`CompactionSummary.original_digest`)
+- Restorability flag (`CompactionSummary.is_decompactable`)
+- Authorization basis (`CompactionEvent.authorized_by`)
+
+Any aggregation query over a governed list MUST account for CompactionSummary entries using their `record_count` and `time_range`; they MUST NOT be skipped or treated as zero.
+
+## Eligibility criteria
+
+A record in a governed list is eligible for compaction when it satisfies at least one of the following:
+
+1. **Entry-count ceiling**: the list length exceeds `RetentionPolicy.max_entries`, and the record is among the oldest entries (lowest `created_at` or equivalent timestamp field) beyond the ceiling.
+2. **Age ceiling**: `RetentionPolicy.max_age_days` is set and the record's timestamp field is older than `max_age_days` calendar days before the current boundary.
+
+An implementation MUST evaluate eligibility deterministically: entry-count eligibility MUST prefer the oldest entries, and age eligibility MUST use UTC timestamps. When both criteria apply, a record eligible under either is eligible.
+
+## Lifecycle boundary requirement
+
+Compaction MUST occur only at a safe lifecycle boundary: after a cycle's Checkpoint is accepted and before the next cycle begins. Compaction MUST NOT occur during an active Transaction or while `CognitiveResumeContext.pending_transaction` is non-null. Violating this rule is a cycle-integrity violation and MUST be surfaced as a `compaction-manifest-divergence` BLOCKING IntegrityGap.
+
+## Authorization model
+
+Compaction is authorized in exactly two ways:
+
+1. **Policy-triggered**: a RetentionPolicy with `compaction_mode != PROHIBITED` whose threshold is exceeded. The RetentionPolicy MUST have been established through an attributable operator input or bootstrap configuration. `CompactionEvent.authorized_by` MUST be `retention_policy:{RetentionPolicy.id}`.
+2. **Explicit operator command**: `urace compact <field-path>` processed through the inbox at the next safe boundary. `CompactionEvent.authorized_by` MUST be the inbox Input id.
+
+The lifecycle controller MUST NOT self-authorize compaction outside these two paths.
+
+## urace compact
+
+```
+urace compact <field-path> [--dry-run] [--mode ARCHIVE|ROLLING_EVICTION]
+```
+
+Initiates compaction of an accumulating list field. MUST be rejected if the field's RetentionPolicy has `compaction_mode: PROHIBITED` or if the field is not in the default governance table above. `--dry-run` reports eligible records and would-be CompactionSummary without committing. The command is written to the inbox and processed at the next safe lifecycle boundary; it MUST NOT execute synchronously within the same cycle that receives it.
+
+## urace decompact
+
+```
+urace decompact <compaction-event-id> [--record-id <id>]
+```
+
+**Full decompaction** (no `--record-id`): Restores all original records from an ARCHIVE-mode CompactionEvent. MUST be rejected if `CompactionEvent.compaction_mode` is ROLLING_EVICTION, the archive file is missing or unreadable, or digest verification fails. On success: removes the CompactionSummary, inserts restored records at the same position, and records an inverse CompactionEvent in the manifest with `authorized_by` set to the inbox Input id. After decompaction the live list is identical to its pre-compaction state.
+
+**Incremental decompaction** (`--record-id <id>`): Extracts a single record from an ARCHIVE-mode CompactionEvent without restoring the full segment. MUST be rejected under the same conditions as full decompaction. On success: the single record is returned as structured output (it is NOT re-inserted into the live list); the CompactionSummary and archive file are left intact. The operation MUST NOT modify the live list or the manifest. `CompactionSummary.record_ids` MUST contain the requested id; if absent, the implementation MUST fall back to a sequential archive scan. A record-id not present in the archive is a non-fatal error; the command exits with a descriptive error and no state modification.
+
+## urace amend
+
+```
+urace amend <compaction-event-id> <record-id> --notice <text>
+```
+
+Applies an in-place amendment to a single record within an ARCHIVE-mode CompactionEvent's archive file. Appends an ArchiveAmendment to `{archive_path}.amendments.jsonl`. Does NOT modify the CompactionSummary or CompactionManifest (the `original_digest` commitment is preserved). MUST be rejected if: the compaction event is ROLLING_EVICTION; the archive file is missing or unreadable; the record-id is not present in the archive. The amendment is written to the inbox and processed at the next safe lifecycle boundary. Use this command to flag a DecisionRecord as PROVENANCE_REVISED while it remains in archive storage, without a full decompaction round-trip.
+
+---
+
+# 62g. Justification System
+
+The Justification System provides structured traversal of the reasoning chain behind any consequential decision in the lifecycle. It operates entirely from durable state — no Executor invocation is required. The system is usable even when the deciding Executor is no longer available, making it executor-agnostic within the meaning of §75.
+
+## Reasoning chain structure
+
+A reasoning chain rooted at DecisionRecord `D` is the directed acyclic graph formed by following `prior_decision_refs` recursively. `D.prior_decision_refs` points to the direct antecedents. Each antecedent may have its own `prior_decision_refs`, extending the chain. The chain terminates at records with no `prior_decision_refs` or records that have been compacted (present in archive only).
+
+A cycle in the chain (`D` → ... → `D`) MUST be detected and surfaced as a `decision-reasoning-cycle` WARNING IntegrityGap with `severity: WARNING`. The traversal MUST halt at the cycle boundary rather than looping.
+
+## Semantic minimum visible at each node
+
+Without decompaction, the following are visible at each chain node from durable state or CompactionSummary:
+
+| Field | Source |
+|-------|--------|
+| Record id | `DecisionRecord.id` or `CompactionSummary.record_ids` |
+| Kind | `DecisionRecord.kind` or `CompactionSummary.kinds` |
+| Subject | `DecisionRecord.subject` (live only; unavailable in compacted summary) |
+| Decided at | `DecisionRecord.decided_at` or `CompactionSummary.time_range` |
+| Provenance status | `DecisionRecord.provenance_status` (live only) |
+| Reasoning steps | `DecisionRecord.reasoning_steps` (live only) |
+
+## urace why
+
+```
+urace why <decision-id> [--depth <N>]
+```
+
+Traverses the reasoning chain rooted at `<decision-id>` to depth `N` (default: unlimited). For each node in the chain, outputs: id, kind, subject, decided_at, provenance_status, outcome, and the number of reasoning_steps. For compacted nodes found only in archive, outputs what is visible from `CompactionSummary.record_ids` and `CompactionSummary.kinds` without reading the archive. Marks compacted nodes as `[compacted — use urace decompact <event-id> to restore]`. Terminates at depth N, at nodes with no `prior_decision_refs`, or at the cycle-detected boundary. Output is ordered from root (requested record) to leaves (earliest antecedents). MUST NOT invoke any Executor; operates purely from durable state. Usable even during DORMANT or BLOCKED lifecycle states.
+
+**Depth contract.** `--depth 0` returns only the requested record's own fields with no chain traversal. `--depth 1` returns the record plus its immediate `prior_decision_refs` nodes. The default (unlimited) traverses the complete chain.
+
+**No-modification contract.** `urace why` is a read-only command. It MUST NOT write to state, inbox, or manifest regardless of what it finds.
 
 ---
 
@@ -4911,6 +5316,21 @@ Where durable state establishes that an interrupted change was accepted, recover
 
 When a recovery attempt is itself interrupted before completing reconciliation — through crash, resource exhaustion or abrupt process termination — the subsequent restart MUST treat the partial recovery as an additional `INDETERMINATE` boundary rather than continuing from the partially-recovered state as if it were the accepted baseline. A partially-recovered lifecycle state MUST NOT be treated as equivalent to the last accepted state; the boundary between the accepted state, the interrupted recovery attempt and the current artifact set MUST be re-established through a fresh reconciliation pass from the last durable accepted checkpoint. URACE MUST preserve the interrupted recovery's own durable record — including which reconciliation steps completed and which did not — so that repeated recovery interruptions cannot silently compound ambiguity about the accepted baseline. Recovery MUST NOT recurse indefinitely: when an implementation detects a recovery-of-recovery chain exceeding a bounded depth, it MUST surface this as a named material blocking limitation requiring operator intervention rather than attempting an additional automated recovery pass.
 
+## Cognitive reset recovery
+
+A cognitive reset occurs when an Executor loses working context — through replacement, context-window eviction, restart, or any mechanism that discards in-process reasoning — without any change to durable URACE state. A cognitive reset is not a data loss event; it is a context reconstitution event and MUST NOT be treated as a crash or storage interruption requiring Transaction recovery unless a pending_transaction is independently present in the CognitiveResumeContext.
+
+Recovery from a cognitive reset proceeds as follows:
+
+1. The lifecycle controller regenerates a fresh CognitiveResumeContext (§62e) from current durable state.
+2. The CRC is verified: `state_digest` MUST match the current state document. A mismatch MUST emit a `cognitive-resume-stale` WARNING IntegrityGap and trigger regeneration before proceeding.
+3. The CRC is injected as structured input to the replacement or reinitialized Executor alongside the current state document.
+4. The Executor resumes the interrupted cycle from the lifecycle phase recorded in `cycle_phase`.
+5. Any `pending_validations` and `blocking_gaps` from the CRC are treated as the current authoritative open-item list.
+6. If `pending_transaction` is non-null, the Transaction recovery protocol of §73 applies before new work begins.
+
+An Executor that cannot resume from a CRC injection is not replaceable and violates §75. A lifecycle that requires restating accepted checkpoints or replaying Decision Records solely because an Executor lost context violates this recovery requirement.
+
 ---
 
 # 74. Conditional Self-Evolution
@@ -5074,7 +5494,10 @@ URACE MUST NOT fundamentally depend on a particular:
 - experiment methodology;
 - runtime model;
 - transaction system;
-- cryptographic scheme.
+- cryptographic scheme;
+- context window management strategy.
+
+An Executor's context window is a runtime resource, not a lifecycle invariant. URACE MUST NOT bake in assumptions about context window size, context management strategy, or the persistence of in-process reasoning across invocations. The CognitiveResumeContext mechanism (§62e) MUST be used to bridge context boundaries so that any compliant Executor can resume from durable state without platform-specific memory management. An Executor that cannot be initialized from a CRC injection plus current durable state is not executor-agnostic within the meaning of this section.
 
 ---
 
@@ -5110,10 +5533,12 @@ For each assessment boundary, URACE MUST:
 12. execute idempotently where possible, observe actual effects and keep unknown outcomes `INDETERMINATE`;
 13. validate against success measures, guardrails and governing Intent;
 14. accept and checkpoint only validated progress, otherwise repair, compensate, restore, adapt or retain explicit uncertainty;
-15. update metrics, learning, decision records, follow-up and wake conditions;
+15. update metrics, learning, decision records, follow-up, wake conditions and CognitiveResumeContext;
 16. continue when justified work exists, otherwise enter efficient wakeable dormancy.
 
 A retained destination MUST remain fixed unless the authoritative source changes it. A delegated destination MAY evolve only within its delegated scope and governing Intent. Route failure requires course correction before destination change. Evidence constrains belief and navigation but never creates Authority.
+
+A cognitive reset may occur between any two steps of this loop. The lifecycle MUST resume from the CognitiveResumeContext at the phase recorded in `cycle_phase`, following the cognitive reset recovery protocol in §73.
 
 ## Operating modes
 
