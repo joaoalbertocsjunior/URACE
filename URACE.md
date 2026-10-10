@@ -2622,6 +2622,65 @@ Every governance event reduces to one of three primitives:
 | **STATE**  | The current active set of rules and their relationships |
 | **CHANGE** | An accepted product or runtime operation, bound to the rules that governed it |
 
+## Rule Schema
+
+Every Rule record stored in the Ledger MUST conform to the following schema. An implementation that omits a REQUIRED field or stores a PROHIBITED field in its place violates this contract and MUST surface the violation as a named Ledger integrity gap.
+
+```
+Rule {
+  id               REQUIRED  stable collision-resistant identifier (prefix encodes kind)
+  kind             REQUIRED  PURPOSE | DIRECTIVE | PERMISSION | PROHIBITION | OBJECTIVE | POLICY
+  level            PROHIBITED as a stored field — MUST be derived from kind at read time, never persisted
+  statement        REQUIRED  human-readable governance statement
+  scope            REQUIRED  list of operation scopes this rule governs; "*" means all scopes
+  derivation       REQUIRED  EXPLICIT | SYSTEM_INFERRED
+  confidence       REQUIRED  0.0–1.0; MUST be 1.0 for EXPLICIT rules
+  source           REQUIRED  identifier of who or what created this rule (input id, bootstrap, system)
+  derived_from     REQUIRED  list of rule_ids this rule was derived from; empty list for root rules
+  superseded_by    REQUIRED  rule_id of the superseding rule, or null if still active
+  active_since     REQUIRED  timestamp when this rule became active
+  active_until     REQUIRED  timestamp when this rule was deactivated or superseded, or null
+  expires_at       OPTIONAL  timestamp for time-bounded OBJECTIVE rules; null if unbounded
+  governed_changes REQUIRED  list of change_ids accepted while this rule was active and governing
+  tags             OPTIONAL  list of string labels for grouping or filtering
+}
+```
+
+**`level` derivation contract.** The level of a rule MUST be derived from its `kind` at read time: PURPOSE → 0; DIRECTIVE, PERMISSION, PROHIBITION → 1; OBJECTIVE, POLICY → 2. Storing `level` as a persistent field is prohibited; any stored `level` field MUST be ignored and recomputed.
+
+**`id` stability contract.** A rule's `id` MUST NOT change after the rule is created. The `id` MUST be unique within the Ledger for all time, including deactivated and superseded rules.
+
+**`confidence` contract.** An EXPLICIT rule MUST carry `confidence: 1.0`. A SYSTEM_INFERRED rule MUST carry a confidence value strictly less than 1.0 computed from the derivation basis. A rule whose confidence drops to 0.0 MUST be deactivated.
+
+## Change Schema
+
+Every Change binding record stored in the Ledger MUST conform to the following schema. An implementation that omits a REQUIRED field violates this contract and MUST surface the violation as a named Ledger integrity gap.
+
+```
+Change {
+  id                    REQUIRED  stable identifier matching the accepted operation id
+  kind                  REQUIRED  ACCEPTED | REJECTED | ROLLED_BACK
+  at                    REQUIRED  timestamp of the outcome
+  description           REQUIRED  human-readable summary of what changed
+  scope                 REQUIRED  operation scope under which this change executed
+  governed_by           REQUIRED  list of rule_ids active and governing at time of change
+  rule_snapshot_digest  REQUIRED  SHA-256 of the lexicographically sorted active rule set at time of change
+  state_before_digest   REQUIRED  SHA-256 of the product state immediately before this change
+  state_after_digest    REQUIRED  SHA-256 of the product state immediately after this change; null for REJECTED
+  delta_to_rules        REQUIRED  list of rule_ids that were themselves added, superseded, or deactivated
+                                  by this operation; empty list for changes that did not mutate the Ledger
+  executor              REQUIRED  {id, route} identifying the Executor that produced this change
+  validation            REQUIRED  {verdict: ACCEPTED|REJECTED|ROLLED_BACK, checks: [...]} outcome record
+  value_delta           REQUIRED  net metric movement (count of improved dimensions minus regressed dimensions)
+}
+```
+
+**`rule_snapshot_digest` contract.** The digest MUST be computed as the SHA-256 of the JSON-serialised list of `{id, kind, statement}` for every active rule, sorted lexicographically by `id`, with no whitespace. This algorithm is fixed; an implementation MUST NOT vary the serialisation.
+
+**`delta_to_rules` contract.** For any change that adds, supersedes, or deactivates a rule in the Ledger, the affected rule_ids MUST appear in `delta_to_rules`. A change with an empty `delta_to_rules` MUST NOT have caused any mutation to the Ledger's active rule set.
+
+**`state_before_digest` / `state_after_digest` contract.** Both digests MUST be computed from the same deterministic product-state serialisation method used by §61 checkpoints. `state_after_digest` MUST be null for REJECTED changes. The pair provides an independent integrity check: `state_after_digest` of change N MUST equal `state_before_digest` of change N+1 in sequence.
+
 ## Rule Kinds
 
 Rules are grouped into three immutability levels:
@@ -2675,23 +2734,22 @@ URACE MUST NOT promote a SYSTEM_INFERRED rule to L1 status without explicit oper
 
 ## Temporal Change Binding
 
-When an operation is **ACCEPTED**, URACE MUST:
-
-1. compute a **snapshot digest** — the SHA-256 of the lexicographically sorted active rule set at the moment of acceptance
-2. record the list of **governing rule IDs** alongside the accepted change
-
-These two records MUST be stored atomically with the accepted change and MUST NOT be modified after acceptance. The snapshot digest MUST be computable from the current active rule set at any point without reference to prior digests.
-
-This allows any future inspection to answer: *"what rules were active and governing when this change was made?"*
+When an operation outcome is determined, URACE MUST produce a Change record conforming to the Change Schema above and store it atomically with the accepted operation. The binding MUST NOT be modified after storage. The binding MUST be stored regardless of whether the outcome is ACCEPTED, REJECTED, or ROLLED_BACK.
 
 ```
-ACCEPTED OPERATION
-  → snapshot digest (SHA-256 of active rule set)
-  → governing rule IDs
+OPERATION OUTCOME
+  → Change record (conforming to Change Schema)
+      governed_by           = active rule IDs at time of outcome
+      rule_snapshot_digest  = SHA-256 of active rule set
+      state_before_digest   = product state digest before change
+      state_after_digest    = product state digest after change (null if REJECTED)
+      delta_to_rules        = rule IDs mutated by this operation (often empty)
   → stored atomically in change_bindings
 ```
 
-If the Rule Ledger is unavailable at acceptance time, URACE MUST surface this as a named integrity gap and MUST NOT silently accept a change without its binding.
+This allows any future inspection to answer: *"what rules were active and governing when this change was made, what was the product state before and after, and did this operation itself change any rules?"*
+
+If the Rule Ledger is unavailable at outcome time, URACE MUST surface this as a named integrity gap and MUST NOT silently record an outcome without its binding.
 
 ## Append-Only Invariant
 
