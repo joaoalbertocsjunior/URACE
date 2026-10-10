@@ -3145,6 +3145,419 @@ VitalDefinition {
 }
 ```
 
+## Config Document
+
+The Config Document is the bootstrap configuration supplied at `init`. It is the single authoritative source for initial Rule Ledger seeding, executor wiring, and lifecycle policy. Once seeded, the Ledger becomes the source of truth for governance rules; the Config Document MUST NOT be re-read per cycle as a substitute for querying the Ledger.
+
+```
+Config {
+  product          REQUIRED  string; human-readable product name
+  product_files    REQUIRED  list of relative file paths constituting the Product
+  state_path       REQUIRED  relative path to the durable state file
+  intent           REQUIRED  {
+                               purpose:  string; the mission statement (seeds PURPOSE rule)
+                               retained: list[string]; statements never autonomously mutable
+                                         (each seeds a PROHIBITION rule)
+                             }
+  authority        REQUIRED  {
+                               delegated: list[string]; autonomously authorized scopes
+                                          (each seeds a PERMISSION rule)
+                               reserved:  list[string]; require operator decision
+                                          (each seeds a PROHIBITION rule)
+                               provenance: OPTIONAL string
+                               source:     OPTIONAL string
+                             }
+  constraints      REQUIRED  list[string]; hard constraint statements (each seeds a PROHIBITION)
+  self_evolution_policy REQUIRED {
+                               mode:       NECESSARY_ONLY | CONTINUOUS | DISABLED
+                               source:     OPTIONAL string
+                               provenance: OPTIONAL string
+                             }
+  executor         REQUIRED  {
+                               enabled:                        bool
+                               max_executor_calls_per_24h:     int ≥ 1
+                               max_executor_calls_per_30d:     int ≥ max_executor_calls_per_24h
+                               discovery_interval_seconds:     int
+                               max_discovery_interval_seconds: int
+                               timeout_seconds:                int
+                               capacity_retry_mode:            automatic | dynamic | fixed
+                               capacity_retry_delay_ms:        int
+                               discovery_yield_exhausted_threshold: int
+                               providers:  list[ExecutorProvider]
+                               allowed_files_by_scope: dict[scope → list[relative_path]]
+                             }
+  evaluation_system REQUIRED {
+                               version:                 int
+                               minimum_evidence_units:  int ≥ 1
+                               weights:                 dict[component → float 0.0–1.0]
+                             }
+  external_metrics  REQUIRED {
+                               mode: DISABLED | PROVIDED_ONLY
+                                     | DISCOVER_PUBLIC_AND_USE_PROVIDED
+                               sources: list[ConnectorSource seed]
+                             }
+  scope_priority    REQUIRED  ScopePriorityConfig (see ScopePrioritySystem)
+  efficiency        REQUIRED  {
+                               max_product_growth_bytes_per_change: int
+                               max_product_growth_ratio_per_change: float
+                               max_reasoning_memory_entries:        int
+                             }
+  operator_patterns OPTIONAL  list of {id, pattern, default_response}
+  change_explanations OPTIONAL {mode: disabled | auto | enabled}
+  analytics_export  OPTIONAL  {mode: DISABLED | ON_DEMAND | ON_CHECKPOINT}
+}
+```
+
+**Immutability contract.** The Config Document MUST NOT be modified by autonomous lifecycle operation. Only the `executor` budget subkeys and `evaluation_system.weights` MAY be updated via authorized `budget_control` and `evaluation_control` inputs respectively. All other fields are fixed at bootstrap.
+
+## State Document
+
+The State Document is the root of all durable lifecycle state. It MUST be written atomically. Its schema version controls migration compatibility.
+
+```
+State {
+  schema_version        REQUIRED  int; current = 1
+  state_version         REQUIRED  int; incremented on every durable write
+  created_at            REQUIRED  timestamp; set once at init
+  updated_at            REQUIRED  timestamp; updated on every durable write
+  lifecycle_state       REQUIRED  DORMANT | ACTIVE | ASSESSING | VALIDATING | REPAIRING
+                                  | BLOCKED | RECONCILING | WAITING_FOR_CAPACITY
+                                  | WAITING_FOR_CONDITION | WAITING_FOR_SCHEDULE
+                                  | WAITING_FOR_AUTHORITATIVE_DECISION | PAUSED
+  intent                REQUIRED  copy of Config.intent (snapshot at init)
+  authority             REQUIRED  copy of Config.authority (snapshot at init)
+  constraints           REQUIRED  copy of Config.constraints (snapshot at init)
+  self_evolution_policy REQUIRED  {mode, source, provenance}
+  rule_ledger           REQUIRED  LedgerContainer
+  objectives            REQUIRED  list[Objective]
+  current_objective     REQUIRED  Objective id | null
+  current_plan          REQUIRED  Plan | null
+  operations            REQUIRED  list[Operation]
+  evidence              REQUIRED  list[Evidence]
+  decisions             REQUIRED  list[Decision]
+  checkpoints           REQUIRED  list[Checkpoint]
+  progress_profiles     REQUIRED  list[ProgressProfile]
+  progress_observations REQUIRED  list (observation records from metric collection)
+  metric_system         REQUIRED  MetricSystem
+  evaluation_system     REQUIRED  EvaluationSystem
+  scope_priority_system REQUIRED  ScopePrioritySystem
+  external_metric_state REQUIRED  ExternalMetricState
+  context_inputs        REQUIRED  list[ContextInput] (max 200, rolling)
+  connector_sources     REQUIRED  list[ConnectorSource]
+  metric_definitions    REQUIRED  list[MetricDefinition]
+  vital_definitions     REQUIRED  list[VitalDefinition]
+  processed_input_ids   REQUIRED  list[string] (idempotency log, max 1000)
+  value_trajectory      REQUIRED  ValueTrajectory
+  destination_anchor    REQUIRED  DestinationAnchor
+  wake_registry         REQUIRED  list[WakeRegistration]
+  blockers              REQUIRED  list[Blocker]
+  unresolved_effects    REQUIRED  list[UnresolvedEffect]
+  pending_validation    REQUIRED  list[PendingValidation]
+  executor_state        REQUIRED  ExecutorState
+  operator_patterns     REQUIRED  list (copy from config at init)
+  pattern_memory        REQUIRED  dict (implementation-defined; MAY be empty)
+  reasoning_memory      REQUIRED  list (reasoning hypothesis entries; max bounded by config)
+  last_cycle            REQUIRED  timestamp | null
+  triggers              OPTIONAL  list[Trigger]
+  pending_runtime_activation OPTIONAL dict; present when a runtime-scope change awaits activation
+  restart_requested     OPTIONAL  bool; set to true when runtime restart is needed
+  system_repair_registry OPTIONAL dict[key → SystemRepairEntry]
+}
+```
+
+**Atomic write contract.** Every write to the State Document MUST be atomic from the perspective of recovery: after a crash, the state file MUST reflect either the pre-write state or the fully committed post-write state. Partial writes MUST NOT be possible.
+
+**schema_version contract.** If the `schema_version` in a loaded State Document does not match the running implementation's expected version, the implementation MUST surface this as a named migration-required condition and MUST NOT silently proceed with an incompatible schema.
+
+## Ledger Container
+
+The Ledger Container is the root of the Rule Ledger stored within the State Document.
+
+```
+LedgerContainer {
+  schema_version  REQUIRED  int; current = 1
+  rules           REQUIRED  list[Rule]; all rules ever created (active and inactive)
+  relationships   REQUIRED  list[Relationship]; explicit edge records between rules
+  change_bindings REQUIRED  list[Change]; all change binding records (max 500, rolling)
+  established_at  REQUIRED  timestamp
+  updated_at      REQUIRED  timestamp
+}
+```
+
+**Completeness contract.** `rules` MUST contain every Rule ever added, including deactivated and superseded rules. `change_bindings` holds the rolling 500 most recent Change records. `relationships` holds every explicit edge added between rules.
+
+## Relationship
+
+A Relationship is an explicit edge in the rule DAG. Relationships that are implicit in Rule fields (`derived_from`, `superseded_by`) MUST also be mirrored as Relationship records to enable graph traversal without scanning all rule fields.
+
+```
+Relationship {
+  from_id    REQUIRED  source Rule id
+  to_id      REQUIRED  target Rule id
+  type       REQUIRED  derived_from | governed_by | governed_changes
+                       | superseded_by | conflicts_with
+  recorded_at REQUIRED timestamp
+  source      OPTIONAL string; what created this relationship
+}
+```
+
+**DAG contract.** No Relationship of type `derived_from` or `governed_by` MUST introduce a cycle. An implementation that would create a cycle MUST reject the Relationship and surface the rejection as Evidence.
+
+**Consistency contract.** When a Rule's `derived_from` list is non-empty, a Relationship record of type `derived_from` MUST exist for each entry. When `superseded_by` is set, a Relationship of type `superseded_by` MUST exist. These MUST be kept in sync.
+
+## Executor Call
+
+An Executor Call is the record of a single invocation of an Executor for discovery or execution. It is stored in ExecutorState and is the primary resource-accounting surface.
+
+```
+ExecutorCall {
+  id                        REQUIRED  stable identifier
+  at                        REQUIRED  timestamp
+  stage                     REQUIRED  discovery | execution
+  reason                    REQUIRED  string; Objective id or trigger description
+  outcome                   REQUIRED  attempted | no_effect | accepted | concurrent_change
+                                      | deferred_provider_capacity | awaiting_operator_decision
+                                      | failed
+  transport_attempts        REQUIRED  int ≥ 1
+  logical_reservation_reused REQUIRED bool
+  executor_attribution      REQUIRED  {executor_id, adapter, capability,
+                                       attempted_executors: list, logical_reservation: string|null}
+  observed_metric_effect    OPTIONAL  {improved: int, regressed: int}; set on accepted
+  changed_files             OPTIONAL  list[string]; set on accepted
+  change_id                 OPTIONAL  Operation id; set on accepted
+  trigger_signature         OPTIONAL  string | null; deduplication key for triggered discovery
+  last_transport_attempt_at OPTIONAL  timestamp; set when transport_attempts > 1
+  usage                     OPTIONAL  {total_tokens: int, cost: float}; provider-reported
+}
+```
+
+## Executor State
+
+The Executor State tracks the operational status of the Executor subsystem and call history.
+
+```
+ExecutorState {
+  last_discovery_at         REQUIRED  timestamp | null
+  last_operation_at         REQUIRED  timestamp | null
+  last_availability_check   REQUIRED  timestamp | null
+  available                 REQUIRED  bool | null
+  failures                  REQUIRED  list of {at, reason, executor_id}
+  executor_calls            REQUIRED  list[ExecutorCall] (rolling, bounded by config)
+  discovery_calls           REQUIRED  int; total discovery calls this lifecycle
+  provider_pool             REQUIRED  dict[provider_id → {status, last_probe_at, ...}]
+  discovery_trigger         OPTIONAL  {reason: string, signature: string}; set when new
+                                      context forces discovery
+}
+```
+
+## External Metric State
+
+The External Metric State records the current status of the external metrics subsystem.
+
+```
+ExternalMetricState {
+  mode                         REQUIRED  DISABLED | PROVIDED_ONLY
+                                         | DISCOVER_PUBLIC_AND_USE_PROVIDED
+  source                       REQUIRED  string
+  provenance                   REQUIRED  string
+  last_collection              REQUIRED  timestamp | null
+  latest                       REQUIRED  list of observation dicts
+  errors                       REQUIRED  list of {source, error, kind}
+  failure_streak               OPTIONAL  int; consecutive failed collections
+  next_collection_at           OPTIONAL  timestamp
+  last_known_good              OPTIONAL  dict; last successful observation values
+  last_error_signature         OPTIONAL  string | null; SHA-256 of current error set
+  last_error_evidence_at       OPTIONAL  timestamp | null
+  candidate_decision_links     OPTIONAL  list; operation references linked to observations
+}
+```
+
+## Progress Profile
+
+A Progress Profile is the measurement baseline and current reading for each observable dimension of product progress.
+
+```
+ProgressProfile {
+  id                  REQUIRED  string (e.g. "blueprint-verification")
+  objective_reference REQUIRED  string
+  intended_outcome    REQUIRED  string
+  measures            REQUIRED  dict[metric_name → {
+                                  baseline:   float
+                                  current:    float
+                                  previous:   float | null
+                                  target:     float
+                                  direction:  nondecreasing | nonincreasing
+                                }]
+  guardrails          REQUIRED  list[string]; invariants that MUST NOT regress
+  cadence             REQUIRED  string; how often measures are updated
+  next_follow_up      REQUIRED  timestamp | string
+  status              REQUIRED  active | archived
+}
+```
+
+**Guardrail contract.** Each guardrail name in `guardrails` corresponds to a measure key in `measures`. An accepted Operation MUST NOT leave any guardrail measure worse than its baseline. If it does, the Operation MUST be rejected.
+
+## Wake Registration
+
+A Wake Registration records a pending lifecycle wake condition that has been established but not yet satisfied.
+
+```
+WakeRegistration {
+  id           REQUIRED  stable identifier
+  scheduled_at REQUIRED  timestamp; when this registration is due to trigger
+  condition    REQUIRED  dict; the observable criterion that satisfies this registration
+  kind         REQUIRED  SCHEDULED | TRIGGERED | CONDITIONAL
+  scope        OPTIONAL  string; which lifecycle scope this registration serves
+  established_at REQUIRED timestamp
+}
+```
+
+**Integrity contract.** On lifecycle restart, every WakeRegistration in `wake_registry` MUST be verified as still active in the current environment. A registration that cannot be verified MUST be surfaced as a wake-integrity gap (see §62 and README). A verified registration MUST NOT be discarded.
+
+## Unresolved Effect
+
+An Unresolved Effect records a committed product change whose outcome has not yet been confirmed as complete.
+
+```
+UnresolvedEffect {
+  operation_id          REQUIRED  Operation id
+  journal_phase         REQUIRED  PREPARED | APPLYING | APPLIED | VALIDATED
+  expected_file_hashes  REQUIRED  dict[relative_path → SHA-256]; expected post-change state
+  recorded_at           REQUIRED  timestamp
+  reconciled_at         OPTIONAL  timestamp; set when disposition is confirmed
+  outcome               OPTIONAL  CONFIRMED_COMPLETE | ROLLED_BACK | UNRESOLVABLE
+}
+```
+
+**Reconciliation contract.** An UnresolvedEffect MUST be reconciled before the lifecycle MAY converge to `IDLE`. A lifecycle with at least one open UnresolvedEffect MUST remain in `RECONCILING` or `BLOCKED` state and MUST surface the open effect as a named blocker.
+
+## Scope Priority System
+
+The Scope Priority System determines which product scope (documentation, runtime, metrics, rebootstrap) receives prioritized attention in the current lifecycle state.
+
+```
+ScopePrioritySystem {
+  version                     REQUIRED  string (e.g. "dynamic-scope-priority-v1")
+  revision                    REQUIRED  int; incremented on each recomputation
+  computed_at                 REQUIRED  timestamp
+  evidence_cutoff             REQUIRED  timestamp; evidence older than this was not considered
+  max_weight_step_per_revision REQUIRED float; maximum change in normalized_weight per revision
+  basis                       REQUIRED  string; human-readable derivation basis
+  scopes                      REQUIRED  dict[scope_name → {
+                                          label:                  string
+                                          raw_weight:             float
+                                          normalized_weight:      float
+                                          previous_weight:        float | null
+                                          change_limited:         bool
+                                          base_weight:            float
+                                          min_weight:             float
+                                          max_weight:             float
+                                          backlog:                int
+                                          unresolved_markers:     int
+                                          days_since_accepted_change: float
+                                          artifacts:              list[string]
+                                        }]
+}
+```
+
+**Normalization contract.** The sum of `normalized_weight` across all active scopes MUST equal 1.0 (±floating-point tolerance). A scope with `change_limited: true` has had its weight clamped by `max_weight_step_per_revision`.
+
+## Context Input
+
+A Context Input is operator-supplied authoritative context that informs discovery and planning.
+
+```
+ContextInput {
+  id      REQUIRED  Input id of the originating Input
+  at      REQUIRED  timestamp
+  origin  REQUIRED  USER_SUPPLIED | SYSTEM_DERIVED
+  text    OPTIONAL  string; free-form context text (max 20 000 chars)
+  source  OPTIONAL  string; who supplied this context
+}
+```
+
+**Retention contract.** The `context_inputs` list MUST be capped at 200 entries (rolling). Oldest entries are evicted first. An evicted entry MUST still appear in the Evidence log.
+
+## Pending Validation
+
+A Pending Validation record represents an Operation that could not be validated immediately due to a missing validation capability, and is queued for validation when capability is restored.
+
+```
+PendingValidation {
+  operation_id     REQUIRED  Operation id
+  operation_scope  REQUIRED  string
+  queued_at        REQUIRED  timestamp
+  reason           REQUIRED  string
+  status           REQUIRED  PENDING_CAPABILITY
+  note             REQUIRED  string; human-readable explanation
+}
+```
+
+**Validation backlog contract.** When a validation capability is restored after being unavailable, URACE MUST process all PendingValidation records in `queued_at`-ascending order before accepting new work. No pending record MAY be silently discarded.
+
+## Destination Anchor
+
+The Destination Anchor is a tamper-evident digest of the lifecycle's core purpose and retained constraints. It is used to detect unauthorized drift in the governing intent.
+
+```
+DestinationAnchor {
+  purpose       REQUIRED  string; copy of Config.intent.purpose
+  retained      REQUIRED  list[string]; sorted copy of Config.intent.retained
+  digest        REQUIRED  SHA-256 of JSON({purpose, retained}, sort_keys=True, no whitespace)
+  established_at REQUIRED timestamp
+}
+```
+
+**Drift detection contract.** On every lifecycle cycle start, URACE MUST recompute the Destination Anchor digest and compare it to the stored `digest`. A divergence MUST be surfaced as a named governance-drift condition and MUST block all autonomous operations until the operator acknowledges the change.
+
+## Metric System
+
+The Metric System tracks the lifecycle's self-assessment of whether its current metrics are appropriate for measuring progress.
+
+```
+MetricSystem {
+  version           REQUIRED  int; incremented when a change is applied
+  last_review_at    REQUIRED  timestamp | null
+  last_assessment   REQUIRED  string; human-readable outcome of last review
+  change_needed     REQUIRED  bool; true = metric reconfiguration is recommended
+  change_history    REQUIRED  list of {at, before, after, input}; append-only
+}
+```
+
+## Evaluation System
+
+The Evaluation System defines how the lifecycle weights evidence to produce an evolution readiness score.
+
+```
+EvaluationSystem {
+  version                  REQUIRED  int
+  minimum_evidence_units   REQUIRED  int ≥ 1
+  weights                  REQUIRED  dict[component → float 0.0–1.0]
+                                     weights MUST sum to a positive value
+  last_review_at           REQUIRED  timestamp | null
+  last_assessment          REQUIRED  string
+  change_needed            REQUIRED  bool
+  change_history           REQUIRED  list of {at, version, before, after, input}; append-only
+}
+```
+
+**Weight contract.** At least one component weight MUST be strictly positive. Setting all weights to 0.0 MUST be rejected. Weights do not need to sum to 1.0; the evaluator normalizes internally.
+
+## System Repair Entry
+
+A System Repair Entry records a recurring fault detected in the lifecycle controller, used to deduplicate repair objectives.
+
+```
+SystemRepairEntry {
+  fault            REQUIRED  dict; structured fault descriptor {component, code, operation, ...}
+  runtime_version  REQUIRED  string; SHA-256 digest of the runtime file set at detection time
+  count            REQUIRED  int ≥ 1; times this fault has recurred
+  status           REQUIRED  OBSERVED | REPAIR_QUEUED | REPAIRED | REPAIR_FAILED
+  first_at         REQUIRED  timestamp
+  last_at          REQUIRED  timestamp
+}
+```
+
 ---
 
 # 62c. Mechanism Contracts
@@ -3289,6 +3702,104 @@ ACCEPTED OPERATION
 **Alert surfacing contract.** All active alerts from the AccelerationReport MUST be surfaced in `urace vitals` output. URACE MUST NOT suppress deceleration alerts because the lifecycle is otherwise making forward progress.
 
 **Baseline contract.** Acceleration MUST NOT be computed until at least 2 checkpoints exist. Direction MUST NOT be labelled until at least 4 checkpoints exist. `AccelerationReport.status` MUST reflect this: `no_data` (0–1 checkpoints), `establishing_baseline` (2–3 checkpoints), `computed` (4+ checkpoints).
+
+## Scope Priority Derivation Mechanism
+
+The Scope Priority Derivation mechanism computes the normalized weight for each product scope at each assessment cycle. Weights drive which scope the lifecycle prioritizes for discovery and execution.
+
+```
+FOR EACH scope in [documentation, runtime, metrics, rebootstrap]:
+  raw_weight = base_weight
+             + (backlog * backlog_factor)
+             + (unresolved_markers * marker_factor)
+             + (days_since_accepted_change * staleness_factor)
+  raw_weight = clamp(raw_weight, min_weight, max_weight)
+
+  delta = raw_weight - previous_weight
+  if |delta| > max_weight_step_per_revision:
+    raw_weight = previous_weight + sign(delta) * max_weight_step_per_revision
+    change_limited = true
+
+total = sum(raw_weight for all scopes)
+normalized_weight[scope] = raw_weight[scope] / total
+```
+
+**Normalization contract.** The sum of `normalized_weight` across all active scopes MUST equal 1.0 (±1e-9 floating-point tolerance). An implementation that fails this invariant MUST NOT use the unnormalized weights for scope selection and MUST surface the derivation as a named computation error.
+
+**Monotonic revision contract.** `ScopePrioritySystem.revision` MUST be incremented on every recomputation, even if all weights are unchanged. This provides a monotonic change witness for audit purposes.
+
+**Staleness factor contract.** `days_since_accepted_change` MUST be computed from the most recent `ACCEPTED` Change record for each scope in the Rule Ledger's `change_bindings`. If no ACCEPTED change exists for a scope, the scope MUST be treated as infinitely stale, clamped to the scope's `max_weight`.
+
+## External Metric Collection Mechanism
+
+The External Metric Collection mechanism gathers observations from configured external metric sources when the mode permits it.
+
+```
+MODE = ExternalMetricState.mode
+
+IF mode == DISABLED:
+  SKIP — no collection
+
+IF mode == PROVIDED_ONLY:
+  read from config.external_metrics.provided_sources only
+  no public source discovery
+
+IF mode == DISCOVER_PUBLIC_AND_USE_PROVIDED:
+  discover public sources matching intent.purpose keywords
+  union with provided_sources
+  deduplicate by source URL/id
+
+FOR EACH source:
+  attempt collection
+  IF success:
+    append observation to ExternalMetricState.latest
+    ExternalMetricState.last_known_good = latest observation
+    ExternalMetricState.failure_streak = 0
+  IF failure:
+    append error to ExternalMetricState.errors
+    increment ExternalMetricState.failure_streak
+    emit Evidence(external-metric-collection-error)
+
+ExternalMetricState.last_collection = now()
+ExternalMetricState.next_collection_at = now() + collection_interval
+```
+
+**Error deduplication contract.** Identical consecutive collection errors (same source, same error kind) MUST NOT each produce a new Evidence record. The first occurrence MUST be recorded; subsequent identical consecutive errors MUST increment a counter and update `last_error_signature` without new Evidence until the error signature changes.
+
+**Failure streak contract.** After three consecutive failures from a source, URACE MUST surface a named external-metric-unavailable condition and MUST NOT continue blocking Executor dispatch on that source's data. A lifecycle MUST NOT enter `BLOCKED` solely due to external metric collection failure.
+
+**Isolation contract.** External metric collection MUST run in a separate Executor call from product Executor calls. A failure in external metric collection MUST NOT roll back or abort an in-progress product Operation.
+
+## Destination Anchor Integrity Mechanism
+
+The Destination Anchor is verified on every lifecycle cycle start to detect unauthorized drift in governing intent.
+
+```
+ON LIFECYCLE CYCLE START:
+  current_digest = SHA-256(
+    JSON({"purpose": config.intent.purpose,
+          "retained": sorted(config.intent.retained)},
+         sort_keys=True, separators=(",", ":"))
+  )
+
+  IF current_digest == state.destination_anchor.digest:
+    anchor VERIFIED — continue
+
+  IF current_digest != state.destination_anchor.digest:
+    emit Evidence(kind="governance-drift-detected",
+                  before_digest=state.destination_anchor.digest,
+                  current_digest=current_digest)
+    enter BLOCKED state
+    surface named condition: "governance-anchor-drift"
+    MUST NOT dispatch any autonomous Operation
+    MUST wait for operator acknowledgement
+```
+
+**Establishment contract.** `destination_anchor` MUST be established at bootstrap and MUST match the config at that point. A bootstrap that fails to write a `destination_anchor` MUST be treated as an integrity gap on first cycle start.
+
+**Acknowledgement contract.** When `governance-anchor-drift` is active, the operator MUST explicitly acknowledge the change via an authenticated lifecycle command (`urace intent acknowledge-drift` or equivalent). The acknowledgement MUST update `destination_anchor` to the new digest and MUST be recorded as an Evidence record with the old and new digests. Autonomous inference of operator acceptance MUST NOT substitute for an explicit acknowledgement command.
+
+**Immutability contract.** Once established, `destination_anchor` MUST NOT be updated by any autonomous operation other than the explicit acknowledgement path. A runtime that updates `destination_anchor` without an attributable operator command MUST be treated as a governance integrity failure.
 
 ---
 
