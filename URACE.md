@@ -3059,7 +3059,7 @@ An Executor Provider Record describes a registered Executor and its operational 
 
 ```
 ExecutorProvider {
-  id                       REQUIRED  stable identifier (default: "codex-primary")
+  id                       REQUIRED  stable identifier; implementation-defined (default is implementation-specific)
   enabled                  REQUIRED  bool
   capabilities             REQUIRED  list of: discovery | planning | mutation | evaluation | execution
   max_calls_per_24h        REQUIRED  int ≥ 1
@@ -3068,7 +3068,7 @@ ExecutorProvider {
   capacity_retry_delay_ms  REQUIRED  int ≥ 0
   capacity_fallback_seconds REQUIRED int ≥ 60
   registered_at            REQUIRED  timestamp; when this provider was first registered
-  adapter                  OPTIONAL  string; adapter kind (e.g. codex-cli, claude-cli)
+  adapter                  OPTIONAL  string; adapter implementation identifier; format is implementation-defined
   command                  OPTIONAL  string | null; override executable path
   capability_priorities    OPTIONAL  dict[capability → int]; routing weight per capability
   priority                 OPTIONAL  int; global routing priority among registered providers
@@ -4019,7 +4019,7 @@ The routing and attribution record for a single Executor dispatch.
 ```
 ExecutorAttribution {
   executor_id         REQUIRED  string; the resolved provider id that handled the call
-  adapter             REQUIRED  string; adapter kind (codex-cli, claude-cli, ...)
+  adapter             REQUIRED  string; adapter implementation identifier; format is implementation-defined
   capability          REQUIRED  string; capability exercised (discovery, execution, ...)
   attempted_executors REQUIRED  list[string]; all providers tried in dispatch order
   logical_reservation REQUIRED  string; ExecutorCall id that reserved this slot
@@ -4136,12 +4136,13 @@ FaultDescriptor {
   component        REQUIRED  string; subsystem where fault occurred
   code             REQUIRED  string; short machine-readable fault code
   operation        OPTIONAL  string; lifecycle operation or phase at fault time
-  exception_class  OPTIONAL  string; Python exception class name
+  error_type       OPTIONAL  string; implementation-defined error type identifier
+                             (e.g. exception class name, error code, signal identifier)
   -- additional fields MAY be present for implementation-specific fault context --
 }
 ```
 
-**Stability contract.** A FaultDescriptor with identical `component` + `code` + `operation` + `exception_class` MUST be treated as the same fault for deduplication purposes in SystemRepairEntry. Used in: SystemRepairEntry.fault.
+**Stability contract.** A FaultDescriptor with identical `component` + `code` + `operation` + `error_type` MUST be treated as the same fault for deduplication purposes in SystemRepairEntry. Used in: SystemRepairEntry.fault.
 
 ## UsageRecord
 
@@ -4149,17 +4150,18 @@ Token and cost accounting from an Executor call.
 
 ```
 UsageRecord {
-  source                       REQUIRED  string; provider or tool that reported usage
-  observed_at                  REQUIRED  timestamp
-  input_tokens                 OPTIONAL  int ≥ 0
-  output_tokens                OPTIONAL  int ≥ 0
-  cache_creation_input_tokens  OPTIONAL  int ≥ 0
-  cache_read_input_tokens      OPTIONAL  int ≥ 0
-  reported_cost_usd            OPTIONAL  float ≥ 0.0
+  source             REQUIRED  string; provider or tool that reported usage
+  observed_at        REQUIRED  timestamp
+  input_tokens       OPTIONAL  int ≥ 0; tokens consumed on the input side
+  output_tokens      OPTIONAL  int ≥ 0; tokens produced on the output side
+  reported_cost_usd  OPTIONAL  float ≥ 0.0; provider-reported cost in USD
+  extended           OPTIONAL  dict[string → any]; provider-specific accounting fields
+                               that do not map to the standard fields above
+                               (e.g. cache token breakdowns, request units, compute credits)
 }
 ```
 
-**Absence contract.** An absent token field means the provider did not report it; it MUST NOT be treated as 0. `total_tokens` in ExecutorCall.usage is a derived sum `input_tokens + output_tokens`; a provider that reports only `total_tokens` MUST be treated as non-decomposable. Used in: ExecutorCall.usage.
+**Absence contract.** An absent token field means the provider did not report it; it MUST NOT be treated as 0. `total_tokens` in ExecutorCall.usage is a derived sum `input_tokens + output_tokens`; a provider that reports only `total_tokens` MUST be treated as non-decomposable. Provider-specific token sub-types or quota units MUST be stored in `extended` rather than as top-level fields, so the schema remains executor-agnostic. Used in: ExecutorCall.usage.
 
 ## ScopePriorityEntry
 
@@ -4294,7 +4296,7 @@ OwnershipMarker {
 
 Uses canonical: TemporalFields (started_at as established_at).
 
-**Write contract.** MUST be written as a JSON object using `O_CREAT|O_EXCL` to guarantee atomicity. `O_EXCL` ensures only one process can create the file; a `FileExistsError` means another process holds the lock. **Liveness contract.** If the PID in the marker is not a live OS process, the marker is stale and MAY be removed after appending a StaleLockObservation record. **Legacy compatibility.** If JSON parsing of the marker file fails, the file content MUST be treated as a decimal PID string (legacy plain-text format) for backward compatibility.
+**Write contract.** MUST be written as a JSON object using an atomic exclusive-create operation (one that succeeds only if the file does not yet exist and fails if it does, with no window for a race condition). An implementation MUST use the platform's strongest available single-writer primitive for this write. **Liveness contract.** If the PID in the marker is not a live OS process, the marker is stale and MAY be removed after appending a StaleLockObservation record. **Legacy compatibility.** If JSON parsing of the marker file fails, the file content MUST be treated as a decimal PID string (legacy plain-text format) for backward compatibility.
 
 ## StaleLockObservation
 
