@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-10-r5**
+**Specification version: 2026-10-11-r6**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -6238,6 +6238,73 @@ Executor(s)
 ```
 
 The bootstrap capability MAY remain available after bootstrap, but it becomes a replaceable capability beneath URACE rather than the owner of the Product lifecycle.
+
+# 81. Spec Structural Audit
+
+URACE MUST maintain a deterministic, executor-agnostic structural analysis of `URACE.md` as first-class Evidence for autonomous objective discovery and spec self-evolution decisions (§38, §74).
+
+## Canonical Concept Vocabulary
+
+The stems below constitute the normative vocabulary of this specification. A stem is the minimum prefix string that uniquely identifies a concept family across all its morphological variants in this document — the most irreducible composition that still discriminates one concept family from all others. Compliant implementations MUST treat each stem as a canonical concept anchor when scanning, auditing or summarising spec content.
+
+| Stem | Concept family |
+|------|---------------|
+| `justif` | justification, justify, justified, justifiable |
+| `evidenc` | evidence, evidential, evidenced |
+| `identif` | identify, identification, identifier, identified |
+| `reproduc` | reproduce, reproducible, reproduction |
+| `veloc` | velocity |
+| `condit` | condition, conditional, conditions |
+| `confl` | conflict, conflate, conflation |
+| `authorit` | authority, authoritative, authorization |
+| `delegat` | delegate, delegation, delegated |
+| `valida` | validate, validation, validated |
+| `observ` | observe, observation, observable |
+| `execut` | executor, execution, execute |
+| `checkpoin` | checkpoint, checkpointed, checkpointing |
+| `recov` | recover, recovery, recoverable |
+| `priorit` | priority, prioritize, prioritized |
+| `determin` | determine, determination, deterministic |
+| `classif` | classify, classification, classified |
+| `reconcil` | reconcile, reconciliation, reconciled |
+
+## Audit Content
+
+A spec structural audit MUST produce, for each numbered section of this specification:
+
+- RFC 2119 verb counts (MUST, MUST NOT, SHOULD, SHOULD NOT, MAY, SHALL, SHALL NOT)
+- Stem family hit counts and the morphological variant inventory found in that section
+- Semantic gap records — spans where a normative rule's meaning cannot be fully resolved without implementation-level judgment
+
+Semantic gap detection MUST cover at minimum:
+
+- **Vague quantifiers**: *reasonable, appropriate, sufficient, adequate, proportionate* — no threshold or criterion supplied
+- **Underspecified conditions**: *as needed, where applicable, when appropriate, where possible* — no observable trigger
+- **Passive-voice normative rules without an attributed actor**: the party responsible for satisfying the rule is not stated
+- **Comparatives without a numeric or defined reference anchor**: *significantly shorter, materially larger* without a baseline
+- **Capability assertions without a testable criterion**: *capable of* without a measurable outcome
+
+The audit MUST also produce global RFC 2119 totals across all sections, a per-stem section distribution identifying which sections concentrate each concept family, and a fence-parity check.
+
+The audit MUST be deterministic: given the same spec text, it MUST produce the same structural output with no dependency on execution time, random state, or external resources.
+
+## Scheduling
+
+URACE SHOULD run a spec structural audit before the first executor discovery cycle following any spec version change.
+
+The audit result MUST be stored as an Evidence record of kind `spec-structural-audit` containing at minimum: the spec version audited, the audit timestamp, the section count, the RFC 2119 totals, and a per-section ambiguity classification (`high`, `medium`, `low`, or `n/a`).
+
+The audit state MUST be persisted in durable lifecycle state and MUST be inspectable. The last-audited spec version MUST be compared to the current spec version on each assessment cycle to determine whether a fresh audit is due.
+
+## Discovery Feed
+
+The audit summary — specifically sections classified as high-ambiguity and sections with passive-voice normative rules lacking attributed actors — MUST be included in the context supplied to the autonomous discovery Executor.
+
+When a section's semantic gap density constitutes a material precision gap, URACE SHOULD surface a spec-improvement Objective for that section in the next discovery cycle, subject to applicable Authority and self-evolution policy (§74).
+
+Spec-improvement Objectives derived from audit findings are ordinary spec-evolution Objectives: they require the same justification, prioritization, execution, validation and checkpoint path as any other Objective. The audit result is Evidence; it does not constitute Authority to modify `URACE.md`.
+
+---
 
 # 80. Final Invariant
 
