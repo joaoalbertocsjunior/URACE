@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-11-r7**
+**Specification version: 2026-10-12-r11**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2753,6 +2753,8 @@ URACE MAY infer rules from existing rules (e.g. an explicit PROHIBITION in a bro
 - MUST decay when the source rule is deactivated or superseded; an inferred rule MUST NOT remain active after its entire derivation chain is deactivated
 - At `INFER_BLOCKING` confidence, MUST carry a complete derivation chain traceable to at least one explicit L1 rule
 
+**Canonical threshold values.** `INFER_BLOCKING = 0.85` (the confidence level at which a SYSTEM_INFERRED rule becomes blocking; configurable via POLICY rule override). The value 0.85 MUST be the default used when no POLICY rule overrides it. An implementation that uses a different hardcoded default violates reproducibility.
+
 URACE MUST NOT promote a SYSTEM_INFERRED rule to L1 status without explicit operator confirmation supplied via authoritative input.
 
 ## Temporal Change Binding
@@ -2887,7 +2889,7 @@ Objective {
   priority                      REQUIRED  integer 0–100; higher = more urgent
   status                        REQUIRED  planned | active | completed | cancelled | disabled
                                           | deferred | deferred_budget | needs_reassessment
-                                          | awaiting_operator_decision | policy_blocked
+                                          | awaiting_operator_decision | policy_blocked | blocked
   expected_value                REQUIRED  float 0.0–1.0; estimated net benefit if completed
   estimated_cost                REQUIRED  float 0.0–1.0; estimated resource fraction
   risk                          REQUIRED  float 0.0–1.0; probability of adverse outcome
@@ -3020,6 +3022,11 @@ Evidence MUST be append-only. An Evidence record MUST NOT be modified or deleted
 | `lifecycle-resumed` | `disposition`: string |
 | `authority-resolution-denied` | `reason`: string |
 | `live-control-boundary` | `applied_inputs`: int, `outcome`: string |
+| `destination-anchor-changed` | `prior_digest`: string, `new_digest`: string, `drift_detected`: bool |
+| `external-metric-observation` | `source_id`: string, `metric_name`: string, `value`: float |
+| `authority-resolution-escalated` | `reason`: string, `requires_decision`: string |
+| `force-discovery-override` | `force_id`: string, `attribution`: string |
+| `external-metric-unavailable` | `source_id`: string, `streak`: int, `reason`: string |
 
 **Append-only contract.** A new Evidence record MUST be created for every event; prior records MUST NOT be edited. An implementation that truncates or compacts the Evidence log MUST preserve at minimum the most recent 1 000 records and MUST NOT discard records for events within the current Objective's lifecycle.
 
@@ -3119,7 +3126,7 @@ Trigger {
   id          REQUIRED  stable identifier
   at          REQUIRED  timestamp
   kind        REQUIRED  EXECUTOR_AVAILABLE | EXECUTOR_UNAVAILABLE
-                        | EXTERNAL_REPOSITORY_UPDATE | LIFECYCLE_EVENT
+                        | EXTERNAL_REPOSITORY_UPDATE | LIFECYCLE_EVENT | SCHEDULED_WAKE
   source      REQUIRED  string; origin of the trigger signal
   provenance  REQUIRED  string; how the signal was detected
   disposition REQUIRED  string; required lifecycle response (e.g. REASSESS)
@@ -3297,6 +3304,11 @@ Config {
                                capacity_retry_mode:            automatic | dynamic | fixed
                                capacity_retry_delay_ms:        int
                                discovery_yield_exhausted_threshold: int
+                               transient_network_backoff_seconds:   int; default 300; MUST be
+                                                                    < capacity_fallback_seconds
+                               systematic_failure_threshold:        int; default 3; consecutive
+                                                                    failures triggering systematic
+                                                                    failure classification
                                providers:  list[ExecutorProvider]
                                allowed_files_by_scope: dict[scope → list[relative_path]]
                              }
@@ -3348,7 +3360,7 @@ State {
   current_plan          REQUIRED  Plan | null
   operations            REQUIRED  list[Operation]
   evidence              REQUIRED  list[Evidence]
-  decisions             REQUIRED  list[Decision]
+  decision_records      REQUIRED  list[DecisionRecord]
   checkpoints           REQUIRED  list[Checkpoint]
   progress_profiles     REQUIRED  list[ProgressProfile]
   progress_observations REQUIRED  list (observation records from metric collection)
@@ -3372,6 +3384,9 @@ State {
   pattern_memory        REQUIRED  dict (implementation-defined; MAY be empty)
   reasoning_memory      REQUIRED  list (reasoning hypothesis entries; max bounded by config)
   last_cycle            REQUIRED  timestamp | null
+  integrity_gaps        REQUIRED  list[IntegrityGap]
+  status_transitions    REQUIRED  list[StatusTransition]
+  spec_audit_state      OPTIONAL  SpecAuditState | null
   triggers              OPTIONAL  list[Trigger]
   pending_runtime_activation OPTIONAL dict; present when a runtime-scope change awaits activation
   restart_requested     OPTIONAL  bool; set to true when runtime restart is needed
@@ -3382,6 +3397,26 @@ State {
 **Atomic write contract.** Every write to the State Document MUST be atomic from the perspective of recovery: after a crash, the state file MUST reflect either the pre-write state or the fully committed post-write state. Partial writes MUST NOT be possible.
 
 **schema_version contract.** If the `schema_version` in a loaded State Document does not match the running implementation's expected version, the implementation MUST surface this as a named migration-required condition and MUST NOT silently proceed with an incompatible schema.
+
+## Reasoning Memory Entry
+
+A Reasoning Memory Entry is a hypothesis or structural pattern retained in `reasoning_memory`.
+
+```
+ReasoningMemoryEntry {
+  id           REQUIRED  stable identifier
+  pattern      REQUIRED  string; the recognized pattern or hypothesis
+  status       REQUIRED  ACTIVE | TENTATIVE; ACTIVE when confidence ≥ 0.6 (see INFER_BLOCKING)
+  confidence   REQUIRED  float 0.0–1.0
+  count        REQUIRED  int ≥ 1; times this pattern has been observed
+  source_ids   REQUIRED  list[string]; Evidence or Input ids that support this pattern
+  created_at   REQUIRED  timestamp
+  updated_at   REQUIRED  timestamp
+  expires_at   OPTIONAL  timestamp | null; when this entry should be reviewed for expiry
+}
+```
+
+**Status threshold contract.** A ReasoningMemoryEntry MUST be classified `ACTIVE` when its `confidence` ≥ 0.6 and `TENTATIVE` otherwise. The threshold 0.6 is distinct from `INFER_BLOCKING` (0.85); ACTIVE status enables use in summaries but does not gate or block operations.
 
 ## Ledger Container
 
@@ -3454,20 +3489,61 @@ The Executor State tracks the operational status of the Executor subsystem and c
 
 ```
 ExecutorState {
-  last_discovery_at         REQUIRED  timestamp | null
-  last_operation_at         REQUIRED  timestamp | null
-  last_availability_check   REQUIRED  timestamp | null
-  available                 REQUIRED  bool | null
-  failures                  REQUIRED  list[FailureRecord]
-  executor_calls            REQUIRED  list[ExecutorCall] (rolling, bounded by config)
-  discovery_calls           REQUIRED  int; total discovery calls this lifecycle
-  provider_pool             REQUIRED  dict[string → ProviderStatus]; keyed by provider_id
-  discovery_trigger         OPTIONAL  {reason: string, signature: string}; set when new
-                                      context forces discovery
+  last_discovery_at              REQUIRED  timestamp | null
+  last_operation_at              REQUIRED  timestamp | null
+  last_availability_check        REQUIRED  timestamp | null
+  available                      REQUIRED  bool | null
+  failures                       REQUIRED  list[FailureRecord]
+  executor_calls                 REQUIRED  list[ExecutorCall] (rolling, bounded by config)
+  discovery_calls                REQUIRED  int; total discovery calls this lifecycle
+  provider_pool                  REQUIRED  dict[string → ProviderStatus]; keyed by provider_id
+  discovery_budget_status        REQUIRED  DiscoveryBudgetStatus; current credit gate outcome
+  unproductive_discovery_streak  REQUIRED  int ≥ 0; consecutive complete-cycle calls with
+                                           no justified action, ineligible scope, or transport
+                                           failure; resets on productive accepted result
+  discovery_trigger              OPTIONAL  {reason: string, signature: string}; set when new
+                                           context forces discovery
+  discovery_defer_reason         OPTIONAL  string | null; human-readable reason the current
+                                           discovery cycle was deferred; present only when
+                                           discovery_budget_status is a deferral state
+  capacity_status                OPTIONAL  WAITING_PROVIDER_CAPACITY | PROBE_DUE | AVAILABLE | null;
+                                           provider capacity probe state; set by the capacity probe
+                                           path independently of discovery_budget_status
 }
 ```
 
-Uses canonical: FailureRecord (failures entries), ProviderStatus (provider_pool values).
+Uses canonical: FailureRecord (failures entries), ProviderStatus (provider_pool values), DiscoveryBudgetStatus (discovery_budget_status).
+
+## DiscoveryBudgetStatus
+
+The canonical enumeration of outcomes from the Discovery Credit Gate (§62c). Written to `ExecutorState.discovery_budget_status` at every cycle boundary. Each value is a mutually exclusive gate outcome; the gate evaluates conditions in priority order and records the first matching outcome.
+
+```
+DiscoveryBudgetStatus =
+  | WITHIN_BUDGET                   — no gate condition active; credit may be spent
+  | SYSTEMATIC_FAILURE_COOLDOWN     — executor in systematic-failure cooldown; all discovery
+                                      deferred until cooldown expires
+  | DAILY_LIMIT_OR_RESERVE_REACHED  — rolling 24h call count at or beyond the configured
+                                      ceiling or reserve floor
+  | MONTHLY_LIMIT_OR_RESERVE_REACHED — rolling 30d call count at or beyond the configured
+                                       ceiling or reserve floor
+  | DUPLICATE_TRIGGER_SUPPRESSED    — incoming discovery trigger is a duplicate of the most
+                                      recently processed trigger signature; no new context
+                                      would change the outcome
+  | DEFERRED_PROPORTIONALITY        — discovery deferred by the proportionality gate; the
+                                      expected marginal value of a discovery call is below the
+                                      defensible threshold (e.g. lifecycle is BLOCKED)
+  | DISCOVERY_YIELD_EXHAUSTED       — unproductive streak has reached the configured threshold;
+                                      further discovery deferred until a qualifying reset event
+  | WAITING_PROVIDER_CAPACITY       — executor provider is in a scheduled capacity-unavailability
+                                      window; discovery deferred until capacity restores
+```
+
+**Ordering contract.** The Discovery Credit Gate MUST evaluate these conditions in the priority order above: systematic-failure cooldown first, then budget ceilings, then duplicate suppression, then proportionality, then yield exhaustion, then provider capacity. A lower-priority condition MUST NOT override a higher-priority gate.
+
+**Deferral-reason contract.** When `discovery_budget_status` is any deferral state (any value other than `WITHIN_BUDGET`), the lifecycle MUST also set `ExecutorState.discovery_defer_reason` to a human-readable string stating the specific reason. The field MUST be cleared when `discovery_budget_status` returns to `WITHIN_BUDGET`.
+
+**Inspection contract.** `discovery_budget_status` MUST be surfaced in every lifecycle inspection output. `discovery_defer_reason` MUST be included when non-null.
 
 ## External Metric State
 
@@ -3571,6 +3647,31 @@ Uses canonical: ProductScope (scopes keys), ScopePriorityEntry (scopes values), 
 
 **Normalization contract.** The sum of `normalized_weight` across all active scopes MUST equal 1.0 (±floating-point tolerance). A scope with `change_limited: true` has had its weight clamped by `max_weight_step_per_revision`.
 
+## ScopePriorityConfig
+
+The ScopePriorityConfig is the operator-supplied configuration for the scope priority system, stored in the Config Document.
+
+```
+ScopePriorityConfig {
+  mode    REQUIRED  STATIC | DYNAMIC_BOUNDED; DYNAMIC_BOUNDED enables bounded weight adjustment
+                   based on observed backlog and recency; STATIC holds weights fixed at init
+  version REQUIRED  string; implementation-defined version tag (e.g. "dynamic-scope-priority-v1")
+  max_weight_step_per_revision REQUIRED  float 0.0–1.0; maximum change in any scope weight per revision
+  scopes  REQUIRED  dict[ProductScope → ScopePriorityConfigEntry]
+}
+```
+
+```
+ScopePriorityConfigEntry {
+  base_weight      REQUIRED  float > 0.0; starting weight
+  min_weight       REQUIRED  float > 0.0; autonomous floor
+  max_weight       REQUIRED  float ≥ min_weight; autonomous ceiling
+  artifacts        REQUIRED  list[relative_path]; product artifacts in this scope
+  execution_scopes REQUIRED  list[string]; allowed_files_by_scope keys this scope uses
+  label            OPTIONAL  string; human-readable scope description
+}
+```
+
 ## Context Input
 
 A Context Input is operator-supplied authoritative context that informs discovery and planning.
@@ -3593,6 +3694,7 @@ A Pending Validation record represents an Operation that could not be validated 
 
 ```
 PendingValidation {
+  id               REQUIRED  stable identifier
   operation_id     REQUIRED  Operation id
   operation_scope  REQUIRED  string
   queued_at        REQUIRED  timestamp
@@ -3670,11 +3772,14 @@ SystemRepairEntry {
   runtime_version  REQUIRED  string; SHA-256 digest of the runtime file set at detection time
   count            REQUIRED  int ≥ 1; times this fault has recurred
   status           REQUIRED  OBSERVED | REPAIR_QUEUED | REPAIRED | REPAIR_FAILED
+                             | ACTIVATION_REQUESTED | DEFERRED_CAPABILITY_OR_BUDGET
   first_at         REQUIRED  timestamp; when fault was first observed (serves as created_at)
   last_at          REQUIRED  timestamp; most recent recurrence (serves as updated_at)
   repaired_at      OPTIONAL  timestamp | null; set when status → REPAIRED
 }
 ```
+
+`ACTIVATION_REQUESTED` is set while a repair objective has been created and awaits executor activation; `DEFERRED_CAPABILITY_OR_BUDGET` is set when the repair cannot proceed because capability or budget is unavailable.
 
 Uses TemporalFields: first_at (as created_at), last_at (as updated_at), repaired_at.
 
@@ -3921,6 +4026,120 @@ ON LIFECYCLE CYCLE START:
 
 **Immutability contract.** Once established, `destination_anchor` MUST NOT be updated by any autonomous operation other than the explicit acknowledgement path. A runtime that updates `destination_anchor` without an attributable operator command MUST be treated as a governance integrity failure.
 
+## Self-Evolution Eligibility Gate Mechanism
+
+Every Executor proposal for a self-evolution or re-bootstrap Objective MUST pass through a deterministic policy gate before the proposal may be accepted as an Objective candidate. The gate reads the durable `self_evolution_policy` record and the ExecutorProposal fields; it MUST NOT consult the Executor again.
+
+```
+EXECUTOR PROPOSAL (ExecutorProposal)
+  → read state.self_evolution_policy.mode
+
+  IF mode == DISABLED:
+    → record Evidence(kind="self-evolution-policy-decision",
+                      outcome="INELIGIBLE", mode="DISABLED",
+                      scope=proposal.scope, reason="policy disabled")
+    → REJECT proposal; do not create Objective
+
+  IF mode == NECESSARY_ONLY:
+    → evaluate three gate fields:
+        (a) proposal.self_evolution_necessary == true
+        (b) proposal.necessity_evidence is non-empty
+        (c) proposal.lower_impact_route_sufficient == false
+    → if any gate field fails:
+        record Evidence(kind="self-evolution-policy-decision",
+                        outcome="INELIGIBLE", mode="NECESSARY_ONLY",
+                        scope=proposal.scope,
+                        reason=<first failing gate field>)
+        REJECT proposal; do not create Objective
+    → if all gate fields pass:
+        record Evidence(kind="self-evolution-policy-decision",
+                        outcome="ELIGIBLE", mode="NECESSARY_ONLY",
+                        scope=proposal.scope)
+        ACCEPT proposal → proceed to Authority Resolution
+
+  IF mode == CONTINUOUS:
+    → record Evidence(kind="self-evolution-policy-decision",
+                      outcome="ELIGIBLE", mode="CONTINUOUS",
+                      scope=proposal.scope)
+    → ACCEPT proposal → proceed to Authority Resolution
+```
+
+**Durable record contract.** Every gate evaluation — ELIGIBLE or INELIGIBLE — MUST produce a durable `self-evolution-policy-decision` Evidence record before any downstream action is taken. An evaluation without a durable record is incomplete and MUST be treated as INELIGIBLE on recovery.
+
+**Policy-source contract.** The gate MUST read the self-evolution policy exclusively from `state["self_evolution_policy"]`. A gate that consults Executor output, operational context, or the most recently observed mode to infer the policy violates §74.
+
+**Recovery contract.** If `state["self_evolution_policy"]` is absent, corrupted, or structurally unreadable, the gate MUST apply `NECESSARY_ONLY` as the fail-closed default and MUST surface a named `self-evolution-policy-unreadable` IntegrityGap (WARNING). It MUST NOT proceed with `CONTINUOUS` mode under any form of inference.
+
+**Gate-before-authority contract.** The eligibility gate MUST be evaluated before Authority Resolution (§62c Authority Resolution Mechanism). A proposal that fails the gate MUST NOT reach Authority Resolution; doing so would allow an ineligible proposal to be denied by authority rather than by policy, obscuring the actual blocking reason.
+
+## Discovery Credit Gate Mechanism
+
+Before every discovery cycle that would invoke a metered or credit-accruing Executor, URACE MUST evaluate the Discovery Credit Gate. The gate is deterministic, executor-agnostic, and reads only durable state and configuration. It MUST NOT invoke an Executor to determine its own outcome.
+
+```
+DISCOVERY CYCLE REQUEST
+  → evaluate conditions in priority order:
+
+  1. IF executor in systematic-failure cooldown:
+       → set discovery_budget_status = SYSTEMATIC_FAILURE_COOLDOWN
+       → set discovery_defer_reason = "systematic failure cooldown active until <retry_at>"
+       → DEFER; do not invoke discovery
+
+  2. IF rolling 24h call count ≥ configured daily ceiling OR below reserve floor:
+       → set discovery_budget_status = DAILY_LIMIT_OR_RESERVE_REACHED
+       → set discovery_defer_reason = "24h call ceiling or reserve reached"
+       → DEFER
+
+  3. IF rolling 30d call count ≥ configured monthly ceiling OR below reserve floor:
+       → set discovery_budget_status = MONTHLY_LIMIT_OR_RESERVE_REACHED
+       → set discovery_defer_reason = "30d call ceiling or reserve reached"
+       → DEFER
+
+  4. IF incoming trigger signature == last processed trigger signature:
+       → set discovery_budget_status = DUPLICATE_TRIGGER_SUPPRESSED
+       → set discovery_defer_reason = "duplicate trigger; no new context since last cycle"
+       → DEFER; do not record IntegrityGap (not a fault condition)
+
+  5. IF lifecycle state is BLOCKED:
+       → set discovery_budget_status = DEFERRED_PROPORTIONALITY
+       → set discovery_defer_reason = "lifecycle BLOCKED; discovered Objectives cannot
+                                       proceed until unresolved effect is reconciled"
+       → emit IntegrityGap(kind="discovery-proportionality-deferred",
+                           severity=WARNING,
+                           detail=discovery_defer_reason)
+       → DEFER
+
+  6. IF unproductive_discovery_streak ≥ configured exhausted threshold:
+       → set discovery_budget_status = DISCOVERY_YIELD_EXHAUSTED
+       → set discovery_defer_reason = "streak=<N> reached threshold=<T>; qualifying
+                                       reset event required"
+       → emit IntegrityGap(kind="discovery-yield-exhausted",
+                           severity=WARNING,
+                           detail=discovery_defer_reason)
+       → surface qualifying_reset_conditions in inspection output
+       → DEFER until qualifying reset event:
+           (a) new authoritative inbox input consumed
+           (b) net-new Evidence record added since streak began
+           (c) change to governing Intent, product-file content, or Authority config
+           (d) operator force-discovery invocation (bypasses gate for one cycle;
+               does NOT reset streak; streak resets only on productive result)
+
+  7. ELSE:
+       → set discovery_budget_status = WITHIN_BUDGET
+       → clear discovery_defer_reason
+       → PROCEED with discovery cycle
+```
+
+**Durable-record contract.** The `discovery_budget_status` and `discovery_defer_reason` fields MUST be written to `ExecutorState` before any deferral takes effect. A deferral that does not produce a durable status record is incomplete and MUST be treated as unresolved on recovery.
+
+**Proportionality-first contract.** A discovery cycle deferred by conditions 5 or 6 MUST emit a named `IntegrityGap` so that the blocking condition is visible in the inspection output. Conditions 1–4 are hard mechanical limits; they do not require an IntegrityGap.
+
+**Budget-independence contract.** The proportionality gate (condition 5) and the yield-exhaustion gate (condition 6) operate independently of and prior to the hard-budget ceilings in conditions 2–3. Satisfying the hard budget alone does not satisfy the proportionality requirement; both must pass for discovery to proceed.
+
+**Force-discovery contract.** An operator force-discovery invocation MUST be recorded as a durable attributed override event in `evidence`. It bypasses the yield-exhaustion gate (condition 6) for exactly one discovery cycle. The `unproductive_discovery_streak` counter MUST NOT be reset by the invocation; it resets only when the forced cycle produces a productive accepted result. If the force cycle produces no justified action, the streak increments normally.
+
+**Streak-reset contract.** `unproductive_discovery_streak` MUST increment when a complete discovery cycle returns no justified action, an ineligible scope under current policy, or a transport failure. It MUST reset to 0 only when a discovery cycle produces at least one productive accepted result. Partial resets are not permitted.
+
 ---
 
 # 62d. Canonical Primitives
@@ -3993,10 +4212,11 @@ A single status change event in an append-only status history list.
 
 ```
 StatusTransition {
-  status  REQUIRED  string; the new status value after this transition
-  at      REQUIRED  timestamp
-  reason  OPTIONAL  string; why the transition occurred
-  source  OPTIONAL  string; Input id or system component that triggered it
+  status       REQUIRED  string; the new status value after this transition
+  at           REQUIRED  timestamp
+  from_status  OPTIONAL  string; the prior status value before this transition
+  reason       OPTIONAL  string; why the transition occurred
+  source       OPTIONAL  string; Input id or system component that triggered it
 }
 ```
 
@@ -4634,6 +4854,27 @@ ArchiveAmendment {
 
 **Append-only contract.** Amendment records MUST NOT be removed or modified after being written. The amendment log is an audit trail. **No-CompactionSummary-mutation contract.** An ArchiveAmendment modifies a record within an archive file; it does NOT modify the CompactionSummary in the live list, the CompactionEvent in the manifest, or the `original_digest`. The `original_digest` remains a commitment to the pre-compaction snapshot, not the post-amendment state. **Amendment vs decompaction contract.** ArchiveAmendment is appropriate for lightweight status changes (e.g., provenance revision). For structural changes that would alter `original_digest` verification, full decompaction (`urace decompact`) is required. Uses canonical: Identifier (id), DigestValue (before_digest, after_digest), TemporalFields (amended_at as created_at).
 
+## SpecAuditState
+
+The persisted audit state record written to `state["spec_audit_state"]` after every §81 structural audit. Enables the lifecycle to determine whether a fresh audit is due on each assessment cycle by comparing `spec_version` to the current spec version. Distinct from the `spec-structural-audit` Evidence record: the Evidence record is an append-only audit-trail entry; this record is the mutable current-state snapshot, replaced on each audit run.
+
+```
+SpecAuditState {
+  spec_version                   REQUIRED  string; spec version string audited (e.g. "2026-10-11-r7")
+  last_audited_at                REQUIRED  timestamp; when this audit was completed
+  section_count                  REQUIRED  int ≥ 1; number of numbered sections found in spec
+  fence_parity_even              REQUIRED  bool; true when total fence count is even
+  rfc2119_totals                 REQUIRED  dict[verb → int]; global RFC 2119 verb counts across all sections
+  normative_density_per_section  REQUIRED  float ≥ 0.0; average normative-rule count per section
+  high_ambiguity_sections        REQUIRED  list[string]; section labels classified as high-ambiguity
+  medium_ambiguity_sections      REQUIRED  list[string]; section labels classified as medium-ambiguity
+  top_gap_sections               REQUIRED  list[dict]; up to 5 sections with highest semantic-gap density
+                                           each entry: {section, title, gap_count, normative_rule_count}
+}
+```
+
+**Freshness contract.** On each assessment cycle, the lifecycle MUST compare `spec_audit_state.spec_version` to the running spec version. When they differ, a fresh audit is due before the next executor discovery cycle. When no `spec_audit_state` exists, a fresh audit is due immediately. **Determinism contract.** Given the same spec text, two audit runs MUST produce identical `SpecAuditState` values. Any dependency on execution time, random state, or external resources violates this contract. Uses TemporalFields: last_audited_at (as created_at for the audit run).
+
 ---
 
 # 62f. Compaction and Retention
@@ -4650,6 +4891,7 @@ Default governance table:
 |-------|--------|----------------|-------------|
 | `ExternalMetricState.latest` | §62b | 1 000 entries | ROLLING_EVICTION |
 | `ExecutorState.failures` | §62b | 500 entries | ARCHIVE |
+| `ExecutorState.executor_calls` | §62b | 35-day rolling window | ROLLING_EVICTION |
 | `ProviderStatus.attempt_history` | §62d | 35-day rolling window | ROLLING_EVICTION (integral) |
 | `StaleLockObservation` JSONL | §62e | 10 MB file | ARCHIVE |
 | `CompactionManifest.events` | §62e | — | PROHIBITED |
@@ -4814,10 +5056,10 @@ WAITING_FOR_SCHEDULE
 WAITING_FOR_AUTHORITATIVE_DECISION
 BLOCKED
 PAUSED
-IDLE
+DORMANT (IDLE)
 ```
 
-`IDLE` represents the lifecycle condition referred to as `DORMANT` throughout this specification: no justified authorized action exists now and no unreconciled externally committed effect is pending, but a viable path back to assessment is retained. The terms are normatively interchangeable; an implementation MUST NOT treat them as distinct states with different transition, wakeability, or persistence requirements.
+`DORMANT` is the canonical lifecycle state string for the condition in which no justified authorized action exists now and no unreconciled externally committed effect is pending, but a viable path back to assessment is retained. The term `IDLE` is a conceptual alias; an implementation MUST use `DORMANT` as the persisted state value. MUST NOT treat them as distinct states with different transition, wakeability, or persistence requirements.
 
 The `ASSESSING` lifecycle state is the evaluation phase in which URACE reviews current Evidence, outstanding Objectives, pending reservations, resource availability, and any unresolved effects discovered at wake or transition, before committing to or continuing authorized work. Entry to `ASSESSING` MUST occur on wake from `IDLE`, on successful exit from `REPAIRING`, at resumption from `PAUSED`, and at any state transition where independent evaluation is required before active execution may begin. The inspection surface MUST expose without an Executor call: the identity of Objectives currently under assessment, the Evidence dimensions being evaluated, and any unresolved effects or pending reservations discovered during assessment. `ASSESSING` is distinct from `ACTIVE`, which executes work under a positively identified justified Objective without requiring a fresh assessment cycle first; and from `IDLE`, which holds no justified work and no active evaluation. `ASSESSING` exits to `ACTIVE` when a justified authorized action is identified; to `IDLE` when no justified authorized action exists; or to `BLOCKED` when an unreconciled externally committed effect is discovered. An implementation MUST NOT skip `ASSESSING` after `REPAIRING` exits and transition directly to `ACTIVE`; the post-repair assessment cycle is the mechanism by which restored Product integrity is independently confirmed before new work begins.
 

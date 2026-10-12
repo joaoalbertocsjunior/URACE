@@ -2,3 +2,7 @@
 /.envrc
 /.claude
 /.codex
+/.agents
+/.analysis
+/CLAUDE.md
+/AGENTS.md

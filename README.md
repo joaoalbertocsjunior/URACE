@@ -48,7 +48,7 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 Generated help lists the commands supported by your implementation.
 
 ```text
-urace autonomous            run persistent evolution
+urace auto                  run persistent evolution
 urace pause / resume        suspend or resume the lifecycle
 
 urace check                 inspect lifecycle state
@@ -65,7 +65,7 @@ urace update download/explain/apply/resolve
 
 Use `urace help` to explore all available commands.
 
-You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Read-only commands (`check`, `vitals`, `rules`, `intent list`, `constraint list`, `change list`, and all `help` operations) load an atomic state snapshot and can run freely from a second terminal while `urace autonomous` owns the lifecycle. Govern and update commands write to an atomic inbox and are applied exactly once at the next safe lifecycle boundary; they never conflict with each other or with an active autonomous run.
+You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Read-only commands (`check`, `vitals`, `rules`, `intent list`, `constraint list`, `change list`, and all `help` operations) load an atomic state snapshot and can run freely from a second terminal while `urace auto` owns the lifecycle. Govern and update commands write to an atomic inbox and are applied exactly once at the next safe lifecycle boundary; they never conflict with each other or with an active autonomous run.
 
 `urace check` reports the lifecycle state; use `urace help check` for a full state reference and guidance.
 
@@ -80,7 +80,7 @@ Keep the current `URACE.md` version identifiable, then use `urace update`:
 
 The `explain` and `apply` commands detect tracked configuration and implementation changes, including changes made by other agents. A conflict applies no files and waits for your decision; failed activation rolls back. Never edit generated state files or copy specification changes into runtime files; use `urace help update`.
 
-The `apply` and `resolve` commands require permission to update URACE. They are queued for the next safe checkpoint; run `urace autonomous` to process them.
+The `apply` and `resolve` commands require permission to update URACE. They are queued for the next safe checkpoint; run `urace auto` to process them.
 
 ## See Progress
 
