@@ -71,9 +71,18 @@ Run `urace /update` — it guides you through the full update sequence safely. U
 
 URACE reports observed **metrics**, system-health **vitals** and decision **scores**. Inspect them with `urace /check`, `urace /vitals` and `urace /change list`; use `urace /help` for details.
 
-## Competing Variants
+## Inspect and Modify Context
 
-The portfolio feature compares different approaches to the same goal under equal resource limits. Use `urace /help portfolio` for usage.
+URACE automatically and gradually compresses its full lifecycle state — objectives, evidence, decisions, operations, and all user-added context — as it grows, to maintain reliability over long runs. It decompresses gradually too, restoring full human-readable form for inspection or modification.
+
+```text
+urace /compact      gradually compress lifecycle state for reliability
+urace /decompact    gradually restore full human-readable form
+urace /amend <id>   correct a record in place without full decompaction
+urace /crc show     inspect the current full-context Cognitive Resume
+```
+
+Use `urace /help compact` for details.
 
 ## Consequential Use
 
