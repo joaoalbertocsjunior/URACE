@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r24**
+**Specification version: 2026-10-12-r25**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -5844,6 +5844,66 @@ DurableInbox = {
   (AP13 obs)   (AP13 obs)    (AP13 obs)
 ```
 
+**Input traceability contract.** When a queued Input is consumed from the Durable Inbox, the resulting lifecycle artifacts MUST carry a `source_input` field referencing the originating `Input.id`. Specifically: Objectives created from `goal` inputs MUST have `source_input: <input-id>`. Evidence records of kind `authoritative-input-consumed` MUST include `source_input: <input-id>`. Any handler that produces a rule-added, rule-superseded, rule-deactivated, scheduled-task-registered, or equivalent lifecycle artifact MUST include `source_input: <input-id>` on the artifact. This field enables `urace inbox status <input-id>` to return the full artifact chain produced by a given inbox command.
+
+**Rejection record contract.** When a queued Input cannot be processed — due to malformed JSON, unsupported `kind`, schema validation failure, or handler rejection — URACE MUST write a structured rejection record to `state.evidence` with `kind: authoritative-input-rejected`, `source_input: <input-id>` (or null if id is unreadable), `reason: <human-readable string>`, and `rejected_at: <timestamp>`. The `.rejected` file suffix signals the physical rejection; the evidence record provides the machine-readable explanation. An implementation that renames the file without writing the evidence record produces an opaque rejection that violates this contract.
+
+**Orderly shutdown signal contract.** When an orderly shutdown signal is received during autonomous operation — including SIGTERM, SIGINT, or any equivalent process-manager termination signal — URACE MUST complete any indivisible atomic operation currently in progress to its next safe checkpoint boundary, MUST NOT discard any durably queued inbox inputs that have not yet been processed, and MUST emit a structured shutdown summary to the active machine-readable channel before exiting. The shutdown summary MUST include: lifecycle state at stop, count of unresolved effects, count of unprocessed inbox inputs, and whether all completed-cycle state is durable. The exit code on orderly shutdown MUST be 130.
+
+**Exit code contract.** An implementation MUST return one of the following exit codes:
+
+| Code | Condition | Machine interpretation |
+|------|-----------|------------------------|
+| `0` | Success | Command completed normally; output is safe to parse |
+| `1` | Validation or not-found error | Input rejected, resource not found, schema invalid; operator action required |
+| `2` | Unrecoverable fault | Unhandled exception or controller error; retry after diagnosis |
+| `75` | Restart requested | Self-evolution activation requires process restart; re-invoke immediately |
+| `76` | Retry recommended | Trusted controller fault in retry state; re-invoke after brief delay |
+| `130` | Orderly shutdown | Received orderly shutdown signal or operator interrupt; state is durable |
+
+Any exit code not listed above is implementation-defined and MUST NOT be treated as a documented outcome by machine consumers.
+
+**Non-support statement.** URACE does not accept commands via standard input (stdin) or via socket/named-pipe IPC. All external command injection MUST use the Durable Inbox file mechanism. This is a deliberate design choice: file-based inbox provides durable, FIFO-ordered, crash-safe delivery that stdin and socket channels do not guarantee. Implementations that wish to wrap URACE in a socket server MUST front the Durable Inbox rather than bypass it.
+
+**`urace inbox status <input-id>` contract.** The `inbox status` subcommand MUST accept an Input id and return a structured result containing: whether the input has been processed (`CONSUMED`, `REJECTED`, or `PENDING`), the timestamp of processing when applicable, the `input_kind`, and the list of `source_input`-linked artifact ids produced (objective ids, rule ids, task ids, evidence ids). In MACHINE mode (`--json`), this MUST be a JSON document. In human mode, a concise readable summary MUST be emitted. If the input id is not found in `processed_input_ids` and no inbox file exists for it, the status MUST be `NOT_FOUND` rather than an error exit.
+
+## IPC Input Schema Catalog
+
+The Durable Inbox accepts 16 input kinds. Each input file MUST conform to the envelope:
+
+```
+InboxInput {
+  id      REQUIRED  string; unique input identifier (e.g. "input-<uuid>")
+  at      REQUIRED  string; ISO-8601 timestamp; determines FIFO ordering
+  kind    REQUIRED  string; one of the 16 kinds below
+  payload REQUIRED  dict;   kind-specific payload (see catalog below)
+  status  OPTIONAL  string; "QUEUED" by convention
+}
+```
+
+**Catalog:**
+
+| Kind | Required payload fields | Effect |
+|------|------------------------|--------|
+| `context` | `text: str` | Appends operator-supplied context; triggers discovery |
+| `goal` | `title: str`, `success_measure: str` | Creates a new planned Objective |
+| `source` | `id: str`, `kind: str` (json_file\|http_json\|github_repository) | Registers or updates a connector source |
+| `metric` | `name: str` | Defines or updates a metric definition |
+| `vital` | `name: str` | Defines or updates a vital definition |
+| `source_control` | `id: str`, `action: str` (remove\|disable\|enable) | Mutates an existing connector source |
+| `metric_control` | `name: str`, `action: str` (remove) | Removes a metric definition |
+| `vital_control` | `name: str`, `action: str` (remove) | Removes a vital definition |
+| `goal_control` | `id: str`, `action: str` (cancel\|disable\|defer\|resume\|pin\|unpin\|prioritize\|schedule\|delete\|resolve-update) | Mutates an existing Objective |
+| `executor_control` | `action: str` (attach\|detach\|retry-policy), `id: str` | Attaches, detaches, or configures an Executor |
+| `policy_control` | `name: str`, `value: str` | Sets a named policy (self-evolution, change-explanations, external-metrics) |
+| `budget_control` | `daily: int`, `monthly: int` | Sets Executor call budget limits |
+| `evaluation_control` | `action: str` (set-weight\|set-minimum), `component?: str`, `value: num` | Configures the evaluation system |
+| `intent_control` | `action: str` (add\|supersede\|deactivate), `statement?: str`, `rule_kind?: str` | Adds, supersedes, or deactivates a DIRECTIVE rule |
+| `constraint_control` | `action: str` (add\|deactivate), `statement?: str`, `rule_kind?: str` (PROHIBITION\|PERMISSION) | Adds or deactivates a constraint rule |
+| `schedule-task` | `task: ScheduledTask` | Registers a durable scheduled task (AP18) |
+
+Optional `goal` payload fields: `reason`, `priority` (int 1–100), `target` (product\|urace), `expected_value`, `estimated_cost`, `risk`, `urgency`, `deadline`, `not_before`, `dependencies`, `pinned`.
+
 ---
 
 ## AP15 — Broadcast Log
@@ -7647,6 +7707,9 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `recoveryman` | RecoveryManifest, recovery manifest |
 | `progressvect` | ProgressVector, progress vector, progress_vector |
 | `executbudg` | ExecutionBudget, execution budget, execution_budget |
+| `sourceinput` | source_input, source_input_id, input traceability |
+| `exitcode` | exit code, exit codes, return code |
+| `inboxstatus` | inbox status, urace inbox status, input status query |
 
 ## Audit Content
 
