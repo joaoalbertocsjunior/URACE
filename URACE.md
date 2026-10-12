@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r12**
+**Specification version: 2026-10-12-r13**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3783,6 +3783,22 @@ SystemRepairEntry {
 
 Uses TemporalFields: first_at (as created_at), last_at (as updated_at), repaired_at.
 
+## TechniqueApplicationRecord
+
+Records one application (or skip/defer) of a technique by the TechniqueApplicabilityGate (§62h).
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| id | string | REQUIRED | stable identifier, prefix `ta-` |
+| technique | string | REQUIRED | T1..T6 or canonical name |
+| verdict | string | REQUIRED | APPLY \| SKIP \| DELEGATE_EXECUTOR \| DEFER |
+| reason | string | REQUIRED | gate guard that matched |
+| applied_at | ISO-8601 | REQUIRED | |
+| cycle | integer | OPTIONAL | cycle counter at application time |
+| sd_result | boolean | OPTIONAL | result of SD(T, state) evaluation |
+| executor_delegated | boolean | OPTIONAL | True when DELEGATE_EXECUTOR verdict executed |
+| credits_consumed | integer | OPTIONAL | credits spent if executor was invoked |
+
 ---
 
 # 62c. Mechanism Contracts
@@ -5012,116 +5028,119 @@ Traverses the reasoning chain rooted at `<decision-id>` to depth `N` (default: u
 
 ---
 
-# 62h. Canonical Specification Patterns
+# 62h. Technique Applicability System
 
-This section canonizes six reasoning and structural patterns that recur implicitly throughout the URACE specification. Naming them as first-class primitives closes reproducibility gaps across independent bootstraps: an implementer who knows the pattern vocabulary can recognize and apply each pattern without deriving it from scratch. These patterns add no new behavioral requirements; they name invariants already expressed in the sections they cite.
+The Technique Applicability System gives the runtime an adaptive mechanism to decide whether each computational technique is worth executing given current state, whether the runtime can self-determine that worth, and — if not — whether delegating to an Executor is credit-justified. This section defines the meta-determination protocol, the six base and derived techniques as operational mechanisms, and the schema for recording applications.
 
----
+## Meta-determination protocol
 
-## Pattern 1 — Gap Detection Calculus
+For each technique T and state S, the system computes:
 
-**Definition.** Given a specification set `S` and an implementation set `I`:
+- **Worth predicate** `W(T, S)` — True when technique T has potential to improve S or detect a violation.
+- **Self-determination condition** `SD(T, S)` — True when the worth computation requires only enumerable, locally available state with no inference beyond arithmetic, set operations, or structural comparison.
+- **Technique credit cost** `C(T)` — number of executor credits consumed if T is delegated. Zero for self-determinable techniques.
 
-```
-gap(S, I) = { r ∈ S | ¬∃ i ∈ I : implements(i, r) }
-```
+A technique whose `SD(T, S) = True` MUST be executed without executor delegation; spending credits on a self-determinable technique is a resource sink violation (§62a).
 
-A gap is any normative requirement in `S` with no corresponding implementation evidence in `I`. The calculus applied at every spec audit is: enumerate `S`, enumerate `I`, compute the asymmetric difference, surface each element as a named IntegrityGap (§62a).
+## TechniqueApplicabilityGate
 
-**Primary instance.** §81 Spec Audit Mechanism. The `spec_audit` cycle phase applies this calculus to (spec normative rules, runtime implementation) and emits one IntegrityGap record per unimplemented rule.
+The TechniqueApplicabilityGate is an ordered delta gate (T3 applied at meta-level) over guards evaluated in priority order for each technique T:
 
-**Operational form.** `gap_set = S − cover(I)`. The implementation MUST reduce `|gap_set|` monotonically across revisions unless a gap is explicitly deferred with documented authority.
+| Priority | Guard | Verdict | Reason |
+|---|---|---|---|
+| 1 | `lifecycle_state == DORMANT` AND no pending technique obligation for T | SKIP | dormant — no justified action |
+| 2 | T already applied this cycle (idempotent) | SKIP | already applied this cycle |
+| 3 | `SD(T, state) = True` | APPLY | self-determinable; zero credit cost |
+| 4 | `SD(T, state) = False` AND `credits_remaining > C(T)` AND `W(T, state) = True` | DELEGATE_EXECUTOR | worth + credits justify delegation |
+| 5 | `SD(T, state) = False` | DEFER | insufficient credits or indeterminate worth |
 
----
+Guard order is normative. A runtime MUST NOT reorder guards.
 
-## Pattern 2 — Bar-Raising Calculus
+## TechniqueApplicationRecord schema  [§62b reference]
 
-**Definition.** Each accepted improvement raises the quality threshold for the next candidate:
+See §62b for the canonical schema definition.
 
-```
-threshold(t+1) = threshold(t) + Δ(accepted(t))
-```
+## Technique definitions
 
-where `Δ(accepted(t))` is a non-negative increment derived from the quality evidence of the accepted operation at time `t`.
+### T1 — Gap Detection Calculus (`diff`)
 
-**Invariant.** `threshold(t)` is non-decreasing. A threshold MUST NOT decrease as a result of a successful acceptance; it MAY only decrease through an explicit operator-authorized threshold reset with documented authority basis.
+**Operator.** `gap(A, B) = {x ∈ A | x ∉ B}`
 
-**Primary instance.** The evaluation system (§53). Each accepted Objective raises the quality bar against which the next proposed Objective is evaluated. Bar-raising prevents quality regression under repeated acceptance pressure.
+**Worth predicate.** `W(T1, S)` = True when A and B are both enumerable from durable state and `|gap(A,B)| > 0` or has not been checked since last mutation of A or B.
 
----
+**SD condition.** Always True. A is a set of normative rules (enumerable from spec); B is a set of implementation evidences (enumerable from state and source). No inference required.
 
-## Pattern 3 — Delta Gate
+**Apply to:** spec normative rules vs implementation coverage (§81 spec audit); before-metrics vs after-metrics (§54 validation gate); expected schema fields vs present fields (§62b conformance).
 
-**Definition.** A delta gate applies an ordered sequence of guard predicates `G = [g₁, g₂, …, gₙ]` to an incoming delta `δ`:
+### T2 — Bar-Raising Calculus (`incr`)
 
-```
-GATE(δ, G) = first_match(G, λg : eval(g, δ))
-```
+**Operator.** `threshold(t+1) = threshold(t) + Δ(accepted(t))`, `Δ ≥ 0`
 
-The gate returns the verdict of the first predicate that matches, or a default fallback if no predicate matches. Each guard has the form `(condition, verdict, reason)`. Guards MUST be evaluated in declaration order; short-circuit on first match.
+**Worth predicate.** `W(T2, S)` = True after an operation is accepted (not on rejection or no-op cycles).
 
-**Invariant.** Guard order is semantically significant: a guard that fires earlier takes unconditional precedence over all later guards. Reordering guards changes observable behavior and constitutes a spec change, not an implementation detail.
+**SD condition.** Always True. `threshold(t)` and `Δ` are both numeric values in durable state.
 
-**Primary instance.** §62c Discovery Credit Gate. The gate's guards in priority order: SYSTEMATIC_FAILURE_COOLDOWN → DAILY_LIMIT_OR_RESERVE_REACHED → MONTHLY_LIMIT_OR_RESERVE_REACHED → deferred call retry → DUPLICATE_TRIGGER_SUPPRESSED → DEFERRED_PROPORTIONALITY → DISCOVERY_YIELD_EXHAUSTED → ALLOW. This ordering contract (§62c) is the canonical instance of the Delta Gate pattern and MUST NOT be permuted.
+**Invariant.** `threshold(t)` is non-decreasing. A runtime MUST NOT lower the threshold as a result of an acceptance. An explicit operator reset with documented authority_basis is the only valid path to threshold reduction.
 
----
+**Apply to:** metric baselines (normative_rules, behavioral_tests); evaluation quality score; iteration bar for Objective acceptance.
 
-## Pattern 4 — Weight Vector Normalization
+### T3 — Delta Gate (`gate`)
 
-**Definition.** A weight vector `W = [w₁, w₂, …, wₙ]` over `n` scopes is normalized when:
+**Operator.** `GATE(δ, G) = first_match(G, λg : eval(g, δ))`
 
-```
-∑ wᵢ = 1.0  (tolerance: ± 1e-9)
-∀ i : wᵢ ≥ 0
-```
+**Worth predicate.** `W(T3, S)` = True when the decision has ≥ 2 possible outcomes and the ordering of outcomes is normatively significant.
 
-After any revision that changes one or more weights, the implementation MUST renormalize the full vector before persisting. A step bound `max_weight_step_per_revision` constrains how much any single weight may change in one revision:
+**SD condition.** Always True. Guard predicates are boolean expressions over enumerable state.
 
-```
-∀ i : |wᵢ(t+1) − wᵢ(t)| ≤ max_weight_step_per_revision
-```
+**Guard order invariant.** Guard order is normatively significant. A gate with N guards has N! possible orderings; only one is canonical. The canonical order for every gate in this spec is declared at the gate's definition site. Reordering is a spec violation.
 
-**Invariant.** `sum(W) = 1.0 ± 1e-9` is a PairedInvariant (see Pattern 5) that MUST hold across every write to the weight vector.
+**Primary instance.** §62c Discovery Credit Gate. Secondary instance: TechniqueApplicabilityGate (this section).
 
-**Primary instance.** §62b ScopePrioritySystem. `ScopePriorityConfig.entries[*].weight` values MUST sum to 1.0 after normalization. `ScopePriorityConfigEntry.max_weight_step_per_revision` enforces the step bound per entry.
+### T4 — Paired Invariant (`paired`)
 
----
+**Operator.** `PairedInvariant(A, B, P) : ∀ writes : P(A, B) = True`
 
-## Pattern 5 — Paired Invariant
+**Worth predicate.** `W(T4, S)` = True when A and B are writable fields in durable state and the last write to either field has not been jointly validated.
 
-**Definition.** A paired invariant over fields `A` and `B` with predicate `P` is the contract:
+**SD condition.** Always True. P is a structural predicate expressible as a boolean over field values.
 
-```
-PairedInvariant(A, B, P) : ∀ writes : P(A, B) = True
-```
+**Write protocol.** Any write to A or B MUST atomically validate P(A, B) before persisting. A write that would violate P MUST be rejected; partial writes that leave P transiently false violate this invariant even if a subsequent write would restore it.
 
-A write that would violate `P(A, B)` MUST be rejected atomically — both fields MUST be updated together, or neither. Split writes that leave `P` temporarily false, even transiently, violate the invariant.
+**Canonical pairs.**
+- `lifecycle_state` ↔ `status_transitions[-1].status` — P: the most recent StatusTransition.status equals the current lifecycle_state after the transition completes.
+- ScopePriorityConfig weights ↔ normalized sum — P: `|∑weights − 1.0| ≤ 1e-9`.
+- PendingValidation.status ↔ operation_id — P: status is PENDING_CAPABILITY only when operation_id references a real recorded operation.
 
-**Common forms.** `P(A, B) ≡ (A = B)` (mirror equality); `P(A, B) ≡ (A ≤ B)` (ordering); `P(A, B) ≡ consistent_type(A, B)` (type coherence); `P(A, B) ≡ (sum(A) = B)` (aggregate consistency).
+### T5 — Atomic Decomposition and Composition (`decompose+compose`)
 
-**Primary instances.**
-- §62d `StatusTransition.status` and `lifecycle_state` — both MUST reflect the same transition; a transition record that does not match the resulting `lifecycle_state` violates this invariant.
-- §62b `PendingValidation.status` and `operation_id` — both MUST reference the same pending operation atomically.
-- Weight vector sum (Pattern 4) — the sum field and the individual weight fields form a paired invariant.
+**Operator.** `Decompose(S)` = partition S into minimal semantic units `{u₁, …, uₙ}` where each `uᵢ` carries exactly one independently normative claim. `Compose(U)` = the schema or pipeline that is the join of all `uᵢ ∈ U`.
 
----
+**Worth predicate.** `W(T5, S)` = True when a schema or pipeline stage bundles ≥ 2 independently testable normative claims that can be separated without information loss.
 
-## Pattern 6 — Atomic Decomposition
+**SD condition.** True for structural decomposition (fields, function arguments, schema properties). False for semantic decomposition of a novel type where the normative boundary between claims is not yet expressed — in that case, executor delegation is required to identify the semantic boundary.
 
-**Definition.** A citizen schema (§62b) is in minimal normal form when no field can be further decomposed into sub-fields without losing semantic meaning that is normatively required by the specification. Formally:
+**Composition rule.** A composed unit MUST reference its constituents by their canonical §62b schema names; inlining a sub-schema as an unnamed type is prohibited.
 
-```
-MinimalNormalForm(S) : ∀ field f ∈ S :
-  ¬∃ decomposition D(f) such that
-    each element of D(f) is independently required by a normative rule
-    AND f cannot be derived from D(f) without information loss
-```
+### T6 — Vector Transformation (`vector`)
 
-**Composition rule.** Citizen schemas MAY be composed by reference (a field whose value is itself a citizen schema), but the inner schema MUST appear as a standalone definition in §62b, not inlined. Inlining creates an unnamed type that cannot be independently validated or referenced.
+**Operator.** Given vector `W = [w₁, …, wₙ]`, a normalization transform produces `W' = W / ‖W‖₁` such that `∑w'ᵢ = 1.0 ± 1e-9` and `w'ᵢ ≥ 0`. A step-bounded update produces `w'ᵢ = clamp(wᵢ + δᵢ, 0, max_weight_step_per_revision)` followed by renormalization.
 
-**Decomposition rule.** When a field is found to bundle two or more independently testable normative requirements, it MUST be split into separate fields, each independently validated by the §62d validation gate.
+**Worth predicate.** `W(T6, S)` = True when a weight vector is present in state and the normalized sum has drifted outside `1.0 ± 1e-9`, or a step-bounded update has been requested.
 
-**Primary instance.** The entire §62b schema catalog. Each schema in that table is a minimal composition: `Blocker`, `Evidence`, `DecisionRecord`, `CompactionSummary`, etc., are not decomposable further without losing the normative semantics they carry.
+**SD condition.** True for known vector spaces (ScopePriorityConfig weights, metric trend vectors). False for a novel metric vector with unknown basis — executor delegation is required to determine the normalization basis.
+
+**Apply to:** §62b ScopePriorityConfig weights; metric trend vectors; any multi-dimensional scoring system where weights must sum to a constant.
+
+## Technique-scope mapping
+
+| Technique | Spec (URACE.md) | Runtime |
+|---|---|---|
+| T1 diff | §81 spec audit rule enumeration | `spec_audit.py` gap computation; `validation.py` before/after metric diff |
+| T2 incr | normative_rules baseline non-decrease | metric baseline tracking; bar-raising on acceptance |
+| T3 gate | TechniqueApplicabilityGate; §62c Discovery Credit Gate | `executor_discovery_due()`; `validate_operation()` |
+| T4 paired | canonical pairs table (this section) | lifecycle_state ↔ status_transitions validation |
+| T5 decompose | citizen schema minimality (§62b) | `primitives.py` schema conformance |
+| T6 vector | ScopePriorityConfig normalization contract | scope weight normalization enforcement |
 
 ---
 
