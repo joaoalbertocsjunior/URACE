@@ -86,10 +86,10 @@ Use `urace /help compact` for details.
 
 ## Reuse URACE Patterns The Way You Want
 
-Take any of URACE's 20 architectural patterns for your own project — no lifecycle, no commitment. For example, AP6 (Causal Provenance Chain) gives you a full audit trail:
+Take any of URACE's 24 architectural patterns for your own project — no lifecycle, no commitment. For example, AP21 (Compaction) gives you log size management without losing audit history:
 
 ```
-urace derive --patterns AP6 --intent "change audit trail for my API"
+urace derive --patterns AP21 --intent "log compaction for my event store"
 ```
 
 Run `urace derive` with no arguments to browse and pick patterns.

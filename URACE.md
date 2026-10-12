@@ -2561,6 +2561,8 @@ When a validation guardrail references a metric source that is currently unavail
 
 # 61. Checkpoint
 
+This section implements **AP22 — Checkpoint** (§62i).
+
 ```text
 EXECUTION
     │
@@ -3176,7 +3178,7 @@ Uses TemporalFields: registered_at (as created_at), last_call_at, last_failure_a
 
 ## Decision
 
-A Decision is a durable record of a lifecycle planning judgment that commits the system to a course of action.
+> **Deprecated.** This is a minimal summary schema retained for historical reference. The authoritative canonical schema is `DecisionRecord` (§62d), which includes full attribution, reasoning steps, evidence refs, and AP23 justification chain support. New implementations MUST use `DecisionRecord`.
 
 ```
 Decision {
@@ -5143,7 +5145,7 @@ SpecAuditState {
 
 # 62f. Compaction and Retention
 
-The Compaction and Retention system governs growth management for accumulating list fields in URACE persistent state. It defines which lists may be bounded, how compaction is authorized and sequenced, how lossless decompaction is guaranteed for ARCHIVE-mode compactions, and what information must survive any compaction mode.
+This section implements **AP21 — Compaction** (§62i). The Compaction and Retention system governs growth management for accumulating list fields in URACE persistent state. It defines which lists may be bounded, how compaction is authorized and sequenced, how lossless decompaction is guaranteed for ARCHIVE-mode compactions, and what information must survive any compaction mode.
 
 ## Governed fields
 
@@ -5241,7 +5243,7 @@ Applies an in-place amendment to a single record within an ARCHIVE-mode Compacti
 
 # 62g. Justification System
 
-The Justification System provides structured traversal of the reasoning chain behind any consequential decision in the lifecycle. It operates entirely from durable state — no Executor invocation is required. The system is usable even when the deciding Executor is no longer available, making it executor-agnostic within the meaning of §75.
+This section implements **AP23 — Justification Chain** (§62i). The Justification System provides structured traversal of the reasoning chain behind any consequential decision in the lifecycle. It operates entirely from durable state — no Executor invocation is required. The system is usable even when the deciding Executor is no longer available, making it executor-agnostic within the meaning of §75.
 
 ## Reasoning chain structure
 
@@ -5847,11 +5849,11 @@ The Durable Inbox is a persistent, FIFO, append-only queue of pending commands a
 **Definition.**
 ```
 DurableInbox = {
-  storage:       filesystem directory (inputs/*.json)
+  storage:       persistent durable storage (implementation-defined medium)
   ordering:      FIFO by `at` field (ISO-8601 ascending)
   durability:    write-before-process — inbox item is durable before the runtime reads it
   idempotency:   AT_MOST_ONCE — item is removed from inbox after successful processing
-  rejection:     failed items renamed to *.rejected, never silently dropped
+  rejection:     failed items preserved as rejection records, never silently dropped
   boundary:      items are processed only at SAFE lifecycle boundaries (not mid-phase)
 }
 ```
@@ -5861,7 +5863,7 @@ DurableInbox = {
 ```
   External Agent (Executor, Operator)
          │
-         │  writes JSON → inputs/{at}-{id}.json
+         │  writes durable queue entry
          ▼
   ┌──────────────────┐
   │   Durable Inbox  │  (AP14)  filesystem queue, FIFO by `at`
@@ -6185,6 +6187,110 @@ Uses canonical: Identifier (id), iso_timestamp (at), probability (failure_rate, 
 
 ---
 
+## AP21 — Compaction
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP3]` · `provides: rolling eviction with configurable retention, CompactionSummary citizen, ARCHIVE and ROLLING_EVICTION modes, decompaction contract, dry-run mode`
+
+Any system built on AP3 (Append-Only Log) will eventually face unbounded growth. Compaction reduces log size while preserving full audit trail integrity: evicted entries are replaced by a `CompactionSummary` record that describes what was removed; the original data is archived and fully restorable via decompaction.
+
+**Compaction modes.**
+
+| Mode | Behavior |
+|---|---|
+| `ARCHIVE` | Evict entries older than retention window into a named archive file; CompactionSummary replaces them in the live log |
+| `ROLLING_EVICTION` | Keep the N most recent entries; evict the rest; summary replaces evicted segment |
+
+**CompactionSummary.** A durable citizen inserted into the log at the compaction boundary:
+
+```
+CompactionSummary {
+  id                  REQUIRED  stable identifier
+  at                  REQUIRED  timestamp of compaction
+  compaction_event_id REQUIRED  identifier linking this summary to its CompactionEvent
+  mode                REQUIRED  ARCHIVE | ROLLING_EVICTION
+  evicted_count       REQUIRED  integer ≥ 1; number of entries replaced
+  retained_count      REQUIRED  integer ≥ 0; entries kept in live log after this summary
+  first_evicted_at    REQUIRED  iso_timestamp; earliest at-timestamp among evicted entries
+  last_evicted_at     REQUIRED  iso_timestamp; latest at-timestamp among evicted entries
+  archive_path        OPTIONAL  string; relative path to archive file (ARCHIVE mode only)
+}
+```
+
+Uses canonical: Identifier (id, compaction_event_id), iso_timestamp (at as created_at, first_evicted_at, last_evicted_at), count (evicted_count, retained_count).
+
+**Dry-run contract.** A compaction invoked with `dry_run: true` MUST compute and return the CompactionSummary without writing any state change. The dry-run result MUST be identical to what a live compaction would produce.
+
+**Decompaction contract.** Given a `compaction_event_id`, the original evicted entries MUST be fully restorable from the archive. Decompaction MUST be idempotent. A decompaction that cannot locate the archive MUST surface a named error rather than silently succeed.
+
+**AP3 invariant preservation.** Compaction MUST NOT reduce the logical entry count below the retained window. The monotone non-decreasing length invariant of AP3 applies to the logical count (live entries + evicted_count from all CompactionSummaries); the physical live log length MAY decrease after compaction.
+
+---
+
+## AP22 — Checkpoint
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP0, AP3]` · `provides: durable integrity marker, crash-safe recovery anchor, content-addressable state verification, checkpoint kinds`
+
+A Checkpoint is a durable integrity marker that binds a content-addressable state digest to a specific lifecycle moment. It enables three capabilities: crash recovery (resume from the last valid Checkpoint after failure), state verification (compare digest across bootstraps to confirm reproducibility), and point-in-time audit (reconstruct what the system believed at any past Checkpoint).
+
+**Checkpoint citizen.**
+
+```
+Checkpoint {
+  id           REQUIRED  stable identifier
+  at           REQUIRED  timestamp
+  kind         REQUIRED  bootstrap | accepted-product-change | assessment
+  digest       REQUIRED  DigestValue; content-addressable hash of the state at this moment
+  operation    OPTIONAL  Operation id; REQUIRED when kind = accepted-product-change
+  transaction  OPTIONAL  Transaction id; REQUIRED when kind = accepted-product-change
+}
+```
+
+Uses canonical: Identifier (id), iso_timestamp (at as created_at), DigestValue (digest).
+
+**Bootstrap Checkpoint contract.** The first Checkpoint in any system MUST be of kind `bootstrap`. Its digest MUST reflect the state immediately after initialization completes. No operation MUST be applied before the bootstrap Checkpoint is durably written.
+
+**Recovery contract.** On restart, if the last durable Checkpoint exists, the system MUST verify the current state digest matches it before proceeding. A digest mismatch MUST surface as a named integrity gap rather than silently proceeding.
+
+**Ordering invariant.** Checkpoints MUST be append-only (AP3). A Checkpoint's `at` timestamp MUST be greater than or equal to all prior Checkpoints' `at` timestamps.
+
+---
+
+## AP23 — Justification Chain
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP6]` · `provides: decision-to-evidence traversal, rule-to-decision traversal, configurable depth with cycle detection, JustificationStep citizen, human-readable chain rendering`
+
+A Justification Chain answers the question: *why was this decision made?* Starting from a decision record, it traverses backwards through the evidence that informed it and the rules that governed it, producing a human-readable chain of reasoning steps. This complements AP6 (Causal Provenance Chain), which traces *what caused a state change*; AP23 traces *what justified a decision*.
+
+**JustificationStep citizen.**
+
+```
+JustificationStep {
+  id           REQUIRED  stable identifier
+  decision_id  REQUIRED  identifier of the decision this step belongs to
+  step_index   REQUIRED  integer ≥ 0; position in the chain (0 = the decision itself)
+  description  REQUIRED  string; human-readable statement of the claim or check at this step
+  evidence_ref OPTIONAL  identifier of the Evidence record grounding this step
+  rule_ref     OPTIONAL  identifier of the Rule that governed this step
+  outcome      REQUIRED  PASS | FAIL | INCONCLUSIVE
+  detail       OPTIONAL  string; additional detail
+}
+```
+
+Uses canonical: Identifier (id, decision_id, evidence_ref, rule_ref), count (step_index).
+
+**Traversal contract.** Given a decision id and an optional maximum depth:
+1. Retrieve the decision record.
+2. For each evidence ref in the decision, retrieve the Evidence record and emit a JustificationStep.
+3. For each rule that governed the decision, retrieve the Rule record and emit a JustificationStep.
+4. Recurse into parent decisions (via AP6 causal chain) up to the configured depth limit.
+5. Detect cycles: if a decision id is encountered that is already in the current traversal path, emit a `CYCLE_DETECTED` step and stop that branch.
+
+**Cycle detection invariant.** A Justification Chain traversal MUST NOT loop indefinitely. The traversal MUST maintain a visited-id set and halt any branch that revisits a node.
+
+**Relation to AP6.** AP6 answers "what caused this state?"; AP23 answers "why was this decided?". A system that adopts AP23 MUST also adopt AP6 to provide the causal evidence links that AP23 traverses.
+
+---
+
 ## Canonical Scalar Catalog
 
 All primitive value types used in citizen schemas. Every field that holds one of these types MUST reference the canonical scalar name.
@@ -6252,6 +6358,10 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
                           AP16 (Snapshot+Log)
                                │
                           AP20 (Circuit Breaker) ──gates──► AP4 (Contract)
+                               │
+                          AP21 (Compaction) ──reduces──► AP3 (Log)
+                          AP22 (Checkpoint) ──anchors──► AP3 (Log)
+                          AP23 (Justification) ──traverses──► AP6 (Causal)
 ```
 
 ---
@@ -8058,6 +8168,12 @@ Applies to: `auto`
 Suppress human-readable per-cycle feedback. When combined with `--json`, JSON Lines output on stdout is retained.
 
 Applies to: `auto`
+
+## --save
+
+Store the generated manifest reference in `state.derived_manifest_refs` for stale-detection by `urace update`. A manifest written only to `--out` is not tracked in state and will not trigger stale warnings.
+
+Applies to: `derive`
 
 ## Output path: --out vs --output
 
