@@ -89,7 +89,7 @@ Use `urace /help compact` for details.
 Take any of URACE's 20 architectural patterns for your own project — no lifecycle, no commitment:
 
 ```
-urace derive --patterns AP14,AP6 --intent "my audit system"
+urace derive --patterns AP6 --intent "change audit trail for my API"
 ```
 
 Dependencies resolve automatically. Output is a `DerivedSystemManifest` documenting exactly what you took. Run `urace derive` with no arguments to browse all 20 patterns.
