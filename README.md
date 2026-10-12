@@ -50,7 +50,7 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 ```text
 urace /auto             run persistent evolution
 urace /pause or /resume suspend or resume the lifecycle
-urace <freeform-text>   describe intent, goals, or constraints in plain language
+urace <freeform-text>   describe goals, intents, and constraints in plain language
 urace /help             explore commands and reference
 urace /update           guided update sequence
 ```
@@ -59,7 +59,7 @@ Run `urace /auto` in one terminal. From a second terminal, send anything.
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Plain text** — the Executor maps your input to goals, intents, constraints, or commands — each confirmed individually. Contradictory inputs surface as alternatives.
+**Plain text** — the Executor maps your input to goals, intents, constraints, and commands — each confirmed individually. Contradictory inputs surface as alternatives.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference. Options shared across commands (`--json`, `--scope`, `--verbose`, and others) are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
