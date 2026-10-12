@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r18**
+**Specification version: 2026-10-12-r19**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2834,6 +2834,8 @@ The runtime accepts free-form text and direct commands through a single top-leve
 1. Reserved keywords (`auto`, `pause`, `resume`, `help`, `update`) always route directly to their lifecycle operations.
 2. Input beginning with `/` routes to the named command: `urace /check` is equivalent to `urace check`; `urace /vitals` to `urace vitals`; `urace /intent add "…"` to `urace intent add "…"`. The `/` is a routing signal only — it does not alter command semantics.
 3. All other input is treated as free-form text and routed through executor-driven classification (ClassificationBatch, §62b).
+
+**SD classification gate.** Before invoking the Executor, the runtime applies a conservative SD=True gate: if the entire free-form input exactly matches a canonical command name or alias (case-insensitive), it is routed directly as a known command without Executor overhead. Only exact matches qualify; partial or fuzzy matches are SD=False and proceed to executor classification. This gate MUST NOT use probabilistic or statistical heuristics.
 
 **Free-form classification protocol.**
 1. The operator provides free text describing one or more lifecycle items.
@@ -6476,6 +6478,8 @@ The minimum portable operator surface SHOULD cover: initialize; inspect full sta
 Every generated implementation MUST provide a discoverable top-level help surface and contextual help for each supported Operation. Help MUST be available without an intelligent Executor call and MUST identify: the installed Operations and memorable aliases; required and optional inputs; safe examples; immediate versus durable-input behavior; human-readable and machine-readable inspection forms; capability or adapter prerequisites; unsupported Operations; and where advanced recovery or deployment guidance resides. A command-line implementation SHOULD support shapes equivalent to `help` and `help <operation>`; APIs and graphical interfaces MAY provide an equally direct operation catalog. Bootstrap MUST demonstrate the help surface and report its exact entry point.
 
 A generated command-line interface SHOULD use the repository-scoped `urace <operation>` shape. Where specification updates are supported, it SHOULD expose stable `urace update download`, `explain`, `apply` and `resolve` operations with the semantics defined by the update lifecycle. An accepted update MUST preserve existing supported command calls, aliases, queued inputs and checkpoint identities, or provide tested compatibility forwarding through a declared deprecation interval. A directory migration MUST keep the accepted command surface active until the new launcher passes health confirmation; it MUST NOT require the new layout merely to download, explain, apply, resolve or roll back that migration.
+
+**Orchestrated update.** Invoking `urace /update` without a subaction runs the full sequence interactively — download, explain, confirm, apply — as a single guided operation. Each phase result is durable; an interrupted sequence resumes from the last completed phase. The individual subactions (`download`, `explain`, `apply`, `resolve`) remain available for step-by-step control.
 
 The default help view SHOULD be a short user-facing operation list rather than a parser grammar dump; internal controller Operations SHOULD be omitted. Configuration controls SHOULD be discoverable through one configuration surface, with memorable aliases permitted for frequent policies. Where self-evolution is configurable, user-facing `auto`, `always` and `never` aliases SHOULD map explicitly to necessary-only, continuous and disabled semantics without weakening protected invariants.
 
