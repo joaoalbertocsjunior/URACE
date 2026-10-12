@@ -23,6 +23,20 @@ YOU + URACE.md + PRODUCT                 YOU — choose the Product and outcome
                                   EXECUTORS ── execute and return ──► URACE VALIDATES
 ```
 
+## Why URACE
+
+URACE automates replaceable Executors to improve the Product continuously, measurably and recoverably. It adapts its plans without changing what you control.
+
+Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time — via `urace /rules`.
+
+## What Is a Product?
+
+A **Product** is whatever URACE improves: a project, service, process, research effort or other goal. It need not be software.
+
+## What Is an Executor?
+
+An **Executor** is an AI agent, orchestrator, program or person that can inspect the Product, change it and run checks. You need one to bootstrap URACE; compatible Executors can then be added, removed, combined or compared. [OpenHands](https://github.com/OpenHands/OpenHands) and [Caveman](https://github.com/JuliusBrussee/caveman) are examples.
+
 ## Get Running
 
 1. Give [`URACE.md`](URACE.md) to a capable Executor with access to your Product.
@@ -49,23 +63,13 @@ Run `urace /auto` in one terminal. From a second terminal, send anything.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference.
 
-## See Progress
-
-URACE reports observed **metrics**, system-health **vitals** and decision **scores**. Inspect them with `urace /check`, `urace /vitals` and `urace /change list`; use `urace /help` for details.
-
 ## Update Safely
 
 Run `urace /update` — it guides you through the full update sequence safely. Pass `--opt-in-patterns AP8,AP14` to limit which architectural patterns the update applies to. Use `urace /help update` for details.
 
-## Reuse URACE Patterns The Way You Want
+## See Progress
 
-Take any of URACE's 20 architectural patterns for your own project — no lifecycle, no commitment:
-
-```
-urace derive --patterns AP14,AP6 --intent "my audit system"
-```
-
-Dependencies resolve automatically. Output is a `DerivedSystemManifest` documenting exactly what you took. Run `urace derive` with no arguments to browse all 20 patterns.
+URACE reports observed **metrics**, system-health **vitals** and decision **scores**. Inspect them with `urace /check`, `urace /vitals` and `urace /change list`; use `urace /help` for details.
 
 ## Inspect and Modify Context
 
@@ -80,19 +84,15 @@ urace /crc show     inspect the current full-context Cognitive Resume
 
 Use `urace /help compact` for details.
 
-## Why URACE
+## Reuse URACE Patterns The Way You Want
 
-URACE automates replaceable Executors to improve the Product continuously, measurably and recoverably. It adapts its plans without changing what you control.
+Take any of URACE's 20 architectural patterns for your own project — no lifecycle, no commitment:
 
-Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time — via `urace /rules`.
+```
+urace derive --patterns AP14,AP6 --intent "my audit system"
+```
 
-## What Is a Product?
-
-A **Product** is whatever URACE improves: a project, service, process, research effort or other goal. It need not be software.
-
-## What Is an Executor?
-
-An **Executor** is an AI agent, orchestrator, program or person that can inspect the Product, change it and run checks. You need one to bootstrap URACE; compatible Executors can then be added, removed, combined or compared. [OpenHands](https://github.com/OpenHands/OpenHands) and [Caveman](https://github.com/JuliusBrussee/caveman) are examples.
+Dependencies resolve automatically. Output is a `DerivedSystemManifest` documenting exactly what you took. Run `urace derive` with no arguments to browse all 20 patterns.
 
 ## Consequential Use
 
