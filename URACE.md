@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r31**
+**Specification version: 2026-10-12-r32**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3479,6 +3479,7 @@ State {
   restart_requested     OPTIONAL  bool; set to true when runtime restart is needed
   system_repair_registry OPTIONAL dict[key → SystemRepairEntry]
   quality_deltas         OPTIONAL  list[QualityDelta]; rolling quality trajectory per scope (AP9)
+  quality_state          OPTIONAL  list[QualityStateEntry]; per-scope streak accumulators; one entry per scope; initialized empty
   reingestion_records    OPTIONAL  list[ReIngestionRecord]; append-only log of re-ingestion events
 }
 ```
@@ -4398,28 +4399,32 @@ The Quality Streak Mechanism is the positive counterpart to AP20 — Circuit Bre
 ```
 QUALITY STREAK EVALUATION (per assessment cycle, SD=True — no executor credits)
 
-  1. Read quality_streak_state from ExecutorState for target scope:
+  1. Read QualityStateEntry from State.quality_state for target scope
+     (NOT from ExecutorState — quality state is a Product-level citizen):
        current_streak     int ≥ 0; consecutive IMPROVEMENT QualityDeltas in scope
        best_streak        int ≥ 0; highest streak ever achieved in scope
-       streak_started_at  timestamp; when current streak began
-       streak_scope       ProductScope; scope of current streak
+       streak_started_at  timestamp | null; when current streak began
 
   2. Read most recent QualityDelta for scope from State.quality_deltas:
 
      IF classification == IMPROVEMENT:
        → increment current_streak
        → update best_streak if current_streak > best_streak
+       → update streak_started_at if current_streak was 0 before increment
+       → write updated QualityStateEntry back to State.quality_state
        → record Evidence(kind="quality-streak-increment",
                          streak=current_streak, scope=scope)
 
      IF classification == REGRESSION:
-       → reset current_streak = 0
+       → reset current_streak = 0; streak_started_at = null
+       → write updated QualityStateEntry back to State.quality_state
        → record Evidence(kind="quality-streak-reset",
                          reason="regression", scope=scope)
-       → notify AP20 Circuit Breaker: regression observed (AP20 evaluates independently)
+       → emit QualityStreakRegressionEvent to AP20 Circuit Breaker
+         (see AP4 contract below; AP20 evaluates its own streak independently)
 
      IF classification == NEUTRAL:
-       → no change to streak counters
+       → no change to streak counters; write last_evaluated_at only
 
   3. IF current_streak ≥ configured autonomy_expansion_threshold AND
         applicable Authority permits scope weight expansion:
@@ -4429,7 +4434,25 @@ QUALITY STREAK EVALUATION (per assessment cycle, SD=True — no executor credits
                          streak=current_streak, scope=scope)
 ```
 
-**Immutability contract.** Streak counters MUST NOT be decremented except by REGRESSION reset. A NEUTRAL QualityDelta MUST NOT increment or reset the streak. **Independence contract.** Quality streak evaluation runs independently of AP20; AP20 governs failure recovery, this mechanism governs success-based expansion. Both MUST be evaluated on each cycle. **Cross-scope independence contract.** A REGRESSION in one scope MUST NOT reset another scope's streak. Streak state is per-scope. **Self-determination contract.** `SD(QualityStreakMechanism, S) = True`; this mechanism reads only enumerable durable state and MUST NOT consume executor credits.
+**Immutability contract.** Streak counters MUST NOT be decremented except by REGRESSION reset. A NEUTRAL QualityDelta MUST NOT increment or reset the streak. **Independence contract.** Quality streak evaluation runs independently of AP20; AP20 governs failure recovery, this mechanism governs success-based expansion. Both MUST be evaluated on each cycle. **Cross-scope independence contract.** A REGRESSION in one scope MUST NOT reset another scope's streak. Streak state is per-scope. **Self-determination contract.** `SD(QualityStreakMechanism, S) = True`; this mechanism reads only enumerable durable state and MUST NOT consume executor credits. **State-location contract.** Quality streak state MUST reside in `State.quality_state` (list of `QualityStateEntry`), never in `ExecutorState`. ExecutorState is executor-operational; quality streak is Product-level and MUST survive executor replacement.
+
+**AP4 Contract — QualityStreakRegression → CircuitBreaker.**
+```
+ProducerConsumerContract {
+  name:                "QualityStreakRegression → CircuitBreaker"
+  producer:            QualityStreakMechanism
+  consumer:            AP20 Circuit Breaker
+  artifact:            QualityDelta (classification = REGRESSION, durably written)
+  producer_must:       write QualityDelta to State.quality_deltas before emitting event;
+                       reset QualityStateEntry.current_streak = 0 before emitting event
+  consumer_may_assume: QualityDelta record is durable and immutable on receipt;
+                       QualityStateEntry for the scope reflects the reset
+  violation_protocol:  ALERT (AP20 may have missed a regression signal)
+  idempotent:          True (AP20 evaluates its own failure streak independently)
+}
+```
+
+**Checkpoint gate contract.** When the most recent `QualityDelta` for a scope carries `classification = REGRESSION`, a Checkpoint acceptance for an Operation in that scope MUST be preceded by a durable `DecisionRecord` explicitly justifying the regression acceptance (reason MUST reference governing Intent and trade-off Evidence). A checkpoint attempt in a REGRESSION scope without such a `DecisionRecord` MUST remain `PENDING`, not `ACCEPTED`. This gate applies only when a QualityDelta for the scope exists; scopes with no quality history are unaffected.
 
 ## Re-Ingestion Contract
 
@@ -5030,7 +5053,7 @@ OutcomeFeedback {
 
 **Immutability contract.** Once written, an OutcomeFeedback MUST NOT be modified; a revised assessment MUST be recorded as a provenance revision of the DecisionRecord itself, not an in-place update of OutcomeFeedback. **Causal contract.** `observed_at` MUST be after `DecisionRecord.decided_at`; an OutcomeFeedback with `observed_at` ≤ `decided_at` is a Ledger integrity violation. **Auto-revision contract.** When `triggers_revision` is true, the lifecycle controller MUST set `provenance_status: PROVENANCE_REVISED` on the associated DecisionRecord and MUST add a `revision_notice` referencing the OutcomeFeedback observation. Used in: DecisionRecord.outcome_feedback. Uses canonical: TemporalFields (observed_at as created_at).
 
-**QualityDelta integration.** A QualityDelta (§62b) SHOULD be written concurrently with an OutcomeFeedback record when a score measurement is available for the associated operation, linking the feedback to the quality trajectory for the Quality Streak Mechanism (§62c).
+**QualityDelta integration.** A QualityDelta (§62b) MUST be written concurrently with an OutcomeFeedback record when a score measurement is available for the associated operation, linking the feedback to the quality trajectory for the Quality Streak Mechanism (§62c). An OutcomeFeedback record with an available score measurement that is written without a concurrent QualityDelta is an architectural gap.
 
 ## RetentionPolicy
 
@@ -5098,7 +5121,23 @@ QualityDelta {
 }
 ```
 
-**Classification contract.** `IMPROVEMENT`: delta > 0; `NEUTRAL`: delta = 0 or no predecessor; `REGRESSION`: delta < 0. **Immutability contract.** Once written, a QualityDelta MUST NOT be modified. **Predecessor chain.** Consecutive QualityDeltas for the same scope form an ordered quality trajectory. **Causal contract.** `measured_at` MUST be after the associated Operation's committed_at. Uses canonical: Identifier (id, operation_id, predecessor_id, measure_ref), UnitFloat (score_before, score_after), ProductScope (scope), TemporalFields (measured_at as created_at). Used in: State.quality_deltas.
+**Classification contract.** `IMPROVEMENT`: delta > 0; `NEUTRAL`: delta = 0 or no predecessor; `REGRESSION`: delta < 0. **Immutability contract.** Once written, a QualityDelta MUST NOT be modified. **Predecessor chain.** Consecutive QualityDeltas for the same scope form an ordered quality trajectory. **Causal contract.** `measured_at` MUST be after the associated Operation's committed_at. **Unit contract.** `score_before` and `score_after` carry `BaseUnit.SCORE` semantics: normalized scores in [0.0, 1.0]. Two QualityDelta records are cross-system comparable only when they share the same `scope` and the same `BaseUnit.SCORE` convention. Uses canonical: Identifier (id, operation_id, predecessor_id, measure_ref), UnitFloat (score_before, score_after), ProductScope (scope), TemporalFields (measured_at as created_at). Used in: State.quality_deltas.
+
+## QualityStateEntry
+
+Per-scope live accumulator for the Quality Streak Mechanism (§62c). Stored in `State.quality_state` as a first-class lifecycle citizen, independent of ExecutorState. Implements AP9 — Monotone Accumulator (§62i). Executor replacement MUST NOT affect this citizen; it persists across executor changes.
+
+```
+QualityStateEntry {
+  scope              REQUIRED  ProductScope; the scope this entry governs
+  current_streak     REQUIRED  int ≥ 0; consecutive IMPROVEMENT QualityDeltas in scope
+  best_streak        REQUIRED  int ≥ 0; highest streak ever achieved in scope
+  streak_started_at  OPTIONAL  timestamp | null; when current streak began; null when current_streak == 0
+  last_evaluated_at  REQUIRED  timestamp; when this entry was last updated by the Quality Streak Mechanism
+}
+```
+
+**Independence contract.** One `QualityStateEntry` per scope. A REGRESSION in one scope MUST NOT affect any other scope's entry. **Persistence contract.** `QualityStateEntry` is a Product-level citizen; it MUST be preserved across executor replacement, cognitive reset, and restart. It MUST NOT reside in or depend on ExecutorState. **Initialization contract.** A `QualityStateEntry` for a scope is created on first `QualityDelta` write for that scope, with `current_streak = 0`, `best_streak = 0`, `streak_started_at = null`. Uses canonical: ProductScope (scope), TemporalFields (last_evaluated_at as created_at). Used in: State.quality_state.
 
 ## ReIngestionRecord
 
@@ -6916,6 +6955,14 @@ When a new Objective is proposed while a partial blocking condition is active, U
 
 When an already-admitted and in-progress Objective encounters, during execution of one of its Operations, a new direct or transitive dependency on a retained, denied or unresolved decision — for example, because a required authorization became retained after admission or a previously resolved decision was revoked while the Objective was executing — URACE MUST apply the minimum-scope blocking principle within that Objective's remaining Operations. Operations with a direct or transitive dependency on the blocking condition MUST be suspended and preserved in pending-eligibility state; Operations without such a dependency MUST continue at their next eligible lifecycle boundary. The in-progress Objective MUST NOT be retired or abandoned solely because one of its Operations cannot proceed; the minimum-scope blocking rule applies within an in-progress Objective across its Operations in the same way it applies across Objectives within the lifecycle. The in-progress Objective's blocked Operations MUST be surfaced in the inspection output as a named partially-blocked workstream, attributed to the same unresolved decision record that governs newly proposed Objectives blocked by the same condition.
 
+**OperationDependency DAG computation.** When `OperationDependency` records (§62b) exist in State, the minimum-scope blocked set for a blocked Operation MUST be computed as the forward-reachable set from that Operation in the `OperationDependency` DAG, filtered by dependency kind:
+
+- `FINISH_TO_START`: the dependent (`to_id`) Operation is blocked at start when the blocking (`from_id`) Operation is blocked. This is the hard-dependency case.
+- `START_TO_START`: the dependent Operation is blocked at start only if the blocking Operation's own start is also blocked. If the blocking Operation has started (even if not finished), the dependent may start.
+- `FINISH_TO_FINISH`: the dependent Operation's completion is blocked; its start is not blocked. Both Operations may execute in parallel; only the dependent's final acceptance waits.
+
+When `OperationDependency` records are present, this DAG-based computation MUST supersede workstream-heuristic grouping for the scopes covered by those records. The self-cycle invariant on `OperationDependency` (§62b: `from_id ≠ to_id`) prevents infinite traversal. Cycles among multiple nodes MUST be detected and surfaced as an `IntegrityGap(kind="operation-dependency-cycle", severity=BLOCKING)` before traversal proceeds.
+
 ---
 
 # 66. Autonomous Liveness
@@ -7598,7 +7645,7 @@ For each assessment boundary, URACE MUST:
 1. recover incomplete transactions and reconcile unresolved effects before dependent new work;
 2. load durable state, governing Intent, applicable Authority, constraints, Evidence and capability state;
 3. ingest attributable new input and observe the Product and environment;
-4. qualify meaningful Triggers, revalidate materially stale premises and preserve uncertainty;
+4. qualify meaningful Triggers, run the Staleness Detection Mechanism (§62c) to revalidate materially stale premises, and preserve uncertainty;
 5. discover and rank eligible Objectives by Intent-relative value, urgency, confidence, cost, risk, reversibility and learning value;
 6. block only scope dependent on retained, denied or unresolved decisions;
 7. create or reuse an attributable Plan with validation, follow-up and recovery conditions;
@@ -8478,7 +8525,7 @@ Inspect the quality streak state and quality delta trajectory for one or all sco
 urace /quality [--scope <scope>] [--json]
 ```
 
-Output includes: `current_streak`, `best_streak`, `streak_scope`, the most recent N QualityDelta records (default: 10), and any pending autonomy expansion proposals. Implements the Quality Streak Mechanism (§62c). Uses: QualityDelta (§62b), Quality Streak Mechanism (§62c).
+Output includes: `current_streak`, `best_streak`, the most recent N QualityDelta records (default: 10), Staleness Detection warnings (§62c), and any pending autonomy expansion proposals. Streak state is read from `State.quality_state` (QualityStateEntry, §62b), not from ExecutorState. Implements the Quality Streak Mechanism (§62c). Uses: QualityDelta (§62b), QualityStateEntry (§62b), Quality Streak Mechanism (§62c).
 
 ## Output path: --out vs --output
 
