@@ -86,13 +86,13 @@ Use `urace /help compact` for details.
 
 ## Reuse URACE Patterns The Way You Want
 
-Take any of URACE's 20 architectural patterns for your own project — no lifecycle, no commitment:
+Take any of URACE's 20 architectural patterns for your own project — no lifecycle, no commitment. For example, AP6 (Causal Provenance Chain) gives you a full audit trail:
 
 ```
 urace derive --patterns AP6 --intent "change audit trail for my API"
 ```
 
-Dependencies resolve automatically. Output is a `DerivedSystemManifest` documenting exactly what you took. Run `urace derive` with no arguments to browse all 20 patterns.
+Run `urace derive` with no arguments to browse and pick patterns.
 
 ## Consequential Use
 
