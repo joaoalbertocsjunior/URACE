@@ -61,7 +61,7 @@ Run `urace /auto` in one terminal. From a second terminal, send anything.
 
 **Plain text** — the Executor maps your input to goals, intents, constraints, or commands — each confirmed individually. Contradictory inputs surface as alternatives.
 
-`urace /help` lists all commands. `urace /help <command>` gives per-command reference.
+`urace /help` lists all commands. `urace /help <command>` gives per-command reference. Options shared across commands (`--json`, `--scope`, `--verbose`, and others) are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Update Safely
 

@@ -7945,6 +7945,75 @@ Spec-improvement Objectives derived from audit findings are ordinary spec-evolut
 
 ---
 
+# 62k. Standard Command Options
+
+Options defined here apply across all commands that accept them. Per-command specs need not redefine semantics — they MUST conform to this contract.
+
+## --json
+
+Emit output as a machine-readable JSON document (or JSON Lines for streaming commands such as `auto`). Human-readable output is suppressed. Exit codes are unaffected.
+
+Applies to: `check`, `vitals`, `change`, `configuration`, `self-evolution`, `commands`, `inbox`, `derive`, `context`, `intent`, `constraint`, `rules`, `source`, `metric`, `vital`, `goal`, `policy`, `budget`, `evaluation`, `report`, `update`, `plan`, `pause`, `resume`, `compact`, `decompact`, `amend`, `why`, `crc`, `auto`
+
+## --scope
+
+Limits the operation to a named authority scope. Valid values: `product` | `runtime` | `all`. Default: `product`.
+
+Applies to: `intent`, `constraint`, `rules`
+
+## --priority
+
+Integer priority weight. Higher values indicate higher scheduling priority.
+
+Applies to: `add-goal` (default: 70), `executor` (default: 100), `goal`
+
+## --kind
+
+String discriminator for filtering or classifying records. Semantics are command-local.
+
+Applies to: `rules` (filter by rule kind), `amend` (amendment kind)
+
+## --id
+
+Stable identifier reference. Semantics are command-local.
+
+Applies to: `intent` (rule ID for supersede/deactivate), `constraint` (rule ID for deactivate), `executor` (executor identity, default: `codex-primary`)
+
+## --source
+
+String identifying the origin of input. Semantics are command-local.
+
+Applies to: `add-context` (default: `repository owner`), `add-metric` (REQUIRED — metric source name)
+
+## --dry-run
+
+Report eligible records or planned mutations without committing any state change.
+
+Applies to: `compact`
+
+## --verbose
+
+Emit detailed deterministic diagnostics without an additional Executor call.
+
+Applies to: `auto`
+
+## --quiet
+
+Suppress human-readable per-cycle feedback. When combined with `--json`, JSON Lines output on stdout is retained.
+
+Applies to: `auto`
+
+## Output path: --out vs --output
+
+Two commands accept an output file path using inconsistent flag names:
+
+- `derive` uses `--out`
+- `report` uses `--output`
+
+These MUST be treated as command-local until unified. A future revision SHOULD standardize on `--out`.
+
+---
+
 # 80. Final Invariant
 
 > **URACE persistently drives the Product toward the highest applicable non-delegated authoritative Intent. The authoritative source controls whatever destination-setting Authority it retains and may delegate any subordinate destination or navigation decision it chooses; URACE MUST preserve that retained boundary and MUST NOT invent, broaden or reason around delegation. Within valid delegated Authority, however, URACE owns the journey: it independently observes reality, discovers opportunities and problems, assesses Evidence, identifies uncertainty, chooses Objectives, prioritizes, plans, experiments, selects replaceable executors, executes, learns, corrects course, validates, checkpoints, repairs, recovers, becomes dormant and reactivates without requiring the authoritative source to navigate decisions already delegated. Evidence constrains what URACE may defensibly believe about the conditions of the journey and may justify route changes or authorized destination evolution, but Evidence, Product Value, Priority, urgency, market pressure, executor capability, recommendation and convenience MUST NOT independently change a retained destination or create Authority. When a route fails, URACE changes the route; when a delegated destination should change, URACE may change it when sufficiently justified; when a retained destination appears infeasible, URACE preserves reality and the authoritative boundary rather than silently redefining either. Retained, denied or unresolved decisions block only dependent scope where possible, while independent authorized Product evolution continues. Materially stale consequential decisions are proportionately revalidated without converting Authority into an approval loop; attempts, effects, observations, validation and acceptance remain distinct; uncertain effects remain explicitly indeterminate until reconciled; accepted progress is checkpointed; and persistent autonomous ownership remains live through both active operation and efficient dormancy until an explicit authoritative terminal condition ends it. In short: the authoritative source chooses the destination it wishes to retain; URACE drives the boat.**
