@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r17**
+**Specification version: 2026-10-12-r18**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2804,7 +2804,8 @@ Three commands expose the Rule Ledger:
 
 | Command | Effect |
 |---------|--------|
-| `urace add "…"` | Classify free text as any combination of goals, intents, and constraints via executor; confirm each detected item |
+| `urace <text>` | Free-form input — Executor classifies as any combination of goals, intents, and constraints; confirm each detected item |
+| `urace /<command> [args]` | Direct command — routes to the named lifecycle operation without Executor classification |
 | `urace intent add "…"` | Add a DIRECTIVE rule (queued; applied at next safe boundary) |
 | `urace intent list` | List active DIRECTIVE rules |
 | `urace intent supersede "…" --id <id>` | Replace an existing DIRECTIVE with a new one |
@@ -2820,29 +2821,39 @@ Three commands expose the Rule Ledger:
 
 `intent` and `constraint` mutations are queued inputs applied at the next safe lifecycle boundary under the same atomicity guarantees as §62. They MUST NOT be applied mid-cycle.
 
-## urace add
+## Universal Input
 
 ```
-urace add "<free text>"
+urace <text>
+urace /<command> [args]
 ```
 
-A convenience command that accepts free-text describing one or more goals, intents, or constraints and routes each to the correct lifecycle operation via executor-driven classification. It is the single entry point for adding governed lifecycle items without knowing their type in advance.
+The runtime accepts free-form text and direct commands through a single top-level dispatch. No subcommand keyword is needed.
 
-**Classification protocol.**
+**Routing rules (ordered):**
+1. Reserved keywords (`auto`, `pause`, `resume`, `help`, `update`) always route directly to their lifecycle operations.
+2. Input beginning with `/` routes to the named command: `urace /check` is equivalent to `urace check`; `urace /vitals` to `urace vitals`; `urace /intent add "…"` to `urace intent add "…"`. The `/` is a routing signal only — it does not alter command semantics.
+3. All other input is treated as free-form text and routed through executor-driven classification (ClassificationBatch, §62b).
+
+**Free-form classification protocol.**
 1. The operator provides free text describing one or more lifecycle items.
-2. The Executor returns a `ClassificationBatch` (§62b) containing one `ClassificationResult` per detected item, in detection order.
+2. The Executor returns a `ClassificationBatch` (§62b) containing one `ClassificationResult` per detected item, in detection order. Items may have type `goal`, `intent`, `constraint`, or `command`.
 3. The runtime displays all detected items numbered — type, subtype, extracted parameters, confidence, and reasoning.
-4. For each item in sequence, the runtime prompts for individual confirmation (y/n/skip). A `permission`-subtype constraint MUST display a visible warning before its confirmation prompt.
-5. Each confirmed item is written to the durable inbox as the appropriate kind (`goal`, `intent_control`, or `constraint_control`) and processed at the next safe lifecycle boundary.
-6. Skipped or rejected items are not written; the operator is directed to the explicit commands for those items.
+4. For each item in sequence: `command`-type items are executed directly without confirmation; `goal`, `intent`, and `constraint` items prompt for individual confirmation (y/n/skip). A `permission`-subtype constraint MUST display a visible warning before its confirmation prompt.
+5. Each confirmed lifecycle item is written to the durable inbox as the appropriate kind (`goal`, `intent_control`, or `constraint_control`) and processed at the next safe lifecycle boundary.
+6. Skipped or rejected items are not written; the operator is directed to the direct command for those items.
 
-**Executor unavailability.** When the Executor is unavailable or over budget, `urace add` MUST NOT attempt heuristic classification. It MUST inform the operator and direct them to the explicit commands (`urace add-goal`, `urace intent add`, `urace constraint add`), which accept structured parameters directly and do not require an Executor.
+**Mixed input.** When free-form text contains both `/command` references and lifecycle-item descriptions, the Executor's ClassificationBatch MAY include `command`-type items alongside `goal`, `intent`, and `constraint` items. A `command`-type item's `parameters` MUST include a `command` field naming the lifecycle operation and an optional `args` list. The runtime executes command-type items in order, interleaved with the confirmation flow for lifecycle items.
 
-**No flag override.** `urace add` accepts only the free-text argument. There is no type-selection flag; explicit type selection is the purpose of the three direct commands. There is no confirmation-skip flag; interactive confirmation is always required.
+**Executor unavailability.** When the Executor is unavailable or over budget, Universal Input MUST NOT attempt heuristic classification. It MUST inform the operator and direct them to the `/`-prefixed direct commands (`urace /add-goal`, `urace /intent add`, `urace /constraint add`).
 
-**Permission warning.** When the ClassificationResult identifies a constraint with subtype `permission`, the runtime MUST display a visible warning before the confirmation prompt indicating that the operation grants a permission. The operator MUST explicitly confirm after seeing this warning.
+**No flag override.** Free-form input accepts only the text argument. There is no type-selection flag; direct commands using `/` serve that purpose. There is no confirmation-skip flag; interactive confirmation is always required for lifecycle items.
 
-**Existing commands preserved.** `urace add-goal`, `urace intent add`, and `urace constraint add` remain the canonical explicit interfaces. `urace add` is additive convenience; it does not deprecate or replace the explicit commands.
+**Permission warning.** When a ClassificationResult identifies a constraint with subtype `permission`, the runtime MUST display a visible warning before the confirmation prompt.
+
+**Startup guidance.** At the start of `urace auto`, the runtime MUST display a single-line hint indicating that free-form text and `/`-prefixed direct commands are available from a second terminal.
+
+**Machine-readable output.** When `json-feedback` is enabled (§62c), structured outputs from Universal Input processing — classification batch, per-item dispositions (confirmed, skipped, rejected, executed) — are also emitted as machine-readable JSON for pipeline integration.
 
 ---
 
@@ -3930,12 +3941,14 @@ The structured output of executor-driven free-text classification for the `urace
 
 | Field | Type | Req | Notes |
 |---|---|---|---|
-| type | string | REQUIRED | `goal` \| `intent` \| `constraint` |
+| type | string | REQUIRED | `goal` \| `intent` \| `constraint` \| `command` |
 | subtype | string | OPTIONAL | `directive` (intent); `prohibition` \| `permission` (constraint); absent for goal |
 | parameters | object | REQUIRED | extracted parameters conforming to the target type's input schema |
 | confidence | probability | REQUIRED | classifier confidence in [0.0, 1.0] |
 | reasoning | string | OPTIONAL | brief explanation of the classification decision |
 | raw_text | string | REQUIRED | the original unmodified free-text input |
+
+For `command`-type items, `parameters` MUST include a `command` field (string) naming the lifecycle operation and MAY include an `args` list.
 
 ---
 
