@@ -6,6 +6,8 @@
 
 [`URACE`](URACE.md) is an open blueprint and complete portable [install-as-bootstrap](#get-running) specification for continuously improving a [**Product**](#what-is-a-product).
 
+Delivered as an open-blueprint rather than traditional code, this project bridges the gap between visionaries and implementers without vendor lock-in. Grounded in innovation, communication, and runtime agnosticism, it relies on the same principles that built the internet.
+
 You set the destination and boundaries. URACE delegates execution to replaceable Executors, validates results, learns and recovers. It changes itself only with your permission.
 
 ```text
@@ -56,7 +58,7 @@ urace vitals                inspect progress, cost and health
 urace rules                 inspect the Rule Ledger (list, graph, conflicts)
 urace change list           list accepted increments
 
-urace add "..."             classify free text as goal, intent, or constraint (executor + confirm)
+urace add "..."             free-text entry point — executor classifies as goal / intent / constraint, then you confirm
 
 urace add-goal ...          queue a measurable goal (explicit, no executor needed)
 urace intent add / list / supersede / deactivate
@@ -66,6 +68,8 @@ urace update download/explain/apply/resolve
 ```
 
 Use `urace help` to explore all available commands.
+
+`urace add "<free text>"` is the single entry point for adding governed lifecycle items without knowing their type in advance. The Executor classifies your text as a goal, intent, or constraint, displays the result with its reasoning, and asks you to confirm before writing anything. There are no type-selection or confirmation-skip flags — interactive confirmation is always required. If the Executor is unavailable or over budget, `urace add` will not attempt heuristic classification; it directs you to the explicit commands instead.
 
 You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Read-only commands (`check`, `vitals`, `rules`, `intent list`, `constraint list`, `change list`, and all `help` operations) load an atomic state snapshot and can run freely from a second terminal while `urace auto` owns the lifecycle. Govern and update commands write to an atomic inbox and are applied exactly once at the next safe lifecycle boundary; they never conflict with each other or with an active autonomous run.
 
