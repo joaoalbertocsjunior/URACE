@@ -1610,6 +1610,8 @@ URACE SHOULD preserve decision basis rather than hidden chain-of-thought.
 
 When a required assessment input — Authority, Intent, State, or Evidence — is absent or below minimum quality for sound navigation, URACE MUST surface the missing input as a specific blocking gap before selecting or executing any dependent Objective. URACE MUST retain the incomplete assessment record and all available inputs intact, and MUST NOT proceed with an inferred or defaulted substitute for a missing required input where that substitute would conceal an actual navigation boundary.
 
+The assessment cycle implements AP8 — Fixpoint Calculus (§62i): gaps are detected iteratively until convergence is reached (no new gaps surfaced in the current cycle).
+
 ---
 
 # 38. Autonomous Objective Discovery
@@ -1641,6 +1643,8 @@ Before concluding that no justified authorized action exists and entering `DORMA
 When a discovery cycle is interrupted by an unhandled evaluation error during the enumeration of a registered input category — such as a corrupted goal record, a schema-inconsistent trigger state or an evaluation exception not attributable to capability unavailability or resource constraints — URACE MUST treat the interrupted cycle as incomplete, MUST record the specific category and error descriptor at the interruption point, and MUST NOT conclude dormancy from the partially enumerated result. The error-interrupted cycle MUST surface in the inspection output as a named blocking limitation identifying the affected category and requiring recovery or operator intervention. Reassessment MUST be scheduled at the earliest qualifying condition, consistent with the incomplete-cycle requirement above. Error-interrupted discovery cycles MUST be distinguished from capability-skipped cycles: the remediation path for an enumeration error is diagnosis and recovery, not waiting for a capability restoration event.
 
 The discovery context provided to an Executor MUST include the spec structural audit summary when available (§81). The reasoning memory is a bounded configurable store: its maximum entry count MUST be configurable via `efficiency.max_reasoning_memory_entries` and MUST NOT grow unboundedly. When the ceiling is reached, entries MUST be evicted in order of lowest-confidence, shortest-hypothesis-age, and least-recently-observed, preserving active high-confidence patterns.
+
+Queued authoritative inputs awaiting application implement AP14 — Durable Inbox (§62i), ensuring FIFO ordering and idempotent processing across lifecycle boundaries.
 
 ---
 
@@ -1725,7 +1729,7 @@ Planner capability does not create Authority.
 
 # 42. Scheduling
 
-Scheduling determines when planned work or reassessment becomes useful.
+Scheduling determines when planned work or reassessment becomes useful. Durable time-based and trigger-based scheduling implements AP18 — Scheduled Task Contract (§62i).
 
 ```text
 Plan / Dormant Condition
@@ -1827,6 +1831,8 @@ When the same Executor failure pattern — identified by identical error classif
 When an Executor becomes permanently unavailable during an active Operation — through abrupt termination, resource exhaustion, timeout or loss of connectivity before the Operation result can be observed — URACE MUST treat the uncommitted portion of that Operation as `INDETERMINATE` and apply the same durable preservation and reconciliation requirements as §52. URACE MUST NOT re-dispatch the same Operation to a replacement Executor without first reconciling whether the original invocation committed an externally observable effect; reconciliation MUST use the strongest available target-system query, transaction or reference ID, durable artifact or deterministic probe. If reconciliation cannot establish whether an external effect occurred, the Operation MUST remain `INDETERMINATE` and the original effect record MUST be preserved; a replacement Executor MUST NOT be used to retry an unreconciled consequential effect.
 
 When an Executor returns a failure attributable to a transient network condition — including a provider-side infrastructure disconnect, upstream connection reset, stream disconnection, or equivalent low-level transport error that does not indicate an authentication, authorization, capability, or provider-capacity gap — URACE MUST classify that failure as a short-backoff retriable condition and MUST NOT apply the longer backoff period reserved for authentication or configuration failures. A transient network failure MUST NOT increment the consecutive-failure counter used for systematic failure detection under §43; a single transport-layer disconnect does not constitute evidence of a repeating adapter-configuration problem. The minimum backoff for a transient network failure SHOULD be significantly shorter than the authentication-failure backoff and SHOULD be configurable independently. URACE MUST NOT conflate transient network failures with authentication failures, capability gaps, or provider-capacity exhaustion in the inspection output or in retry scheduling.
+
+The backoff, consecutive-failure threshold, and cooldown behavior in this section implement AP10 — Bounded Retry with Backoff (§62i). Effect reconciliation before re-dispatch implements AP6 — Causal Provenance Chain (§62i).
 
 ---
 
@@ -2022,7 +2028,7 @@ VALIDATE
 
 # 50. Idempotency and Replay
 
-Where retries could duplicate consequential effects, stable Operation identity or equivalent idempotency semantics SHOULD be used.
+This section formalizes AP5 — Idempotency Contract (§62i) for lifecycle operations: applying an operation N times produces the same result as applying it once. Where retries could duplicate consequential effects, stable Operation identity or equivalent idempotency semantics SHOULD be used.
 
 ```text
 LOGICAL OPERATION
@@ -2191,6 +2197,8 @@ When validation capability that was temporarily unavailable becomes available, U
 
 When an independent validation attempt executes against an Observation but returns an inconclusive or ambiguous disposition — where validation capability was present and ran but could not produce a conclusive pass or fail, for example due to a validation-rule evaluation error, an incomplete result schema or an inability to assess a required criterion — URACE MUST preserve the Observation as pending validation, MUST record the inconclusive attempt with its specific unresolvable criterion as attribution on the Observation, and MUST NOT treat a completed-but-inconclusive attempt as equivalent to validation capability unavailability. An inconclusive validation result requires diagnosing the validation rule or criterion rather than waiting for a capability restoration event. An Observation that accumulates only inconclusive attempts without a conclusive pass MUST NOT be advanced to accepted Product state; repeated inconclusive results from the same validation path MUST NOT escalate to acceptance by elapsed time, attempt count or Executor re-confirmation.
 
+Observations preserved in pending-validation state implement AP14 — Durable Inbox (§62i), ensuring crash-safe FIFO preservation until validation capability is restored.
+
 ---
 
 # 55. Executor Cardinality and Capacity
@@ -2286,7 +2294,7 @@ ACCELERATING?  STABLE?  DECELERATING?
                          AND PRIORITY
 ```
 
-Value production velocity tracks lifecycle health across time; it does not create Authority or bypass validation, Checkpoint or constraint requirements.
+Value production velocity tracks lifecycle health across time; it does not create Authority or bypass validation, Checkpoint or constraint requirements. Rolling velocity convergence and deceleration detection implement AP8 — Fixpoint Calculus (§62i).
 
 ---
 
@@ -2367,7 +2375,7 @@ CONFLICT         DESTINATION
 
 # 60. Validation and Acceptance
 
-Executor confidence is not validation. `accept(op) ↔ validate(op).verdict = VALIDATED ∧ ¬rollback_needed(op)`
+Executor confidence is not validation. `accept(op) ↔ validate(op).verdict = VALIDATED ∧ ¬rollback_needed(op)` Snapshot-before/after state preservation and atomic delta journaling implement AP16 — State Snapshot + Delta Log (§62i).
 
 Validation SHOULD assess where applicable:
 
@@ -2786,7 +2794,7 @@ If the Rule Ledger is unavailable at outcome time, URACE MUST surface this as a 
 
 ## Append-Only Invariant
 
-The Rule Ledger MUST be append-only with supersession. Rules MUST NOT be deleted from the Ledger. A rule that is no longer active MUST be marked deactivated or superseded with an attributed timestamp and reason, preserving the full historical chain. Any query against the Ledger MUST be able to reconstruct the complete active rule set at any prior accepted change by replaying the binding record.
+The Rule Ledger MUST be append-only with supersession (AP3 — Append-Only Log, §62i). Rules MUST NOT be deleted from the Ledger. A rule that is no longer active MUST be marked deactivated or superseded with an attributed timestamp and reason, preserving the full historical chain. Any query against the Ledger MUST be able to reconstruct the complete active rule set at any prior accepted change by replaying the binding record.
 
 ## Bootstrap Seeding
 
@@ -2825,7 +2833,7 @@ Three commands expose the Rule Ledger:
 | `urace /rules conflicts` | Surface detected rule conflicts |
 | `urace /rules changes <id>` | List accepted changes governed by a rule |
 
-`intent` and `constraint` mutations are queued inputs applied at the next safe lifecycle boundary under the same atomicity guarantees as §62. They MUST NOT be applied mid-cycle.
+`intent` and `constraint` mutations are queued inputs applied at the next safe lifecycle boundary under the same atomicity guarantees as §62. They MUST NOT be applied mid-cycle. For complete command-line syntax, shared options, and output contracts for all commands, see §62k Standard Command Options.
 
 ## Universal Input
 
@@ -3081,6 +3089,8 @@ Evidence MUST be append-only. An Evidence record MUST NOT be modified or deleted
 | `force-discovery-override` | `force_id`: string, `attribution`: string |
 | `external-metric-unavailable` | `source_id`: string, `streak`: int, `reason`: string |
 
+Uses canonical: Identifier (id), iso_timestamp (at as created_at). Note: Evidence is append-only per AP3; MUST NOT expose updated_at or any mutable timestamp field.
+
 **Append-only contract.** A new Evidence record MUST be created for every event; prior records MUST NOT be edited. An implementation that truncates or compacts the Evidence log MUST preserve at minimum the most recent 1 000 records and MUST NOT discard records for events within the current Objective's lifecycle.
 
 ## Checkpoint
@@ -3121,6 +3131,8 @@ Input {
   status   REQUIRED  QUEUED (only valid value at rest; consumed inputs are removed)
 }
 ```
+
+Uses canonical: Identifier (id), iso_timestamp (at as created_at). Note: Input is append-only at rest; MUST NOT expose updated_at.
 
 **Idempotency contract.** An Input id that appears in `processed_input_ids` MUST NOT be applied a second time. This list MUST be checked before processing any Input.
 
@@ -4036,7 +4048,7 @@ OPERATOR COMMAND
 
 ## Transaction Mechanism
 
-A Transaction wraps the file mutations of a single Operation, providing a rollback capability and a durable record for crash recovery.
+A Transaction wraps the file mutations of a single Operation, providing a rollback capability and a durable record for crash recovery. The before/after snapshot pair and phase-progressive delta journal implement AP16 — State Snapshot + Delta Log (§62i).
 
 ```
 Transaction {
@@ -4296,7 +4308,7 @@ EXECUTOR PROPOSAL (ExecutorProposal)
 
 ## Discovery Credit Gate Mechanism
 
-Before every discovery cycle that would invoke a metered or credit-accruing Executor, URACE MUST evaluate the Discovery Credit Gate. The gate is deterministic, executor-agnostic, and reads only durable state and configuration. It MUST NOT invoke an Executor to determine its own outcome. `gate_open ↔ calls_today < max_calls_per_day ∧ calls_month < max_calls_per_month`
+Before every discovery cycle that would invoke a metered or credit-accruing Executor, URACE MUST evaluate the Discovery Credit Gate. The gate is deterministic, executor-agnostic, and reads only durable state and configuration. It MUST NOT invoke an Executor to determine its own outcome. `gate_open ↔ calls_today < max_calls_per_day ∧ calls_month < max_calls_per_month` The systematic-failure cooldown (condition 1) implements AP10 — Bounded Retry with Backoff (§62i).
 
 ```
 DISCOVERY CYCLE REQUEST
@@ -6131,6 +6143,48 @@ preserve(C, update) ↔ C.preserve_on_update = True
 
 ---
 
+## AP20 — Circuit Breaker
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP4]` · `provides: proactive failure-rate gating, CLOSED/OPEN/HALF_OPEN state machine, configurable threshold and observation window, recovery probe, CircuitBreakerRecord citizen`
+
+A Circuit Breaker monitors the recent failure rate of calls across a ProducerConsumerContract boundary and opens a gate to stop attempts entirely when that rate exceeds a configured threshold. It complements AP10 (Bounded Retry with Backoff): AP10 schedules retries after individual failures; AP20 stops attempts altogether when the failure rate indicates the downstream component is unavailable, preventing cascading failures.
+
+**State machine.**
+
+```
+CLOSED ──[failure_rate > threshold]──► OPEN
+OPEN   ──[probe_timeout elapsed]───► HALF_OPEN
+HALF_OPEN ──[probe succeeds]───────► CLOSED
+HALF_OPEN ──[probe fails]──────────► OPEN
+```
+
+- **CLOSED**: normal operation; all calls proceed; failure rate is tracked in a rolling observation window.
+- **OPEN**: all calls are rejected immediately without attempting the downstream component; a probe timer counts down.
+- **HALF_OPEN**: a single probe call is allowed; success re-closes the breaker; failure re-opens it.
+
+**CircuitBreakerRecord.** A state transition MUST produce a `CircuitBreakerRecord` citizen:
+
+```
+CircuitBreakerRecord {
+  id                REQUIRED  stable identifier
+  at                REQUIRED  timestamp of transition
+  contract_id       REQUIRED  ProducerConsumerContract id this breaker guards
+  prior_state       REQUIRED  CLOSED | OPEN | HALF_OPEN
+  new_state         REQUIRED  CLOSED | OPEN | HALF_OPEN
+  failure_rate      REQUIRED  float [0.0, 1.0]; rate that triggered the transition
+  threshold         REQUIRED  float [0.0, 1.0]; configured threshold at time of transition
+  observation_window_seconds  REQUIRED  float; rolling window used to compute failure_rate
+}
+```
+
+Uses canonical: Identifier (id), iso_timestamp (at), probability (failure_rate, threshold).
+
+**Relation to AP10.** A system MAY adopt both AP20 and AP10. When both are active, AP20 gates whether an attempt is made at all; AP10 governs retry scheduling when an attempt has been made and failed. AP20 MUST be evaluated before AP10 in the call path.
+
+**Exclusion note.** A derived system that adopts AP20 without AP4 MUST document the contract boundary it guards using equivalent producer/consumer obligation notation; the AP4 Citizen identity requirement for the contract is the only hard dependency.
+
+---
+
 ## Canonical Scalar Catalog
 
 All primitive value types used in citizen schemas. Every field that holds one of these types MUST reference the canonical scalar name.
@@ -6196,6 +6250,8 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
                           AP13 (Observer) ◄─────reads─────┘
                                │
                           AP16 (Snapshot+Log)
+                               │
+                          AP20 (Circuit Breaker) ──gates──► AP4 (Contract)
 ```
 
 ---
