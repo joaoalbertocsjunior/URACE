@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-11-r6**
+**Specification version: 2026-10-11-r7**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -1640,6 +1640,8 @@ Before concluding that no justified authorized action exists and entering `DORMA
 
 When a discovery cycle is interrupted by an unhandled evaluation error during the enumeration of a registered input category — such as a corrupted goal record, a schema-inconsistent trigger state or an evaluation exception not attributable to capability unavailability or resource constraints — URACE MUST treat the interrupted cycle as incomplete, MUST record the specific category and error descriptor at the interruption point, and MUST NOT conclude dormancy from the partially enumerated result. The error-interrupted cycle MUST surface in the inspection output as a named blocking limitation identifying the affected category and requiring recovery or operator intervention. Reassessment MUST be scheduled at the earliest qualifying condition, consistent with the incomplete-cycle requirement above. Error-interrupted discovery cycles MUST be distinguished from capability-skipped cycles: the remediation path for an enumeration error is diagnosis and recovery, not waiting for a capability restoration event.
 
+The discovery context provided to an Executor MUST include the spec structural audit summary when available (§81). The reasoning memory is a bounded configurable store: its maximum entry count MUST be configurable via `efficiency.max_reasoning_memory_entries` and MUST NOT grow unboundedly. When the ceiling is reached, entries MUST be evicted in order of lowest-confidence, shortest-hypothesis-age, and least-recently-observed, preserving active high-confidence patterns.
+
 ---
 
 # 39. Priority
@@ -1881,6 +1883,8 @@ DecisionRecord {
 ```
 
 This records decision basis, not hidden chain-of-thought. The formal canonical schema for DecisionRecord — including all field types, required/optional status, invariant contracts and provenance lifecycle — is defined in §62d. The loose notation above is a navigational reference; the §62d definition is authoritative for any implementation.
+
+**Canonical state key.** Decision records MUST be persisted under `state["decision_records"]`. The key `state["decisions"]` MUST NOT be used as a canonical store for DecisionRecord instances; any implementation using that key for DecisionRecord persistence violates this section and §62d. `urace why` traversal and §62g reasoning-chain operations MUST read exclusively from `state["decision_records"]`. See §62g for traversal semantics and `urace why` command specification.
 
 When Evidence referenced by a Decision Record as primary justification is later found to have been fabricated, provably incorrect, or formally retracted by its source with material bearing on the decision outcome, URACE MUST flag the affected Decision Record as provenance-revised, MUST preserve the original record intact with an attributed revision notice, and MUST trigger proportionate revalidation of any active Objectives, Plans or Operations that relied on that Evidence as primary justification. A provenance-revised Decision Record MUST NOT silently continue as current authorization for ongoing uncommitted work; it MUST surface in the inspection output with an identified revalidation requirement. Where the affected Decision Record authorized an already-committed externally observable effect, §53 Effect Reconciliation governs the response. Where revalidation cannot proceed due to temporarily unavailable capability, the dependent work MUST be preserved as explicitly blocked on revalidation-pending state rather than abandoned or silently continued.
 
@@ -2171,10 +2175,15 @@ EVIDENCE
 VALIDATION
       │
       ▼
-ACCEPTED PRODUCT STATE
+ACCEPTED  ← explicit transitional status
+      │
+      ▼
+ACCEPTED PRODUCT STATE → ACTIVE lifecycle
 ```
 
 `done` is not a checkpoint.
+
+An Operation passes through a distinct `ACCEPTED` status between independent validation passing and the lifecycle becoming `ACTIVE` again. The `ACCEPTED` status records that the validation gate was satisfied; the subsequent transition to `ACTIVE` records that the lifecycle is ready for new work. These MUST NOT be collapsed into a single transition; each MUST be recorded as a durable status-transition event. An implementation that moves directly from `VALIDATING` to `ACTIVE` without an intervening `ACCEPTED` record MUST surface this as a `missing-acceptance-status` WARNING in the lifecycle inspection output.
 
 An Executor result, claim or completion signal MUST be treated as an Observation until independent validation confirms it satisfies applicable guardrails, integrity checks and Authorization boundaries. URACE MUST NOT advance Product state from Observation to Accepted solely because an Executor reports completion; advancement requires an explicit attributable validation act that was not performed by the same execution context that produced the result. Where validation capability is temporarily unavailable, the Observation MUST be preserved as pending validation rather than automatically accepted by elapsed time or repeated Executor confirmation. A model's self-assessed certainty, a confidence score or a second invocation of the same Executor MUST NOT substitute for an independent validation boundary.
 
@@ -4583,7 +4592,7 @@ CognitiveResumeContext {
 
 Uses canonical: Identifier (id, pending_transaction), DigestValue (state_digest), TemporalFields (generated_at as created_at).
 
-**Generation contract.** The lifecycle controller MUST generate a fresh CognitiveResumeContext at every cycle boundary: assessment start, planning start, execution start, validation complete, dormancy entry. A CRC whose `state_digest` does not match current state MUST NOT be injected; doing so is a `cognitive-resume-stale` WARNING IntegrityGap. **Injection contract.** The lifecycle controller MUST inject the current CRC alongside the state document as structured input whenever an Executor is initialized or reinitialized. The Executor MUST NOT be required to infer current lifecycle phase from the state document alone. **Stateless-resumable contract.** An Executor invocation MUST be resumable from the injected CRC plus current durable state without any in-process memory from a prior invocation. An Executor that requires recapitulation of prior reasoning not present in durable state violates this contract and is not replaceable per §75. **No-duplication contract.** The CRC MUST NOT substitute for a DecisionRecord. Reasoning behind a decision MUST still be written to a DecisionRecord (§62d); the CRC is a reconstitution aid, not an authorization record.
+**Generation contract.** The lifecycle controller MUST generate a fresh CognitiveResumeContext at every cycle boundary: assessment start, planning start, execution start, validation complete, dormancy entry. A CRC whose `state_digest` does not match current state MUST NOT be injected; doing so is a `cognitive-resume-stale` WARNING IntegrityGap. **Injection contract.** The lifecycle controller MUST inject the current CRC alongside the state document as structured input whenever an Executor is initialized or reinitialized. The Executor MUST NOT be required to infer current lifecycle phase from the state document alone. **Stateless-resumable contract.** An Executor invocation MUST be resumable from the injected CRC plus current durable state without any in-process memory from a prior invocation. An Executor that requires recapitulation of prior reasoning not present in durable state violates this contract and is not replaceable per §75. **No-duplication contract.** The CRC MUST NOT substitute for a DecisionRecord. Reasoning behind a decision MUST still be written to a DecisionRecord (§62d); the CRC is a reconstitution aid, not an authorization record. **`lifecycle_state` key contract.** The `cycle_phase` field MUST be derived from the canonical `state["lifecycle_state"]` field in durable state. An implementation that reads `lifecycle_status`, `status`, or any other key as the primary source for `cycle_phase` derivation violates this contract; those keys MUST NOT serve as fallbacks when `lifecycle_state` is absent.
 
 ## CompactionIndex
 
@@ -5402,6 +5411,24 @@ DISCOVER LIMITATION / OPPORTUNITY
        ▼
     REASSESS
 ```
+
+## Executor Proposal Schema
+
+When an Executor proposes a self-evolution Objective during discovery, the proposal MUST carry the following fields to enable the self-evolution policy gate:
+
+```
+ExecutorProposal {
+  self_evolution_necessary        REQUIRED  bool; true when the Executor asserts the proposal
+                                            is a necessary runtime or rebootstrap evolution
+  necessity_evidence              REQUIRED  string; non-empty justification when
+                                            self_evolution_necessary is true; empty otherwise
+  lower_impact_route_sufficient   REQUIRED  bool; true when a lower-impact Product route
+                                            exists that satisfies the same goal;
+                                            NECESSARY_ONLY eligibility requires this to be false
+}
+```
+
+An implementation MUST evaluate all three fields before treating a self-evolution proposal as eligible under `NECESSARY_ONLY`. A proposal with `self_evolution_necessary: false`, an empty `necessity_evidence`, or `lower_impact_route_sufficient: true` MUST be classified as ineligible for self-evolution and MUST be recorded as a durable `self-evolution-policy-decision` Evidence event with outcome `INELIGIBLE`. These fields are part of the inspectable authority chain for any self-evolution Objective and MUST NOT be omitted from the ExecutorProposal schema.
 
 Autonomous initiation MUST NOT be confused with self-authorization.
 
