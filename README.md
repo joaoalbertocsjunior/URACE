@@ -69,7 +69,7 @@ urace update download/explain/apply/resolve
 
 Use `urace help` to explore all available commands.
 
-`urace add "<free text>"` is the single entry point for adding governed lifecycle items without knowing their type in advance. The Executor classifies your text as a goal, intent, or constraint, displays the result with its reasoning, and asks you to confirm before writing anything. There are no type-selection or confirmation-skip flags — interactive confirmation is always required. If the Executor is unavailable or over budget, `urace add` will not attempt heuristic classification; it directs you to the explicit commands instead.
+`urace add "<free text>"` is the single entry point for adding governed lifecycle items without knowing their type in advance. A single input may yield any combination of goals, intents, and constraints — the Executor detects each independently. All detected items are shown numbered with type, confidence, and reasoning; you confirm each one individually before anything is written. There are no type-selection or confirmation-skip flags. If the Executor is unavailable or over budget, `urace add` will not attempt heuristic classification; it directs you to the explicit commands instead.
 
 You can edit the Product while URACE runs; it preserves newer work instead of overwriting it. Read-only commands (`check`, `vitals`, `rules`, `intent list`, `constraint list`, `change list`, and all `help` operations) load an atomic state snapshot and can run freely from a second terminal while `urace auto` owns the lifecycle. Govern and update commands write to an atomic inbox and are applied exactly once at the next safe lifecycle boundary; they never conflict with each other or with an active autonomous run.
 
