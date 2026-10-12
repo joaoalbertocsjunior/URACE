@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r28**
+**Specification version: 2026-10-12-r31**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -1702,6 +1702,8 @@ Plan {
 ```
 
 URACE SHOULD autonomously create, revise, abandon and replace Plans inside Authority.
+
+**Operation dependency graph.** When Plan.dependencies is populated, each entry MUST conform to the OperationDependency schema (§62b). The dependency set MUST be acyclic; URACE MUST validate the DAG invariant before scheduling any operation in the plan. Topological evaluation order applies: FOUNDATIONAL-tier dependencies MUST be resolved before COMPOSITIONAL, which MUST be resolved before INTEGRATED (AP24 ordering, §62i).
 
 ---
 
@@ -3411,10 +3413,15 @@ Config {
   operator_patterns OPTIONAL  list of {id, pattern, default_response}
   change_explanations OPTIONAL {mode: disabled | auto | enabled}
   analytics_export  OPTIONAL  {mode: DISABLED | ON_DEMAND | ON_CHECKPOINT}
+  context_budget   OPTIONAL  {
+                               target_utilization:   float 0.0–1.0 (default 0.70)
+                               hard_cap_fraction:    float 0.0–1.0 (default 0.90)
+                               executor_context_cap: int; token capacity of executor class
+                             }
 }
 ```
 
-**Immutability contract.** The Config Document MUST NOT be modified by autonomous lifecycle operation. Only the `executor` budget subkeys and `evaluation_system.weights` MAY be updated via authorized `budget_control` and `evaluation_control` inputs respectively. All other fields are fixed at bootstrap.
+**Immutability contract.** The Config Document MUST NOT be modified by autonomous lifecycle operation. Only the `executor` budget subkeys and `evaluation_system.weights` MAY be updated via authorized `budget_control` and `evaluation_control` inputs respectively. All other fields are fixed at bootstrap. `context_budget` is fixed at bootstrap and MUST NOT be modified autonomously.
 
 ## State Document
 
@@ -3471,6 +3478,8 @@ State {
   pending_runtime_activation OPTIONAL dict; present when a runtime-scope change awaits activation
   restart_requested     OPTIONAL  bool; set to true when runtime restart is needed
   system_repair_registry OPTIONAL dict[key → SystemRepairEntry]
+  quality_deltas         OPTIONAL  list[QualityDelta]; rolling quality trajectory per scope (AP9)
+  reingestion_records    OPTIONAL  list[ReIngestionRecord]; append-only log of re-ingestion events
 }
 ```
 
@@ -4382,6 +4391,137 @@ DISCOVERY CYCLE REQUEST
 
 **Streak-reset contract.** `unproductive_discovery_streak` MUST increment when a complete discovery cycle returns no justified action, an ineligible scope under current policy, or a transport failure. It MUST reset to 0 only when a discovery cycle produces at least one productive accepted result. Partial resets are not permitted.
 
+## Quality Streak Mechanism
+
+The Quality Streak Mechanism is the positive counterpart to AP20 — Circuit Breaker (§62i): where AP20 tracks failure streaks and gates further execution, this mechanism tracks consecutive quality improvements and gates progressive autonomy expansion. It implements AP9 — Monotone Accumulator (§62i) over QualityDelta records (§62b).
+
+```
+QUALITY STREAK EVALUATION (per assessment cycle, SD=True — no executor credits)
+
+  1. Read quality_streak_state from ExecutorState for target scope:
+       current_streak     int ≥ 0; consecutive IMPROVEMENT QualityDeltas in scope
+       best_streak        int ≥ 0; highest streak ever achieved in scope
+       streak_started_at  timestamp; when current streak began
+       streak_scope       ProductScope; scope of current streak
+
+  2. Read most recent QualityDelta for scope from State.quality_deltas:
+
+     IF classification == IMPROVEMENT:
+       → increment current_streak
+       → update best_streak if current_streak > best_streak
+       → record Evidence(kind="quality-streak-increment",
+                         streak=current_streak, scope=scope)
+
+     IF classification == REGRESSION:
+       → reset current_streak = 0
+       → record Evidence(kind="quality-streak-reset",
+                         reason="regression", scope=scope)
+       → notify AP20 Circuit Breaker: regression observed (AP20 evaluates independently)
+
+     IF classification == NEUTRAL:
+       → no change to streak counters
+
+  3. IF current_streak ≥ configured autonomy_expansion_threshold AND
+        applicable Authority permits scope weight expansion:
+       → propose: increase ScopePriorityConfig.max_weight for scope by one bounded step
+       → MUST pass Self-Evolution Eligibility Gate (§62c) if expansion modifies Config
+       → record Evidence(kind="quality-streak-autonomy-proposal",
+                         streak=current_streak, scope=scope)
+```
+
+**Immutability contract.** Streak counters MUST NOT be decremented except by REGRESSION reset. A NEUTRAL QualityDelta MUST NOT increment or reset the streak. **Independence contract.** Quality streak evaluation runs independently of AP20; AP20 governs failure recovery, this mechanism governs success-based expansion. Both MUST be evaluated on each cycle. **Cross-scope independence contract.** A REGRESSION in one scope MUST NOT reset another scope's streak. Streak state is per-scope. **Self-determination contract.** `SD(QualityStreakMechanism, S) = True`; this mechanism reads only enumerable durable state and MUST NOT consume executor credits.
+
+## Re-Ingestion Contract
+
+Formal contract for re-ingesting archived or compacted lifecycle data back into active state. Complements AP21 — Compaction (§62i) and §62f Compaction and Retention. Produces a ReIngestionRecord citizen (§62b).
+
+```
+RE-INGESTION REQUEST (operator-authorized, wraps Transaction Mechanism)
+
+  1. Locate target CompactionSummary at requested position in target field
+  2. Locate archive at CompactionSummary.archive_path
+     IF archive not found:
+       → ABORT; emit IntegrityGap(kind="reingestion-archive-missing", severity=BLOCKING)
+  3. Compute SHA-256 of archived records
+  4. Compare to CompactionSummary.original_digest:
+     IF mismatch:
+       → emit IntegrityGap(kind="reingestion-digest-mismatch", severity=BLOCKING)
+       → ABORT; do not modify live field
+  5. Open Transaction journal (PREPARED)
+  6. Remove CompactionSummary from target position
+  7. Insert original records at target position in original order (APPLYING → APPLIED)
+  8. Write ReIngestionRecord to evidence log
+  9. Advance Transaction to VALIDATED
+```
+
+**Atomicity contract.** Re-ingestion MUST be performed as a single lifecycle transaction (§62c Transaction Mechanism). A partial re-ingestion is a recovery condition; resume from the Transaction journal. **Field-order contract.** Restored records MUST occupy the exact position range originally compacted; relative ordering of neighboring live records MUST NOT change. **Policy contract.** Re-ingestion into a field with `compaction_mode: ROLLING_EVICTION` is PROHIBITED; such fields have no archive. **Authorization contract.** Re-ingestion MUST NOT be performed autonomously; it MUST be preceded by an attributable operator input. Uses canonical: ReIngestionRecord (§62b), CompactionSummary (§62b), Transaction Mechanism (§62c).
+
+## Staleness Detection Mechanism
+
+A general-purpose self-determinable mechanism for detecting and surfacing stale data across the lifecycle. Complements derived-manifest stale detection (§62j) and PendingValidation expiry (§62b). `SD = True` — no executor credits consumed.
+
+```
+STALENESS SCAN (per assessment cycle, SD=True)
+
+  DOMAIN: Decisions
+    FOR EACH DecisionRecord WHERE status == CURRENT:
+      decision_age = now − decided_at
+      IF decision_age > decision_freshness_window
+         AND (Intent changed since decided_at
+              OR Authority changed since decided_at
+              OR basis_evidence_ids reference Evidence superseded since decided_at):
+        → emit IntegrityGap(kind="stale-decision", severity=WARNING,
+                            detail="DecisionRecord {id} age={age}; basis may have changed")
+
+  DOMAIN: Evidence
+    FOR EACH Evidence WHERE kind IN [external-metric, market-signal, external-observation]:
+      evidence_age = now − recorded_at
+      IF evidence_age > evidence_freshness_window[kind]:
+        → emit IntegrityGap(kind="stale-evidence", severity=WARNING,
+                            detail="Evidence {id} kind={kind} age={age}")
+
+  DOMAIN: Rules
+    FOR EACH Rule WHERE status == ACTIVE AND supporting evidence count == 0:
+      rule_age = now − created_at
+      IF rule_age > rule_freshness_window:
+        → emit IntegrityGap(kind="unsupported-rule", severity=WARNING,
+                            detail="Rule {id} has no supporting Evidence in {age}d")
+```
+
+**Proportionality contract.** Staleness detection is self-determinable (`SD = True`); it MUST NOT consume executor credits. **Non-blocking contract.** All staleness gaps are `WARNING` severity, never `BLOCKING`; they surface for operator attention but MUST NOT halt the lifecycle. **Configuration contract.** Freshness windows (`decision_freshness_window`, `evidence_freshness_window`, `rule_freshness_window`) MUST be declared in Config Document before the first staleness scan. Absent configuration MAY defer the domain scan and MUST NOT produce false positives.
+
+## Context Budget Mechanism
+
+Governs the sweet-spot between context input richness and executor context window capacity. Prevents silent degradation when accumulated context approaches executor caps. Implements the Context Budget Contract for executor delegations.
+
+```
+CONTEXT BUDGET EVALUATION (before each executor delegation, SD=True)
+
+  1. Estimate token count of current context payload:
+       sources: active ContextInput list, recent Evidence subset,
+                current Plan, active Objective set, active Rules
+  2. Read from Config.context_budget:
+       target_utilization      float 0.0–1.0; desired fraction of executor cap (default 0.70)
+       hard_cap_fraction       float 0.0–1.0; absolute maximum fraction (default 0.90)
+       executor_context_cap    int; declared token capacity of target executor class
+
+  3. IF estimated_tokens > hard_cap_fraction * executor_context_cap:
+       → GRACEFUL DEGRADATION:
+           (a) evict oldest ContextInput entries (oldest first) until within hard_cap_fraction
+           (b) replace evicted payload with summary token (CompactionSummary-equivalent)
+           (c) record Evidence(kind="context-budget-degraded",
+                               evicted_count=N, remaining_count=M, cap=executor_context_cap)
+       → MUST NOT exceed hard_cap_fraction under any circumstance
+
+  4. IF estimated_tokens > target_utilization * executor_context_cap:
+       → emit IntegrityGap(kind="context-budget-advisory", severity=INFO,
+                           detail="context at {pct}% of cap; approaching target_utilization")
+
+  5. PROCEED with delegation at current context size
+```
+
+**Executor-agnostic contract.** `executor_context_cap` MUST be declared per executor class in Config.context_budget; it MUST NOT be hard-coded in the spec or runtime. **Graceful-degradation-first contract.** The mechanism MUST prefer graceful eviction with summary over hard rejection. Hard rejection is the last resort, applied only when graceful degradation cannot fit within `hard_cap_fraction`. **Reversibility contract.** Evicted ContextInput entries MUST still appear in the Evidence log; they are excluded from the delegation payload, not deleted from State. **SD contract.** Token estimation and budget comparison are locally computable; this mechanism is `SD = True` and MUST NOT delegate to an executor to evaluate its own outcome.
+
 ---
 
 # 62d. Canonical Primitives
@@ -4432,6 +4572,25 @@ UnitFloat {
 **Validity contract.** UnitFloat fields MUST NOT accept NaN, infinity, or values outside [0.0, 1.0]. **Normalization contract.** When UnitFloat fields serve as normalized weights across a group (e.g. ScopePrioritySystem.scopes[*].normalized_weight), their sum MUST equal 1.0 (±1e-9 tolerance).
 
 Used in: Objective.expected_value, Objective.estimated_cost, Objective.risk, Objective.urgency, Rule.confidence, ScopePrioritySystem scope weights, EvaluationSystem.weights.
+
+## BaseUnit
+
+A symbolic enumeration of standard measurement units for MeasureEntry values, budget quantities, and capacity metrics. Declaring a unit in BaseUnit enables cross-system comparison of metrics without runtime type inference.
+
+```
+BaseUnit {
+  TOKENS        int; LLM context window tokens or prompt tokens
+  REQUESTS      int; API or executor call count
+  MILLISECONDS  float; elapsed time
+  BYTES         int; data size
+  COUNT         int; generic countable unit; use when no more specific unit applies
+  SCORE         float [0.0, 1.0]; normalized quality or evaluation score (UnitFloat range)
+  PERCENT       float [0.0, 100.0]; ratio expressed as a percentage
+  CREDITS       float; metered resource credits (executor-defined denomination)
+}
+```
+
+**Declaration contract.** When a MeasureEntry, MetricDefinition, or ExecutionBudget field carries a unit, the unit SHOULD be declared using a BaseUnit value when the metric fits one. A field that uses a non-standard unit MUST declare its unit semantics inline. **Comparison contract.** Two measurements are cross-system comparable only when they share the same BaseUnit and the same scope. **Extensibility.** A derived system MAY declare additional units; extension units MUST NOT reuse BaseUnit names. Uses canonical: UnitFloat (SCORE values). Used in: MeasureEntry (direction-tied unit), MetricDefinition, ExecutionBudget, Context Budget Mechanism.
 
 ## ProductScope
 
@@ -4871,6 +5030,8 @@ OutcomeFeedback {
 
 **Immutability contract.** Once written, an OutcomeFeedback MUST NOT be modified; a revised assessment MUST be recorded as a provenance revision of the DecisionRecord itself, not an in-place update of OutcomeFeedback. **Causal contract.** `observed_at` MUST be after `DecisionRecord.decided_at`; an OutcomeFeedback with `observed_at` ≤ `decided_at` is a Ledger integrity violation. **Auto-revision contract.** When `triggers_revision` is true, the lifecycle controller MUST set `provenance_status: PROVENANCE_REVISED` on the associated DecisionRecord and MUST add a `revision_notice` referencing the OutcomeFeedback observation. Used in: DecisionRecord.outcome_feedback. Uses canonical: TemporalFields (observed_at as created_at).
 
+**QualityDelta integration.** A QualityDelta (§62b) SHOULD be written concurrently with an OutcomeFeedback record when a score measurement is available for the associated operation, linking the feedback to the quality trajectory for the Quality Streak Mechanism (§62c).
+
 ## RetentionPolicy
 
 A configurable policy governing maximum growth and compaction eligibility for an accumulating list field in URACE persistent state. Establishes the authorization for policy-triggered compaction (§62f).
@@ -4917,6 +5078,63 @@ CompactionSummary {
 ```
 
 **Integrity contract.** `original_digest` MUST be computed before any records are removed. A CompactionSummary whose `original_digest` does not match the archive is a `compaction-manifest-divergence` BLOCKING IntegrityGap. **Position contract.** A CompactionSummary MUST be placed at the position in the list where the first of the compacted records appeared; compacted records are then removed. The relative ordering of live (non-compacted) records MUST NOT change. **Prohibited-field contract.** A CompactionSummary MUST NOT be inserted into a field with `compaction_mode: PROHIBITED`. **Aggregation contract.** Any query or inspection command that aggregates over a governed list MUST account for CompactionSummary entries: `record_count` and `time_range` MUST be used for aggregate statistics, not skipped or treated as zero. **Lookup contract.** `record_ids` and `kinds` MUST be populated for ARCHIVE-mode compactions on governed lists whose records carry an `id` field. An implementation that omits them on ARCHIVE-mode compaction is non-conformant for the purposes of incremental decompaction. Uses canonical: Identifier (compaction_event_id), DigestValue (original_digest), TemporalFields (time_range timestamps).
+
+## QualityDelta
+
+A single quality measurement comparing consecutive operation results in the same scope. Forms an ordered quality trajectory for the Quality Streak Mechanism (§62c).
+
+```
+QualityDelta {
+  id               REQUIRED  Identifier; prefix "qdl"
+  operation_id     REQUIRED  Identifier; the Operation whose result is measured
+  predecessor_id   OPTIONAL  Identifier; immediately preceding Operation in the same scope; absent when no predecessor
+  scope            REQUIRED  ProductScope
+  score_before     OPTIONAL  UnitFloat; quality score of predecessor result; absent when no predecessor
+  score_after      REQUIRED  UnitFloat; quality score of this operation's result
+  delta            REQUIRED  float; score_after − score_before; 0.0 when no predecessor
+  classification   REQUIRED  IMPROVEMENT | NEUTRAL | REGRESSION
+  measured_at      REQUIRED  timestamp
+  measure_ref      OPTIONAL  Identifier; MeasureEntry that produced score_after
+}
+```
+
+**Classification contract.** `IMPROVEMENT`: delta > 0; `NEUTRAL`: delta = 0 or no predecessor; `REGRESSION`: delta < 0. **Immutability contract.** Once written, a QualityDelta MUST NOT be modified. **Predecessor chain.** Consecutive QualityDeltas for the same scope form an ordered quality trajectory. **Causal contract.** `measured_at` MUST be after the associated Operation's committed_at. Uses canonical: Identifier (id, operation_id, predecessor_id, measure_ref), UnitFloat (score_before, score_after), ProductScope (scope), TemporalFields (measured_at as created_at). Used in: State.quality_deltas.
+
+## ReIngestionRecord
+
+Tracks the re-ingestion of archived or compacted lifecycle data back into active state. Produced by the Re-Ingestion Contract (§62c).
+
+```
+ReIngestionRecord {
+  id                   REQUIRED  Identifier; prefix "rei"
+  compaction_event_id  REQUIRED  Identifier; CompactionEvent that produced the archived data
+  archive_path         REQUIRED  string; path from which records were read
+  record_count         REQUIRED  int ≥ 0; number of records re-ingested
+  target_field         REQUIRED  string; dot-path of the live field restored into
+  digest_verified      REQUIRED  bool; true = original_digest matched before re-ingestion
+  re_ingested_at       REQUIRED  timestamp
+  operator_id          OPTIONAL  string; identity of the authoritative source that authorized re-ingestion
+  status               REQUIRED  VERIFIED | INTEGRITY_GAP
+}
+```
+
+**Integrity contract.** Before any record is moved from archive back to the live field, the implementation MUST compute SHA-256 of the archived records and compare to `CompactionSummary.original_digest`. A mismatch MUST set `status = INTEGRITY_GAP` and emit `IntegrityGap(kind="reingestion-digest-mismatch", severity=BLOCKING)`. **Authorization contract.** Re-ingestion MUST NOT be performed autonomously; an attributable operator input MUST precede it. Uses canonical: Identifier (id, compaction_event_id), TemporalFields (re_ingested_at as created_at). Used in: State evidence log, Re-Ingestion Contract (§62c).
+
+## OperationDependency
+
+A directed edge in the operation dependency DAG within a Plan. The set of OperationDependency edges MUST be acyclic.
+
+```
+OperationDependency {
+  from_id    REQUIRED  Identifier; Objective or Operation that must satisfy this edge before to_id proceeds
+  to_id      REQUIRED  Identifier; Objective or Operation that depends on from_id
+  kind       REQUIRED  FINISH_TO_START | START_TO_START | FINISH_TO_FINISH
+  scope      OPTIONAL  ProductScope; scope within which the dependency is meaningful
+  rationale  OPTIONAL  string; human-readable reason for this dependency edge
+}
+```
+
+**DAG invariant.** OperationDependency edges in a Plan MUST be acyclic. A cycle is a Plan integrity violation; URACE MUST NOT schedule any operation in a cyclic cluster until the cycle is resolved. Topological sort order (FOUNDATIONAL first, INTEGRATED last — AP24 §62i) MUST be honored. **Kind semantics.** `FINISH_TO_START`: to_id may not start until from_id is complete. `START_TO_START`: to_id may not start until from_id has started. `FINISH_TO_FINISH`: to_id may not finish until from_id has finished. Uses canonical: Identifier (from_id, to_id), ProductScope (scope). Used in: Plan.dependencies (§40).
 
 ---
 
@@ -5237,6 +5455,8 @@ urace decompact <compaction-event-id> [--record-id <id>]
 
 **Incremental decompaction** (`--record-id <id>`): Extracts a single record from an ARCHIVE-mode CompactionEvent without restoring the full segment. MUST be rejected under the same conditions as full decompaction. On success: the single record is returned as structured output (it is NOT re-inserted into the live list); the CompactionSummary and archive file are left intact. The operation MUST NOT modify the live list or the manifest. `CompactionSummary.record_ids` MUST contain the requested id; if absent, the implementation MUST fall back to a sequential archive scan. A record-id not present in the archive is a non-fatal error; the command exits with a descriptive error and no state modification.
 
+**Re-ingestion contract.** Full re-ingestion of a compacted field segment back into active state follows the Re-Ingestion Contract (§62c), which wraps the Transaction Mechanism and enforces digest verification. `urace decompact` is the user-facing command; the Re-Ingestion Contract is the underlying mechanism.
+
 ## urace amend
 
 ```
@@ -5387,6 +5607,29 @@ See §62b for the canonical schema definition.
 
 **Apply to:** §62b ScopePriorityConfig weights; metric trend vectors; any multi-dimensional scoring system where weights must sum to a constant.
 
+### T7 — Determinism/Probabilistics Selection (`det-prob`)
+
+**Operator.** Given a decision domain D and state S, classify D as one of three execution modes:
+- `DETERMINISTIC`: D has enumerable, finite options with explicit evaluation criteria expressible as boolean predicates over S. Execute locally; zero credits.
+- `HEURISTIC`: D has a bounded search space where known domain heuristics reliably prune candidates without exhaustive enumeration. Execute heuristic locally; validate result (C_validate credits).
+- `PROBABILISTIC`: D requires inference over uncertain state or novel inputs where explicit criteria cannot be pre-specified. Delegate to executor with reasoning trace requirement (C_executor credits).
+
+**Worth predicate.** `W(T7, S)` = True before any executor delegation decision where the delegation mode has not been classified for the current domain and state.
+
+**SD condition.** True when the domain is well-typed with explicit enumerable criteria. False for novel domains — executor delegation required to classify.
+
+**Selection protocol.**
+
+| Classification | Execution method | Credit cost | SD |
+|---|---|---|---|
+| DETERMINISTIC | evaluate predicates locally | 0 | True |
+| HEURISTIC | apply domain heuristic locally + validate result | C_validate | True (heuristic step) |
+| PROBABILISTIC | delegate to executor with reasoning trace | C_executor | False |
+
+**Invariant.** A DETERMINISTIC classification MUST NOT delegate to an executor unless local evaluation fails due to a missing data dependency (in which case, log a named IntegrityGap before delegating). A PROBABILISTIC classification MUST NOT be treated as DETERMINISTIC merely because the most recent run happened to match a predicate pattern.
+
+**Apply to:** authority resolution (DETERMINISTIC when policy fully enumerated); evidence conflict resolution (HEURISTIC for known conflict patterns, PROBABILISTIC for novel conflicts); objective discovery (PROBABILISTIC); T7 self-classification (DETERMINISTIC for T1–T4; HEURISTIC for T5; PROBABILISTIC for novel domains); context budget estimation (DETERMINISTIC).
+
 ## Technique-scope mapping
 
 | Technique | Spec (URACE.md) | Runtime |
@@ -5397,6 +5640,7 @@ See §62b for the canonical schema definition.
 | T4 paired | canonical pairs table (this section) | lifecycle_state ↔ status_transitions validation |
 | T5 decompose | citizen schema minimality (§62b) | schema conformance validation primitives |
 | T6 vector | ScopePriorityConfig normalization contract | scope weight normalization enforcement |
+| T7 det-prob | authority resolution classification; discovery delegation mode | delegation mode selector for executor calls; SD gate before credit spend |
 
 ---
 
@@ -6190,6 +6434,8 @@ Uses canonical: Identifier (id), iso_timestamp (at), probability (failure_rate, 
 **Relation to AP10.** A system MAY adopt both AP20 and AP10. When both are active, AP20 gates whether an attempt is made at all; AP10 governs retry scheduling when an attempt has been made and failed. AP20 MUST be evaluated before AP10 in the call path.
 
 **Exclusion note.** A derived system that adopts AP20 without AP4 MUST document the contract boundary it guards using equivalent producer/consumer obligation notation; the AP4 Citizen identity requirement for the contract is the only hard dependency.
+
+**Quality Streak Mechanism.** The Quality Streak Mechanism (§62c) is the positive counterpart to AP20: where AP20 opens on high failure rate, the Quality Streak Mechanism expands autonomy on consecutive quality improvements. Both mechanisms MUST be evaluated per assessment cycle and operate independently over their respective signal types.
 
 ---
 
@@ -8166,7 +8412,7 @@ Options defined here apply across all commands that accept them. Per-command spe
 
 Emit output as a machine-readable JSON document (or JSON Lines for streaming commands such as `auto`). Human-readable output is suppressed. Exit codes are unaffected.
 
-Applies to: `check`, `vitals`, `change`, `configuration`, `self-evolution`, `commands`, `inbox`, `derive`, `context`, `intent`, `constraint`, `rules`, `source`, `metric`, `vital`, `goal`, `policy`, `budget`, `evaluation`, `report`, `update`, `plan`, `pause`, `resume`, `compact`, `decompact`, `amend`, `why`, `crc`, `auto`
+Applies to: `check`, `vitals`, `change`, `configuration`, `self-evolution`, `commands`, `inbox`, `derive`, `context`, `intent`, `constraint`, `rules`, `source`, `metric`, `vital`, `goal`, `policy`, `budget`, `evaluation`, `report`, `update`, `plan`, `pause`, `resume`, `compact`, `decompact`, `amend`, `why`, `quality`, `crc`, `auto`
 
 ## --scope
 
@@ -8223,6 +8469,16 @@ Store the generated manifest reference in `state.derived_manifest_refs` for stal
 Applies to: `derive`
 
 **`derive` command and AP24.** The `derive` command is the runtime instantiation of AP24 — Derivation Framework (§62i). It resolves pattern dependencies per the AP24 dependency resolution contract, builds a `DerivedSystemManifest` citizen, and bounds the derived system's obligations to exactly the patterns it adopted. Full command contract in §62j.
+
+## urace /quality
+
+Inspect the quality streak state and quality delta trajectory for one or all scopes. Self-determinable; zero executor credits.
+
+```
+urace /quality [--scope <scope>] [--json]
+```
+
+Output includes: `current_streak`, `best_streak`, `streak_scope`, the most recent N QualityDelta records (default: 10), and any pending autonomy expansion proposals. Implements the Quality Streak Mechanism (§62c). Uses: QualityDelta (§62b), Quality Streak Mechanism (§62c).
 
 ## Output path: --out vs --output
 
