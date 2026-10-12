@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r27**
+**Specification version: 2026-10-12-r28**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2871,6 +2871,8 @@ The runtime accepts free-form text and direct commands through a single top-leve
 ---
 
 # 62b. Citizen Schemas
+
+**Cross-reference note.** Several schemas in this section carry parenthetical citations of the form `(§62i APxx)`. These are forward cross-references to the Architectural Meta-Patterns defined in §62i. The AP0–AP19 formal definitions reside exclusively in §62i; the citations here are attributions that name the source section, not duplicate definitions. A reader may proceed through §62b without requiring §62i, treating each `(§62i APxx)` note as "see §62i for the full definition of this pattern."
 
 All named citizens produced or consumed by a URACE lifecycle MUST conform to the schemas defined in this section. An implementation that omits a REQUIRED field or misrepresents its type violates this contract and MUST surface the violation as a named integrity gap on load. Fields marked OPTIONAL MAY be omitted when not applicable; an absent OPTIONAL field MUST be treated as its stated default.
 
