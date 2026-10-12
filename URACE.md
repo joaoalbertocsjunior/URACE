@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r15**
+**Specification version: 2026-10-12-r16**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2804,6 +2804,7 @@ Three commands expose the Rule Ledger:
 
 | Command | Effect |
 |---------|--------|
+| `urace add "…"` | Classify free text as goal / intent / constraint via executor, then confirm |
 | `urace intent add "…"` | Add a DIRECTIVE rule (queued; applied at next safe boundary) |
 | `urace intent list` | List active DIRECTIVE rules |
 | `urace intent supersede "…" --id <id>` | Replace an existing DIRECTIVE with a new one |
@@ -2818,6 +2819,29 @@ Three commands expose the Rule Ledger:
 | `urace rules changes <id>` | List accepted changes governed by a rule |
 
 `intent` and `constraint` mutations are queued inputs applied at the next safe lifecycle boundary under the same atomicity guarantees as §62. They MUST NOT be applied mid-cycle.
+
+## urace add
+
+```
+urace add "<free text>"
+```
+
+A convenience command that accepts free-text describing a goal, intent, or constraint and routes it to the correct lifecycle operation via executor-driven classification. It is the single entry point for adding governed lifecycle items without knowing their type in advance.
+
+**Classification protocol.**
+1. The runtime submits the free text to the Executor with a classification task.
+2. The Executor returns a `ClassificationResult` (§62b) containing the detected type, subtype, extracted parameters, and confidence.
+3. The runtime displays the classification to the operator and requests confirmation before committing.
+4. On confirmation, the classified input is written to the durable inbox (§62c Input Queue) as the appropriate kind (`goal`, `intent_control`, or `constraint_control`) and processed at the next safe lifecycle boundary.
+5. On rejection, no input is written and the operator is directed to the explicit commands.
+
+**Executor unavailability.** When the Executor is unavailable or over budget, `urace add` MUST NOT attempt heuristic classification. It MUST inform the operator and direct them to the explicit commands (`urace add-goal`, `urace intent add`, `urace constraint add`), which accept structured parameters directly and do not require an Executor.
+
+**No flag override.** `urace add` accepts only the free-text argument. There is no type-selection flag; explicit type selection is the purpose of the three direct commands. There is no confirmation-skip flag; interactive confirmation is always required.
+
+**Permission warning.** When the ClassificationResult identifies a constraint with subtype `permission`, the runtime MUST display a visible warning before the confirmation prompt indicating that the operation grants a permission. The operator MUST explicitly confirm after seeing this warning.
+
+**Existing commands preserved.** `urace add-goal`, `urace intent add`, and `urace constraint add` remain the canonical explicit interfaces. `urace add` is additive convenience; it does not deprecate or replace the explicit commands.
 
 ---
 
@@ -3065,6 +3089,7 @@ Input {
                      | source_control | metric_control | vital_control | goal_control
                      | executor_control | policy_control | budget_control
                      | evaluation_control | intent_control | constraint_control
+                     | add-classify
   payload  REQUIRED  dict; structure is kind-specific
   status   REQUIRED  QUEUED (only valid value at rest; consumed inputs are removed)
 }
@@ -3075,6 +3100,12 @@ Input {
 **Ordering contract.** Inputs MUST be applied in the order they were enqueued (oldest first by `at`). No Input MUST be reordered relative to another Input of any kind. `order ≡ sorted(inputs, key=λi: parse_ts(i.at))`
 
 **Removal contract.** An Input file MUST be removed from the inbox atomically with the state write that records its application. An Input that is removed without a corresponding state write MUST be treated as a recovery condition.
+
+**Input kind notes.**
+
+| Kind | Notes |
+|---|---|
+| `add-classify` | Free-text input awaiting executor classification; transient — replaced by classified kind on confirmation |
 
 ## Executor Provider Record
 
@@ -3891,6 +3922,19 @@ A paired record linking a natural language normative rule to its formula equival
 | variables | list<string> | OPTIONAL | variable names used in the formula |
 | sd_result | boolean | REQUIRED | True = self-determinable; False = executor-derived |
 | verified_at | iso_timestamp | OPTIONAL | when the formula was last verified correct |
+
+## ClassificationResult
+
+The structured output of executor-driven free-text classification for the `urace add` command (§62c `urace add`).
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| type | string | REQUIRED | `goal` \| `intent` \| `constraint` |
+| subtype | string | OPTIONAL | `directive` (intent); `prohibition` \| `permission` (constraint); absent for goal |
+| parameters | object | REQUIRED | extracted parameters conforming to the target type's input schema |
+| confidence | probability | REQUIRED | classifier confidence in [0.0, 1.0] |
+| reasoning | string | OPTIONAL | brief explanation of the classification decision |
+| raw_text | string | REQUIRED | the original unmodified free-text input |
 
 ---
 

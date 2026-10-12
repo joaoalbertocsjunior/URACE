@@ -56,7 +56,9 @@ urace vitals                inspect progress, cost and health
 urace rules                 inspect the Rule Ledger (list, graph, conflicts)
 urace change list           list accepted increments
 
-urace add-goal ...          queue a measurable goal
+urace add "..."             classify free text as goal, intent, or constraint (executor + confirm)
+
+urace add-goal ...          queue a measurable goal (explicit, no executor needed)
 urace intent add / list / supersede / deactivate
 urace constraint add / list / --allow / deactivate
 
