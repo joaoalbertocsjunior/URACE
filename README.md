@@ -65,7 +65,17 @@ Run `urace /auto` in one terminal. From a second terminal, send anything.
 
 ## Update Safely
 
-Run `urace /update` — it guides you through the full update sequence safely. Use `urace /help update` for details.
+Run `urace /update` — it guides you through the full update sequence safely. Pass `--opt-in-patterns AP8,AP14` to limit which architectural patterns the update applies to. Use `urace /help update` for details.
+
+## Borrow Any Pattern Without Adopting URACE
+
+URACE's 20 architectural decisions (AP0–AP19) are independently adoptable. Take crash-safe FIFO queuing (AP14), stagnation detection (AP8), or causal provenance (AP6) for your own system — without the lifecycle:
+
+```
+urace derive --patterns AP14,AP6 --intent "my audit system"
+```
+
+Dependencies resolve automatically. Every exclusion is explicit. The output is a self-contained `DerivedSystemManifest` documenting exactly what you adopted. Run `urace derive` (no arguments) to browse all 20 patterns.
 
 ## See Progress
 

@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r26**
+**Specification version: 2026-10-12-r27**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -6292,13 +6292,39 @@ urace derive [--patterns <comma-list>] [--intent <text>]
 
 **No state lock, no executor call, no lifecycle state change.** `derive` is a pure computation on the Pattern Catalog. It MAY run while URACE is actively running in another process; it does not mutate lifecycle state.
 
+**Skip-by-default contract.** Providing `--patterns` always proceeds directly to manifest generation — no interactive menu, no confirmation step, no additional prompts. The list view is the only opt-in menu surface and fires ONLY when `--patterns` is omitted entirely. An implementation MUST NOT require operator confirmation between `--patterns` input and manifest output.
+
 **Exit codes.** `0` on success. `1` if any `--patterns` or `--exclude` value is not a known pattern ID.
 
 ## DerivedSystemManifest as Lifecycle Artifact
 
 A `DerivedSystemManifest` MUST conform to the `DerivedSystemManifest` citizen schema. It is a lifecycle artifact: it carries a stable `manifest_id`, was generated at a declared timestamp, references a specific URACE spec version, and is traceable. Implementations that store or transmit a manifest SHOULD treat it as a citizen record and include it in their evidence log.
 
+**Manifest persistence.** `urace derive --save` stores a manifest reference in `state.derived_manifest_refs` — a list of `DerivedManifestRef` records: `{manifest_id, spec_version, generated_at, adopted_pattern_ids, intent}`. This enables the update system to detect stale manifests. Manifests written only to `--out` are not tracked in state.
+
 A derived system's compliance obligation is exactly: **every adopted pattern's normative requirements apply; no unadopted pattern's normative requirements apply.** This is the complete and closed contract.
+
+## `urace update --opt-in-patterns` Contract
+
+The `--opt-in-patterns <comma-list>` flag is available on all `urace update` subcommands and on the orchestrated `urace update` (no action). Its default is absent — meaning the update applies to all patterns.
+
+**When `--opt-in-patterns` is set:**
+- `explain`: the diff report is annotated with `opted_in_patterns_affected: [list]` identifying which opted-in APs changed between accepted and candidate; sections outside the opt-in list are still shown but marked `[not in opt-in scope]`
+- `apply`: the migration payload is annotated with `opted_in_patterns: [list]` so the executor applies only those AP sections; sections outside the opt-in list MUST be preserved verbatim from the accepted implementation
+- Orchestrated `urace update` (no action): passes `--opt-in-patterns` through to both explain and apply phases
+
+**`--opt-in-patterns` and the derive skip-by-default contract apply the same principle:** both operations default to the full scope and require the operator to explicitly narrow the scope. Neither operation shows an interactive selection menu unless `--patterns` / `--opt-in-patterns` is omitted AND the explicit list-mode form is invoked.
+
+## Stale DerivedManifestRef Detection
+
+When `urace update download` or `urace update apply` runs and `state.derived_manifest_refs` is non-empty, the implementation MUST compare each ref's `spec_version` to the candidate spec version. Any ref whose `spec_version` is behind the candidate MUST be surfaced as a `derived-manifest-stale` warning in the command output and as an Evidence record of kind `derived-manifest-stale` appended to `state.evidence`. The warning MUST include the `manifest_id`, the stale `spec_version`, and the candidate version. This is a warning, not a blocker: the update proceeds normally.
+
+**Stale detection formula:**
+```
+stale(ref, candidate_version) ↔ ref.spec_version ≠ candidate_version
+```
+
+The operator resolves staleness by re-running `urace derive --patterns ... --save` after the update completes.
 
 ## Subsequent-Gap Closure
 
@@ -6313,6 +6339,9 @@ The following scenarios that could produce gaps are pre-closed by this framework
 | User wants to use AP14 (Durable Inbox) standalone | AP14 requires only AP5 (Idempotency Contract); resolver adds AP5; user can also `--exclude AP5` with reason |
 | User adopts AP16 (State Document) without understanding its deps | Resolver auto-adds AP3, AP4, AP6; manifest shows them as TRANSITIVE; no hidden requirement |
 | Derived system mistakenly claims zero deps for an INTEGRATED pattern | `validate_derived_system_manifest` validates every PatternAdoptionRecord tier field; mismatches raise ValueError |
+| URACE update bumps spec version; user's DerivedSystemManifest now points at old version | Stale-manifest detection fires on `update download/apply`; warns with manifest_id + both versions; user re-runs `urace derive --save` |
+| User wants update to only touch specific patterns they care about | `urace update --opt-in-patterns AP8,AP14` annotates migration payload; sections outside opt-in list preserved verbatim |
+| `urace derive --patterns` shows a menu when user wants direct output | Skip-by-default contract: `--patterns` always bypasses list view; list fires only on bare `urace derive` |
 
 ---
 
@@ -7873,6 +7902,8 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `standaloneap` | standalone pattern, standalone=true, foundational pattern |
 | `derivedep` | PatternExclusionRecord, excluded dep, transitive dep exclusion, dependency resolution |
 | `patterncatl` | Pattern Catalog, PATTERN_CATALOG, AP0-AP19 catalog, architectural pattern catalog |
+| `optinpat` | opt-in patterns, --opt-in-patterns, opted_in_patterns, per-pattern update selection |
+| `stalemfst` | stale manifest, derived-manifest-stale, DerivedManifestRef staleness, stale spec_version |
 
 ## Audit Content
 
