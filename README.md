@@ -27,7 +27,7 @@ YOU + URACE.md + PRODUCT                 YOU — choose the Product and outcome
 
 URACE automates replaceable Executors to improve the Product continuously, measurably and recoverably. It adapts its plans without changing what you control.
 
-Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time — via `urace rules`.
+Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time — via `urace /rules`.
 
 ## What Is a Product?
 
@@ -43,7 +43,7 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 2. Say **"Bootstrap."**
 3. Follow the setup to define the outcome, delegation and protected boundaries.
 
-`URACE.md` is the only required bootstrap document. Setup validates the result, keeps system files under `urace/`, and activates a `urace` command in the Product folder through an environment-appropriate launcher. If bootstrap was interrupted, run `urace check` before issuing any commands.
+`URACE.md` is the only required bootstrap document. Setup validates the result, keeps system files under `urace/`, and activates a `urace` command in the Product folder through an environment-appropriate launcher. If bootstrap was interrupted, run `urace /check` before issuing any commands.
 
 ## Use It
 
@@ -54,34 +54,30 @@ urace /help             explore commands and reference
 urace /update           guided update sequence
 ```
 
-Run `urace auto` in one terminal. Use a second terminal for everything else — free-form or direct.
+Run `urace /auto` in one terminal. From a second terminal, send anything.
 
-**Direct (Tier 0):** prefix with `/` — `urace /check`, `urace /vitals`, `urace /rules list`. Instant, zero Executor overhead, always works even without Executor configured.
+**`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Exact shortcut (Tier 1):** common words and aliases route directly without Executor — `urace "pause"`, `urace "status"`, `urace "check"`, `urace "stop"`.
+**Plain text** — describe your intent naturally and the Executor maps it: `urace "ship the mobile app by Q2"`, `urace "pause"`, `urace "check and grow revenue by 20%"`. One input can yield any combination of goals, intents, constraints, and commands — each confirmed individually. Contradictory inputs surface as alternatives to choose from.
 
-**Free-form (Tier 2):** anything else — `urace "ship the mobile app by Q2"`, `urace "hi"`, `urace "check and grow revenue"`. The Executor classifies intent, maps to commands and/or responds directly. A single input may yield any combination of goals, intents, constraints, commands, and responses — each handled in order. Contradictory inputs return alternatives for you to choose.
-
-When `json-feedback` is enabled, all structured outputs are also emitted in machine-readable form for pipeline integration.
-
-`urace help` lists all available commands; `urace help <command>` gives per-command reference.
+`urace /help` lists all commands. `urace /help <command>` gives per-command reference.
 
 ## Update Safely
 
-Keep the current `URACE.md` version identifiable, then use `urace update`:
+Keep the current `URACE.md` version identifiable, then use `urace /update`:
 
 1. `download` stores the identified new version separately without changing the working system.
 2. `explain` reports the new version's changes, local effects and risks without changing files.
 3. `apply` preserves compatible tracked changes and activates the new version only after validation and a health check.
 4. `resolve`, only after a conflict, records your decision and resumes the same update.
 
-The `explain` and `apply` commands detect tracked configuration and implementation changes, including changes made by other agents. A conflict applies no files and waits for your decision; failed activation rolls back. Never edit generated state files or copy specification changes into runtime files; use `urace help update`.
+The `explain` and `apply` commands detect tracked configuration and implementation changes, including changes made by other agents. A conflict applies no files and waits for your decision; failed activation rolls back. Never edit generated state files or copy specification changes into runtime files; use `urace /help update`.
 
-The `apply` and `resolve` commands require permission to update URACE. They are queued for the next safe checkpoint; run `urace auto` to process them.
+The `apply` and `resolve` commands require permission to update URACE. They are queued for the next safe checkpoint; run `urace /auto` to process them.
 
 ## See Progress
 
-URACE reports observed **metrics**, system-health **vitals** and decision **scores**. Inspect them with `urace check`, `urace vitals` and `urace change list`; use `urace help` for details.
+URACE reports observed **metrics**, system-health **vitals** and decision **scores**. Inspect them with `urace /check`, `urace /vitals` and `urace /change list`; use `urace /help` for details.
 
 ## Competing Variants
 
