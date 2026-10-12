@@ -49,7 +49,8 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 
 ```text
 urace /auto             run persistent evolution
-urace /pause / /resume  suspend or resume the lifecycle
+urace /pause & /resume  suspend or resume the lifecycle
+urace <freeform-text>   describe intent, goals, or constraints in plain language
 urace /help             explore commands and reference
 urace /update           guided update sequence
 ```
@@ -58,22 +59,13 @@ Run `urace /auto` in one terminal. From a second terminal, send anything.
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Plain text** — describe your intent naturally and the Executor maps it: `urace "ship the mobile app by Q2"`, `urace "pause"`, `urace "check and grow revenue by 20%"`. One input can yield any combination of goals, intents, constraints, and commands — each confirmed individually. Contradictory inputs surface as alternatives to choose from.
+**Plain text** — the Executor maps your input to goals, intents, constraints, or commands — each confirmed individually. Contradictory inputs surface as alternatives.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference.
 
 ## Update Safely
 
-Keep the current `URACE.md` version identifiable, then use `urace /update`:
-
-1. `download` stores the identified new version separately without changing the working system.
-2. `explain` reports the new version's changes, local effects and risks without changing files.
-3. `apply` preserves compatible tracked changes and activates the new version only after validation and a health check.
-4. `resolve`, only after a conflict, records your decision and resumes the same update.
-
-The `explain` and `apply` commands detect tracked configuration and implementation changes, including changes made by other agents. A conflict applies no files and waits for your decision; failed activation rolls back. Never edit generated state files or copy specification changes into runtime files; use `urace /help update`.
-
-The `apply` and `resolve` commands require permission to update URACE. They are queued for the next safe checkpoint; run `urace /auto` to process them.
+Run `urace /update` — it guides you through the full update sequence safely. Use `urace /help update` for details.
 
 ## See Progress
 
