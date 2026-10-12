@@ -48,19 +48,19 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 ## Use It
 
 ```text
-urace auto              run persistent evolution
-urace pause / resume    suspend or resume the lifecycle
-urace help              explore commands and reference
-urace update download/explain/apply/resolve
+urace /auto             run persistent evolution
+urace /pause / /resume  suspend or resume the lifecycle
+urace /help             explore commands and reference
+urace /update           guided update sequence
 ```
 
 Run `urace auto` in one terminal. Use a second terminal for everything else — free-form or direct.
 
-**Free-form:** `urace "ship the mobile app by Q2"` — the Executor classifies your text as one or more goals, intents, or constraints, shows its reasoning, and confirms each item before writing anything.
+**Direct (Tier 0):** prefix with `/` — `urace /check`, `urace /vitals`, `urace /rules list`. Instant, zero Executor overhead, always works even without Executor configured.
 
-**Direct:** prefix any command with `/` — `urace /check`, `urace /vitals`, `urace /rules list`. No Executor overhead.
+**Exact shortcut (Tier 1):** common words and aliases route directly without Executor — `urace "pause"`, `urace "status"`, `urace "check"`, `urace "stop"`.
 
-**Mixed:** `urace "/vitals and ship mobile app by Q2"` — the Executor decomposes the input, executes direct parts immediately and queues lifecycle items after per-item confirmation.
+**Free-form (Tier 2):** anything else — `urace "ship the mobile app by Q2"`, `urace "hi"`, `urace "check and grow revenue"`. The Executor classifies intent, maps to commands and/or responds directly. A single input may yield any combination of goals, intents, constraints, commands, and responses — each handled in order. Contradictory inputs return alternatives for you to choose.
 
 When `json-feedback` is enabled, all structured outputs are also emitted in machine-readable form for pipeline integration.
 

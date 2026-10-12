@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r20**
+**Specification version: 2026-10-12-r21**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2830,18 +2830,23 @@ urace /<command> [args]
 
 The runtime accepts free-form text and direct commands through a single top-level dispatch. No subcommand keyword is needed.
 
-**Routing rules (ordered):**
-1. Reserved keywords (`auto`, `pause`, `resume`, `help`, `update`) always route directly to their lifecycle operations.
-2. Input beginning with `/` routes to the named command: `urace /check` is equivalent to `urace check`; `urace /vitals` to `urace vitals`; `urace /intent add "…"` to `urace intent add "…"`. The `/` is a routing signal only — it does not alter command semantics.
-3. All other input is treated as free-form text and routed through executor-driven classification (ClassificationBatch, §62b).
+**Routing rules (three tiers):**
+
+**Tier 0 — Slash direct.** Input beginning with `/` followed by a known command routes directly to that command without Executor involvement. `urace /check`, `urace /rules list`, `urace /intent add "…"`. A `/`-prefixed token that does not match a known command is treated as free-form text with the `/` stripped.
+
+**Tier 1 — Local exact match.** The full input (case-insensitive) is looked up in a canonical alias table covering known command names and common natural-language equivalents (`"stop"` → `pause`, `"status"` → `check`, `"rules list"`, etc.). On a match, the input routes directly without Executor involvement. This tier handles obvious single-intent inputs at zero cost.
+
+**Tier 2 — Executor classification.** All remaining input — conversational, multi-intent, ambiguous, natural language, or any combination — is routed to the Executor as free text. The Executor returns a `ClassificationBatch` (§62b) whose items may have type `goal`, `intent`, `constraint`, `command`, or `response`. The runtime processes all items in order: `response` items are printed immediately; `command` items are executed immediately; `goal`, `intent`, and `constraint` items prompt for individual confirmation. When `logic` is `or`, items are presented as alternatives and the operator selects.
+
+**Argparse recovery.** When a known command is followed by unrecognised non-flag arguments that argparse cannot process, the runtime re-routes the entire original input as free-form text to Tier 2. This handles inputs such as `urace auto help` or `urace update the revenue goal` where trailing tokens are intent, not argparse arguments.
 
 **SD classification gate.** Before invoking the Executor, the runtime applies a conservative SD=True gate: if the entire free-form input exactly matches a canonical command name or alias (case-insensitive), it is routed directly as a known command without Executor overhead. Only exact matches qualify; partial or fuzzy matches are SD=False and proceed to executor classification. This gate MUST NOT use probabilistic or statistical heuristics.
 
 **Free-form classification protocol.**
 1. The operator provides free text describing one or more lifecycle items.
-2. The Executor returns a `ClassificationBatch` (§62b) containing one `ClassificationResult` per detected item, in detection order. Items may have type `goal`, `intent`, `constraint`, or `command`.
+2. The Executor returns a `ClassificationBatch` (§62b) containing one `ClassificationResult` per detected item, in detection order. Items may have type `goal`, `intent`, `constraint`, `command`, or `response`.
 3. The runtime displays all detected items numbered — type, subtype, extracted parameters, confidence, and reasoning.
-4. For each item in sequence: `command`-type items are executed directly without confirmation; `goal`, `intent`, and `constraint` items prompt for individual confirmation (y/n/skip). A `permission`-subtype constraint MUST display a visible warning before its confirmation prompt.
+4. For each item in sequence: `response` items are printed immediately; `command`-type items are executed directly without confirmation; `goal`, `intent`, and `constraint` items prompt for individual confirmation (y/n/skip). A `permission`-subtype constraint MUST display a visible warning before its confirmation prompt.
 5. Each confirmed lifecycle item is written to the durable inbox as the appropriate kind (`goal`, `intent_control`, or `constraint_control`) and processed at the next safe lifecycle boundary.
 6. Skipped or rejected items are not written; the operator is directed to the direct command for those items.
 
@@ -3943,7 +3948,7 @@ The structured output of executor-driven free-text classification for the `urace
 
 | Field | Type | Req | Notes |
 |---|---|---|---|
-| type | string | REQUIRED | `goal` \| `intent` \| `constraint` \| `command` |
+| type | string | REQUIRED | `goal` \| `intent` \| `constraint` \| `command` \| `response` |
 | subtype | string | OPTIONAL | `directive` (intent); `prohibition` \| `permission` (constraint); absent for goal |
 | parameters | object | REQUIRED | extracted parameters conforming to the target type's input schema |
 | confidence | probability | REQUIRED | classifier confidence in [0.0, 1.0] |
@@ -3951,6 +3956,8 @@ The structured output of executor-driven free-text classification for the `urace
 | raw_text | string | REQUIRED | the original unmodified free-text input |
 
 For `command`-type items, `parameters` MUST include a `command` field (string) naming the lifecycle operation and MAY include an `args` list.
+
+For `response`-type items, `parameters` MUST include a `text` field (string) containing the message to display directly to the operator.
 
 ---
 
@@ -3963,6 +3970,7 @@ The top-level response returned by the Executor for a `urace add` command. A sin
 | items | list\<ClassificationResult\> | REQUIRED | one or more detected items in detection order; MUST NOT be empty |
 | compound | boolean | REQUIRED | True when the input contained more than one detectable item |
 | raw_text | string | REQUIRED | the original unmodified free-text input |
+| logic | string | OPTIONAL | `and` (default) — execute all items in order; `or` — items are alternatives, operator chooses |
 
 ---
 
