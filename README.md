@@ -86,7 +86,7 @@ Use `urace /help compact` for details.
 
 ## Reuse URACE Patterns The Way You Want
 
-Take any of URACE's 24 architectural patterns for your own project — no lifecycle, no commitment. For example, AP21 (Compaction) gives you log size management without losing audit history:
+Take any of URACE's 25 architectural patterns for your own project — no lifecycle, no commitment. For example, AP21 (Compaction) gives you log size management without losing audit history:
 
 ```
 urace derive --patterns AP21 --intent "log compaction for my event store"
