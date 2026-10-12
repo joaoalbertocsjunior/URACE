@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r13**
+**Specification version: 2026-10-12-r15**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2367,7 +2367,7 @@ CONFLICT         DESTINATION
 
 # 60. Validation and Acceptance
 
-Executor confidence is not validation.
+Executor confidence is not validation. `accept(op) ↔ validate(op).verdict = VALIDATED ∧ ¬rollback_needed(op)`
 
 Validation SHOULD assess where applicable:
 
@@ -2755,6 +2755,8 @@ URACE MAY infer rules from existing rules (e.g. an explicit PROHIBITION in a bro
 
 **Canonical threshold values.** `INFER_BLOCKING = 0.85` (the confidence level at which a SYSTEM_INFERRED rule becomes blocking; configurable via POLICY rule override). The value 0.85 MUST be the default used when no POLICY rule overrides it. An implementation that uses a different hardcoded default violates reproducibility.
 
+**Canonical scalar domains.** The domain constraints for all canonical scalars are defined in §62i Canonical Scalar Catalog. Any field declared with a scalar type in §62b MUST satisfy the domain constraint at write time. A validation primitive (§62d) that accepts a value outside the declared domain is a runtime conformance violation.
+
 URACE MUST NOT promote a SYSTEM_INFERRED rule to L1 status without explicit operator confirmation supplied via authoritative input.
 
 ## Temporal Change Binding
@@ -3070,7 +3072,7 @@ Input {
 
 **Idempotency contract.** An Input id that appears in `processed_input_ids` MUST NOT be applied a second time. This list MUST be checked before processing any Input.
 
-**Ordering contract.** Inputs MUST be applied in the order they were enqueued (oldest first by `at`). No Input MUST be reordered relative to another Input of any kind.
+**Ordering contract.** Inputs MUST be applied in the order they were enqueued (oldest first by `at`). No Input MUST be reordered relative to another Input of any kind. `order ≡ sorted(inputs, key=λi: parse_ts(i.at))`
 
 **Removal contract.** An Input file MUST be removed from the inbox atomically with the state write that records its application. An Input that is removed without a corresponding state write MUST be treated as a recovery condition.
 
@@ -3799,6 +3801,97 @@ Records one application (or skip/defer) of a technique by the TechniqueApplicabi
 | executor_delegated | boolean | OPTIONAL | True when DELEGATE_EXECUTOR verdict executed |
 | credits_consumed | integer | OPTIONAL | credits spent if executor was invoked |
 
+## BridgeRecord
+
+Records one bridge translation event (§62i AP11).
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| id | identifier | REQUIRED | prefix `br-` |
+| bridge_name | string | REQUIRED | B1..B4 or canonical name |
+| source_schema | string | REQUIRED | CitizenSchema name of input |
+| target_schema | string | REQUIRED | CitizenSchema name of output |
+| translated_at | iso_timestamp | REQUIRED | |
+| loss_declared | boolean | OPTIONAL | True when bridge is LOSSY_DECLARED |
+| dropped_fields | list<string> | OPTIONAL | fields dropped in lossy translation |
+
+## OrchestratorRecord
+
+Records one orchestrator execution (§62i AP12).
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| id | identifier | REQUIRED | prefix `orch-` |
+| orchestrator_name | string | REQUIRED | e.g. `cycle`, `spec_audit`, `compaction` |
+| started_at | iso_timestamp | REQUIRED | |
+| completed_at | iso_timestamp | OPTIONAL | absent if aborted |
+| phases_completed | list<string> | REQUIRED | phase names in order |
+| outcome | string | REQUIRED | COMPLETED \| ABORTED \| DEGRADED |
+| failure_phase | string | OPTIONAL | phase where failure occurred if ABORTED |
+| postconditions_met | boolean | OPTIONAL | |
+
+## ScheduledTask
+
+A durable named task scheduled for future execution (§62i AP18).
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| id | identifier | REQUIRED | prefix `task-` |
+| name | string | REQUIRED | human-readable name |
+| schedule | TaskSchedule | REQUIRED | when to execute |
+| scope | string | REQUIRED | `runtime` \| `executor` \| `spec_audit` \| `metric_collection` |
+| action | string | REQUIRED | lifecycle command or action identifier |
+| status | string | REQUIRED | `ACTIVE` \| `PAUSED` \| `COMPLETED` \| `ERROR` |
+| created_by | string | REQUIRED | `USER` \| `AUTO` |
+| authority_basis | string | REQUIRED | why this task was scheduled |
+| last_run_at | iso_timestamp | OPTIONAL | most recent execution time |
+| next_run_at | iso_timestamp | OPTIONAL | next scheduled execution time |
+| run_count | count | OPTIONAL | number of successful executions |
+| consecutive_failures | count | OPTIONAL | reset to 0 on success |
+| preserve_on_update | boolean | OPTIONAL | default True for USER tasks |
+
+## TaskSchedule
+
+Scheduling definition for a ScheduledTask.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| kind | string | REQUIRED | `CRON` \| `INTERVAL_SECONDS` \| `TRIGGER` \| `IMMEDIATE` |
+| cron_expr | string | OPTIONAL | standard cron expression; required when kind=CRON |
+| interval_seconds | count | OPTIONAL | required when kind=INTERVAL_SECONDS |
+| trigger_event | string | OPTIONAL | evidence kind to watch; required when kind=TRIGGER |
+| next_run_at | iso_timestamp | OPTIONAL | pre-computed next run time |
+
+## CustomizationRecord
+
+A declared user override that is preserved across spec updates (§62i AP19).
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| id | identifier | REQUIRED | prefix `cust-` |
+| scope | string | REQUIRED | `config` \| `spec_parameter` \| `runtime_behavior` |
+| key | string | REQUIRED | dotted path to the overridden value |
+| value | any | REQUIRED | the user's override value |
+| reason | string | REQUIRED | why this override was made |
+| created_at | iso_timestamp | REQUIRED | |
+| preserve_on_update | boolean | REQUIRED | True = keep across spec updates |
+| conflict_status | string | OPTIONAL | `OK` \| `CONFLICT` \| `RESOLVED` |
+| conflict_detail | string | OPTIONAL | description of the conflict if any |
+
+## LexicalFormula
+
+A paired record linking a natural language normative rule to its formula equivalent (§62i AP17 LSC).
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| id | identifier | REQUIRED | prefix `lf-` |
+| spec_section | string | REQUIRED | section reference e.g. `§62c` |
+| natural_language | string | REQUIRED | the original prose rule |
+| formula | string | REQUIRED | the formula in standard mathematical notation |
+| variables | list<string> | OPTIONAL | variable names used in the formula |
+| sd_result | boolean | REQUIRED | True = self-determinable; False = executor-derived |
+| verified_at | iso_timestamp | OPTIONAL | when the formula was last verified correct |
+
 ---
 
 # 62c. Mechanism Contracts
@@ -4090,7 +4183,7 @@ EXECUTOR PROPOSAL (ExecutorProposal)
 
 ## Discovery Credit Gate Mechanism
 
-Before every discovery cycle that would invoke a metered or credit-accruing Executor, URACE MUST evaluate the Discovery Credit Gate. The gate is deterministic, executor-agnostic, and reads only durable state and configuration. It MUST NOT invoke an Executor to determine its own outcome.
+Before every discovery cycle that would invoke a metered or credit-accruing Executor, URACE MUST evaluate the Discovery Credit Gate. The gate is deterministic, executor-agnostic, and reads only durable state and configuration. It MUST NOT invoke an Executor to determine its own outcome. `gate_open ↔ calls_today < max_calls_per_day ∧ calls_month < max_calls_per_month`
 
 ```
 DISCOVERY CYCLE REQUEST
@@ -4466,7 +4559,7 @@ ObservationRecord {
 }
 ```
 
-**Retention contract.** `ExternalMetricState.latest` is a rolling observation window. Implementations MUST bound its growth: the default ceiling is 1000 entries under ROLLING_EVICTION mode. The ceiling MAY be reconfigured via a RetentionPolicy, and the mode MAY be changed to ARCHIVE when observation replay is required. Exceeding the ceiling without a compaction event MUST emit a `retention-policy-violated` WARNING IntegrityGap. Used in: ExternalMetricState.latest. Uses canonical: TemporalFields (at as created_at).
+**Retention contract.** `ExternalMetricState.latest` is a rolling observation window. Implementations MUST bound its growth: the default ceiling is 1000 entries under ROLLING_EVICTION mode. The ceiling MAY be reconfigured via a RetentionPolicy, and the mode MAY be changed to ARCHIVE when observation replay is required. Exceeding the ceiling without a compaction event MUST emit a `retention-policy-violated` WARNING IntegrityGap. `retain(r) ↔ now() − parse_ts(r.at) < retention_seconds` Used in: ExternalMetricState.latest. Uses canonical: TemporalFields (at as created_at).
 
 ## ProviderStatus
 
@@ -5141,6 +5234,718 @@ See §62b for the canonical schema definition.
 | T4 paired | canonical pairs table (this section) | lifecycle_state ↔ status_transitions validation |
 | T5 decompose | citizen schema minimality (§62b) | `primitives.py` schema conformance |
 | T6 vector | ScopePriorityConfig normalization contract | scope weight normalization enforcement |
+
+---
+
+# 62i. Architectural Meta-Patterns
+
+## First-class Architectural Concepts
+
+Before defining individual patterns, this section establishes five first-class concepts that the pattern vocabulary is built upon.
+
+**Citizen.** A citizen is any named entity that participates in the URACE lifecycle: it has an identity (a stable `id` field), conforms to a declared citizen schema (§62b), produces or consumes evidence in the broadcast log (AP15), and is traceable through the causal chain (AP6). Citizens are distinct from scalars (leaf values, no identity) and operations (transformations, no persistent identity). See AP0 for the formal definition.
+
+**Formula.** A formula is a symbolic expression that is the precise, unambiguous, machine-verifiable encoding of a normative rule. Where natural language describes a rule in prose, a formula expresses it in mathematical notation. Every normative rule in this specification that admits a formula representation SHOULD also have one. Formulas are the canonical form for quantitative constraints, ordering contracts, and invariants. See AP17 for the Lexical→Formula reduction mechanism.
+
+**Calculus.** A calculus is a system of symbolic rules for transforming expressions within a domain. In this specification, five calculi are used: Gap Detection (T1, §62h), Bar-Raising (T2, §62h), Delta Gate (T3, §62h), Fixpoint (AP8), and Lexical→Formula Reduction (AP17). Each calculus has a defined domain, operators, and reduction rules.
+
+**Meta-Pattern.** A meta-pattern is a pattern that describes how to define, instantiate, and compose other patterns. §62i defines meta-patterns. The patterns defined here are themselves instances of the meta-patterns they describe: AP2 (Citizen Schema) is itself a citizen schema; AP3 (Append-Only Log) is itself stored in an append-only log; AP4 (Contract) is itself governed by contracts.
+
+**Meta-Technique.** A meta-technique is a technique for deciding which technique to apply, how to apply it, and when to apply it. The TechniqueApplicabilityGate (§62h) is the primary meta-technique in URACE. AP17 (Lexical→Formula) and AP19 (Customization Layer) are meta-techniques that govern how the specification itself evolves.
+
+---
+
+## Reuse-over-use axiom
+
+A pattern MUST be defined once in the most general form before it is instantiated. Implementing the same structural contract ad hoc in two places without referencing a shared pattern definition is an architectural violation. The canonical form always takes precedence.
+
+---
+
+## AP0 — Citizen
+
+A citizen is the fundamental unit of identity in URACE. Every named, schema-bearing, lifecycle-participating entity is a citizen.
+
+**Definition.**
+```
+Citizen = {
+  id:       identifier  — stable, never reused after creation
+  schema:   CitizenSchema.name  — the §62b schema this citizen conforms to
+  at:       iso_timestamp  — creation timestamp
+  source:   string  — component that created this citizen
+}
+```
+
+**Properties.**
+- **Identity.** Two citizens are the same if and only if their `id` fields are equal.
+- **Schema conformance.** A citizen MUST conform to its declared schema at all times; a mutation that violates the schema MUST be rejected.
+- **Traceability.** Every citizen creation and mutation MUST produce an entry in the broadcast log (AP15) carrying the citizen's `id`.
+- **Non-recycling.** A citizen `id` MUST NOT be reused after the citizen is deleted, archived, or compacted.
+
+**Canonical citizen classes.** All schemas in §62b are citizen schemas. Primary classes: `Objective`, `Evidence`, `Blocker`, `DecisionRecord`, `StatusTransition`, `PendingValidation`, `ScheduledTask`, `CustomizationRecord`.
+
+---
+
+## AP1 — Canonical Scalar
+
+A canonical scalar is a leaf-node value type that cannot be further decomposed without losing semantic meaning. It is the smallest unit of information in the system.
+
+**Definition.**
+```
+CanonicalScalar = {
+  name:            unique canonical identifier
+  type:            json_primitive | enum | bounded_numeric
+  domain:          constraint expression defining valid values
+  validation_rule: predicate V(x) → {VALID, INVALID, reason}
+  null_policy:     PROHIBITED | PERMITTED | REQUIRED_ABSENT
+}
+```
+
+**Reuse contract.** A canonical scalar is defined once in §62b and referenced by name in every schema that uses a value of that type. Inlining the domain constraint instead of referencing the canonical scalar name is a reuse violation.
+
+**Catalog.** See §62b Canonical Scalar Catalog.
+
+---
+
+## AP2 — Citizen Schema
+
+A citizen schema is a named, versioned, fully-specified data structure whose every field is either a canonical scalar or a reference to another citizen schema. It is the primary reuse unit for structured data.
+
+**Definition.**
+```
+CitizenSchema = {
+  name:        unique canonical name (PascalCase, declared in §62b)
+  fields:      list of FieldDef
+  required:    set of field names that MUST be present
+  validation:  named primitive in §62d validate_* family
+  version:     spec revision when first introduced or last modified
+}
+
+FieldDef = {
+  name:      field identifier
+  type:      CanonicalScalar.name | CitizenSchema.name
+  cardinality: ONE | MANY | OPTIONAL
+}
+```
+
+**Minimality rule.** A citizen schema MUST be in minimal normal form (§62h AP Pattern 6 — Atomic Decomposition): no field bundles two independently normative claims. A field that can be split into two fields each with their own normative rule MUST be split.
+
+**Composition rule.** Fields whose type is another citizen schema MUST reference the schema by its canonical §62b name. Anonymous inline sub-schemas are prohibited.
+
+---
+
+## AP3 — Append-Only Log
+
+An append-only log is a durable ordered sequence of records where records are only ever added to the end — never modified or deleted before the retention window expires.
+
+**Definition.**
+```
+AppendOnlyLog<T> = {
+  entries:        list<T>  — monotone non-decreasing length
+  entry_schema:   CitizenSchema  — every entry conforms to T
+  retention:      RetentionPolicy  — governs compaction and eviction
+  id_field:       field name within T whose value is a stable identifier
+  at_field:       field name within T whose value is an ISO-8601 timestamp
+}
+```
+
+**Invariants.**
+- Append: `log(t+1).length ≥ log(t).length`
+- Ordering: `∀ i < j : log[i].at ≤ log[j].at`
+- Identity: `∀ i : log[i].id` is stable and never reused after the entry is written
+- Causal: every entry carries a `source` field naming the component that produced it
+
+**Compaction.** Compaction (§62f) does not violate append-only: it replaces a contiguous segment with a `CompactionSummary` entry while the original records move to archive. The log's logical length does not decrease; the live list length decreases only by replacement with a summary entry, not by silent deletion.
+
+**Canonical instances.** `state.evidence`, `state.status_transitions`, `state.executor_calls`, `state.decision_records`, `state.technique_application_log`.
+
+---
+
+## AP4 — Producer-Consumer Contract
+
+A producer-consumer contract is a named, verifiable, bilateral obligation between two components: one that writes a value (producer) and one that reads it (consumer).
+
+**Definition.**
+```
+ProducerConsumerContract = {
+  name:               unique contract identifier
+  producer:           component name
+  consumer:           component name
+  artifact:           schema name or field reference
+  producer_must:      list of normative obligations on the writer
+  consumer_may_assume: list of guaranteed properties the reader can rely on
+  violation_protocol: what happens when the contract is broken (REJECT | QUARANTINE | ALERT)
+  idempotent:         bool — True when applying the contract N times equals once
+}
+```
+
+**Reuse contract.** Any two components that exchange data MUST document their exchange as a named ProducerConsumerContract. Implicit knowledge of inter-component data shape is a contract violation.
+
+**Canonical instances.**
+- `InputQueue → CycleOrchestrator` — inputs written by executor, consumed at safe boundary
+- `CycleOrchestrator → StateDocument` — cycle writes state, runtime reads it at next cycle
+- `Executor → InputQueue` — executor writes inbox items, runtime processes them
+- `ValidationGate → CycleOrchestrator` — gate returns verdict, cycle acts on it
+
+---
+
+## AP5 — Idempotency Contract
+
+An operation satisfies the idempotency contract when applying it N times to the same input produces the same output as applying it once.
+
+**Definition.**
+```
+f idempotent ⟺ ∀ x : f(f(x)) = f(x)
+```
+
+**Why URACE requires it.** Cycles may be interrupted and retried. Any operation that is not idempotent produces inconsistent state on retry. All state-mutating operations MUST declare their idempotency class.
+
+**Idempotency classes.**
+| Class | Definition | URACE examples |
+|---|---|---|
+| PURE | `f(f(x)) = f(x)` | `save_state`, `spec_audit`, `validate_operation` |
+| AT_MOST_ONCE | Side effects occur at most once; retries are no-ops | executor call (guarded by dedup) |
+| AT_LEAST_ONCE | Safe to retry; may produce duplicate records | evidence append (records carry `id`, dedup on read) |
+| EXACTLY_ONCE | Guaranteed single effect; requires coordination | compaction commit (write + swap, atomic) |
+
+**Contract.** Every operation exposed as a lifecycle command or cycle phase MUST declare its idempotency class. A state-mutating operation that lacks an idempotency class declaration is an architectural gap.
+
+---
+
+## AP6 — Causal Provenance Chain
+
+Every durable state change MUST be traceable to a cause. A cause is a durable record that precedes the change in causal time.
+
+**Definition.**
+```
+CausalChain(s₂) ≡ ∃ s₁, e : s₂ = apply(e, s₁)  ∧  e.at ≤ s₂.modified_at
+```
+
+where `e` is an Evidence or Input record that authorized the change.
+
+**Provenance fields.** Every append-only log entry MUST carry:
+- `source` — the component that produced it (e.g., `cli:cycle`, `executor:response`)
+- `at` — ISO-8601 timestamp of creation
+- `id` — stable identifier
+
+**Traceability requirement.** Given any durable state field F at time T, an implementation MUST be able to reconstruct the sequence of Evidence or Input records that caused F's current value, by traversal of append-only logs. An implementation that mutates F without a traceable antecedent violates this contract.
+
+**Canonical instance.** §62g Justification System (`urace why`). The `prior_decision_refs` field in `DecisionRecord` is the causal pointer used to traverse the chain.
+
+---
+
+## AP7 — Canonical Reduction (Semantic Resulting Logic Calculus)
+
+Canonical reduction is the process of transforming any expression — a spec rule, schema, pipeline description, or data value — into its unique, minimal, machine-reproducible canonical form.
+
+**Definition.**
+```
+reduce(expr) = canonical_form(expr)
+```
+
+where `canonical_form` satisfies:
+- **Uniqueness.** Two semantically equivalent expressions have the same canonical form.
+- **Minimality.** No part of the canonical form is redundant; removing any element changes the semantic content.
+- **Reproducibility.** Given the same input, any independent bootstrap produces the same canonical form.
+
+**SEMANTIC RESULTING LOGIC CALCULUS (SRLC).** The SRLC is the applied discipline of canonical reduction over the URACE semantic domain. It answers: "What is the smallest, unambiguous, machine-reproducible expression of this concept?"
+
+**SD conditions.**
+- Structural reduction (field deduplication, sort canonicalization, whitespace normalization): SD = True.
+- Semantic equivalence detection (two rules with different phrasing but same normative effect): SD = False — requires executor judgment.
+
+**Apply to.** Spec normative rules → minimal normative claims; citizen schemas → minimal normal form; pipeline descriptions → minimal ordered step sequence; evidence records → canonical evidence kind vocabulary (§62b Evidence kinds table).
+
+**Primary tool.** The §81 Spec Audit Mechanism applies SRLC to produce `normative_rules` count: each normative rule is reduced to a minimal, independently testable claim before counting.
+
+---
+
+## AP8 — Fixpoint Calculus
+
+A fixpoint computation iterates a function until the output equals the input — i.e., until the system reaches a stable state.
+
+**Definition.**
+```
+fix(f, x₀) : iterate xₙ₊₁ = f(xₙ) until xₙ₊₁ = xₙ (or ‖xₙ₊₁ − xₙ‖ < ε)
+```
+
+**Convergence contract.** An implementation applying fixpoint MUST:
+1. Declare a convergence predicate `P(xₙ, xₙ₊₁)` before iteration begins.
+2. Bound the maximum iteration count `max_iter` to prevent infinite loops.
+3. If `max_iter` is reached without convergence, surface a named IntegrityGap with `severity: WARNING`.
+
+**SD condition.** True when the iteration space is finite and enumerable. False when convergence depends on open-ended inference — executor delegation required.
+
+**Apply to.** Spec audit convergence (iterating gap detection until no new gaps); metric stabilization (iterating until trend is flat); reasoning chain resolution (iterating until no new antecedents).
+
+---
+
+## AP9 — Monotone Accumulator
+
+A monotone accumulator is a value that only increases (or stays the same) — it never decreases except through an explicit authorized reset.
+
+**Definition.**
+```
+MonotoneAccumulator(v) : v(t+1) ≥ v(t)  ∀ t
+```
+
+**Reset protocol.** A decrease in `v` is only valid when accompanied by an authorized `reset_event` record with `authority_basis` and `reason` fields. A decrease without a reset event is an integrity violation.
+
+**Apply to.** `normative_rules` count; `behavioral_tests` count; `evidence` log length; `executor_calls` count; `normative_rules` metric baseline; any bar-raising threshold (§62h T2).
+
+**Relationship to AP3.** The length of an Append-Only Log is a monotone accumulator. The log's entry count is the accumulator value; appending increments it; compaction replaces entries but does not decrease the logical count (summaries count as one entry).
+
+---
+
+## AP10 — Bounded Retry with Backoff
+
+A bounded retry applies an operation up to `max_attempts` times, with exponentially increasing delay between attempts, bounded by `max_delay`.
+
+**Definition.**
+```
+delay(n) = min(base_delay × 2^n, max_delay)   n = 0, 1, …, max_attempts−1
+```
+
+**Contract.**
+- `attempt(0)` is the initial try; no delay before it.
+- `attempt(n)` for `n > 0` waits `delay(n−1)` before executing.
+- After `max_attempts` failures, the operation is classified as SYSTEMATIC_FAILURE.
+- Jitter MAY be added: `delay_jittered(n) = delay(n) × U(0.5, 1.0)` where U is uniform random.
+
+**SD condition.** Always True — all parameters are numeric values in config.
+
+**Apply to.** Executor transient network failures (§62c); auth failure backoff (§62c); capability probe retry; validation gate retry when capability unavailable.
+
+---
+
+## AP11 — Bridge
+
+A bridge is an explicit, named, one-directional translation layer between two incompatible representations. It is the canonical mechanism for crossing a semantic boundary.
+
+**Definition.**
+```
+Bridge = {
+  name:           unique bridge identifier
+  source_schema:  CitizenSchema name (input representation)
+  target_schema:  CitizenSchema name (output representation)
+  direction:      ONE_WAY | BIDIRECTIONAL
+  transform:      f : source_record → target_record
+  loss_policy:    LOSSLESS | LOSSY_DECLARED  — lossy bridges must document what is lost
+  idempotency:    IdempotencyClass
+}
+```
+
+**Why bridges, not direct casts.** A direct cast from S to T embeds the translation in both the producer and consumer, coupling them. A named bridge is a single definition point: change the translation once to propagate it everywhere.
+
+**Canonical bridges in URACE.**
+
+```
+┌─────────────────┐     Bridge B1      ┌────────────────────┐
+│  URACE.md       │ ─────────────────► │  spec_audit.py     │
+│  (normative     │  rule → IntegrityGap│  (runtime coverage │
+│   rules)        │  or PASS evidence  │   evidence)        │
+└─────────────────┘                    └────────────────────┘
+
+┌─────────────────┐     Bridge B2      ┌────────────────────┐
+│  Executor       │ ─────────────────► │  InputQueue        │
+│  (JSON output)  │  response → Input  │  (state inbox)     │
+└─────────────────┘                    └────────────────────┘
+
+┌─────────────────┐     Bridge B3      ┌────────────────────┐
+│  MetricObserv.  │ ─────────────────► │  ValidationGate    │
+│  (raw values)   │  value → guardrail │  (verdict)         │
+└─────────────────┘     result         └────────────────────┘
+```
+
+**Bridge B1 — Spec→Runtime.** Translates each normative rule in URACE.md into either a passing implementation evidence record or a named IntegrityGap. Implemented by `spec_audit.py`. Lossless: every rule produces exactly one output record.
+
+**Bridge B2 — Executor→Inbox.** Translates executor JSON output into an Input record consumed by the durable inbox. Implemented by `inputs.py` dispatch. Loss policy: LOSSY_DECLARED — unrecognized executor output fields are dropped and logged as `executor-response-unrecognized-field` evidence.
+
+**Bridge B3 — Metric→Decision.** Translates raw metric observations into validation gate verdicts (PASS/FAIL). Implemented by `validation.py` metric guardrail. Lossless: every metric produces one check record.
+
+---
+
+## AP12 — Orchestrator
+
+An orchestrator is a named, multi-phase coordination mechanism that sequences operations, enforces pre/post conditions, handles failures, and emits a completion record.
+
+**Definition.**
+```
+Orchestrator = {
+  name:         unique orchestrator identifier
+  preconditions: list<Predicate>  — must hold before execution begins
+  phases:        ordered list<OrchestratorPhase>
+  failure_contract: ON_PHASE_FAILURE → {ABORT_AND_ROLLBACK | CONTINUE_DEGRADED | HALT}
+  postconditions: list<Predicate>  — must hold after successful completion
+  completion_record: OrchestratorRecord  — appended to evidence on completion
+}
+
+OrchestratorPhase = {
+  name:       phase identifier
+  idempotency: IdempotencyClass
+  timeout_s:  maximum allowed duration
+  on_timeout: FAIL_PHASE | SKIP_PHASE
+}
+```
+
+**Sequence diagram — cycle() orchestrator:**
+```
+ ┌─────────────────────────────────────────────────────────────────┐
+ │ Orchestrator: cycle()                                           │
+ │                                                                 │
+ │  [Pre] lifecycle_state ∈ {ASSESSING, DORMANT, BLOCKED}         │
+ │    │                                                            │
+ │    ▼                                                            │
+ │  Phase 1: assess        — evaluate metrics, gaps, objectives   │
+ │    │                                                            │
+ │    ▼                                                            │
+ │  Phase 2: select        — choose highest-priority action       │
+ │    │                                                            │
+ │    ▼                                                            │
+ │  Phase 3: execute       — apply selected action (or skip)      │
+ │    │                                                            │
+ │    ▼                                                            │
+ │  Phase 4: validate      — independent validation gate (§54)    │
+ │    │         ┌── FAIL → rollback → record rejection            │
+ │    ▼         │                                                  │
+ │  Phase 5: persist       — durable write of state + CRC        │
+ │    │                                                            │
+ │    ▼                                                            │
+ │  Phase 6: technique_gate — evaluate T1–T6 applicability        │
+ │    │                                                            │
+ │    ▼                                                            │
+ │  [Post] state persisted, CRC current, evidence appended        │
+ └─────────────────────────────────────────────────────────────────┘
+```
+
+**Canonical instance.** `cycle()` in `cli.py`. Every autonomous URACE iteration is one execution of this orchestrator.
+
+**Reuse.** Any future multi-phase operation (e.g., compaction, rebootstrap) MUST be defined as an Orchestrator instance with the same contract structure rather than implemented as an ad-hoc sequence.
+
+---
+
+## AP13 — Observer
+
+An observer is a component that is notified of a state change without being directly coupled to the component that caused the change.
+
+**Definition.**
+```
+Observer = {
+  name:          unique observer identifier
+  watches:       field_path or event_kind in state
+  trigger:       Predicate(old_value, new_value) → bool
+  action:        what the observer does when triggered
+  idempotency:   IdempotencyClass (observers MUST be idempotent)
+}
+```
+
+**Decoupling contract.** The producing component MUST NOT know the identity of observers. Observers read from the Broadcast Log (AP15); they do not receive direct callbacks.
+
+**Canonical instances.**
+- `spec_audit_due()` — watches `spec_version` field; fires when version changes → triggers spec audit phase.
+- `executor_discovery_due()` — watches executor credit state; fires when budget gates clear → triggers discovery.
+- Metric threshold observer — watches metric values; fires when a value crosses baseline → triggers ASSESSING transition.
+
+---
+
+## AP14 — Durable Inbox (Input Queue)
+
+The Durable Inbox is a persistent, FIFO, append-only queue of pending commands and responses written by external agents and processed at safe lifecycle boundaries.
+
+**Definition.**
+```
+DurableInbox = {
+  storage:       filesystem directory (inputs/*.json)
+  ordering:      FIFO by `at` field (ISO-8601 ascending)
+  durability:    write-before-process — inbox item is durable before the runtime reads it
+  idempotency:   AT_MOST_ONCE — item is removed from inbox after successful processing
+  rejection:     failed items renamed to *.rejected, never silently dropped
+  boundary:      items are processed only at SAFE lifecycle boundaries (not mid-phase)
+}
+```
+
+**Communication topology diagram:**
+
+```
+  External Agent (Executor, Operator)
+         │
+         │  writes JSON → inputs/{at}-{id}.json
+         ▼
+  ┌──────────────────┐
+  │   Durable Inbox  │  (AP14)  filesystem queue, FIFO by `at`
+  └──────────┬───────┘
+             │  consume_inputs() at safe boundary
+             ▼
+  ┌──────────────────┐
+  │ Input Dispatcher │  (Bridge B2)  validates, routes to handler
+  └──────────┬───────┘
+             │  handler mutates state, appends evidence
+             ▼
+  ┌──────────────────┐
+  │  State Document  │  (AP16)  snapshot + delta log
+  └──────────┬───────┘
+             │  evidence appended
+             ▼
+  ┌──────────────────┐
+  │  Broadcast Log   │  (AP15)  state.evidence — all consumers read here
+  └──────────┬───────┘
+             │
+      ┌──────┴──────┐──────────────┐
+      ▼             ▼              ▼
+  Inspection   Spec Audit    Reasoning Memory
+  (AP13 obs)   (AP13 obs)    (AP13 obs)
+```
+
+---
+
+## AP15 — Broadcast Log
+
+The Broadcast Log is the system-wide event bus: an append-only log to which all components write events and from which all consumers read. Producers never directly notify consumers; consumers observe the log.
+
+**Definition.**
+```
+BroadcastLog = AppendOnlyLog<Evidence>  (AP3 instance)
+
+Every Evidence entry has:
+  id:     stable identifier (prefix `ev-`)
+  at:     ISO-8601 timestamp
+  kind:   Evidence kind (§62b Evidence kinds table)
+  source: component identifier
+  detail: freeform string or structured payload
+```
+
+**Decoupling property.** Because all communication flows through the log, any component can be replaced without modifying others — the log contract is the only interface. This is the architectural basis for URACE's executor-agnosticism (§75).
+
+**Canonical instance.** `state.evidence`. Every cycle, every lifecycle command, every bridge translation, and every validation result appends at least one entry here.
+
+---
+
+## AP16 — State Snapshot + Delta Log
+
+The State Document is a combination of a current-value snapshot and append-only logs of changes. The current state is always immediately readable from the snapshot; the complete history is reconstructible from the logs.
+
+**Definition.**
+```
+StateDocument = {
+  snapshot:    dict<field, current_value>  — directly readable
+  delta_logs:  list<AppendOnlyLog>         — evidence, status_transitions, etc.
+}
+
+Reconstruction: state_at(t) = apply_deltas(earliest_snapshot_before(t), deltas_since(t))
+```
+
+**Durable write protocol.** Every mutation to `snapshot` MUST:
+1. Apply the mutation.
+2. Append a corresponding entry to the relevant `delta_log` (evidence, status_transitions, etc.).
+3. Write both atomically via `atomic_write_json` (§62f).
+
+A mutation that updates the snapshot without appending a delta log entry violates the causal provenance chain (AP6).
+
+---
+
+## AP17 — Lexical→Formula Reduction (Lexical Symbol Calculus)
+
+The Lexical Symbol Calculus (LSC) is the discipline of reducing natural language expressions — sets of words, characters, symbols, or compositions thereof — to their precise, minimal, canonical formula equivalents.
+
+**Operators.**
+
+| Input | LSC operator | Output example |
+|---|---|---|
+| "must not decrease" | monotone lower-bound | `v(t+1) ≥ v(t)` |
+| "sum to one" | normalization equality | `∑wᵢ = 1.0 ± ε` |
+| "FIFO order" | sort by timestamp | `order ≡ sorted(items, key=λi: i.at)` |
+| "within budget" | inequality guard | `calls_today < max_calls_per_day` |
+| "not present" | set complement | `x ∉ S` |
+| "all items" | universal quantifier | `∀ i ∈ S : P(i)` |
+| "there exists" | existential quantifier | `∃ i ∈ S : P(i)` |
+| "if and only if" | biconditional | `A ↔ B` |
+| "causes / leads to" | causal implication | `A → B` |
+| "within window" | temporal bound | `now() - item.at < window_seconds` |
+
+**Reduction protocol.**
+
+```
+reduce_to_formula(text):
+  1. Identify the normative verb (MUST, SHALL, SHOULD, MAY).
+  2. Extract the subject (what entity).
+  3. Extract the predicate (what property must hold).
+  4. Select the LSC operator that maps the predicate to a formula.
+  5. Bind variables from the subject to the formula.
+  6. Verify: formula is satisfiable, unambiguous, and machine-checkable.
+  7. If step 6 fails: SD = False → delegate semantic boundary to executor.
+```
+
+**SD condition.** True when the normative text uses vocabulary from the LSC operator table above. False when the text involves open-ended semantic equivalence judgments (two differently worded rules may have the same normative effect — executor needed to verify).
+
+**Application to URACE.md.** Every normative rule in this specification that can be expressed as a formula SHOULD include the formula alongside the prose. The formula is not a replacement for the prose; it is a machine-verifiable companion. Where a formula and prose conflict, the prose governs the intent and the formula governs the implementation. Formula language: standard mathematical notation with ISO-8601 timestamps and set-builder notation.
+
+**Primary formulas in this specification.**
+
+| Location | Natural language | Formula |
+|---|---|---|
+| §62c Input Queue | inputs processed in FIFO order | `order ≡ sorted(inputs, key=λi: parse_ts(i.at))` |
+| §62f retention | records within rolling window | `retain(r) ↔ now() − parse_ts(r.at) < retention_s` |
+| §62b weight normalization | weights must sum to one | `∑wᵢ = 1.0 ± 1e-9 ∧ ∀i: wᵢ ≥ 0` |
+| §62h T2 bar-raising | threshold non-decreasing | `threshold(t+1) ≥ threshold(t)` |
+| §62h T4 paired invariant | lifecycle matches transition | `lifecycle_state = status_transitions[−1].status` |
+| §62c discovery gate | calls within daily budget | `calls_today < max_calls_per_day ∧ calls_month < max_calls_per_month` |
+| §60 acceptance | accept only when validated | `accept(op) ↔ validate(op).verdict = VALIDATED` |
+| §62h T1 gap calculus | unimplemented rules | `gap(S, I) = {r ∈ S \| ¬∃i ∈ I: implements(i, r)}` |
+
+---
+
+## AP18 — Scheduled Task Contract
+
+A scheduled task is a durable, named, time- or trigger-governed action that the runtime executes at a declared future point. Tasks are citizens (AP0): they have stable identity, schema conformance, and causal traceability.
+
+**Definition.**
+```
+ScheduledTask = CitizenSchema  (see §62b)
+TaskSchedule  = CitizenSchema  (see §62b)
+```
+
+**Task kinds.**
+- **USER task.** Created by the operator via a `schedule-task` inbox input. Preserved across updates (AP19).
+- **AUTO task.** Created by the runtime's auto-scheduling logic based on state analysis. Examples: when gap calculus (T1) detects new unimplemented rules → schedule `spec_audit`; when metric trend is declining → schedule `metric_investigation`; when systematic failure streak exceeds threshold → schedule `executor_health_check`.
+
+**Auto-scheduling triggers.**
+
+| Condition | Auto-scheduled task | Scope |
+|---|---|---|
+| `gap(spec_rules, impl) > 0` new entries since last audit | `spec_audit` | runtime |
+| metric trend = declining for ≥ 2 consecutive cycles | `metric_investigation` | executor |
+| `systematic_failure_streak ≥ systematic_failure_threshold` | `executor_health_check` | executor |
+| no accepted improvement in ≥ 30 cycles | `bar_raising_check` | runtime |
+
+**Execution protocol.**
+1. At each cycle start, the runtime evaluates `task_due(task, now())` for each ACTIVE ScheduledTask.
+2. A due task fires: `run_count += 1`, `last_run_at` set, next `next_run_at` computed.
+3. For USER tasks, the `action` field specifies the lifecycle command to inject into the inbox.
+4. For AUTO tasks, the runtime directly acts on the trigger (no inbox round-trip needed).
+5. A task that fails 3 consecutive times is set to status `ERROR` and MUST NOT auto-retry.
+
+**Scheduling formula.** For INTERVAL_SECONDS tasks:
+```
+next_run_at(t+1) = last_run_at(t) + interval_seconds
+```
+
+For TRIGGER tasks:
+```
+fire(task) ↔ evidence_log contains entry with kind = task.schedule.trigger_event
+              AND entry.at > task.last_run_at (or task.created_at if never run)
+```
+
+**Idempotency.** Task execution MUST be idempotent: running a task that has already been run this cycle produces no additional effect. The `last_run_at` field is the deduplication key.
+
+---
+
+## AP19 — Customization / Personalization Layer
+
+The Customization Layer bridges the tension between specification-first development and user freedom. A URACE deployment MUST be reproducible from the specification, but a user MUST also be able to personalize their runtime, bootstrap file, or configuration without those choices being silently overwritten by spec updates.
+
+**Design principle.** The specification is the canonical ground truth. User customizations are explicit, named, scoped overrides. Customizations are preserved across updates; spec changes that conflict with customizations are surfaced as conflicts, not silently resolved.
+
+**Customization scopes.**
+
+| Scope | What it governs | Update behavior |
+|---|---|---|
+| `config` | Values in `config.json` (thresholds, limits, paths) | Preserved; spec update cannot lower a user-raised threshold without conflict |
+| `spec_parameter` | Named spec constants (e.g., INFER_BLOCKING threshold) | Preserved; spec change to same constant is flagged as CONFLICT |
+| `runtime_behavior` | Named behavioral flags (e.g., `disable_auto_discovery`) | Preserved; spec new requirement that contradicts flag is flagged as CONFLICT |
+
+**CustomizationRecord.** See §62b. Every customization is a durable citizen with `preserve_on_update` field.
+
+**Conflict resolution protocol.**
+```
+on_spec_update(old_spec, new_spec, customizations):
+  for each customization C in customizations where C.preserve_on_update = True:
+    if new_spec changes the default for C.key:
+      if C.value conflicts with new_spec.requirement(C.key):
+        emit evidence kind "customization-conflict-detected"
+              with detail: C.key, C.value, new_spec.requirement(C.key)
+        status = CONFLICT  — user must resolve; do not auto-apply new default
+      else:
+        keep C.value  — customization is compatible with new spec
+  apply remaining spec changes that do not conflict
+```
+
+**Bootstrap reproducibility guarantee.** A URACE bootstrap from a standard (unmodified) `URACE.md` MUST produce an identical initial state regardless of bootstrap executor. User customizations applied after bootstrap are additive and declared; they do not affect the reproducibility of the base bootstrap.
+
+**User modification freedom.** A user MAY modify `URACE.md` to create a personalized fork. A user MAY modify `config.json`. A user MAY modify runtime source files. In all cases, the modifications are the user's responsibility; URACE cannot guarantee correctness of user-modified artifacts. The Customization Layer exists so that users can express their overrides *as customizations* (declared, preserved, conflict-detectable) rather than as silent edits that are lost on update.
+
+**Preservation formula.**
+```
+preserve(C, update) ↔ C.preserve_on_update = True
+                      ∧ ¬conflict(C, update)
+```
+
+---
+
+## Canonical Scalar Catalog
+
+All primitive value types used in citizen schemas. Every field that holds one of these types MUST reference the canonical scalar name.
+
+| Scalar | Type | Domain | Null policy |
+|---|---|---|---|
+| `probability` | float | [0.0, 1.0] | PROHIBITED |
+| `iso_timestamp` | string | RFC-3339 / ISO-8601 with timezone | PROHIBITED |
+| `identifier` | string | `^[a-z][a-z0-9]*-[A-Za-z0-9]+$` | PROHIBITED |
+| `count` | integer | ≥ 0 | PROHIBITED |
+| `budget_fraction` | float | [0.0, 1.0] | PROHIBITED |
+| `confidence` | float | [0.0, 1.0] | PROHIBITED |
+| `severity_level` | enum | INFO \| WARNING \| ERROR \| CRITICAL | PROHIBITED |
+| `duration_seconds` | float | ≥ 0.0 | PROHIBITED |
+| `rfc2119_keyword` | enum | MUST \| MUST NOT \| SHALL \| SHALL NOT \| SHOULD \| SHOULD NOT \| MAY \| NEED NOT | PROHIBITED |
+| `lifecycle_state_value` | enum | ASSESSING \| DORMANT \| BLOCKED \| PAUSED | PROHIBITED |
+| `verdict_value` | enum | VALIDATED \| REJECTED \| PENDING_CAPABILITY | PROHIBITED |
+
+---
+
+## Bridge Topology
+
+```
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                         URACE Bridge Topology                           │
+  │                                                                         │
+  │   URACE.md ──B1──► spec_audit.py ──► IntegrityGap | Evidence           │
+  │   (normative rules)  (gap calculus)   (broadcast log entry)             │
+  │                                                                         │
+  │   Executor ──B2──► inputs/*.json ──► Input dispatcher ──► State        │
+  │   (JSON resp)        (durable inbox)  (handler registry)   (snapshot)  │
+  │                                                                         │
+  │   Metrics ──B3──► validation.py ──► check record ──► verdict           │
+  │   (raw obs)         (guardrail eval)  (PASS|FAIL)    (VALIDATED|REJ.)  │
+  │                                                                         │
+  │   State ──B4──► inspection.py ──► human-readable output                │
+  │   (snapshot)     (render())         (AP13 observer)                    │
+  └─────────────────────────────────────────────────────────────────────────┘
+```
+
+Add B4 — State→Inspection bridge: translates the internal state snapshot into human-readable inspection output. Implemented by `inspection.py:render()`.
+
+---
+
+## Architectural Composition: How Patterns Interlock
+
+```
+  AP0 (Citizen) ──identity─► AP2 (Schema) ──validates─► AP3 (Log)
+  AP17 (LSC)   ──reduces──► AP7 (SRLC)   ──canonizes─► AP1 (Scalar)
+  AP18 (Sched) ──triggers─► AP12 (Orch.)  ──writes───► AP14 (Inbox)
+  AP19 (Custom)──overrides► AP4 (Contract)──preserved─► AP16 (Snap)
+
+  AP1 (Scalar) ──forms─► AP2 (Schema) ──populates─► AP3 (Log)
+       │                       │                          │
+       │                  AP5 (Idem.)              AP6 (Causal)
+       │                       │                          │
+  AP7 (SRLC) ──reduces─► AP4 (Contract) ◄──bridges── AP11 (Bridge)
+       │                       │                          │
+  AP8 (Fixpt) ──iterates─► AP12 (Orch.) ──sequences─► AP14 (Inbox)
+       │                       │                          │
+  AP9 (Mono.) ──guards──► AP10 (Retry) ──feeds──────► AP15 (Bcast)
+                               │                          │
+                          AP13 (Observer) ◄─────reads─────┘
+                               │
+                          AP16 (Snapshot+Log)
+```
 
 ---
 
