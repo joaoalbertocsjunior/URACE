@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r22**
+**Specification version: 2026-10-12-r23**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3561,10 +3561,35 @@ ExecutorState {
   capacity_status                OPTIONAL  WAITING_PROVIDER_CAPACITY | PROBE_DUE | AVAILABLE | null;
                                            provider capacity probe state; set by the capacity probe
                                            path independently of discovery_budget_status
+  progress_vector                OPTIONAL  float [0.0, 1.0] | null; ratio of completed Objectives to
+                                           total known Objectives in the current goal scope; updated
+                                           at each cycle boundary; null until first Objective is known
+  progress_stagnant_cycles       OPTIONAL  int ≥ 0; consecutive cycles where progress_vector has not
+                                           increased; resets to 0 on any increase; configurable
+                                           stagnation_threshold (default 5) triggers REPAIRING entry
+  execution_budget               OPTIONAL  ExecutionBudget | null; goal-level resource envelope;
+                                           null means no budget floor enforced
+  recovery_manifest              OPTIONAL  RecoveryManifest | null; most recent manifest emitted at
+                                           repair-exhausted in auto mode; null if none emitted
 }
 ```
 
-Uses canonical: FailureRecord (failures entries), ProviderStatus (provider_pool values), DiscoveryBudgetStatus (discovery_budget_status).
+Uses canonical: FailureRecord (failures entries), ProviderStatus (provider_pool values), DiscoveryBudgetStatus (discovery_budget_status), ExecutionBudget (execution_budget), RecoveryManifest (recovery_manifest).
+
+## ExecutionBudget
+
+Goal-level resource envelope. Distinct from `DiscoveryBudgetStatus`, which tracks per-cycle discovery credits. `ExecutionBudget` governs the total resource floor for the entire goal-scoped run, not individual discovery cycles.
+
+```
+ExecutionBudget {
+  max_iterations      REQUIRED  int ≥ 1; maximum lifecycle cycles before budget-exhausted terminal
+  max_executor_calls  REQUIRED  int ≥ 1; maximum total Executor calls before budget-exhausted terminal
+  iterations_used     REQUIRED  int ≥ 0; current count; incremented at each cycle boundary
+  executor_calls_used REQUIRED  int ≥ 0; current count; incremented at each Executor call
+}
+```
+
+**Budget-exhausted contract.** When `iterations_used ≥ max_iterations` OR `executor_calls_used ≥ max_executor_calls`, the lifecycle MUST treat the condition as budget-exhausted. In `auto` execution mode, budget-exhausted MUST emit a `RecoveryManifest` and perform a graceful stop per the repair-exhausted auto clause (§64). In `supervised` execution mode, budget-exhausted MUST surface a named `budget-exhausted` BLOCKING IntegrityGap and enter `BLOCKED`. **Default contract.** When `execution_budget` is null, no budget floor is enforced; the lifecycle runs until goal completion or repair-exhausted terminal. **Scope contract.** `ExecutionBudget` fields MUST NOT track token-level consumption; token tracking is a separate concern. Fields cover only iteration and Executor call counts.
 
 ## DiscoveryBudgetStatus
 
@@ -4524,15 +4549,45 @@ A deduplicated failure entry for recurring fault patterns.
 
 ```
 FailureRecord {
-  at      REQUIRED  timestamp; first occurrence
-  last_at REQUIRED  timestamp; most recent occurrence (= at on first occurrence)
-  stage   REQUIRED  string; lifecycle stage or component where failure occurred
-  error   REQUIRED  string; error message or exception description
-  count   REQUIRED  int ≥ 1; total occurrences
+  at           REQUIRED  timestamp; first occurrence
+  last_at      REQUIRED  timestamp; most recent occurrence (= at on first occurrence)
+  stage        REQUIRED  string; lifecycle stage or component where failure occurred
+  error        REQUIRED  string; error message or exception description
+  count        REQUIRED  int ≥ 1; total occurrences
+  failure_type OPTIONAL  transient | semantic | structural; default semantic when absent
 }
 ```
 
-**Deduplication contract.** A FailureRecord with the same stage and error signature MUST be updated (`count`, `last_at`) rather than appended as a new record. **Growth contract.** Deduplication bounds growth by fault identity; when failure diversity is high (many distinct `stage` + `error` combinations) the list may still grow substantially. An implementation MAY define a RetentionPolicy for this field. If no RetentionPolicy exists and the list exceeds 500 entries, the lifecycle MUST emit a `retention-policy-violated` WARNING IntegrityGap. Used in: ExecutorState.failures.
+**Deduplication contract.** A FailureRecord with the same stage and error signature MUST be updated (`count`, `last_at`) rather than appended as a new record. `failure_type` is NOT part of the deduplication key; the key remains `stage + error` only. **Failure type semantics.** `transient` — network, transport, or provider-capacity error not attributable to logic or configuration; routes to short-backoff retry. `semantic` — incorrect approach, wrong technique, or strategy mismatch; routes to tier escalation via TechniqueApplicabilityGate. `structural` — broken invariant, schema violation, or corrupt state; routes to rollback and REPAIRING. **Backwards compatibility contract.** Existing FailureRecord instances without `failure_type` MUST be treated as `failure_type: semantic`; an implementation MUST NOT reject or fail to read a FailureRecord missing this field. **Growth contract.** Deduplication bounds growth by fault identity; when failure diversity is high (many distinct `stage` + `error` combinations) the list may still grow substantially. An implementation MAY define a RetentionPolicy for this field. If no RetentionPolicy exists and the list exceeds 500 entries, the lifecycle MUST emit a `retention-policy-violated` WARNING IntegrityGap. Used in: ExecutorState.failures.
+
+## RecoveryManifest
+
+A re-ingestible artifact emitted when `REPAIRING` reaches repair-exhausted in `auto` execution mode, or when `ExecutionBudget` is exhausted in `auto` mode. Enables the next `urace auto` invocation to continue goal-scoped execution from the furthest safe point without human intervention. Stored as `ExecutorState.recovery_manifest`; persisted via the existing atomic write contract.
+
+```
+RecoveryManifest {
+  manifest_id         REQUIRED  string; unique identifier for this manifest instance
+  emitted_at          REQUIRED  timestamp; when this manifest was written
+  emission_cause      REQUIRED  repair-exhausted | budget-exhausted; what triggered emission
+  last_safe_state     REQUIRED  string; lifecycle state value at last known good point before failure
+  last_safe_commit    REQUIRED  string | null; durable checkpoint id or git ref at last known good
+                                 point; null if no checkpoint exists
+  failure_summary     REQUIRED  list[string]; FailureRecord ids from ExecutorState.failures that
+                                 contributed to this emission; MAY be empty if cause is budget-exhausted
+                                 with no recorded failures
+  goal_delta          REQUIRED  string; human-readable description of remaining work not yet completed
+                                 at time of emission; derived from incomplete Objectives
+  progress_at_emit    REQUIRED  float [0.0, 1.0] | null; value of ExecutorState.progress_vector at
+                                 emission; null if progress_vector was null
+  budget_consumed     OPTIONAL  ExecutionBudget | null; snapshot of ExecutionBudget at emission;
+                                 null if no ExecutionBudget was configured
+  recommended_tier    OPTIONAL  T1 | T2 | T3 | null; highest TechniqueApplicabilityGate tier
+                                 attempted before exhaustion; hints re-entry strategy for next run
+  execution_mode      REQUIRED  auto | supervised; execution mode active at time of emission
+}
+```
+
+**Re-ingestion contract.** On `urace auto` start, if `ExecutorState.recovery_manifest` is non-null and `emission_cause` matches a recoverable condition, the lifecycle MUST use `last_safe_state`, `last_safe_commit`, and `recommended_tier` to resume from the manifest rather than reinitializing from scratch. **Single-manifest contract.** Only one RecoveryManifest is retained at a time; a new emission overwrites the prior value. **Supervisor visibility contract.** In `supervised` mode, `RecoveryManifest` is never emitted autonomously; it is populated only when an operator explicitly requests a manifest export. **Citizen classification.** RecoveryManifest is a named lifecycle entity conforming to AP0 (Citizen); it carries durable identity (`manifest_id`), lifecycle attribution (`emitted_at`, `execution_mode`), and a defined retention policy (overwritten on next emission).
 
 ## ChangeHistoryEntry
 
@@ -6098,6 +6153,12 @@ The `RECONCILING` lifecycle state is entered when URACE has positively establish
 
 The `REPAIRING` lifecycle state is entered when URACE has detected a Product integrity failure through an attributable check result — an acceptance validation failure, a self-consistency check, a failed activation health check, or an equivalent attributable integrity signal — and is actively executing the bounded repair sequence required to restore the Product to its last known good accepted state. Entry MUST be triggered by a durable integrity-failure record identifying the check that failed and its observed criterion; autonomous inference of integrity failure without an attributable check result MUST NOT constitute valid entry. `REPAIRING` is distinct from `ACTIVE`, which represents ordinary Product evolution under authorized Intent initiated by justified Objective work rather than a detected integrity failure; from `RECONCILING`, which handles uncertain external effect disposition rather than Product artifact integrity; and from `BLOCKED`, which holds when a committed external effect cannot yet be reconciled. The inspection surface MUST expose without an Executor call: the triggering integrity-failure check identifier and its failed criterion, the Product checkpoint being used as the repair baseline, and the current bounded repair step and its completion condition. A repair sequence MUST have a declared attempt ceiling; if the ceiling is reached without successful restoration, URACE MUST surface a named repair-exhausted condition, MUST NOT continue repair attempts autonomously, and MUST retain durable lifecycle state intact pending operator review. On successful completion, `REPAIRING` exits to `ASSESSING` for an independent integrity-confirmation cycle before any return to `ACTIVE`; a direct transition from `REPAIRING` to `ACTIVE` without an intervening `ASSESSING` confirmation cycle MUST NOT occur.
 
+**Stagnation entry trigger.** `REPAIRING` MAY also be entered when `ExecutorState.progress_stagnant_cycles` reaches the configured `stagnation_threshold` without an integrity-failure check result, provided the stagnation is recorded as a durable `progress-stagnation` integrity signal identifying the cycle count and the last observed `progress_vector` value. Stagnation-triggered REPAIRING MUST be distinguished from validation-failure-triggered REPAIRING in the inspection output. This extends the existing valid entry condition ("an equivalent attributable integrity signal") rather than replacing it.
+
+**Tier escalation before exhaustion.** Before surfacing repair-exhausted, a `REPAIRING` sequence MUST attempt technique escalation through the TechniqueApplicabilityGate tiers in order: T1 (Gap Detection), T2 (Fixpoint Convergence), T3 (Meta-Pattern Selection). Each tier constitutes one attempt boundary. The attempt ceiling MUST be evaluated per-tier, not across all tiers combined: exhausting one tier escalates to the next rather than triggering the repair-exhausted condition. Only when T3 is exhausted without successful restoration MUST URACE surface repair-exhausted. An implementation that triggers repair-exhausted before attempting all available tiers violates this section.
+
+**Auto mode repair-exhausted clause.** When repair-exhausted is reached and the active execution mode is `auto`: URACE MUST emit a `RecoveryManifest` to `ExecutorState.recovery_manifest` with `emission_cause: repair-exhausted`, MUST perform a graceful stop per the graceful stop protocol (preserving all durable state intact per §6276), and MUST NOT enter `BLOCKED`. The next `urace auto` invocation MUST re-ingest the manifest and resume from `last_safe_state` and `last_safe_commit`. In `supervised` execution mode, repair-exhausted MUST surface as a `repair-exhausted` BLOCKING IntegrityGap and enter `BLOCKED` as previously specified; this clause does not alter supervised-mode behavior.
+
 The `VALIDATING` lifecycle state is entered when an Operation has produced a Product increment that has not yet passed the acceptance validation required to commit it to the accepted Product state. Entry MUST be triggered by a completed increment with a durable record identifying the increment and the acceptance criterion to be applied; the lifecycle MUST NOT enter `VALIDATING` without such a record. The inspection surface MUST expose without an Executor call: the identity of the Product increment under validation, the acceptance validation method in use, and the current validation step and its completion condition. An elapsed-time limit MUST NOT substitute for a positive acceptance validation result; if the validation method is temporarily unavailable, the increment MUST remain in `VALIDATING` pending availability rather than being silently accepted. `VALIDATING` is distinct from `ACTIVE`, which executes authorized work to produce an increment and does not involve an acceptance gate on a completed increment; from `ASSESSING`, which evaluates current conditions before any increment is produced; and from `REPAIRING`, which is entered only after an increment has already failed acceptance validation and the bounded restoration sequence is executing. On successful validation, `VALIDATING` exits to `ASSESSING` for a fresh evaluation cycle; on validation failure, `VALIDATING` exits to `REPAIRING` with a durable integrity-failure record identifying the failed criterion.
 
 The `PAUSED` lifecycle state represents an explicit suspension initiated by an authorized operator command. A `PAUSED` lifecycle MUST retain durable state, Intent, Authority and lifecycle history intact. Unlike `BLOCKED`, it has no unreconciled externally committed effect requiring resolution before resumption; unlike `IDLE`, its suspension was explicit rather than the result of no justified authorized action existing now. URACE MUST NOT enter `PAUSED` autonomously; it MUST require an attributable authorized operator input. While `PAUSED`, URACE MUST preserve all pending scheduled conditions in durable state and MUST process them in due-date order at successive eligible lifecycle boundaries after resumption, before new unscheduled work begins. `urace autonomous` MUST resume a `PAUSED` lifecycle from its preserved durable state without reinitializing Authority, Intent, Evidence or accepted lifecycle history.
@@ -7577,6 +7638,9 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `contract` | contract, contracts, contracted |
 | `method` | method, methods |
 | `diagram` | diagram, diagrams |
+| `recoveryman` | RecoveryManifest, recovery manifest |
+| `progressvect` | ProgressVector, progress vector, progress_vector |
+| `executbudg` | ExecutionBudget, execution budget, execution_budget |
 
 ## Audit Content
 
