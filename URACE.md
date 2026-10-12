@@ -1832,7 +1832,7 @@ When an Executor becomes permanently unavailable during an active Operation — 
 
 When an Executor returns a failure attributable to a transient network condition — including a provider-side infrastructure disconnect, upstream connection reset, stream disconnection, or equivalent low-level transport error that does not indicate an authentication, authorization, capability, or provider-capacity gap — URACE MUST classify that failure as a short-backoff retriable condition and MUST NOT apply the longer backoff period reserved for authentication or configuration failures. A transient network failure MUST NOT increment the consecutive-failure counter used for systematic failure detection under §43; a single transport-layer disconnect does not constitute evidence of a repeating adapter-configuration problem. The minimum backoff for a transient network failure SHOULD be significantly shorter than the authentication-failure backoff and SHOULD be configurable independently. URACE MUST NOT conflate transient network failures with authentication failures, capability gaps, or provider-capacity exhaustion in the inspection output or in retry scheduling.
 
-The backoff, consecutive-failure threshold, and cooldown behavior in this section implement AP10 — Bounded Retry with Backoff (§62i). Effect reconciliation before re-dispatch implements AP6 — Causal Provenance Chain (§62i).
+The backoff, consecutive-failure threshold, and cooldown behavior in this section implement AP10 — Bounded Retry with Backoff (§62i), which requires AP4 — Producer-Consumer Contract (§62i) to define retry boundaries and obligations. Effect reconciliation before re-dispatch implements AP6 — Causal Provenance Chain (§62i).
 
 ---
 
@@ -2028,7 +2028,7 @@ VALIDATE
 
 # 50. Idempotency and Replay
 
-This section formalizes AP5 — Idempotency Contract (§62i) for lifecycle operations: applying an operation N times produces the same result as applying it once. Where retries could duplicate consequential effects, stable Operation identity or equivalent idempotency semantics SHOULD be used.
+This section formalizes AP5 — Idempotency Contract (§62i) and AP4 — Producer-Consumer Contract (§62i) for lifecycle operations: applying an operation N times produces the same result as applying it once. Retries across lifecycle boundaries require both the idempotency guarantee and an explicit contract that the effect was or was not produced. Where retries could duplicate consequential effects, stable Operation identity or equivalent idempotency semantics SHOULD be used.
 
 ```text
 LOGICAL OPERATION
@@ -2110,6 +2110,8 @@ Where reconciliation has applied all available investigation means and cannot es
 ---
 
 # 53. Effect Reconciliation
+
+Effect reconciliation implements AP6 — Causal Provenance Chain (§62i): every recovery disposition MUST become Evidence, enabling causal traceability and reconstruction of effect status across restarts.
 
 Use strongest practical verification.
 
@@ -2375,7 +2377,7 @@ CONFLICT         DESTINATION
 
 # 60. Validation and Acceptance
 
-Executor confidence is not validation. `accept(op) ↔ validate(op).verdict = VALIDATED ∧ ¬rollback_needed(op)` Snapshot-before/after state preservation and atomic delta journaling implement AP16 — State Snapshot + Delta Log (§62i).
+Executor confidence is not validation. `accept(op) ↔ validate(op).verdict = VALIDATED ∧ ¬rollback_needed(op)` Snapshot-before/after state preservation and atomic delta journaling implement AP16 — State Snapshot + Delta Log (§62i). Validation of Authority compliance, Intent consistency, schema conformance, and constraint satisfaction implements AP2 — Citizen Schema (§62i).
 
 Validation SHOULD assess where applicable:
 
@@ -2444,6 +2446,8 @@ Follow-up frequency MUST be proportionate to the rate at which meaningful change
 When a configured observation source for an established `ProgressProfile` measure becomes permanently unavailable after its baseline has been recorded, URACE MUST preserve the last observed value, observation time and source identifier as `LAST_KNOWN_GOOD` state, MUST surface the source unavailability as a named observation gap in the progress profile, and MUST NOT treat the absence of a new observation as a zero-value observation or as a regression against the baseline. Permanent measure unavailability does not by itself terminate the governing Objective or trigger a goal revision; it surfaces a specific measurement gap that requires an authorized lifecycle operation — such as `urace add-goal` with an updated `observationMethod` — to establish a replacement measure with a new, explicitly attributed baseline. Until a replacement measure is authorized and established, the Objective status MUST reflect the observation gap rather than an inferred trend derived from the last known value alone.
 
 ## Autonomous Operational Feedback
+
+This subsection implements AP13 — Observer (§62i): the lifecycle (producer) emits structured feedback to a channel that observers read without the lifecycle coupling to them. The MACHINE channel is the AP13 broadcast surface; human and machine channels are independent.
 
 During active autonomous operation, URACE SHOULD provide timely observable feedback proportionate to activity without requiring inspection of internal files. Feedback SHOULD make clear:
 
@@ -2685,7 +2689,7 @@ Uses canonical: Identifier (id), ProductScope (scope entries), UnitFloat (confid
 
 **`level` derivation contract.** The level of a rule MUST be derived from its `kind` at read time: PURPOSE → 0; DIRECTIVE, PERMISSION, PROHIBITION → 1; OBJECTIVE, POLICY → 2. Storing `level` as a persistent field is prohibited; any stored `level` field MUST be ignored and recomputed.
 
-**`id` stability contract.** A rule's `id` MUST NOT change after the rule is created. The `id` MUST be unique within the Ledger for all time, including deactivated and superseded rules.
+**`id` stability contract (AP0 — Citizen, §62i).** A rule's `id` MUST NOT change after the rule is created. The `id` MUST be unique within the Ledger for all time, including deactivated and superseded rules.
 
 **`confidence` contract.** An EXPLICIT rule MUST carry `confidence: 1.0`. A SYSTEM_INFERRED rule MUST carry a confidence value strictly less than 1.0 computed from the derivation basis. A rule whose confidence drops to 0.0 MUST be deactivated.
 
@@ -2915,7 +2919,7 @@ TemporalFields {
 
   -- Audit and processing --
   established_at    timestamp          when formally established (anchors, policies, containers)
-  recorded_at       timestamp          when durably persisted to an append-only audit store
+  recorded_at       timestamp          when durably persisted to an append-only audit store (AP3)
   queued_at         timestamp          when placed in a processing queue
   scheduled_at      timestamp          due time for a scheduled or triggered condition
   satisfied_at      timestamp | null   when a scheduled or conditional trigger was satisfied
@@ -2981,6 +2985,8 @@ Objective {
 
 Uses TemporalFields: created_at, updated_at, completed_at, cancelled_at, deleted_at. Uses canonical: Identifier (id), ProductScope (scope), UnitFloat (expected_value, estimated_cost, risk, urgency).
 ```
+
+**Identifier immutability contract (AP0 — Citizen, §62i).** An Objective's `id` MUST NOT change after creation and MUST NOT be reused after the Objective is completed, cancelled, or deleted.
 
 **Status transition contract.** `planned → active` requires authority resolution to pass. `active → completed` requires an ACCEPTED Operation and successful validation. `active → needs_reassessment` is triggered by evidence that the success measure can no longer be evaluated. Status MUST NOT regress from `completed` or `cancelled`.
 
@@ -3053,7 +3059,7 @@ Uses TemporalFields: attempted_at (as created_at), updated_at, accepted_at, reje
 
 ## Evidence
 
-Evidence is the append-only audit log of every significant lifecycle event. It is the primary traceability surface.
+Evidence is the append-only audit log (AP3 — Append-Only Log, §62i) of every significant lifecycle event, serving as the concrete instantiation of the Broadcast Log (AP15 — Broadcast Log, §62i). It is the primary traceability surface.
 
 ```
 Evidence (base) {
@@ -4027,7 +4033,7 @@ Mechanisms are the interlinking processes that move citizens from one state to a
 
 ## Input Queue Mechanism
 
-The Input Queue is the sole safe path for operator instructions to enter the lifecycle. It guarantees atomicity, ordering, and idempotency.
+The Input Queue is the sole safe path for operator instructions to enter the lifecycle (AP14 — Durable Inbox, §62i). It guarantees FIFO ordering, atomicity, and idempotency.
 
 ```
 OPERATOR COMMAND
@@ -4966,7 +4972,7 @@ StaleLockObservation {
 }
 ```
 
-Uses canonical: TemporalFields (at as recorded_at). Stored as append-only JSONL (one JSON object per line).
+Uses canonical: TemporalFields (at as recorded_at). Stored as append-only JSONL (one JSON object per line). Checkpoint records are themselves append-only (AP3 — Append-Only Log, §62i) and MUST NOT be modified after creation.
 
 ## IntegrityGap
 
@@ -6291,6 +6297,91 @@ Uses canonical: Identifier (id, decision_id, evidence_ref, rule_ref), count (ste
 
 ---
 
+## AP24 — Derivation Framework
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP0, AP2]` · `provides: PatternEntry citizen, PatternCatalog, DerivedSystemManifest, transitive dependency resolver, stale-manifest detection, zero-conformance guarantee, PatternAdoptionRecord citizen, PatternExclusionRecord citizen`
+
+A Derivation Framework enables any system to declare a catalog of reusable structural patterns, resolve adoption of a chosen subset with automatic transitive dependency resolution, and produce a machine-readable manifest of that adoption. AP24 is self-bootstrapping: it defines the `PatternEntry` citizen schema used to populate a catalog, so a system that adopts AP24 can define its own catalog without any external schema dependency.
+
+**Zero-conformance guarantee.** A derived system that adopts zero patterns has zero AP24 obligations. A derived system that adopts exactly one pattern has obligations only for that pattern and its transitive dependencies (unless those deps are explicitly excluded). No top-level architectural decision is mandatory for a derived system.
+
+**PatternEntry citizen.**
+
+```
+PatternEntry {
+  id           REQUIRED  identifier; unique within the catalog (e.g. "AP0")
+  name         REQUIRED  string; human-readable name
+  standalone   REQUIRED  boolean; true ↔ the pattern may be adopted with no dependencies
+  tier         REQUIRED  enum: FOUNDATIONAL | COMPOSITIONAL | INTEGRATED
+  requires     REQUIRED  list[identifier]; pattern IDs this pattern depends on; [] when standalone
+  provides     REQUIRED  list[string]; human-readable capability descriptions
+  summary      OPTIONAL  string; single-sentence description for list views
+  spec_section OPTIONAL  string; canonical location in the governing specification
+}
+```
+
+Uses canonical: Identifier (id), boolean (standalone).
+
+**Tier semantics.** `FOUNDATIONAL`: standalone or all deps are foundational; can always be adopted in isolation. `COMPOSITIONAL`: requires 1–2 other patterns. `INTEGRATED`: requires 3+ patterns or forms a deeply coupled cluster.
+
+**PatternCatalog.** A named, append-only (AP3) collection of `PatternEntry` records. The catalog is the sole authority for pattern IDs known to the resolver. A reference to an unknown pattern ID is a resolver error. Catalog entries MUST NOT be removed; a deprecated pattern MUST be marked in its `summary` and MUST remain resolvable.
+
+**Dependency resolution contract.** Given `explicit_patterns` and `excluded_ids`:
+1. Seed a BFS queue with `explicit_patterns \ excluded_ids`.
+2. For each pattern dequeued: if already seen or excluded, skip. Otherwise add to `resolved`; enqueue all `requires` not yet seen and not excluded, logging each transitive addition.
+3. Sort `resolved` topologically: FOUNDATIONAL first, then COMPOSITIONAL, then INTEGRATED; break ties by pattern ID lexicographic order.
+4. Return `(resolved, resolution_log)`.
+
+An unknown pattern ID at any step MUST raise a named error. The resolver MUST NOT silently ignore unknown IDs.
+
+**PatternAdoptionRecord citizen.**
+
+```
+PatternAdoptionRecord {
+  pattern_id  REQUIRED  identifier
+  name        REQUIRED  string
+  adoption    REQUIRED  enum: EXPLICIT | TRANSITIVE
+  tier        REQUIRED  enum: FOUNDATIONAL | COMPOSITIONAL | INTEGRATED
+  provides    REQUIRED  list[string]
+}
+```
+
+**PatternExclusionRecord citizen.**
+
+```
+PatternExclusionRecord {
+  pattern_id       REQUIRED  identifier
+  name             REQUIRED  string
+  override_reason  REQUIRED  string; non-empty
+  acknowledged     REQUIRED  boolean; MUST be true
+}
+```
+
+`PatternExclusionRecord.acknowledged` MUST be `true`. This is a deliberate acknowledgment gate: an operator who excludes a transitive dependency MUST explicitly affirm awareness of the consequences.
+
+**DerivedSystemManifest citizen.** The output artifact of one derivation run. Carries a stable `manifest_id`, the spec version it was derived from, and the full adoption + exclusion records. A DerivedSystemManifest is itself a citizen (AP0) and SHOULD be stored in the evidence log.
+
+```
+DerivedSystemManifest {
+  manifest_id       REQUIRED  identifier
+  derived_from      REQUIRED  string; name of the governing specification
+  spec_version      REQUIRED  string; version of that specification
+  intent            REQUIRED  string; what the derived system is for
+  generated_at      REQUIRED  iso_timestamp
+  adopted_patterns  REQUIRED  list[PatternAdoptionRecord]
+  excluded_deps     OPTIONAL  list[PatternExclusionRecord]
+  resolution_log    OPTIONAL  list[string]; human-readable dep resolution trace
+}
+```
+
+Uses canonical: Identifier (manifest_id), iso_timestamp (generated_at).
+
+**Stale-manifest detection contract.** When the governing spec is updated, any stored DerivedSystemManifest whose `spec_version` differs from the new version MUST be surfaced as a `derived-manifest-stale` warning. The warning MUST include the `manifest_id`, the stale version, and the candidate version. Stale detection is a warning, not a blocker.
+
+**Relation to AP0 and AP2.** AP24 requires AP0 (Citizen Schema Identity) to give every PatternEntry, PatternAdoptionRecord, PatternExclusionRecord, and DerivedSystemManifest a stable identity, and AP2 (Schema Contract) to enforce the schema invariants at write time.
+
+---
+
 ## Canonical Scalar Catalog
 
 All primitive value types used in citizen schemas. Every field that holds one of these types MUST reference the canonical scalar name.
@@ -6362,11 +6453,15 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
                           AP21 (Compaction) ──reduces──► AP3 (Log)
                           AP22 (Checkpoint) ──anchors──► AP3 (Log)
                           AP23 (Justification) ──traverses──► AP6 (Causal)
+                          AP24 (Derivation) ──identities──► AP0 (Citizen)
+                                           ──validates──► AP2 (Schema)
 ```
 
 ---
 
 # 62j. Derivation Framework
+
+This section implements **AP24 — Derivation Framework** (§62i). The runtime mechanism described here is the URACE instantiation of AP24: the PatternCatalog is `PATTERN_CATALOG` (§62i AP0–AP24), the resolver implements the AP24 dependency resolution contract, and the manifest output is a `DerivedSystemManifest` citizen.
 
 URACE is specification-first: an implementation MUST conform to the spec. But a **derived system** — a new system built by adopting a chosen subset of URACE architectural patterns — is NOT required to conform to any pattern it has not explicitly adopted. The Derivation Framework is the canonical mechanism for declaring, resolving, and documenting that adoption.
 
@@ -6378,73 +6473,25 @@ This guarantee applies to ALL patterns including foundational ones. A derived sy
 
 ## Pattern Adoption Tiers
 
-Every AP0–AP19 carries a **derivation metadata block** declaring its tier, standalone status, dependency list, and capabilities. Three tiers exist:
+Every AP0–AP24 carries a **derivation metadata block** declaring its tier, standalone status, dependency list, and capabilities. Three tiers exist:
 
 | Tier | Definition | Pattern IDs |
 |------|-----------|-------------|
 | `FOUNDATIONAL` | standalone=true, or all deps are themselves foundational | AP0, AP1, AP2, AP3, AP4, AP5, AP7 |
-| `COMPOSITIONAL` | requires 1–2 other APs | AP6, AP8, AP9, AP10, AP11, AP12, AP13, AP14, AP15, AP17 |
-| `INTEGRATED` | requires 3+ APs or forms a deeply coupled cluster | AP16, AP18, AP19 |
+| `COMPOSITIONAL` | requires 1–2 other APs | AP6, AP8, AP9, AP10, AP11, AP12, AP13, AP14, AP15, AP17, AP20, AP21, AP22, AP23 |
+| `INTEGRATED` | requires 3+ APs or forms a deeply coupled cluster | AP16, AP18, AP19, AP24 |
 
 A FOUNDATIONAL pattern can always be adopted in isolation. A COMPOSITIONAL or INTEGRATED pattern requires transitive dependency resolution unless deps are explicitly excluded.
 
-## DerivedSystemManifest Schema
+## Citizen Schemas
 
-```
-DerivedSystemManifest = {
-  manifest_id:       identifier       REQUIRED  stable manifest id
-  derived_from:      "URACE"          REQUIRED  always "URACE"
-  spec_version:      string           REQUIRED  URACE spec version derived from
-  intent:            string           REQUIRED  what the derived system is for
-  generated_at:      iso_timestamp    REQUIRED
-  adopted_patterns:  list[PatternAdoptionRecord]  REQUIRED
-  excluded_deps:     list[PatternExclusionRecord] OPTIONAL
-  resolution_log:    list[string]     OPTIONAL  human-readable dep resolution trace
-}
-
-PatternAdoptionRecord = {
-  pattern_id:  string   REQUIRED  e.g. "AP0", "AP14"
-  name:        string   REQUIRED  human name of the pattern
-  adoption:    enum     REQUIRED  "EXPLICIT" | "TRANSITIVE"
-  tier:        enum     REQUIRED  "FOUNDATIONAL" | "COMPOSITIONAL" | "INTEGRATED"
-  provides:    list[string]  REQUIRED  capabilities this pattern contributes
-}
-
-PatternExclusionRecord = {
-  pattern_id:       string   REQUIRED
-  name:             string   REQUIRED
-  override_reason:  string   REQUIRED  non-empty; why the dep is excluded
-  acknowledged:     true     REQUIRED  MUST be the literal value true
-}
-```
-
-**PatternExclusionRecord.acknowledged** MUST be `true`. This is a deliberate acknowledgment gate: an operator who excludes a transitive dependency MUST explicitly affirm that they understand the consequences. An exclusion record where `acknowledged` is false or absent is a schema violation.
-
-## Dependency Resolution Algorithm
-
-```
-resolve(explicit_patterns, excluded_ids):
-  resolved = []
-  queue = explicit_patterns \ excluded_ids
-  seen = {}
-  while queue not empty:
-    pid = dequeue(queue)
-    if pid in seen: continue
-    if pid not in PATTERN_CATALOG: raise ValueError("unknown pattern")
-    seen.add(pid)
-    resolved.append(pid)
-    for dep in PATTERN_CATALOG[pid].requires:
-      if dep not in seen and dep not in excluded_ids:
-        log("dep added transitively: required by pid")
-        enqueue(queue, dep)
-  return topological_sort(resolved, by=tier then id)
-```
+The canonical schemas for this section — `PatternEntry`, `PatternAdoptionRecord`, `PatternExclusionRecord`, and `DerivedSystemManifest` — are defined in **AP24 — Derivation Framework** (§62i). All citizen schema obligations from AP24 apply here.
 
 **Transitive resolution is automatic.** When a user requests AP8, the resolver automatically adds AP3 and AP5. When a user requests AP16, the resolver adds AP3, AP4, AP6 (and AP6 adds AP3, AP4 again — deduped). The `resolution_log` in the manifest records every transitive addition.
 
 **Explicit exclusion overrides transitive resolution.** If the user passes `--exclude AP3` with `--exclude-reason "using our own log system"`, AP3 is excluded from the manifest and marked in `excluded_deps` with `acknowledged: true`. The adopted pattern (AP8) still appears in the manifest but AP3 does not. The operator assumes responsibility for the excluded pattern's obligations.
 
-## `urace derive` Command Contract
+## `urace derive` Command Contract (AP24 — Derivation Framework instantiation, §62i)
 
 ```
 urace derive [--patterns <comma-list>] [--intent <text>]
@@ -8174,6 +8221,8 @@ Applies to: `auto`
 Store the generated manifest reference in `state.derived_manifest_refs` for stale-detection by `urace update`. A manifest written only to `--out` is not tracked in state and will not trigger stale warnings.
 
 Applies to: `derive`
+
+**`derive` command and AP24.** The `derive` command is the runtime instantiation of AP24 — Derivation Framework (§62i). It resolves pattern dependencies per the AP24 dependency resolution contract, builds a `DerivedSystemManifest` citizen, and bounds the derived system's obligations to exactly the patterns it adopted. Full command contract in §62j.
 
 ## Output path: --out vs --output
 
