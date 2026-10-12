@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r11**
+**Specification version: 2026-10-12-r12**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -5009,6 +5009,119 @@ Traverses the reasoning chain rooted at `<decision-id>` to depth `N` (default: u
 **Depth contract.** `--depth 0` returns only the requested record's own fields with no chain traversal. `--depth 1` returns the record plus its immediate `prior_decision_refs` nodes. The default (unlimited) traverses the complete chain.
 
 **No-modification contract.** `urace why` is a read-only command. It MUST NOT write to state, inbox, or manifest regardless of what it finds.
+
+---
+
+# 62h. Canonical Specification Patterns
+
+This section canonizes six reasoning and structural patterns that recur implicitly throughout the URACE specification. Naming them as first-class primitives closes reproducibility gaps across independent bootstraps: an implementer who knows the pattern vocabulary can recognize and apply each pattern without deriving it from scratch. These patterns add no new behavioral requirements; they name invariants already expressed in the sections they cite.
+
+---
+
+## Pattern 1 — Gap Detection Calculus
+
+**Definition.** Given a specification set `S` and an implementation set `I`:
+
+```
+gap(S, I) = { r ∈ S | ¬∃ i ∈ I : implements(i, r) }
+```
+
+A gap is any normative requirement in `S` with no corresponding implementation evidence in `I`. The calculus applied at every spec audit is: enumerate `S`, enumerate `I`, compute the asymmetric difference, surface each element as a named IntegrityGap (§62a).
+
+**Primary instance.** §81 Spec Audit Mechanism. The `spec_audit` cycle phase applies this calculus to (spec normative rules, runtime implementation) and emits one IntegrityGap record per unimplemented rule.
+
+**Operational form.** `gap_set = S − cover(I)`. The implementation MUST reduce `|gap_set|` monotonically across revisions unless a gap is explicitly deferred with documented authority.
+
+---
+
+## Pattern 2 — Bar-Raising Calculus
+
+**Definition.** Each accepted improvement raises the quality threshold for the next candidate:
+
+```
+threshold(t+1) = threshold(t) + Δ(accepted(t))
+```
+
+where `Δ(accepted(t))` is a non-negative increment derived from the quality evidence of the accepted operation at time `t`.
+
+**Invariant.** `threshold(t)` is non-decreasing. A threshold MUST NOT decrease as a result of a successful acceptance; it MAY only decrease through an explicit operator-authorized threshold reset with documented authority basis.
+
+**Primary instance.** The evaluation system (§53). Each accepted Objective raises the quality bar against which the next proposed Objective is evaluated. Bar-raising prevents quality regression under repeated acceptance pressure.
+
+---
+
+## Pattern 3 — Delta Gate
+
+**Definition.** A delta gate applies an ordered sequence of guard predicates `G = [g₁, g₂, …, gₙ]` to an incoming delta `δ`:
+
+```
+GATE(δ, G) = first_match(G, λg : eval(g, δ))
+```
+
+The gate returns the verdict of the first predicate that matches, or a default fallback if no predicate matches. Each guard has the form `(condition, verdict, reason)`. Guards MUST be evaluated in declaration order; short-circuit on first match.
+
+**Invariant.** Guard order is semantically significant: a guard that fires earlier takes unconditional precedence over all later guards. Reordering guards changes observable behavior and constitutes a spec change, not an implementation detail.
+
+**Primary instance.** §62c Discovery Credit Gate. The gate's guards in priority order: SYSTEMATIC_FAILURE_COOLDOWN → DAILY_LIMIT_OR_RESERVE_REACHED → MONTHLY_LIMIT_OR_RESERVE_REACHED → deferred call retry → DUPLICATE_TRIGGER_SUPPRESSED → DEFERRED_PROPORTIONALITY → DISCOVERY_YIELD_EXHAUSTED → ALLOW. This ordering contract (§62c) is the canonical instance of the Delta Gate pattern and MUST NOT be permuted.
+
+---
+
+## Pattern 4 — Weight Vector Normalization
+
+**Definition.** A weight vector `W = [w₁, w₂, …, wₙ]` over `n` scopes is normalized when:
+
+```
+∑ wᵢ = 1.0  (tolerance: ± 1e-9)
+∀ i : wᵢ ≥ 0
+```
+
+After any revision that changes one or more weights, the implementation MUST renormalize the full vector before persisting. A step bound `max_weight_step_per_revision` constrains how much any single weight may change in one revision:
+
+```
+∀ i : |wᵢ(t+1) − wᵢ(t)| ≤ max_weight_step_per_revision
+```
+
+**Invariant.** `sum(W) = 1.0 ± 1e-9` is a PairedInvariant (see Pattern 5) that MUST hold across every write to the weight vector.
+
+**Primary instance.** §62b ScopePrioritySystem. `ScopePriorityConfig.entries[*].weight` values MUST sum to 1.0 after normalization. `ScopePriorityConfigEntry.max_weight_step_per_revision` enforces the step bound per entry.
+
+---
+
+## Pattern 5 — Paired Invariant
+
+**Definition.** A paired invariant over fields `A` and `B` with predicate `P` is the contract:
+
+```
+PairedInvariant(A, B, P) : ∀ writes : P(A, B) = True
+```
+
+A write that would violate `P(A, B)` MUST be rejected atomically — both fields MUST be updated together, or neither. Split writes that leave `P` temporarily false, even transiently, violate the invariant.
+
+**Common forms.** `P(A, B) ≡ (A = B)` (mirror equality); `P(A, B) ≡ (A ≤ B)` (ordering); `P(A, B) ≡ consistent_type(A, B)` (type coherence); `P(A, B) ≡ (sum(A) = B)` (aggregate consistency).
+
+**Primary instances.**
+- §62d `StatusTransition.status` and `lifecycle_state` — both MUST reflect the same transition; a transition record that does not match the resulting `lifecycle_state` violates this invariant.
+- §62b `PendingValidation.status` and `operation_id` — both MUST reference the same pending operation atomically.
+- Weight vector sum (Pattern 4) — the sum field and the individual weight fields form a paired invariant.
+
+---
+
+## Pattern 6 — Atomic Decomposition
+
+**Definition.** A citizen schema (§62b) is in minimal normal form when no field can be further decomposed into sub-fields without losing semantic meaning that is normatively required by the specification. Formally:
+
+```
+MinimalNormalForm(S) : ∀ field f ∈ S :
+  ¬∃ decomposition D(f) such that
+    each element of D(f) is independently required by a normative rule
+    AND f cannot be derived from D(f) without information loss
+```
+
+**Composition rule.** Citizen schemas MAY be composed by reference (a field whose value is itself a citizen schema), but the inner schema MUST appear as a standalone definition in §62b, not inlined. Inlining creates an unnamed type that cannot be independently validated or referenced.
+
+**Decomposition rule.** When a field is found to bundle two or more independently testable normative requirements, it MUST be split into separate fields, each independently validated by the §62d validation gate.
+
+**Primary instance.** The entire §62b schema catalog. Each schema in that table is a minimal composition: `Blocker`, `Evidence`, `DecisionRecord`, `CompactionSummary`, etc., are not decomposable further without losing the normative semantics they carry.
 
 ---
 
