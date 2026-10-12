@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r19**
+**Specification version: 2026-10-12-r20**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
