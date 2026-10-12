@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r25**
+**Specification version: 2026-10-12-r26**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -5412,6 +5412,8 @@ A pattern MUST be defined once in the most general form before it is instantiate
 
 ## AP0 — Citizen
 
+**Derivation metadata.** `standalone: true` · `tier: FOUNDATIONAL` · `requires: []` · `provides: named identity, schema conformance, lifecycle traceability`
+
 A citizen is the fundamental unit of identity in URACE. Every named, schema-bearing, lifecycle-participating entity is a citizen.
 
 **Definition.**
@@ -5436,6 +5438,8 @@ Citizen = {
 
 ## AP1 — Canonical Scalar
 
+**Derivation metadata.** `standalone: true` · `tier: FOUNDATIONAL` · `requires: []` · `provides: typed leaf values, domain constraints, define-once reuse contract`
+
 A canonical scalar is a leaf-node value type that cannot be further decomposed without losing semantic meaning. It is the smallest unit of information in the system.
 
 **Definition.**
@@ -5456,6 +5460,8 @@ CanonicalScalar = {
 ---
 
 ## AP2 — Citizen Schema
+
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [AP0, AP1]` · `provides: named versioned data structures, minimality rule, composition rule`
 
 A citizen schema is a named, versioned, fully-specified data structure whose every field is either a canonical scalar or a reference to another citizen schema. It is the primary reuse unit for structured data.
 
@@ -5484,6 +5490,8 @@ FieldDef = {
 
 ## AP3 — Append-Only Log
 
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [AP2]` · `provides: durable ordered sequence, monotone length invariant, ordering/identity/causal invariants, compaction-safe retention`
+
 An append-only log is a durable ordered sequence of records where records are only ever added to the end — never modified or deleted before the retention window expires.
 
 **Definition.**
@@ -5510,6 +5518,8 @@ AppendOnlyLog<T> = {
 ---
 
 ## AP4 — Producer-Consumer Contract
+
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [AP0]` · `provides: named bilateral obligations, producer_must list, consumer_may_assume guarantees, violation protocol`
 
 A producer-consumer contract is a named, verifiable, bilateral obligation between two components: one that writes a value (producer) and one that reads it (consumer).
 
@@ -5539,6 +5549,8 @@ ProducerConsumerContract = {
 
 ## AP5 — Idempotency Contract
 
+**Derivation metadata.** `standalone: true` · `tier: FOUNDATIONAL` · `requires: []` · `provides: retry safety, idempotency class declaration (PURE/AT_MOST_ONCE/AT_LEAST_ONCE/EXACTLY_ONCE)`
+
 An operation satisfies the idempotency contract when applying it N times to the same input produces the same output as applying it once.
 
 **Definition.**
@@ -5562,6 +5574,8 @@ f idempotent ⟺ ∀ x : f(f(x)) = f(x)
 
 ## AP6 — Causal Provenance Chain
 
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP3, AP4]` · `provides: full cause traceability, causal chain traversal, source/at/id provenance on every log entry`
+
 Every durable state change MUST be traceable to a cause. A cause is a durable record that precedes the change in causal time.
 
 **Definition.**
@@ -5583,6 +5597,8 @@ where `e` is an Evidence or Input record that authorized the change.
 ---
 
 ## AP7 — Canonical Reduction (Semantic Resulting Logic Calculus)
+
+**Derivation metadata.** `standalone: true` · `tier: FOUNDATIONAL` · `requires: []` · `provides: semantic deduplication, minimality guarantee, cross-bootstrap reproducibility`
 
 Canonical reduction is the process of transforming any expression — a spec rule, schema, pipeline description, or data value — into its unique, minimal, machine-reproducible canonical form.
 
@@ -5610,6 +5626,8 @@ where `canonical_form` satisfies:
 
 ## AP8 — Fixpoint Calculus
 
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP3, AP5]` · `provides: stagnation detection, convergence loops, REPAIRING lifecycle escalation trigger`
+
 A fixpoint computation iterates a function until the output equals the input — i.e., until the system reaches a stable state.
 
 **Definition.**
@@ -5630,6 +5648,8 @@ fix(f, x₀) : iterate xₙ₊₁ = f(xₙ) until xₙ₊₁ = xₙ (or ‖xₙ�
 
 ## AP9 — Monotone Accumulator
 
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP3]` · `provides: monotone growth invariant, evidence count integrity, progress measurement baseline`
+
 A monotone accumulator is a value that only increases (or stays the same) — it never decreases except through an explicit authorized reset.
 
 **Definition.**
@@ -5646,6 +5666,8 @@ MonotoneAccumulator(v) : v(t+1) ≥ v(t)  ∀ t
 ---
 
 ## AP10 — Bounded Retry with Backoff
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP4, AP5]` · `provides: resilient bounded retry, exponential backoff, failure classification (transient/semantic/structural)`
 
 A bounded retry applies an operation up to `max_attempts` times, with exponentially increasing delay between attempts, bounded by `max_delay`.
 
@@ -5667,6 +5689,8 @@ delay(n) = min(base_delay × 2^n, max_delay)   n = 0, 1, …, max_attempts−1
 ---
 
 ## AP11 — Bridge
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP4]` · `provides: authority-boundary translation, BridgeRecord citizen, schema validation at crossing point`
 
 A bridge is an explicit, named, one-directional translation layer between two incompatible representations. It is the canonical mechanism for crossing a semantic boundary.
 
@@ -5714,6 +5738,8 @@ Bridge = {
 ---
 
 ## AP12 — Orchestrator
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP4]` · `provides: sequenced multi-step operations, OrchestratorRecord citizen, phase boundaries with safe abort points`
 
 An orchestrator is a named, multi-phase coordination mechanism that sequences operations, enforces pre/post conditions, handles failures, and emits a completion record.
 
@@ -5774,6 +5800,8 @@ OrchestratorPhase = {
 
 ## AP13 — Observer
 
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP3]` · `provides: decoupled observation, broadcast log read contract, reactive triggers without producer coupling`
+
 An observer is a component that is notified of a state change without being directly coupled to the component that caused the change.
 
 **Definition.**
@@ -5797,6 +5825,8 @@ Observer = {
 ---
 
 ## AP14 — Durable Inbox (Input Queue)
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP5]` · `provides: crash-safe FIFO input queue, source_input traceability, structured rejection records, 16-kind input catalog, orderly shutdown with input preservation`
 
 The Durable Inbox is a persistent, FIFO, append-only queue of pending commands and responses written by external agents and processed at safe lifecycle boundaries.
 
@@ -5908,6 +5938,8 @@ Optional `goal` payload fields: `reason`, `priority` (int 1–100), `target` (pr
 
 ## AP15 — Broadcast Log
 
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP3]` · `provides: system-wide event bus, decoupled pub/sub, append-only event history`
+
 The Broadcast Log is the system-wide event bus: an append-only log to which all components write events and from which all consumers read. Producers never directly notify consumers; consumers observe the log.
 
 **Definition.**
@@ -5929,6 +5961,8 @@ Every Evidence entry has:
 ---
 
 ## AP16 — State Snapshot + Delta Log
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP3, AP6]` · `provides: durable state snapshot, delta log, causal state reconstruction, atomic snapshot+delta writes`
 
 The State Document is a combination of a current-value snapshot and append-only logs of changes. The current state is always immediately readable from the snapshot; the complete history is reconstructible from the logs.
 
@@ -5952,6 +5986,8 @@ A mutation that updates the snapshot without appending a delta log entry violate
 ---
 
 ## AP17 — Lexical→Formula Reduction (Lexical Symbol Calculus)
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP7]` · `provides: spec rule formalization, formula-linked rule pairs, machine-verifiable normative rules`
 
 The Lexical Symbol Calculus (LSC) is the discipline of reducing natural language expressions — sets of words, characters, symbols, or compositions thereof — to their precise, minimal, canonical formula equivalents.
 
@@ -6004,6 +6040,8 @@ reduce_to_formula(text):
 
 ## AP18 — Scheduled Task Contract
 
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP0, AP2, AP12, AP14]` · `provides: durable named scheduled tasks, ScheduledTask citizen, USER/SYSTEM task classes, trigger-based and time-based scheduling`
+
 A scheduled task is a durable, named, time- or trigger-governed action that the runtime executes at a declared future point. Tasks are citizens (AP0): they have stable identity, schema conformance, and causal traceability.
 
 **Definition.**
@@ -6048,6 +6086,8 @@ fire(task) ↔ evidence_log contains entry with kind = task.schedule.trigger_eve
 ---
 
 ## AP19 — Customization / Personalization Layer
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP4, AP16]` · `provides: named scoped user overrides, conflict detection on spec update, CustomizationRecord citizen, three customization scopes`
 
 The Customization Layer bridges the tension between specification-first development and user freedom. A URACE deployment MUST be reproducible from the specification, but a user MUST also be able to personalize their runtime, bootstrap file, or configuration without those choices being silently overwritten by spec updates.
 
@@ -6155,6 +6195,124 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
                                │
                           AP16 (Snapshot+Log)
 ```
+
+---
+
+# 62j. Derivation Framework
+
+URACE is specification-first: an implementation MUST conform to the spec. But a **derived system** — a new system built by adopting a chosen subset of URACE architectural patterns — is NOT required to conform to any pattern it has not explicitly adopted. The Derivation Framework is the canonical mechanism for declaring, resolving, and documenting that adoption.
+
+## Zero-Conformance Guarantee
+
+A derived system that adopts zero URACE patterns has zero URACE obligations. A derived system that adopts exactly one pattern (e.g. AP5 Idempotency Contract) has obligations only for that pattern. **No top-level architectural decision is mandatory for a derived system.** The only requirement is that each adopted pattern is correctly applied and its declared dependencies are either also adopted or explicitly excluded with a documented reason.
+
+This guarantee applies to ALL patterns including foundational ones. A derived system MAY choose to adopt AP14 (Durable Inbox) without AP5 (Idempotency Contract) if the operator explicitly excludes AP5 and documents why. The exclusion is acknowledged, not enforced.
+
+## Pattern Adoption Tiers
+
+Every AP0–AP19 carries a **derivation metadata block** declaring its tier, standalone status, dependency list, and capabilities. Three tiers exist:
+
+| Tier | Definition | Pattern IDs |
+|------|-----------|-------------|
+| `FOUNDATIONAL` | standalone=true, or all deps are themselves foundational | AP0, AP1, AP2, AP3, AP4, AP5, AP7 |
+| `COMPOSITIONAL` | requires 1–2 other APs | AP6, AP8, AP9, AP10, AP11, AP12, AP13, AP14, AP15, AP17 |
+| `INTEGRATED` | requires 3+ APs or forms a deeply coupled cluster | AP16, AP18, AP19 |
+
+A FOUNDATIONAL pattern can always be adopted in isolation. A COMPOSITIONAL or INTEGRATED pattern requires transitive dependency resolution unless deps are explicitly excluded.
+
+## DerivedSystemManifest Schema
+
+```
+DerivedSystemManifest = {
+  manifest_id:       identifier       REQUIRED  stable manifest id
+  derived_from:      "URACE"          REQUIRED  always "URACE"
+  spec_version:      string           REQUIRED  URACE spec version derived from
+  intent:            string           REQUIRED  what the derived system is for
+  generated_at:      iso_timestamp    REQUIRED
+  adopted_patterns:  list[PatternAdoptionRecord]  REQUIRED
+  excluded_deps:     list[PatternExclusionRecord] OPTIONAL
+  resolution_log:    list[string]     OPTIONAL  human-readable dep resolution trace
+}
+
+PatternAdoptionRecord = {
+  pattern_id:  string   REQUIRED  e.g. "AP0", "AP14"
+  name:        string   REQUIRED  human name of the pattern
+  adoption:    enum     REQUIRED  "EXPLICIT" | "TRANSITIVE"
+  tier:        enum     REQUIRED  "FOUNDATIONAL" | "COMPOSITIONAL" | "INTEGRATED"
+  provides:    list[string]  REQUIRED  capabilities this pattern contributes
+}
+
+PatternExclusionRecord = {
+  pattern_id:       string   REQUIRED
+  name:             string   REQUIRED
+  override_reason:  string   REQUIRED  non-empty; why the dep is excluded
+  acknowledged:     true     REQUIRED  MUST be the literal value true
+}
+```
+
+**PatternExclusionRecord.acknowledged** MUST be `true`. This is a deliberate acknowledgment gate: an operator who excludes a transitive dependency MUST explicitly affirm that they understand the consequences. An exclusion record where `acknowledged` is false or absent is a schema violation.
+
+## Dependency Resolution Algorithm
+
+```
+resolve(explicit_patterns, excluded_ids):
+  resolved = []
+  queue = explicit_patterns \ excluded_ids
+  seen = {}
+  while queue not empty:
+    pid = dequeue(queue)
+    if pid in seen: continue
+    if pid not in PATTERN_CATALOG: raise ValueError("unknown pattern")
+    seen.add(pid)
+    resolved.append(pid)
+    for dep in PATTERN_CATALOG[pid].requires:
+      if dep not in seen and dep not in excluded_ids:
+        log("dep added transitively: required by pid")
+        enqueue(queue, dep)
+  return topological_sort(resolved, by=tier then id)
+```
+
+**Transitive resolution is automatic.** When a user requests AP8, the resolver automatically adds AP3 and AP5. When a user requests AP16, the resolver adds AP3, AP4, AP6 (and AP6 adds AP3, AP4 again — deduped). The `resolution_log` in the manifest records every transitive addition.
+
+**Explicit exclusion overrides transitive resolution.** If the user passes `--exclude AP3` with `--exclude-reason "using our own log system"`, AP3 is excluded from the manifest and marked in `excluded_deps` with `acknowledged: true`. The adopted pattern (AP8) still appears in the manifest but AP3 does not. The operator assumes responsibility for the excluded pattern's obligations.
+
+## `urace derive` Command Contract
+
+```
+urace derive [--patterns <comma-list>] [--intent <text>]
+             [--exclude <comma-list>] [--exclude-reason <text>]
+             [--out <path>] [--json]
+```
+
+**Without `--patterns`**: lists all available patterns with their tier, requires, and provides fields. No state or config access required.
+
+**With `--patterns`**: resolves dependencies, builds a `DerivedSystemManifest`, and outputs it. If `--out` is provided, the manifest is written atomically to that path. If `--json`, the manifest is printed as a JSON document. Otherwise, a human-readable pattern guide is printed.
+
+**`--exclude` requires `--exclude-reason`**. An `--exclude` without `--exclude-reason` is an error. This enforces the acknowledged exclusion contract.
+
+**No state lock, no executor call, no lifecycle state change.** `derive` is a pure computation on the Pattern Catalog. It MAY run while URACE is actively running in another process; it does not mutate lifecycle state.
+
+**Exit codes.** `0` on success. `1` if any `--patterns` or `--exclude` value is not a known pattern ID.
+
+## DerivedSystemManifest as Lifecycle Artifact
+
+A `DerivedSystemManifest` MUST conform to the `DerivedSystemManifest` citizen schema. It is a lifecycle artifact: it carries a stable `manifest_id`, was generated at a declared timestamp, references a specific URACE spec version, and is traceable. Implementations that store or transmit a manifest SHOULD treat it as a citizen record and include it in their evidence log.
+
+A derived system's compliance obligation is exactly: **every adopted pattern's normative requirements apply; no unadopted pattern's normative requirements apply.** This is the complete and closed contract.
+
+## Subsequent-Gap Closure
+
+The following scenarios that could produce gaps are pre-closed by this framework:
+
+| Scenario | Closure |
+|----------|---------|
+| User picks pattern X that silently needs pattern Y | Transitive resolution adds Y automatically; `resolution_log` explains it |
+| User wants to exclude Y (has own implementation) | `--exclude Y --exclude-reason "..."` produces acknowledged `PatternExclusionRecord`; no silent gap |
+| New AP added in future spec revision | Pattern Catalog entry added; existing manifests are unaffected (pinned to their `spec_version`); derive re-run picks up new AP |
+| Pattern dependencies change in future revision | Old manifests reference old `spec_version`; `urace derive` re-run produces updated manifest against new catalog |
+| User wants to use AP14 (Durable Inbox) standalone | AP14 requires only AP5 (Idempotency Contract); resolver adds AP5; user can also `--exclude AP5` with reason |
+| User adopts AP16 (State Document) without understanding its deps | Resolver auto-adds AP3, AP4, AP6; manifest shows them as TRANSITIVE; no hidden requirement |
+| Derived system mistakenly claims zero deps for an INTEGRATED pattern | `validate_derived_system_manifest` validates every PatternAdoptionRecord tier field; mismatches raise ValueError |
 
 ---
 
@@ -7710,6 +7868,11 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `sourceinput` | source_input, source_input_id, input traceability |
 | `exitcode` | exit code, exit codes, return code |
 | `inboxstatus` | inbox status, urace inbox status, input status query |
+| `derivedmfst` | DerivedSystemManifest, derived system manifest, derivation manifest |
+| `patternopt` | PatternAdoptionRecord, pattern adoption, pattern opt-in |
+| `standaloneap` | standalone pattern, standalone=true, foundational pattern |
+| `derivedep` | PatternExclusionRecord, excluded dep, transitive dep exclusion, dependency resolution |
+| `patterncatl` | Pattern Catalog, PATTERN_CATALOG, AP0-AP19 catalog, architectural pattern catalog |
 
 ## Audit Content
 
