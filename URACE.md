@@ -5228,11 +5228,11 @@ See §62b for the canonical schema definition.
 
 | Technique | Spec (URACE.md) | Runtime |
 |---|---|---|
-| T1 diff | §81 spec audit rule enumeration | `spec_audit.py` gap computation; `validation.py` before/after metric diff |
+| T1 diff | §81 spec audit rule enumeration | spec audit component gap computation; validation gate before/after metric diff |
 | T2 incr | normative_rules baseline non-decrease | metric baseline tracking; bar-raising on acceptance |
-| T3 gate | TechniqueApplicabilityGate; §62c Discovery Credit Gate | `executor_discovery_due()`; `validate_operation()` |
+| T3 gate | TechniqueApplicabilityGate; §62c Discovery Credit Gate | discovery-due evaluator; validation gate |
 | T4 paired | canonical pairs table (this section) | lifecycle_state ↔ status_transitions validation |
-| T5 decompose | citizen schema minimality (§62b) | `primitives.py` schema conformance |
+| T5 decompose | citizen schema minimality (§62b) | schema conformance validation primitives |
 | T6 vector | ScopePriorityConfig normalization contract | scope weight normalization enforcement |
 
 ---
@@ -5540,27 +5540,27 @@ Bridge = {
 
 ```
 ┌─────────────────┐     Bridge B1      ┌────────────────────┐
-│  URACE.md       │ ─────────────────► │  spec_audit.py     │
+│  URACE.md       │ ─────────────────► │  Spec Audit        │
 │  (normative     │  rule → IntegrityGap│  (runtime coverage │
 │   rules)        │  or PASS evidence  │   evidence)        │
 └─────────────────┘                    └────────────────────┘
 
 ┌─────────────────┐     Bridge B2      ┌────────────────────┐
-│  Executor       │ ─────────────────► │  InputQueue        │
+│  Executor       │ ─────────────────► │  Input Queue       │
 │  (JSON output)  │  response → Input  │  (state inbox)     │
 └─────────────────┘                    └────────────────────┘
 
 ┌─────────────────┐     Bridge B3      ┌────────────────────┐
-│  MetricObserv.  │ ─────────────────► │  ValidationGate    │
+│  MetricObserv.  │ ─────────────────► │  Validation Gate   │
 │  (raw values)   │  value → guardrail │  (verdict)         │
 └─────────────────┘     result         └────────────────────┘
 ```
 
-**Bridge B1 — Spec→Runtime.** Translates each normative rule in URACE.md into either a passing implementation evidence record or a named IntegrityGap. Implemented by `spec_audit.py`. Lossless: every rule produces exactly one output record.
+**Bridge B1 — Spec→Runtime.** Translates each normative rule in URACE.md into either a passing implementation evidence record or a named IntegrityGap. Implemented by the runtime's spec audit component. Lossless: every rule produces exactly one output record.
 
-**Bridge B2 — Executor→Inbox.** Translates executor JSON output into an Input record consumed by the durable inbox. Implemented by `inputs.py` dispatch. Loss policy: LOSSY_DECLARED — unrecognized executor output fields are dropped and logged as `executor-response-unrecognized-field` evidence.
+**Bridge B2 — Executor→Inbox.** Translates executor JSON output into an Input record consumed by the durable inbox. Implemented by the runtime's input dispatch component. Loss policy: LOSSY_DECLARED — unrecognized executor output fields are dropped and logged as `executor-response-unrecognized-field` evidence.
 
-**Bridge B3 — Metric→Decision.** Translates raw metric observations into validation gate verdicts (PASS/FAIL). Implemented by `validation.py` metric guardrail. Lossless: every metric produces one check record.
+**Bridge B3 — Metric→Decision.** Translates raw metric observations into validation gate verdicts (PASS/FAIL). Implemented by the runtime's validation gate component. Lossless: every metric produces one check record.
 
 ---
 
@@ -5617,7 +5617,7 @@ OrchestratorPhase = {
  └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Canonical instance.** `cycle()` in `cli.py`. Every autonomous URACE iteration is one execution of this orchestrator.
+**Canonical instance.** The autonomous cycle orchestrator. Every autonomous URACE iteration is one execution of this orchestrator.
 
 **Reuse.** Any future multi-phase operation (e.g., compaction, rebootstrap) MUST be defined as an Orchestrator instance with the same contract structure rather than implemented as an ad-hoc sequence.
 
@@ -5906,21 +5906,21 @@ All primitive value types used in citizen schemas. Every field that holds one of
   ┌─────────────────────────────────────────────────────────────────────────┐
   │                         URACE Bridge Topology                           │
   │                                                                         │
-  │   URACE.md ──B1──► spec_audit.py ──► IntegrityGap | Evidence           │
+  │   URACE.md ──B1──► Spec Audit ──────► IntegrityGap | Evidence           │
   │   (normative rules)  (gap calculus)   (broadcast log entry)             │
   │                                                                         │
-  │   Executor ──B2──► inputs/*.json ──► Input dispatcher ──► State        │
+  │   Executor ──B2──► Input Queue ─────► Input Dispatcher ──► State       │
   │   (JSON resp)        (durable inbox)  (handler registry)   (snapshot)  │
   │                                                                         │
-  │   Metrics ──B3──► validation.py ──► check record ──► verdict           │
+  │   Metrics ──B3──► Validation Gate ──► check record ──► verdict         │
   │   (raw obs)         (guardrail eval)  (PASS|FAIL)    (VALIDATED|REJ.)  │
   │                                                                         │
-  │   State ──B4──► inspection.py ──► human-readable output                │
-  │   (snapshot)     (render())         (AP13 observer)                    │
+  │   State ──B4──► Inspection ─────────► human-readable output            │
+  │   (snapshot)     (render component)   (AP13 observer)                  │
   └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-Add B4 — State→Inspection bridge: translates the internal state snapshot into human-readable inspection output. Implemented by `inspection.py:render()`.
+Add B4 — State→Inspection bridge: translates the internal state snapshot into human-readable inspection output. Implemented by the runtime's inspection render component.
 
 ---
 
