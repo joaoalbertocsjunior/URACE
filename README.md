@@ -49,7 +49,7 @@ An **Executor** is an AI agent, orchestrator, program or person that can inspect
 
 ```text
 urace /auto             run persistent evolution
-urace /pause & /resume  suspend or resume the lifecycle
+urace /pause or /resume suspend or resume the lifecycle
 urace <freeform-text>   describe intent, goals, or constraints in plain language
 urace /help             explore commands and reference
 urace /update           guided update sequence
@@ -73,7 +73,7 @@ URACE reports observed **metrics**, system-health **vitals** and decision **scor
 
 ## Competing Variants
 
-The portfolio feature compares different approaches to the same goal under equal resource limits. Use `urace help portfolio` for usage.
+The portfolio feature compares different approaches to the same goal under equal resource limits. Use `urace /help portfolio` for usage.
 
 ## Consequential Use
 

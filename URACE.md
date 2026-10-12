@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r21**
+**Specification version: 2026-10-12-r22**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2806,18 +2806,18 @@ Three commands expose the Rule Ledger:
 |---------|--------|
 | `urace <text>` | Free-form input — Executor classifies as any combination of goals, intents, and constraints; confirm each detected item |
 | `urace /<command> [args]` | Direct command — routes to the named lifecycle operation without Executor classification |
-| `urace intent add "…"` | Add a DIRECTIVE rule (queued; applied at next safe boundary) |
-| `urace intent list` | List active DIRECTIVE rules |
-| `urace intent supersede "…" --id <id>` | Replace an existing DIRECTIVE with a new one |
-| `urace intent deactivate --id <id>` | Deactivate a DIRECTIVE rule |
-| `urace constraint add "…"` | Add a PROHIBITION rule |
-| `urace constraint add "…" --allow` | Add a PERMISSION rule |
-| `urace constraint deactivate --id <id>` | Deactivate a constraint rule |
-| `urace rules list` | List all active rules |
-| `urace rules inspect <id>` | Full rule record with derivation chain |
-| `urace rules graph` | Full rule graph with relationships |
-| `urace rules conflicts` | Surface detected rule conflicts |
-| `urace rules changes <id>` | List accepted changes governed by a rule |
+| `urace /intent add "…"` | Add a DIRECTIVE rule (queued; applied at next safe boundary) |
+| `urace /intent list` | List active DIRECTIVE rules |
+| `urace /intent supersede "…" --id <id>` | Replace an existing DIRECTIVE with a new one |
+| `urace /intent deactivate --id <id>` | Deactivate a DIRECTIVE rule |
+| `urace /constraint add "…"` | Add a PROHIBITION rule |
+| `urace /constraint add "…" --allow` | Add a PERMISSION rule |
+| `urace /constraint deactivate --id <id>` | Deactivate a constraint rule |
+| `urace /rules list` | List all active rules |
+| `urace /rules inspect <id>` | Full rule record with derivation chain |
+| `urace /rules graph` | Full rule graph with relationships |
+| `urace /rules conflicts` | Surface detected rule conflicts |
+| `urace /rules changes <id>` | List accepted changes governed by a rule |
 
 `intent` and `constraint` mutations are queued inputs applied at the next safe lifecycle boundary under the same atomicity guarantees as §62. They MUST NOT be applied mid-cycle.
 
@@ -5321,7 +5321,7 @@ See §62b for the canonical schema definition.
 
 ## First-class Architectural Concepts
 
-Before defining individual patterns, this section establishes five first-class concepts that the pattern vocabulary is built upon.
+Before defining individual patterns, this section establishes nine first-class concepts that the pattern vocabulary is built upon.
 
 **Citizen.** A citizen is any named entity that participates in the URACE lifecycle: it has an identity (a stable `id` field), conforms to a declared citizen schema (§62b), produces or consumes evidence in the broadcast log (AP15), and is traceable through the causal chain (AP6). Citizens are distinct from scalars (leaf values, no identity) and operations (transformations, no persistent identity). See AP0 for the formal definition.
 
@@ -5332,6 +5332,14 @@ Before defining individual patterns, this section establishes five first-class c
 **Meta-Pattern.** A meta-pattern is a pattern that describes how to define, instantiate, and compose other patterns. §62i defines meta-patterns. The patterns defined here are themselves instances of the meta-patterns they describe: AP2 (Citizen Schema) is itself a citizen schema; AP3 (Append-Only Log) is itself stored in an append-only log; AP4 (Contract) is itself governed by contracts.
 
 **Meta-Technique.** A meta-technique is a technique for deciding which technique to apply, how to apply it, and when to apply it. The TechniqueApplicabilityGate (§62h) is the primary meta-technique in URACE. AP17 (Lexical→Formula) and AP19 (Customization Layer) are meta-techniques that govern how the specification itself evolves.
+
+**Primitive.** A primitive is the lowest-level indivisible unit in the architectural vocabulary. Two classes exist: a Canonical Scalar (AP1) — a leaf value type with no sub-structure — and a Citizen (AP0) — a named, schema-bearing entity with identity. Every field in every citizen schema resolves, recursively, to one of these two primitive classes. The word "primitive" in this specification always refers to one or both of these classes; no third primitive class exists.
+
+**Communication / Intercommunication.** Communication is the exchange of information between two or more components. In URACE, all inter-component communication is formalized as a composition of three patterns: a Bridge (AP11) for crossing authority or process boundaries; a Durable Inbox (AP14) for asynchronous delivery with at-least-once guarantee; and a Broadcast Log (AP15) for append-only event distribution. "Intercommunication" names the same exchange when it involves two or more components passing messages back and forth across a Bridge. No separate AP is defined for Communication or Intercommunication — they are always compositions of AP11, AP14, and AP15.
+
+**Diagram.** A diagram is a structural or flow visualization of URACE components and their relationships. Diagrams are documentation artifacts: they clarify intent, are not stored as lifecycle state, are not citizens, carry no normative force beyond what the accompanying text states, and are never inputs to autonomous decisions. When a diagram and the normative text conflict, the normative text governs.
+
+**Method.** Method is a generic colloquial alias that resolves — by context — to one of three canonical forms: a Technique (§62h, a structured approach to Product improvement), an Operation (§62b, a bounded executor action with defined preconditions and outcomes), or an Architectural Meta-Pattern (§62i, a reusable structural contract). When the word "method" appears in this specification or in user input, it MUST be interpreted in its canonical form. No first-class schema named Method exists.
 
 ---
 
@@ -7555,6 +7563,20 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `determin` | determine, determination, deterministic |
 | `classif` | classify, classification, classified |
 | `reconcil` | reconcile, reconciliation, reconciled |
+| `citizen` | citizen, citizens, citizenship |
+| `schema` | schema, schemas, schema-bearing |
+| `scalar` | scalar, scalars |
+| `primitiv` | primitive, primitives |
+| `bridg` | bridge, bridges, bridging |
+| `formul` | formula, formulas, formulaic |
+| `calcul` | calculus, calculi, calculation |
+| `pattern` | pattern, patterns, meta-pattern |
+| `techniqu` | technique, techniques, meta-technique |
+| `orchestrat` | orchestrator, orchestration, orchestrated |
+| `communic` | communication, communications, intercommunication |
+| `contract` | contract, contracts, contracted |
+| `method` | method, methods |
+| `diagram` | diagram, diagrams |
 
 ## Audit Content
 
