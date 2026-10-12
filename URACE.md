@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r16**
+**Specification version: 2026-10-12-r17**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2804,7 +2804,7 @@ Three commands expose the Rule Ledger:
 
 | Command | Effect |
 |---------|--------|
-| `urace add "…"` | Classify free text as goal / intent / constraint via executor, then confirm |
+| `urace add "…"` | Classify free text as any combination of goals, intents, and constraints via executor; confirm each detected item |
 | `urace intent add "…"` | Add a DIRECTIVE rule (queued; applied at next safe boundary) |
 | `urace intent list` | List active DIRECTIVE rules |
 | `urace intent supersede "…" --id <id>` | Replace an existing DIRECTIVE with a new one |
@@ -2826,14 +2826,15 @@ Three commands expose the Rule Ledger:
 urace add "<free text>"
 ```
 
-A convenience command that accepts free-text describing a goal, intent, or constraint and routes it to the correct lifecycle operation via executor-driven classification. It is the single entry point for adding governed lifecycle items without knowing their type in advance.
+A convenience command that accepts free-text describing one or more goals, intents, or constraints and routes each to the correct lifecycle operation via executor-driven classification. It is the single entry point for adding governed lifecycle items without knowing their type in advance.
 
 **Classification protocol.**
-1. The runtime submits the free text to the Executor with a classification task.
-2. The Executor returns a `ClassificationResult` (§62b) containing the detected type, subtype, extracted parameters, and confidence.
-3. The runtime displays the classification to the operator and requests confirmation before committing.
-4. On confirmation, the classified input is written to the durable inbox (§62c Input Queue) as the appropriate kind (`goal`, `intent_control`, or `constraint_control`) and processed at the next safe lifecycle boundary.
-5. On rejection, no input is written and the operator is directed to the explicit commands.
+1. The operator provides free text describing one or more lifecycle items.
+2. The Executor returns a `ClassificationBatch` (§62b) containing one `ClassificationResult` per detected item, in detection order.
+3. The runtime displays all detected items numbered — type, subtype, extracted parameters, confidence, and reasoning.
+4. For each item in sequence, the runtime prompts for individual confirmation (y/n/skip). A `permission`-subtype constraint MUST display a visible warning before its confirmation prompt.
+5. Each confirmed item is written to the durable inbox as the appropriate kind (`goal`, `intent_control`, or `constraint_control`) and processed at the next safe lifecycle boundary.
+6. Skipped or rejected items are not written; the operator is directed to the explicit commands for those items.
 
 **Executor unavailability.** When the Executor is unavailable or over budget, `urace add` MUST NOT attempt heuristic classification. It MUST inform the operator and direct them to the explicit commands (`urace add-goal`, `urace intent add`, `urace constraint add`), which accept structured parameters directly and do not require an Executor.
 
@@ -3934,6 +3935,18 @@ The structured output of executor-driven free-text classification for the `urace
 | parameters | object | REQUIRED | extracted parameters conforming to the target type's input schema |
 | confidence | probability | REQUIRED | classifier confidence in [0.0, 1.0] |
 | reasoning | string | OPTIONAL | brief explanation of the classification decision |
+| raw_text | string | REQUIRED | the original unmodified free-text input |
+
+---
+
+## ClassificationBatch
+
+The top-level response returned by the Executor for a `urace add` command. A single free-text input may describe any combination of goals, intents, and constraints; the Executor detects each independently and returns all as a batch.
+
+| Field | Type | Req | Notes |
+|---|---|---|---|
+| items | list\<ClassificationResult\> | REQUIRED | one or more detected items in detection order; MUST NOT be empty |
+| compound | boolean | REQUIRED | True when the input contained more than one detectable item |
 | raw_text | string | REQUIRED | the original unmodified free-text input |
 
 ---
