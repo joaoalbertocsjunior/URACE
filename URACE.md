@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r41**
+**Specification version: 2026-10-14-r42**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -7489,7 +7489,7 @@ The canonical schemas for this section — `PatternEntry`, `PatternAdoptionRecor
 ```
 urace derive [<intent>]
              [--kind pattern|mechanism|schema|protocol|contract|all]
-             [--patterns <comma-list>] [--suggest] [--from-goals]
+             [--constructs <comma-list>] [--suggest] [--from-goals]
              [--exclude <comma-list>] [--exclude-reason <text>]
              [--out <path>] [--save] [--json]
              [--derive-capabilities] [--apply-capabilities]
@@ -7498,21 +7498,23 @@ urace derive [<intent>]
              [--derive-milestone]
 ```
 
+**r42 — `--constructs` canonical arg.** `--constructs` is the canonical argument for specifying explicit construct or pattern IDs. `--patterns` remains a fully supported backward-compat alias — all existing invocations continue to work unchanged. "Building Blocks" is the canonical user-facing name for the set of 60 derivable constructs (README, section headers).
+
 **r41 — Construct kinds.** `--kind` selects which construct catalog(s) to search and derive from. Default is `pattern` (existing behavior, backward compatible). `all` searches all 60 constructs across all five kinds. When a non-pattern kind is used, `urace derive` produces a `DerivedConstructSet` (id prefix `cset-`) instead of a `DerivedSystemManifest`. `--kind` can be comma-separated for multi-kind derivation (e.g. `--kind mechanism,schema`). All existing `--kind pattern` behavior is unchanged.
 
-**r40 — Intent-first interface.** `<intent>` is the primary positional argument. When provided, `urace derive` runs `suggest_patterns_from_intent` to rank patterns by keyword and affinity overlap, then builds a manifest from the top suggestions. `--patterns` is a complementary and optional argument: when combined with `<intent>`, explicit pattern IDs are merged with intent-suggested IDs (explicit takes precedence; intent adds non-overlapping suggestions). When `<intent>` is omitted and `--patterns` is not set, the catalog browse is shown.
+**r40 — Intent-first interface.** `<intent>` is the primary positional argument. When provided, `urace derive` runs `suggest_patterns_from_intent` to rank patterns by keyword and affinity overlap, then builds a manifest from the top suggestions. `--constructs` is a complementary and optional argument (`--patterns` is a backward-compat alias): when combined with `<intent>`, explicit pattern IDs are merged with intent-suggested IDs (explicit takes precedence; intent adds non-overlapping suggestions). When `<intent>` is omitted and `--patterns` is not set, the catalog browse is shown.
 
 **`--suggest`**: dry-run intent matching — prints ranked pattern suggestions without building a manifest. Requires `<intent>`.
 
-**`--from-goals`**: reads Goals from current state and derives a ranked pattern suggestion list by running `patterns_from_goals` across all goal titles/descriptions. Prints suggestions and a ready-to-copy `--patterns` argument. Does not build a manifest.
+**`--from-goals`**: reads Goals from current state and derives a ranked pattern suggestion list by running `patterns_from_goals` across all goal titles/descriptions. Prints suggestions and a ready-to-copy `--constructs` argument. Does not build a manifest.
 
 **`suggest_patterns_from_intent(intent, top_n) → list[SuggestionEntry]`**: scores each AP in the catalog by (a) keyword overlap between intent tokens and pattern name/summary/provides, plus (b) affinity-table bonus for domain stems (event, compaction, retry, circuit, schedule, etc.). Returns top-N entries sorted descending by score, each containing `{pattern_id, name, tier, score, summary}`.
 
 **`patterns_from_goals(goals, top_n) → list[SuggestionEntry]`**: aggregates `suggest_patterns_from_intent` across all goal texts, sums scores, deduplicates, and returns top-N ranked entries. Used by `--from-goals`.
 
-**`--refresh`**: re-derives all saved DerivedManifestRefs (or only the one matching `--manifest-id`) using their stored `adopted_pattern_ids` and `intent`. Generates a new DerivedSystemManifest per ref, updates the stored DerivedManifestRef in state, creates a DerivationRecord(kind=REFRESH). If `--show-delta` is also set, the output includes: new patterns available since last derive, capability gaps that appeared or closed, changed dependency resolution. `--refresh` MUST NOT require `--patterns`; it reads from state.
+**`--refresh`**: re-derives all saved DerivedManifestRefs (or only the one matching `--manifest-id`) using their stored `adopted_pattern_ids` and `intent`. Generates a new DerivedSystemManifest per ref, updates the stored DerivedManifestRef in state, creates a DerivationRecord(kind=REFRESH). If `--show-delta` is also set, the output includes: new patterns available since last derive, capability gaps that appeared or closed, changed dependency resolution. `--refresh` MUST NOT require `--constructs`; it reads from state.
 
-**`--apply-capabilities`**: requires `--derive-capabilities` or `--patterns` to be set. Takes all capability drafts produced by `--derive-capabilities` and writes each as a `CapabilityStatement` entry in `Config.capability_envelope.capabilities` (appending if not already present, matching by name). Produces a DerivationRecord(kind=CAPABILITY_APPLY, capabilities_applied=N). MUST NOT overwrite an existing CapabilityStatement; only adds absent ones.
+**`--apply-capabilities`**: requires `--derive-capabilities` or `--constructs` to be set. Takes all capability drafts produced by `--derive-capabilities` and writes each as a `CapabilityStatement` entry in `Config.capability_envelope.capabilities` (appending if not already present, matching by name). Produces a DerivationRecord(kind=CAPABILITY_APPLY, capabilities_applied=N). MUST NOT overwrite an existing CapabilityStatement; only adds absent ones.
 
 **`--derive-milestone`**: reads `state.capability_states` (or Config.capability_envelope) and produces a draft `ProductMilestone` whose `capability_gates` list targets all capabilities currently ABSENT or PARTIAL. The draft is printed (or written to `--out`) but NOT autonomously written to state; operator review is required. Produces a DerivationRecord(kind=MILESTONE_DRAFT).
 
@@ -7520,19 +7522,19 @@ urace derive [<intent>]
 
 **DerivationRecord audit trail.** Every `urace derive` invocation that produces a manifest, applies capabilities, refreshes, or drafts a milestone MUST append a `DerivationRecord` to `state.derivation_records`.
 
-**Without `<intent>` and without `--patterns`**: lists all available patterns with their tier, requires, and provides fields. No state or config access required.
+**Without `<intent>` and without `--constructs`**: lists all available patterns with their tier, requires, and provides fields. No state or config access required.
 
-**With `<intent>` (no `--patterns`)**: auto-suggests patterns via `suggest_patterns_from_intent`, resolves dependencies, builds and outputs a `DerivedSystemManifest`. Prints which patterns were suggested before the manifest.
+**With `<intent>` (no `--constructs`)**: auto-suggests patterns via `suggest_patterns_from_intent`, resolves dependencies, builds and outputs a `DerivedSystemManifest`. Prints which patterns were suggested before the manifest.
 
-**With `--patterns` only**: resolves dependencies, builds a `DerivedSystemManifest`, and outputs it. If `--out` is provided, the manifest is written atomically to that path. If `--json`, the manifest is printed as a JSON document. Otherwise, a human-readable pattern guide is printed.
+**With `--constructs` only**: resolves dependencies, builds a `DerivedSystemManifest`, and outputs it. If `--out` is provided, the manifest is written atomically to that path. If `--json`, the manifest is printed as a JSON document. Otherwise, a human-readable pattern guide is printed.
 
 **`--exclude` requires `--exclude-reason`**. An `--exclude` without `--exclude-reason` is an error. This enforces the acknowledged exclusion contract.
 
 **No state lock, no executor call, no lifecycle state change.** `derive` is a pure computation on the Pattern Catalog. It MAY run while URACE is actively running in another process; it does not mutate lifecycle state.
 
-**Skip-by-default contract.** Providing `--patterns` always proceeds directly to manifest generation — no interactive menu, no confirmation step, no additional prompts. The list view is the only opt-in menu surface and fires ONLY when `--patterns` is omitted entirely. An implementation MUST NOT require operator confirmation between `--patterns` input and manifest output.
+**Skip-by-default contract.** Providing `--constructs` always proceeds directly to manifest generation — no interactive menu, no confirmation step, no additional prompts. The list view is the only opt-in menu surface and fires ONLY when `--constructs` is omitted entirely. An implementation MUST NOT require operator confirmation between `--constructs` input and manifest output.
 
-**Exit codes.** `0` on success. `1` if any `--patterns` or `--exclude` value is not a known pattern ID.
+**Exit codes.** `0` on success. `1` if any `--constructs` or `--exclude` value is not a known pattern ID.
 
 ## DerivedSystemManifest as Lifecycle Artifact
 
@@ -7564,7 +7566,7 @@ When `urace update download` or `urace update apply` runs and `state.derived_man
 stale(ref, candidate_version) ↔ ref.spec_version ≠ candidate_version
 ```
 
-The operator resolves staleness by re-running `urace derive --patterns ... --save` after the update completes.
+The operator resolves staleness by re-running `urace derive --constructs ... --save` after the update completes.
 
 ## Subsequent-Gap Closure
 
@@ -7581,7 +7583,7 @@ The following scenarios that could produce gaps are pre-closed by this framework
 | Derived system mistakenly claims zero deps for an INTEGRATED pattern | `validate_derived_system_manifest` validates every PatternAdoptionRecord tier field; mismatches raise ValueError |
 | URACE update bumps spec version; user's DerivedSystemManifest now points at old version | Stale-manifest detection fires on `update download/apply`; warns with manifest_id + both versions; user re-runs `urace derive --save` |
 | User wants update to only touch specific patterns they care about | `urace update --opt-in-patterns AP8,AP14` annotates migration payload; sections outside opt-in list preserved verbatim |
-| `urace derive --patterns` shows a menu when user wants direct output | Skip-by-default contract: `--patterns` always bypasses list view; list fires only on bare `urace derive` |
+| `urace derive --constructs` shows a menu when user wants direct output | Skip-by-default contract: `--constructs` always bypasses list view; list fires only on bare `urace derive` |
 
 ---
 
