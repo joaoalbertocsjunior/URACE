@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r47**
+**Specification version: 2026-10-14-r48**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2570,6 +2570,8 @@ MILESTONE N ──active──► gates evaluated each cycle
 
 Executor confidence is not validation. `accept(op) ↔ validate(op).verdict = VALIDATED ∧ ¬rollback_needed(op)` Snapshot-before/after state preservation and atomic delta journaling implement AP16 — State Snapshot + Delta Log (§62i). Validation of Authority compliance, Intent consistency, schema conformance, and constraint satisfaction implements AP2 — Citizen Schema (§62i).
 
+**Compliance recording contract.** After every independent validation gate evaluation, the lifecycle MUST append one ComplianceRecord per domain evaluated, and MUST update the corresponding ComplianceState entry. A validation gate evaluation that does not produce a ComplianceRecord for each assessed domain is a `compliance-record-missing` WARNING IntegrityGap. This canonizes what the gate already evaluates — it adds persistence and queryability, not new validation behavior.
+
 Validation SHOULD assess where applicable:
 
 - result correctness;
@@ -3084,6 +3086,8 @@ All named citizens produced or consumed by a URACE lifecycle MUST conform to the
 The schemas in §62a (Rule, Change) and in this section together form the complete citizen contract set. Any bootstrap from `URACE.md` that produces these structures MUST be schema-conformant for the system to be considered reproducible.
 
 **Canonical field clusters.** In addition to the primitive types below, §62l defines two shared field clusters used across citizen schemas: `GoverningRecord` (id, authority_basis, scope, established_at) and `EffectUncertaintyProtocol`. Citizens using these clusters MUST declare `Uses canonical: GoverningRecord` or `Uses canonical: EffectUncertaintyProtocol` in their schema definition. See §62l for the authoritative definitions.
+
+**Data interchange contract.** URACE does not define a separate wire-format or data-exchange protocol for single-product use. Citizen schemas (§62b) plus canonical primitives (§62d) plus the AP3 Append-Only Evidence Log constitute the complete data interchange contract for all single-product deployments. If URACE-to-URACE federation (coordinating multiple URACE instances across products) is introduced in a future revision, an explicit ExchangeEnvelope citizen SHALL be added at that time. An implementation that introduces a custom wire format without a corresponding citizen schema definition MUST surface this as a conformance gap.
 
 ## TemporalFields
 
@@ -3697,6 +3701,8 @@ State {
   test_run_records       OPTIONAL  list[TestRunRecord]; test execution results; feeds QualityDelta
   derivation_records     OPTIONAL  list[DerivationRecord]; audit trail of derive invocations (r36)
   derivation_refs        OPTIONAL  list[DerivedManifestRef]; formal saved manifest refs — canonical from r36; coexists with derived_manifest_refs for backward compat
+  compliance_records     OPTIONAL  list[ComplianceRecord]; append-only compliance trajectory; one record per domain per validation evaluation
+  compliance_state       OPTIONAL  dict[domain → ComplianceState]; current posture per validation domain; one entry per domain
 }
 ```
 
@@ -5529,6 +5535,41 @@ QualityStateEntry {
 ```
 
 **Independence contract.** One `QualityStateEntry` per scope. A REGRESSION in one scope MUST NOT affect any other scope's entry. **Persistence contract.** `QualityStateEntry` is a Product-level citizen; it MUST be preserved across executor replacement, cognitive reset, and restart. It MUST NOT reside in or depend on ExecutorState. **Initialization contract.** A `QualityStateEntry` for a scope is created on first `QualityDelta` write for that scope, with `current_streak = 0`, `best_streak = 0`, `streak_started_at = null`. Uses canonical: ProductScope (scope), TemporalFields (last_evaluated_at as created_at). Used in: State.quality_state.
+
+## ComplianceRecord
+
+A single immutable record of a compliance evaluation outcome for one validation domain. Forms an append-only compliance trajectory, analogous to QualityDelta for quality. Written after every independent validation gate evaluation.
+
+```
+ComplianceRecord {
+  id               REQUIRED  Identifier; prefix "cpl"
+  domain           REQUIRED  "authority" | "intent" | "schema" | "constraint" | "governance"
+  status           REQUIRED  COMPLIANT | NON_COMPLIANT | UNKNOWN
+  operation_id     OPTIONAL  Identifier; operation that triggered this evaluation; absent when source is not an operation
+  decision_id      OPTIONAL  Identifier; DecisionRecord that substantiates the compliance outcome
+  violation_detail OPTIONAL  string; human-readable description when status = NON_COMPLIANT
+  scope            OPTIONAL  ProductScope; scope of the evaluated operation or record
+  evaluated_at     REQUIRED  timestamp
+}
+```
+
+**Immutability contract.** Once written, a ComplianceRecord MUST NOT be modified. **Causal contract.** evaluated_at MUST be on or after the associated operation's committed_at when operation_id is present. **Domain contract.** domain values are fixed to the four validation domains from §54 plus "governance" for Rule Ledger and DestinationAnchor checks. **Trajectory contract.** Consecutive ComplianceRecords for the same domain form an ordered compliance trajectory; the most recent per domain represents current posture. Uses canonical: Identifier (id, operation_id, decision_id), ProductScope (scope), TemporalFields (evaluated_at as created_at). Used in: State.compliance_records.
+
+## ComplianceState
+
+Per-domain live summary of current compliance posture. One entry per domain, updated on each ComplianceRecord write for that domain. Product-level citizen; persists across executor replacement.
+
+```
+ComplianceState {
+  domain              REQUIRED  string; same enum as ComplianceRecord.domain
+  status              REQUIRED  COMPLIANT | NON_COMPLIANT | UNKNOWN
+  last_checked_at     REQUIRED  timestamp; when this entry was last updated
+  violation_refs      OPTIONAL  list[Identifier]; ids of recent NON_COMPLIANT ComplianceRecords for this domain
+  consecutive_clean   REQUIRED  int ≥ 0; number of COMPLIANT evaluations since last NON_COMPLIANT
+}
+```
+
+**Persistence contract.** ComplianceState entries are Product-level; they MUST survive executor replacement, cognitive reset, and restart. **Initialization contract.** A ComplianceState entry for a domain is created on first ComplianceRecord write for that domain, with consecutive_clean = 0. **Independence contract.** One entry per domain. A NON_COMPLIANT result in one domain MUST NOT affect any other domain's entry. **Self-determination contract.** SD(compliance inspection, S) = True; urace /compliance reads only durable state. Uses canonical: Identifier (violation_refs entries), TemporalFields (last_checked_at as created_at). Used in: State.compliance_state.
 
 ## ReIngestionRecord
 
@@ -9844,6 +9885,16 @@ urace /quality [--scope <scope>] [--json]
 
 Output includes: `current_streak`, `best_streak`, the most recent N QualityDelta records (default: 10), Staleness Detection warnings (§62c), and any pending autonomy expansion proposals. Streak state is read from `State.quality_state` (QualityStateEntry, §62b), not from ExecutorState. Implements the Quality Streak Mechanism (§62c). Uses: QualityDelta (§62b), QualityStateEntry (§62b), Quality Streak Mechanism (§62c).
 
+## urace /compliance
+
+Inspect the current compliance posture and compliance trajectory. Self-determinable; zero executor credits.
+
+```
+urace /compliance [--domain <domain>] [--history <n>] [--json]
+```
+
+Output includes: per-domain status (COMPLIANT | NON_COMPLIANT | UNKNOWN), consecutive_clean count, last_checked_at, and the most recent N ComplianceRecords (default: 10). --domain filters to a single domain. --history N overrides the record count. Reads ComplianceState (§62b) and compliance_records from State. Implements the compliance inspection surface defined by the Compliance Canonization (§62b ComplianceRecord + ComplianceState). Uses: ComplianceRecord (§62b), ComplianceState (§62b).
+
 ## urace milestone
 
 Shows the current active ProductMilestone status, gate progress, and ProductVersion history.
@@ -9884,6 +9935,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r48 | 2026-10-14 | spec+runtime | Compliance Canonization: ComplianceRecord + ComplianceState citizens; compliance_records/compliance_state State fields; §54 compliance recording contract; urace /compliance command; Data Interchange canonical note |
 | r47 | 2026-10-14 | runtime-only | Extract shared helpers: `_aggregate_scores`, `_affinity_match`, `_make_catalog_digest_fns`, `_suggest_unadopted_for_refs`, `_refresh_derived_refs`; fix digest update in refresh |
 | r46 | 2026-10-14 | spec+runtime | New-construct suggestion + construct/pattern update detection on `urace update download/explain`; `construct_digests`/`pattern_digests` in saved refs; DeriveUpdateSuggestion + ConstructUpdateDetection contracts |
 | r45 | 2026-10-14 | spec+runtime | `--opt-in-constructs` replaces `--opt-in-patterns` (alias kept); ConstructSetRef citizen + stale-construct-set detection; `--save`/`--refresh` wired for DerivedConstructSet; `construct_set_refs` in initial state |
