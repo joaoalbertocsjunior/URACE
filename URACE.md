@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r43**
+**Specification version: 2026-10-14-r44**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -7489,7 +7489,7 @@ The canonical schemas for this section — `PatternEntry`, `PatternAdoptionRecor
 ```
 urace derive [<intent>]
              [--kind pattern|mechanism|schema|protocol|contract|all]
-             [--constructs <comma-list>] [--suggest] [--from-goals]
+             [--constructs <comma-list>] [--suggest] [--from-goals] [--from-constraints] [--from-inspection]
              [--exclude <comma-list>] [--exclude-reason <text>]
              [--out <path>] [--save] [--json]
              [--derive-capabilities] [--apply-capabilities]
@@ -7508,9 +7508,17 @@ urace derive [<intent>]
 
 **`--from-goals`**: reads Goals from current state and derives a ranked pattern suggestion list using GoalDerivedSuggestion across all goal titles/descriptions. Prints suggestions and a ready-to-copy `--constructs` argument. Does not build a manifest.
 
+**`--from-constraints`**: reads HardConstraints from current state and derives construct suggestions (kinds: contract, protocol, mechanism) by running IntentSuggestionEngine over each constraint's name, description, scope, and enforcement text. Aggregates scores across all constraints. Prints ranked suggestions and a ready-to-copy `--constructs` argument. Does not build a manifest.
+
+**`--from-inspection`**: runs the InspectionSurface on current state, collects blocking and warning gaps, and derives construct suggestions that address those gaps by running IntentSuggestionEngine over each gap's kind and detail text. Aggregates scores across all gaps. If no gaps exist, reports system is healthy. Does not build a manifest.
+
 **IntentSuggestionEngine (pattern mode):** scores each entry in the PatternCatalog by (a) keyword overlap between intent tokens and the entry's name/summary/provides, plus (b) domain-affinity bonus for recognized stems (event, compaction, retry, circuit, schedule, etc.). Returns top-N results sorted descending by score, each containing `{pattern_id, name, tier, score, summary}`. Any conforming implementation MAY use any scoring strategy that preserves this rank-by-relevance contract.
 
 **GoalDerivedSuggestion:** aggregates IntentSuggestionEngine results across all goal title/description texts, sums scores per pattern, deduplicates, and returns top-N ranked entries. Used by `--from-goals`.
+
+**ConstraintDerivedSuggestion:** aggregates IntentSuggestionEngine results across all HardConstraint name/description/scope/enforcement texts, sums scores per construct, deduplicates, and returns top-N ranked entries filtered to contract/protocol/mechanism kinds. Used by `--from-constraints`.
+
+**GapDerivedSuggestion:** aggregates IntentSuggestionEngine results across all InspectionSurface blocking and warning gap kind/detail texts, sums scores per construct across all kinds, deduplicates, and returns top-N ranked entries. Used by `--from-inspection`.
 
 **`--refresh`**: re-derives all saved DerivedManifestRefs (or only the one matching `--manifest-id`) using their stored `adopted_pattern_ids` and `intent`. Generates a new DerivedSystemManifest per ref, updates the stored DerivedManifestRef in state, creates a DerivationRecord(kind=REFRESH). If `--show-delta` is also set, the output includes: new patterns available since last derive, capability gaps that appeared or closed, changed dependency resolution. `--refresh` MUST NOT require `--constructs`; it reads from state.
 
@@ -9858,6 +9866,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r44 | 2026-10-14 | spec+runtime | `--from-constraints`: HardConstraint-to-construct suggestion; `--from-inspection`: InspectionSurface gap-to-construct suggestion; ConstraintDerivedSuggestion + GapDerivedSuggestion contracts |
 | r43 | 2026-10-14 | spec | Purge all runtime-specific function/variable names from spec body; add Revision Log (§81); all contracts now stated in executor-agnostic terms |
 | r42 | 2026-10-14 | spec | `--constructs` canonical arg; `--patterns` backward-compat alias; "Building Blocks" canonical user-facing name for 60 derivable constructs |
 | r41 | 2026-10-14 | spec | §62m Extended Construct Catalogs: Mechanism (6), Schema (20), Protocol (2), Contract (6); `--kind` flag; DerivedConstructSet citizen; ConstructCatalog; IntentSuggestionEngine construct mode |
