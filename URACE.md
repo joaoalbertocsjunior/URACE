@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r37**
+**Specification version: 2026-10-14-r38**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -1591,6 +1591,7 @@ DiscoverySkip {
   blocked_on  OPTIONAL  string; what must change before this category can be evaluated
 }
 ```
+Uses canonical: TemporalFields (started_at as created_at, completed_at). Used in: State.discovery_records.
 
 **DiscoveryCycleStatus enum.**
 ```
@@ -1665,6 +1666,7 @@ AssessmentRecord {
   incomplete_reason    OPTIONAL  string; set when cycle_status != COMPLETE
 }
 ```
+Uses canonical: TemporalFields (assessed_at as created_at). Used in: State.assessment_records.
 
 **AssessmentCycleStatus enum.**
 ```
@@ -2235,6 +2237,9 @@ Stable fallback is a recovery boundary, not permission to reject valid authorize
 
 ---
 
+**Canonical protocol.** Effect uncertainty handling across this section and §52 implements the **EffectUncertaintyProtocol** (§62l). All subsections that classify effects as INDETERMINATE, require reconciliation before retry, or preserve durable uncertainty records apply that protocol. Sections throughout the spec that reference INDETERMINATE handling cite §62l EffectUncertaintyProtocol rather than restating these three steps.
+
+
 # 54. Observation vs Acceptance
 
 ```text
@@ -2455,6 +2460,7 @@ MarketSignal {
   hypothesis_ids  OPTIONAL  list of string; FitHypothesis IDs this signal informs
 }
 ```
+Uses canonical: TemporalFields (observed_at as created_at). Used in: State.market_signals.
 
 **FitHypothesis citizen schema.** A FitHypothesis is a falsifiable belief about whether a specific Product behavior or outcome contributes to market fit under governing Intent.
 
@@ -2471,6 +2477,7 @@ FitHypothesis {
   last_updated_at REQUIRED  string; ISO-8601 timestamp
 }
 ```
+Uses canonical: TemporalFields (created_at, last_updated_at as updated_at). Used in: State.fit_hypotheses.
 
 **MarketSignalKind enum.**
 ```
@@ -3075,6 +3082,8 @@ The runtime accepts free-form text and direct commands through a single top-leve
 All named citizens produced or consumed by a URACE lifecycle MUST conform to the schemas defined in this section. An implementation that omits a REQUIRED field or misrepresents its type violates this contract and MUST surface the violation as a named integrity gap on load. Fields marked OPTIONAL MAY be omitted when not applicable; an absent OPTIONAL field MUST be treated as its stated default.
 
 The schemas in §62a (Rule, Change) and in this section together form the complete citizen contract set. Any bootstrap from `URACE.md` that produces these structures MUST be schema-conformant for the system to be considered reproducible.
+
+**Canonical field clusters.** In addition to the primitive types below, §62l defines two shared field clusters used across citizen schemas: `GoverningRecord` (id, authority_basis, scope, established_at) and `EffectUncertaintyProtocol`. Citizens using these clusters MUST declare `Uses canonical: GoverningRecord` or `Uses canonical: EffectUncertaintyProtocol` in their schema definition. See §62l for the authoritative definitions.
 
 ## TemporalFields
 
@@ -7560,6 +7569,200 @@ The following scenarios that could produce gaps are pre-closed by this framework
 
 ---
 
+# 62l. Shared Reuse Contracts
+
+This section defines nine named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+
+---
+
+## GoverningRecord Canonical Cluster
+
+A **GoverningRecord** is any citizen that establishes an authoritative boundary rather than recording an event. GoverningRecords share four required fields that form the governance provenance contract.
+
+```
+GoverningRecord {
+  id               REQUIRED  Identifier; prefix depends on citizen type
+  authority_basis  REQUIRED  string; which Authority record establishes this record
+  scope            REQUIRED  string; scope path this record applies to; "*" = all scopes
+  established_at   REQUIRED  string; ISO-8601 timestamp; immutable after creation
+}
+```
+
+**Immutability contract.** `established_at` MUST NOT change after the record is created. **Authority contract.** `authority_basis` MUST reference a resolvable Authority record; a GoverningRecord with an unresolvable `authority_basis` is a provenance violation and MUST be surfaced as an IntegrityGap(kind="governing-record-unresolvable-authority", severity=WARNING). **Scope contract.** A GoverningRecord with `scope="*"` applies to all lifecycle scopes. A record with a specific scope applies only to operations whose scope matches or is a child of the declared scope.
+
+**Citizens using GoverningRecord:** PolicyRecord (§72), HardConstraint (§72), DestinationAnchor (§62b), Authority records (§6), CapabilityStatement (§59b).
+
+---
+
+## EffectUncertaintyProtocol
+
+When an Operation's external effect status cannot be established with confidence, URACE MUST apply the EffectUncertaintyProtocol. This protocol is defined once here; all sections cite it by name.
+
+**Three-step protocol:**
+
+1. **Classify as INDETERMINATE.** The effect is immediately classified as `INDETERMINATE` in durable state. URACE MUST NOT assume success, failure, or retry safety.
+2. **Reconcile before retry.** Before any retry or re-dispatch, URACE MUST apply the strongest available reconciliation method: target-system query, transaction reference ID, durable artifact hash, deterministic probe. Retry MUST NOT proceed until reconciliation establishes a disposition.
+3. **Preserve until disposition.** If reconciliation cannot establish disposition, the `INDETERMINATE` record MUST remain in durable state indefinitely. It MUST NOT be silently aged out, assumed resolved, or used as implicit authorization for a subsequent attempt. It MUST be surfaced in the LifecycleInspectionSurface (§62l) as a named blocker. Dependent Operations MUST be preserved as explicitly blocked on the unresolved record.
+
+**Scoped blocking contract.** An indefinitely unresolvable INDETERMINATE effect MUST block only its minimum dependent workstream set consistent with §65 Partial Blocking. Executor-independent work and unrelated workstreams MUST NOT be suspended.
+
+**Applies in:** §43 (executor permanent unavailability), §52 (write-before-effect boundary), §53 (effect reconciliation), §63 (concurrent state conflict), §73 (recovery interruption), behavioral tests BJ/BK/BL/BM/BN.
+
+---
+
+## OperatorGateProtocol
+
+An **operator gate** is a lifecycle condition that MUST NOT be cleared by autonomous action. The OperatorGateProtocol is defined once here; all sections that require operator action cite it by name.
+
+**Four-clause protocol:**
+
+1. **Surface as named blocker.** The condition MUST be surfaced in the LifecycleInspectionSurface as a named blocking limitation identifying: what the gate is, why it cannot be self-cleared, and what operator action is required.
+2. **Hold state without autonomous progress.** The dependent workstream MUST be preserved in a named blocked state. URACE MUST NOT proceed with the gated action, attempt a workaround, or silently time out the gate.
+3. **Require authenticated clearance.** The gate is cleared only by an authenticated lifecycle command (e.g., `urace govern`, `urace add`, attributed Input). The clearance MUST be processed through the inbox (AP14) at the next safe lifecycle boundary.
+4. **Record clearance as durable event.** The clearance MUST be recorded as a durable Evidence or DecisionRecord attributing the operator, the cleared condition, and the timestamp. The record MUST remain in durable state for audit purposes.
+
+**Applies in:** §43 (systematic executor failure cooldown reset), §63 (stale OwnershipMarker), §72 (HARD constraint violation attempt), §73 (recovery-of-recovery chain), §74 (ambiguous self-evolution policy), §62f (compaction authorization).
+
+---
+
+## AuthorityClosureInvariant
+
+**The Authority boundary is closed under all non-Authority inputs.** No input other than an explicit, attributable Authority record may expand the scope of legitimate autonomous action. This invariant is stated once here; all sections that enforce it cite it by name.
+
+**Closed inputs — none of the following can create or expand Authority:**
+- Evidence (however credible or strong)
+- Priority (however urgent)
+- Capability (however technically feasible)
+- Market signals or Product Value (however compelling)
+- Trigger events (however frequent or impactful)
+- Schedule (however overdue)
+- Executor recommendation (however confident)
+- Higher-order Intent inference (however logical)
+- User absence or silence
+- Autonomous observation of an easier or more profitable destination
+
+**Applies in:** §10, §26, §29, §36, §39, §42, §56, §59, behavioral tests T/U/AO/AY/BC and all Authority anti-leak tests.
+
+---
+
+## RevalidationScope
+
+When a material premise change invalidates an accepted decision, the revalidation scope is determined by the nature of the change. "Proportionate revalidation" is operationalized as a lookup from change class to RevalidationScope value.
+
+**RevalidationScope enum:**
+```
+DECISION_ONLY    — re-examine only the affected DecisionRecord and its validity conditions
+DEPENDENT_PLANS  — re-examine the DecisionRecord and all Plans and Operations that cite it
+FULL_LIFECYCLE   — re-examine Authority, Intent, all active Plans and the current Objective
+```
+
+**Trigger-to-scope mapping:**
+
+| Premise change class | RevalidationScope |
+|---|---|
+| Single Evidence record retracted or revised | DECISION_ONLY |
+| Authority record suspended or revoked | DEPENDENT_PLANS |
+| Governing Intent versioned or replaced | FULL_LIFECYCLE |
+| Hard constraint added or scope changed | DEPENDENT_PLANS |
+| Policy record status changed | DEPENDENT_PLANS |
+| Multiple simultaneous premise changes | FULL_LIFECYCLE |
+| Executor identity continuity broken | DECISION_ONLY (per-operation) |
+
+**Minimum scope rule.** URACE MUST apply the minimum RevalidationScope sufficient to ensure no stale premise drives a new committed effect. Applying a wider scope than necessary is permitted but wasteful.
+
+**Applies in:** §45, §46, §48, §72, behavioral tests BE/BF and any section using "proportionate revalidation."
+
+---
+
+## InspectionSurface Contract
+
+The **InspectionSurface** is the structured output produced by `urace check` and any lifecycle inspection command. Its schema is defined once here; all sections that require items to be "surfaced in inspection output" specify only the category and kind, not the output structure.
+
+```
+InspectionSurface {
+  lifecycle_state          REQUIRED  string; current lifecycle state
+  assessed_at              REQUIRED  string; ISO-8601 timestamp of last assessment
+  blocking_gaps            REQUIRED  list of IntegrityGap; severity=BLOCKING items
+  warning_gaps             REQUIRED  list of IntegrityGap; severity=WARNING items
+  indeterminate_effects    REQUIRED  list; open INDETERMINATE unresolved effects
+  operator_gates           REQUIRED  list; open OperatorGateProtocol conditions
+  stale_items              REQUIRED  list; stale decisions, manifests, hypotheses requiring validation
+  capability_readiness     REQUIRED  map; capability_id -> CapabilityStatus
+  scheduled_conditions     REQUIRED  list; upcoming scheduled wake conditions
+  policy_violations        REQUIRED  list; detected policy violations (HARD blocks + SOFT warnings)
+  open_pending_validations REQUIRED  list; PendingValidation records not yet resolved
+  summary                  REQUIRED  string; one-sentence human-readable status
+}
+```
+
+**Completeness contract.** An InspectionSurface that omits a required category is structurally incomplete. The `blocking_gaps` and `operator_gates` categories MUST be exhaustive — every known blocker must appear. **SD=True** — the InspectionSurface is fully computable from durable state without Executor invocation.
+
+---
+
+## IntegrityGapCatalog
+
+The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each kind is defined once. An implementation MUST NOT emit a gap kind not in this catalog without registering it here.
+
+| kind | severity | triggering section | resolution |
+|---|---|---|---|
+| `progress-stagnation` | BLOCKING | §62c executor quality | Route reassessment or repair |
+| `derived-manifest-stale` | WARNING | §62j stale DerivedManifestRef | `urace derive --refresh` |
+| `regression-checkpoint-pending` | WARNING | §62c X2 checkpoint gate | CHECKPOINT_ACCEPTANCE DecisionRecord |
+| `stale-decision-revalidation` | WARNING | §62c staleness detection | Revalidate or supersede decision |
+| `over-engineered` | WARNING | §59b capability envelope | Complexity reduction objective |
+| `cognitive-resume-stale` | WARNING | §62e CRC verification | CRC regeneration from current state |
+| `compaction-manifest-divergence` | BLOCKING | §62f compaction | Manual manifest repair |
+| `capability-envelope-breach` | WARNING | §59b envelope gate | CAPABILITY_SCOPE_EXPANSION DecisionRecord |
+| `capability-without-test-coverage` | WARNING | §59b test coverage gate | Add TestRecord(kind=CAPABILITY_GATE) |
+| `pattern-capability-gap` | WARNING | §62j derivation | Register CapabilityStatement or apply caps |
+| `no-hard-constraints-declared` | WARNING | §72 bootstrap contract | Declare at least one HardConstraint |
+| `retention-policy-violated` | WARNING | §62b retention | Compact field or revise RetentionPolicy |
+| `wake-registration-missing-fields` | WARNING | §67 wake verification | Fix WakeRegistration required fields |
+| `wake-registration-unverified` | WARNING | §67 wake verification | Set verified_at on WakeRegistration |
+| `governing-record-unresolvable-authority` | WARNING | §62l GoverningRecord | Correct authority_basis reference |
+| `authority-conflict` | BLOCKING | §14–§16 resolution | Authority conflict resolution via §14 |
+| `indeterminate-effect-unresolvable` | BLOCKING | §52–§53 reconciliation | Operator-authorized disposition |
+| `incomplete-discovery-cycle` | WARNING | §38 discovery | Resolve blocking capability gap |
+| `assessment-cycle-error-interrupted` | WARNING | §37 assessment | Fix enumeration error in named category |
+| `operator-gate-open` | BLOCKING | §62l OperatorGateProtocol | Authenticated operator clearance |
+
+**Extension contract.** A derived system MAY define additional gap kinds by registering them in its own IntegrityGapCatalog extension. Extension kinds MUST use a scoped prefix (e.g., `myapp-`) to avoid collisions. **Severity contract.** BLOCKING gaps MUST halt the dependent operation before any effect is committed. WARNING gaps MUST be surfaced but MUST NOT block unrelated workstreams.
+
+---
+
+## PatternMechanismMapping
+
+The complete mapping from AP patterns (§62i) to the spec sections that implement them, enabling the `urace derive` system and `--opt-in-patterns` to operate on a structured lookup rather than full-text parsing.
+
+| AP | Pattern name | Implementing section(s) | Key provides |
+|---|---|---|---|
+| AP0 | Citizen Schema Identity | §62b (all citizens), §62l GoverningRecord | id prefix, uniqueness, lifecycle traceability |
+| AP1 | Canonical Scalar | §62b canonical primitives, §62l | typed leaf values, define-once |
+| AP2 | Citizen Schema | §62b, §62l InspectionSurface, §62l GoverningRecord | named versioned structures, minimality |
+| AP3 | Append-Only Log | §62b evidence/checkpoints/operations, §62f compaction | durable ordered sequence, monotone length |
+| AP4 | Producer-Consumer Contract | §43 executor boundary, §62c mechanisms, §72 policy gate | named bilateral obligations |
+| AP5 | Idempotency Contract | §50, §51, §62b InputQueue | retry safety, idempotency class |
+| AP6 | Causal Provenance Chain | §53 reconciliation, §62e CRC, §62g justification | full cause traceability |
+| AP7 | Canonical Reduction | §62a rule ledger, §62h TAS | semantic deduplication, minimality |
+| AP8 | Fixpoint Calculus | §37 assessment cycle, §38 discovery | stagnation detection, convergence |
+| AP9 | Monotone Accumulator | §59b capability completeness, §62c quality streak | monotone growth invariant |
+| AP10 | Bounded Retry with Backoff | §43 executor selection, §62c discovery credit gate | resilient bounded retry |
+| AP11 | Bridge | §62i Bridge topology, inter-scope operations | authority-boundary translation |
+| AP12 | Orchestrator | §62i Orchestrator topology, multi-step plans | sequenced operations, safe abort |
+| AP13 | Observer | §60 autonomous feedback, §71 live observability | decoupled observation, broadcast |
+| AP14 | Durable Inbox | §38 queued inputs, §62l OperatorGateProtocol | crash-safe FIFO, orderly shutdown |
+| AP15 | Broadcast Log | §60 machine/human channels | decoupled pub/sub, event history |
+| AP16 | State Snapshot + Delta Log | §60 validation, §73 recovery | atomic snapshot+delta, causal reconstruction |
+| AP17 | Lexical→Formula Reduction | §62a rule formalization | spec rule formalization, machine-verifiable |
+| AP18 | Scheduled Task Contract | §42 scheduling, §62c scheduled tasks | durable named scheduled tasks |
+| AP19 | Customization Layer | §62b CustomizationRecord | named scoped overrides, conflict detection |
+| AP20 | Circuit Breaker | §43 systematic failure, §62c quality streak | proactive failure-rate gating |
+| AP21 | Compaction | §62f compaction mechanism | bounded growth, archive + decompact |
+| AP22 | Checkpoint | §61 checkpoint, §62c checkpoint mechanism | accepted-state snapshot, recovery anchor |
+| AP23 | Justification Chain | §62g justification system, `urace why` | reasoning chain traversal |
+| AP24 | Derivation Framework | §62j derivation, `urace derive` | DerivedSystemManifest, zero-conformance |
+| AP25 | Bounded Evolution Band | §59b capable evolution, §62c envelope gate | capability ceiling, sweet-spot band |
+
 # 63. Concurrency
 
 Where multiple runtimes MAY operate:
@@ -8152,6 +8355,7 @@ PolicyRecord {
   revocation_reason OPTIONAL string
 }
 ```
+Uses canonical: GoverningRecord (id, authority_basis, scope, established_at), TemporalFields (established_at, suspended_at, revoked_at). Used in: State.policy_records.
 
 **HardConstraint citizen schema.**
 
@@ -8165,6 +8369,7 @@ HardConstraint {
   violation_count OPTIONAL  int; number of blocked attempts; default 0
 }
 ```
+Uses canonical: GoverningRecord (id, authority_basis, scope, established_at), TemporalFields (established_at). Used in: State.hard_constraints.
 
 **PolicyKind enum.**
 ```
@@ -8199,6 +8404,9 @@ SOFT  — violation surfaces warning; attributable DecisionRecord may override
 **Bootstrap contract.** If no HardConstraint or PolicyRecord exists at bootstrap, URACE MUST record a WARNING IntegrityGap(kind="no-hard-constraints-declared") to prompt the operator to establish safety boundaries. The absence of declared constraints does not imply no constraints; it implies unverifiable constraints.
 
 ---
+
+**Canonical protocol.** Actions that cannot proceed and require an authenticated operator action apply the **OperatorGateProtocol** (§62l). Hard constraint violations, policy APPROVAL_REQUIREMENT gates, and suspended-policy clearances all use this protocol.
+
 
 # 73. Recovery
 
