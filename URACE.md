@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r44**
+**Specification version: 2026-10-14-r45**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -7548,22 +7548,22 @@ urace derive [<intent>]
 
 A `DerivedSystemManifest` MUST conform to the `DerivedSystemManifest` citizen schema. It is a lifecycle artifact: it carries a stable `manifest_id`, was generated at a declared timestamp, references a specific URACE spec version, and is traceable. Implementations that store or transmit a manifest SHOULD treat it as a citizen record and include it in their evidence log.
 
-**Manifest persistence.** `urace derive --save` stores a manifest reference in `state.derived_manifest_refs` — a list of `DerivedManifestRef` records: `{manifest_id, spec_version, generated_at, adopted_pattern_ids, intent}`. This enables the update system to detect stale manifests. Manifests written only to `--out` are not tracked in state.
+**Manifest and construct set persistence.** `urace derive --save` stores a manifest reference in `state.derived_manifest_refs` (pattern kind) or a ConstructSetRef in `state.construct_set_refs` (non-pattern kinds) — a list of `DerivedManifestRef` records: `{manifest_id, spec_version, generated_at, adopted_pattern_ids, intent}`. This enables the update system to detect stale manifests. Manifests written only to `--out` are not tracked in state.
 
 A derived system's compliance obligation is exactly: **every adopted pattern's normative requirements apply; no unadopted pattern's normative requirements apply.** This is the complete and closed contract.
 
-## `urace update --opt-in-patterns` Contract
+## `urace update --opt-in-constructs` Contract
 
-The `--opt-in-patterns <comma-list>` flag is available on all `urace update` subcommands and on the orchestrated `urace update` (no action). Its default is absent — meaning the update applies to all patterns.
+The `--opt-in-constructs <comma-list>` flag (also accepted as `--opt-in-patterns` for backward compatibility) is available on all `urace update` subcommands and on the orchestrated `urace update` (no action). Its default is absent — meaning the update applies to all constructs and patterns. Accepted values: AP IDs (e.g. AP8,AP14) and construct IDs (e.g. QSM,GoalRecord) may be mixed freely.
 
-**When `--opt-in-patterns` is set:**
+**When `--opt-in-constructs` is set:**
 - `explain`: the diff report is annotated with `opted_in_patterns_affected: [list]` identifying which opted-in APs changed between accepted and candidate; sections outside the opt-in list are still shown but marked `[not in opt-in scope]`
 - `apply`: the migration payload is annotated with `opted_in_patterns: [list]` so the executor applies only those AP sections; sections outside the opt-in list MUST be preserved verbatim from the accepted implementation
-- Orchestrated `urace update` (no action): passes `--opt-in-patterns` through to both explain and apply phases
+- Orchestrated `urace update` (no action): passes `--opt-in-constructs` through to both explain and apply phases
 
-**`--opt-in-patterns` and the derive skip-by-default contract apply the same principle:** both operations default to the full scope and require the operator to explicitly narrow the scope. Neither operation shows an interactive selection menu unless `--patterns` / `--opt-in-patterns` is omitted AND the explicit list-mode form is invoked.
+**`--opt-in-constructs` and the derive skip-by-default contract apply the same principle:** both operations default to the full scope and require the operator to explicitly narrow the scope. Neither operation shows an interactive selection menu unless `--patterns` / `--opt-in-patterns` is omitted AND the explicit list-mode form is invoked.
 
-**Pattern → Capability Derivation Contract.** When one or more patterns are adopted via `--opt-in-patterns` or `urace derive`, URACE MUST evaluate whether each adopted pattern's `provides` clause introduces capabilities not yet declared in `Config.capability_envelope.capabilities`. For each undeclared `provides` clause item, URACE MUST emit IntegrityGap(kind="pattern-capability-gap", severity=WARNING, detail="adopted pattern {AP_id} provides '{capability_name}' but no CapabilityStatement covers it"). This is the primary mechanism for keeping capability declarations aligned with adopted architecture. **`--derive-capabilities` flag.** When `urace derive --derive-capabilities` is run, URACE MUST auto-generate draft CapabilityStatement records (status=ABSENT, value_weight=0.1 default) for each `provides` clause item of all adopted patterns not already covered by a declared CapabilityStatement. These drafts are written to a `capability_drafts` output field and MUST NOT be autonomously merged into Config without operator review and an authorized input. **Opt-in-patterns feedback.** After every `--opt-in-patterns` apply, the output MUST include: adopted patterns, their provides clauses, and any pattern-capability-gap warnings.
+**Pattern → Capability Derivation Contract.** When one or more patterns are adopted via `--opt-in-patterns` or `urace derive`, URACE MUST evaluate whether each adopted pattern's `provides` clause introduces capabilities not yet declared in `Config.capability_envelope.capabilities`. For each undeclared `provides` clause item, URACE MUST emit IntegrityGap(kind="pattern-capability-gap", severity=WARNING, detail="adopted pattern {AP_id} provides '{capability_name}' but no CapabilityStatement covers it"). This is the primary mechanism for keeping capability declarations aligned with adopted architecture. **`--derive-capabilities` flag.** When `urace derive --derive-capabilities` is run, URACE MUST auto-generate draft CapabilityStatement records (status=ABSENT, value_weight=0.1 default) for each `provides` clause item of all adopted patterns not already covered by a declared CapabilityStatement. These drafts are written to a `capability_drafts` output field and MUST NOT be autonomously merged into Config without operator review and an authorized input. **Opt-in-constructs feedback.** After every `--opt-in-constructs` apply, the output MUST include: adopted patterns, their provides clauses, and any pattern-capability-gap warnings.
 
 ## Stale DerivedManifestRef Detection
 
@@ -7867,6 +7867,22 @@ Output produced by `urace derive` when `--kind` includes any non-pattern kind.
 | `kinds_present` | list[string] | Sorted unique kinds in adopted_constructs |
 
 **IntentSuggestionEngine (construct mode):** ranks all entries in the ConstructCatalog by keyword overlap and domain-affinity bonus, filtered to the requested kinds. Returns `{construct_id, name, kind, score, summary}` results. Any conforming implementation MAY use any scoring strategy that preserves rank-by-relevance.
+
+## ConstructSetRef Citizen
+
+A lightweight reference to a saved DerivedConstructSet, stored in `state.construct_set_refs`. Created by `urace derive --kind ... --save`; enables stale-detection and refresh.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | Identifier | Stable identity |
+| `construct_set_id` | string | The `cset-xxx` ID of the saved set |
+| `spec_version` | string | Spec version at derivation time |
+| `generated_at` | ISO-8601 | When the set was derived |
+| `adopted_construct_ids` | list[string] | Construct IDs in the set |
+| `kinds_present` | list[string] | Distinct kinds in the set |
+| `intent` | string | Original intent text |
+
+**Stale-construct-set detection contract.** When the governing spec is updated, any stored ConstructSetRef whose `spec_version` differs from the new version MUST be surfaced as a `derived-construct-set-stale` warning. The warning MUST include the `construct_set_id`, the stale version, and the candidate version. Stale detection is a warning, not a blocker. **Refresh contract.** `urace derive --kind ... --refresh` re-derives all saved ConstructSetRefs (or the one matching `--manifest-id`) using their stored `adopted_construct_ids` and `intent`, writes updated refs to `state.construct_set_refs`, and appends a DerivationRecord of kind `CONSTRUCT_SET_REFRESH`.
 
 # 63. Concurrency
 
@@ -9866,6 +9882,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r45 | 2026-10-14 | spec+runtime | `--opt-in-constructs` replaces `--opt-in-patterns` (alias kept); ConstructSetRef citizen + stale-construct-set detection; `--save`/`--refresh` wired for DerivedConstructSet; `construct_set_refs` in initial state |
 | r44 | 2026-10-14 | spec+runtime | `--from-constraints`: HardConstraint-to-construct suggestion; `--from-inspection`: InspectionSurface gap-to-construct suggestion; ConstraintDerivedSuggestion + GapDerivedSuggestion contracts |
 | r43 | 2026-10-14 | spec | Purge all runtime-specific function/variable names from spec body; add Revision Log (§81); all contracts now stated in executor-agnostic terms |
 | r42 | 2026-10-14 | spec | `--constructs` canonical arg; `--patterns` backward-compat alias; "Building Blocks" canonical user-facing name for 60 derivable constructs |
