@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r34**
+**Specification version: 2026-10-12-r35**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2404,6 +2404,31 @@ BOOTSTRAPPING → FORMING → CAPABLE → OPTIMIZED → OVER_ENGINEERED
 
 **Capability Envelope Gate.** A change that increases product surface measure (lines, schemas, mechanisms, AP patterns) beyond the configured complexity ceiling while the Product is already at CAPABLE or OPTIMIZED maturity MUST be gated. URACE MUST emit an IntegrityGap(kind="capability-envelope-breach", severity=WARNING) and MUST NOT accept the change without a DecisionRecord explicitly justifying the surface expansion.
 
+**Milestone Progression Chain.** Milestones are not isolated gates — they form an ordered chain. Each milestone declares the `version` it produces when achieved and optionally a `next_milestone_id` pointing to the next milestone to activate. When a milestone transitions to ACHIEVED:
+1. A `ProductVersion` record is written to `State.product_versions` carrying the milestone's version string, maturity level, and all capability/quality/density measurements at the moment of achievement.
+2. If `next_milestone_id` is declared, the referenced milestone transitions from PENDING to ACTIVE. This creates a continuous improvement loop: achieving one capable sweet spot immediately targets the next.
+3. URACE MUST NOT loop back to a previous milestone (ACHIEVED milestones are immutable).
+
+**Continuous improvement loop.**
+```text
+MILESTONE N ──active──► gates evaluated each cycle
+        │
+    all gates satisfied
+        │
+        ▼
+  MILESTONE N achieved → ProductVersion vN.0 written
+        │
+  next_milestone_id?
+     YES │                      NO │
+         ▼                         ▼
+  MILESTONE N+1 → ACTIVE      stay CAPABLE/OPTIMIZED
+  (higher gates, richer sweet spot)
+```
+
+**ProductVersion.** Every achieved milestone produces exactly one `ProductVersion` record — a durable, versioned snapshot of the Product at its capable sweet spot. ProductVersion is the answer to "what version is this Product?" — not a git tag, not a line count, but a capability-certified milestone achievement.
+
+**Tests as Product citizens.** A capability CANNOT reach `CAPABLE` status without a passing `TestRunRecord` of kind `CAPABILITY_GATE` or `ACCEPTANCE` that declares the capability in `capability_ids_covered`. An assessment cycle that marks a capability CAPABLE without a passing TestRunRecord MUST surface IntegrityGap(kind="capability-without-test-coverage", severity=WARNING). This ensures the capable sweet spot is verifiably achieved, not merely asserted.
+
 ---
 
 # 60. Validation and Acceptance
@@ -3531,6 +3556,8 @@ State {
   sweet_spot_assessments OPTIONAL  list[SweetSpotAssessment]; history of sweet spot evaluations; latest is current
   capability_states      OPTIONAL  list[CapabilityEnvelopeEntry]; one entry per declared capability
   value_density_history  OPTIONAL  list[ValueDensityRecord]; time-series of value density snapshots
+  product_versions       OPTIONAL  list[ProductVersion]; one record per milestone achievement; append-only
+  test_run_records       OPTIONAL  list[TestRunRecord]; test execution results; feeds QualityDelta
 }
 ```
 
@@ -4681,6 +4708,38 @@ SWEET SPOT EVALUATION (per assessment cycle, SD=True)
          → set milestone.status = ACHIEVED; milestone.achieved_at = now()
          → record Evidence(kind="milestone-achieved", milestone_id=milestone.id)
 
+  6a. IF milestone was just achieved (gates all passed):
+        → create ProductVersion:
+            id = identifier("pver"),
+            version = active_milestone.version,
+            milestone_id = active_milestone.id,
+            achieved_at = now(),
+            maturity_level = maturity_level,
+            capability_completeness = capability_completeness,
+            value_density = value_density,
+            product_surface_measure = surface,
+            next_milestone_id = active_milestone.next_milestone_id (if set)
+        → append to State.product_versions
+        → emit Evidence(kind="product-version-released",
+                        version=active_milestone.version,
+                        milestone_id=active_milestone.id)
+
+  6b. IF active_milestone.next_milestone_id is set:
+        → find milestone in Config.capability_envelope.milestones with that id
+        → IF found AND status == PENDING: transition to ACTIVE
+        → IF found AND status == ACHIEVED: skip (already done)
+        → IF not found: emit IntegrityGap(kind="milestone-chain-broken", severity=WARNING)
+
+  6c. Test Coverage Gate check:
+        FOR EACH declared capability with status CAPABLE in State.capability_states:
+          IF capability declares test_criteria:
+            check State.test_run_records for any record WHERE:
+              verdict == PASS AND capability.id IN capability_ids_covered
+              AND kind IN {CAPABILITY_GATE, ACCEPTANCE}
+            IF none found:
+              → emit IntegrityGap(kind="capability-without-test-coverage", severity=WARNING,
+                                  detail="CapabilityStatement {id} is CAPABLE but has no passing TestRunRecord")
+
   7. Write SweetSpotAssessment to State.sweet_spot_assessments
   8. Write ValueDensityRecord to State.value_density_history
   9. IF maturity_level == OVER_ENGINEERED:
@@ -4715,6 +4774,28 @@ CAPABILITY ENVELOPE GATE (before each accepted-product-change, SD=True)
 ```
 
 **Additive contract.** This gate fires ONLY when: (a) a capability_envelope is configured; (b) the Product is currently CAPABLE or OPTIMIZED; (c) the proposed change increases surface beyond the ceiling. It MUST NOT block COMPLEXITY_REDUCING changes. **Non-blocking for unconfigured products.** A Product with no declared capability_envelope is unaffected by this gate. Uses: SweetSpotAssessment (maturity_level), DecisionRecord (CAPABILITY_SCOPE_EXPANSION), Config.capability_envelope.
+
+## Test Coverage Gate Mechanism
+
+Enforces that every capability marked CAPABLE in State.capability_states is backed by at least one passing TestRunRecord of kind CAPABILITY_GATE or ACCEPTANCE. `SD = True` — reads only local state.
+
+```
+TEST COVERAGE GATE (per assessment cycle, SD=True)
+
+  FOR EACH CapabilityEnvelopeEntry WHERE status IN {CAPABLE, OVER_ENGINEERED}:
+    1. Resolve the associated CapabilityStatement (by capability_id)
+    2. IF CapabilityStatement.test_criteria is absent or null: SKIP (untested capability; gap surfaced separately)
+    3. Search State.test_run_records WHERE:
+         verdict == PASS
+         AND capability_id IN record.capability_ids_covered
+         AND record.kind IN {CAPABILITY_GATE, ACCEPTANCE}
+    4. IF no such record found:
+         → emit IntegrityGap(kind="capability-without-test-coverage", severity=WARNING,
+                             detail="Capability {id} claims CAPABLE but no passing TestRunRecord covers it")
+    5. IF found: PASS
+```
+
+**Coverage contract.** A capability with declared test_criteria that has no passing TestRunRecord is an unverified claim. URACE MUST surface this as a WARNING; it MUST NOT autonomously mark it CAPABLE on the basis of assertion alone. **Non-blocking contract.** This gate emits WARNING severity only; it does not block lifecycle progress. It is informational, driving the operator to add test coverage. **SD contract.** `SD(TestCoverageGate, S) = True` — all inputs are locally computable.
 
 ---
 
@@ -5397,10 +5478,12 @@ ProductMilestone {
   status              REQUIRED  PENDING | ACTIVE | ACHIEVED | SUPERSEDED
   achieved_at         OPTIONAL  timestamp | null; set when status transitions to ACHIEVED
   superseded_by       OPTIONAL  Identifier; next milestone id if status = SUPERSEDED
+  version             REQUIRED  string; the version string this milestone produces on achievement (e.g. "v1.0")
+  next_milestone_id   OPTIONAL  Identifier | null; milestone to activate on this one's achievement
 }
 ```
 
-**Gate contract.** A ProductMilestone transitions from ACTIVE to ACHIEVED only when ALL of the following are simultaneously true: every capability in capability_gates has status CAPABLE; all quality_gates are satisfied (if declared); product_surface_measure ≤ complexity_ceiling (if declared); value_density ≥ value_density_floor (if declared). Partial satisfaction MUST NOT advance the milestone. **Idempotency contract.** Milestone achievement check is PURE; re-evaluating an ACHIEVED milestone MUST NOT change its status unless a regression invalidates a gate. Uses canonical: Identifier (id, superseded_by), ProductScope (scope in quality_gates), TemporalFields (achieved_at). Used in: Config.capability_envelope.milestones, State (referenced by SweetSpotAssessment).
+**Gate contract.** A ProductMilestone transitions from ACTIVE to ACHIEVED only when ALL of the following are simultaneously true: every capability in capability_gates has status CAPABLE; all quality_gates are satisfied (if declared); product_surface_measure ≤ complexity_ceiling (if declared); value_density ≥ value_density_floor (if declared). Partial satisfaction MUST NOT advance the milestone. **Idempotency contract.** Milestone achievement check is PURE; re-evaluating an ACHIEVED milestone MUST NOT change its status unless a regression invalidates a gate. **Version contract.** Every ProductMilestone MUST declare a version string. On achievement, a ProductVersion record MUST be created carrying this version string. **Chain contract.** When next_milestone_id is non-null, the referenced milestone MUST transition to ACTIVE status upon this milestone's achievement. A chain that contains a cycle (milestone A → B → A) is a configuration error and MUST surface IntegrityGap(kind="milestone-chain-cycle", severity=BLOCKING). Uses canonical: Identifier (id, superseded_by, next_milestone_id), ProductScope (scope in quality_gates), TemporalFields (achieved_at). Used in: Config.capability_envelope.milestones, State (referenced by SweetSpotAssessment).
 
 ## SweetSpotAssessment
 
@@ -5441,6 +5524,71 @@ ValueDensityRecord {
 ```
 
 **AP9 alignment.** value_density SHOULD NOT decline below the best observed value_density at the CAPABLE milestone; a declining trend after CAPABLE is a WARNING. **Trend contract.** `delta` and `trend` MUST be computed relative to the immediately preceding ValueDensityRecord for the same scope; first record has null delta and null trend. Uses canonical: Identifier (id, assessment_id), TemporalFields (recorded_at). Used in: State.value_density_history.
+
+## ProductVersion
+
+A durable versioned record of the Product having achieved a capable sweet spot milestone. One ProductVersion is produced per milestone achievement. ProductVersion is the authoritative answer to "what version is the Product at?"
+
+```
+ProductVersion {
+  id                      REQUIRED  Identifier; prefix "pver"
+  version                 REQUIRED  string; version string declared on the achieved milestone (e.g. "v1.0", "v2.1.0")
+  milestone_id            REQUIRED  Identifier; ProductMilestone that produced this version
+  achieved_at             REQUIRED  timestamp
+  maturity_level          REQUIRED  ProductMaturityLevel; level at achievement time
+  capability_completeness REQUIRED  UnitFloat; fraction of capabilities at CAPABLE when achieved
+  value_density           REQUIRED  float ≥ 0.0; value_density at achievement time
+  product_surface_measure REQUIRED  int ≥ 0; surface measure at achievement time
+  next_milestone_id       OPTIONAL  Identifier | null; the milestone activated by this achievement
+  notes                   OPTIONAL  string
+}
+```
+
+**Monotone version contract.** version strings MUST represent a monotonically advancing sequence within a declared versioning scheme. A ProductVersion whose version string is lexicographically ≤ any prior ProductVersion in the same product MUST surface IntegrityGap(kind="non-monotone-version", severity=WARNING). **Immutability contract.** A ProductVersion MUST NOT be modified after creation. It is a durable record of a real achievement, not a current-state summary. **Traceability contract.** ProductVersion.milestone_id MUST reference an existing ProductMilestone with status=ACHIEVED. Uses canonical: Identifier (id, milestone_id, next_milestone_id), UnitFloat (capability_completeness), TemporalFields (achieved_at). Used in: State.product_versions.
+
+## TestRecord
+
+A named, scope-bound behavioral expectation the Product must satisfy. TestRecords are Product citizens — they express what the Product must be able to do, independent of any specific test runner implementation. Linking a TestRecord to a CapabilityStatement enables the Test Coverage Gate mechanism.
+
+```
+TestRecord {
+  id               REQUIRED  Identifier; prefix "tst"
+  name             REQUIRED  string; human-readable test name
+  description      REQUIRED  string; what behavioral property this test verifies
+  scope            REQUIRED  ProductScope
+  kind             REQUIRED  TestKind
+  capability_id    OPTIONAL  Identifier | null; CapabilityStatement this test verifies
+  status           REQUIRED  ACTIVE | DISABLED
+  last_run_id      OPTIONAL  Identifier | null; most recent TestRunRecord id
+}
+```
+
+**Coverage contract.** Every CapabilityStatement with a non-null test_criteria SHOULD have at least one TestRecord of kind CAPABILITY_GATE or ACCEPTANCE with capability_id pointing to it. A CapabilityStatement with test_criteria and no associated TestRecords MUST surface IntegrityGap(kind="capability-without-test-record", severity=WARNING). **Ownership contract.** TestRecords are authored by the authoritative source or by URACE under explicit authority; they MUST NOT be autonomously created, modified, or deleted without a DecisionRecord. Uses canonical: Identifier (id, capability_id, last_run_id), ProductScope (scope). Used in: State (via TestRunRecord.test_ids), CapabilityStatement (via test_criteria reference).
+
+## TestRunRecord
+
+The result of executing a set of TestRecords. A TestRunRecord is an Evidence-equivalent citizen: its verdict feeds directly into QualityDelta classification and CapabilityEnvelopeEntry status updates.
+
+```
+TestRunRecord {
+  id                    REQUIRED  Identifier; prefix "trr"
+  run_at                REQUIRED  timestamp
+  scope                 REQUIRED  ProductScope
+  kind                  REQUIRED  TestKind; kind of tests that were run
+  total                 REQUIRED  int ≥ 0
+  passed                REQUIRED  int ≥ 0
+  failed                REQUIRED  int ≥ 0
+  skipped               REQUIRED  int ≥ 0
+  errored               REQUIRED  int ≥ 0
+  verdict               REQUIRED  TestVerdict; aggregate verdict for this run
+  capability_ids_covered OPTIONAL list[Identifier] | null; capabilities whose tests were run
+  test_ids              OPTIONAL  list[Identifier] | null; TestRecord ids executed in this run
+  executor_id           OPTIONAL  string | null; executor or tool that ran the tests
+  notes                 OPTIONAL  string
+}
+```
+
+**Verdict contract.** `verdict = PASS ↔ failed == 0 ∧ errored == 0`. A run with any failed or errored test MUST carry verdict=FAIL or verdict=ERROR respectively. **Count contract.** `total = passed + failed + skipped + errored`. A TestRunRecord that violates this MUST surface IntegrityGap(kind="test-run-count-mismatch", severity=BLOCKING). **QualityDelta contract.** Every TestRunRecord with verdict=FAIL or verdict=ERROR MUST produce a concurrent QualityDelta(classification=REGRESSION) for each scope in capability_ids_covered. A TestRunRecord with verdict=PASS where the prior verdict for those capabilities was FAIL MUST produce QualityDelta(classification=IMPROVEMENT). Uses canonical: Identifier (id), ProductScope (scope), TemporalFields (run_at). Used in: State.test_run_records.
 
 ---
 
@@ -5722,6 +5870,37 @@ CapabilityContributionKind {
 ```
 
 **Authorization contract.** `CAPABILITY_DEFINING` MUST NOT be selected autonomously when Product maturity_level is CAPABLE or OPTIMIZED unless a governing authority explicitly authorizes capability scope expansion (recorded as DecisionRecord(kind=CAPABILITY_SCOPE_EXPANSION)). `QUALITY_IMPROVING` and `COMPLEXITY_REDUCING` are always autonomously authorized.
+
+## TestKind
+
+The kind of behavioral expectation a TestRecord represents.
+
+```
+TestKind {
+  values:
+    UNIT             — tests a single unit in isolation
+    INTEGRATION      — tests a component interaction
+    BEHAVIORAL       — tests end-to-end user-visible behavior
+    ACCEPTANCE       — tests a capability acceptance criterion (maps to CapabilityStatement)
+    CAPABILITY_GATE  — a gate test: if PASS, the associated capability MUST be marked CAPABLE
+}
+```
+
+**Gate semantics.** A TestRecord with kind=CAPABILITY_GATE whose most recent TestRunRecord verdict is PASS MUST result in the associated capability's completeness_fraction being updated to 1.0 and status to CAPABLE at the next assessment cycle. This is the only autonomous mechanism that advances a capability to CAPABLE; all other transitions require operator action or explicit Evidence.
+
+## TestVerdict
+
+The aggregate result of a TestRunRecord.
+
+```
+TestVerdict {
+  values:
+    PASS   — all tests passed (failed == 0 AND errored == 0)
+    FAIL   — one or more tests failed
+    ERROR  — one or more tests errored (infrastructure failure, not behavioral failure)
+    SKIPPED — all tests were skipped (no meaningful result)
+}
+```
 
 ---
 
@@ -7164,6 +7343,8 @@ The `--opt-in-patterns <comma-list>` flag is available on all `urace update` sub
 - Orchestrated `urace update` (no action): passes `--opt-in-patterns` through to both explain and apply phases
 
 **`--opt-in-patterns` and the derive skip-by-default contract apply the same principle:** both operations default to the full scope and require the operator to explicitly narrow the scope. Neither operation shows an interactive selection menu unless `--patterns` / `--opt-in-patterns` is omitted AND the explicit list-mode form is invoked.
+
+**Pattern → Capability Derivation Contract.** When one or more patterns are adopted via `--opt-in-patterns` or `urace derive`, URACE MUST evaluate whether each adopted pattern's `provides` clause introduces capabilities not yet declared in `Config.capability_envelope.capabilities`. For each undeclared `provides` clause item, URACE MUST emit IntegrityGap(kind="pattern-capability-gap", severity=WARNING, detail="adopted pattern {AP_id} provides '{capability_name}' but no CapabilityStatement covers it"). This is the primary mechanism for keeping capability declarations aligned with adopted architecture. **`--derive-capabilities` flag.** When `urace derive --derive-capabilities` is run, URACE MUST auto-generate draft CapabilityStatement records (status=ABSENT, value_weight=0.1 default) for each `provides` clause item of all adopted patterns not already covered by a declared CapabilityStatement. These drafts are written to a `capability_drafts` output field and MUST NOT be autonomously merged into Config without operator review and an authorized input. **Opt-in-patterns feedback.** After every `--opt-in-patterns` apply, the output MUST include: adopted patterns, their provides clauses, and any pattern-capability-gap warnings.
 
 ## Stale DerivedManifestRef Detection
 
@@ -8878,6 +9059,21 @@ urace /quality [--scope <scope>] [--json]
 ```
 
 Output includes: `current_streak`, `best_streak`, the most recent N QualityDelta records (default: 10), Staleness Detection warnings (§62c), and any pending autonomy expansion proposals. Streak state is read from `State.quality_state` (QualityStateEntry, §62b), not from ExecutorState. Implements the Quality Streak Mechanism (§62c). Uses: QualityDelta (§62b), QualityStateEntry (§62b), Quality Streak Mechanism (§62c).
+
+## urace milestone
+
+Shows the current active ProductMilestone status, gate progress, and ProductVersion history.
+
+Output includes:
+- active milestone id, name, version target
+- capability gates: N/M satisfied (list of satisfied and unsatisfied capability ids)
+- quality gates: per-scope streak vs min_streak
+- complexity and density gate status (if declared)
+- milestone_status: PENDING | ACHIEVED
+- version_history: list of ProductVersion records (most recent first)
+- pattern_capability_gaps: undeclared capabilities from adopted AP patterns
+
+`--json` emits machine-readable payload. Uses: ProductMilestone (§62b), ProductVersion (§62b), SweetSpotAssessment (§62b), Config.capability_envelope.
 
 ## Output path: --out vs --output
 
