@@ -65,7 +65,7 @@ Run `urace /auto` in one terminal. From a second terminal, send anything.
 
 ## Update Safely
 
-Run `urace /update` — it guides you through the full update sequence safely. Pass `--opt-in-patterns AP8,AP14` to limit which architectural patterns the update applies to. Use `urace /help update` for details.
+Run `urace /update` — it guides you through the full update sequence safely. Pass `--opt-in-constructs AP8,AP14` to limit which constructs or patterns the update applies to. Use `urace /help update` for details.
 
 ## See Progress
 
