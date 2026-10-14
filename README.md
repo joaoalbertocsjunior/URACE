@@ -84,15 +84,17 @@ urace /crc show     inspect the current full-context Cognitive Resume
 
 Use `urace /help compact` for details.
 
-## Reuse URACE Patterns The Way You Want
+## Reuse URACE Constructs The Way You Want
 
-Take any of URACE's 25 architectural patterns for your own project — no lifecycle, no commitment. Describe what you're building and URACE picks matching patterns automatically:
+Take any of URACE's 60 constructs — patterns, mechanisms, schemas, protocols, and contracts — for your own project, no lifecycle required. Describe what you're building and URACE picks matching constructs automatically:
 
 ```
 urace derive "resilient event log with compaction"
+urace derive "quality tracking with regression gates" --kind mechanism,schema
+urace derive "authority boundary model" --kind contract
 ```
 
-Add `--suggest` to preview which patterns match before committing. Use `--patterns` to complement or override the suggestions. Run `urace derive` with no arguments to browse the full catalog.
+Add `--suggest` to preview matches before committing. `--kind all` searches across every construct kind. Run `urace derive` with no arguments to browse.
 
 ## Consequential Use
 

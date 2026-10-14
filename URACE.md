@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r40**
+**Specification version: 2026-10-14-r41**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -7488,6 +7488,7 @@ The canonical schemas for this section — `PatternEntry`, `PatternAdoptionRecor
 
 ```
 urace derive [<intent>]
+             [--kind pattern|mechanism|schema|protocol|contract|all]
              [--patterns <comma-list>] [--suggest] [--from-goals]
              [--exclude <comma-list>] [--exclude-reason <text>]
              [--out <path>] [--save] [--json]
@@ -7496,6 +7497,8 @@ urace derive [<intent>]
              [--show-delta]
              [--derive-milestone]
 ```
+
+**r41 — Construct kinds.** `--kind` selects which construct catalog(s) to search and derive from. Default is `pattern` (existing behavior, backward compatible). `all` searches all 60 constructs across all five kinds. When a non-pattern kind is used, `urace derive` produces a `DerivedConstructSet` (id prefix `cset-`) instead of a `DerivedSystemManifest`. `--kind` can be comma-separated for multi-kind derivation (e.g. `--kind mechanism,schema`). All existing `--kind pattern` behavior is unchanged.
 
 **r40 — Intent-first interface.** `<intent>` is the primary positional argument. When provided, `urace derive` runs `suggest_patterns_from_intent` to rank patterns by keyword and affinity overlap, then builds a manifest from the top suggestions. `--patterns` is a complementary and optional argument: when combined with `<intent>`, explicit pattern IDs are merged with intent-suggested IDs (explicit takes precedence; intent adds non-overlapping suggestions). When `<intent>` is omitted and `--patterns` is not set, the catalog browse is shown.
 
@@ -7777,6 +7780,83 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | AP23 | Justification Chain | §62g justification system, `urace why` | reasoning chain traversal |
 | AP24 | Derivation Framework | §62j derivation, `urace derive` | DerivedSystemManifest, zero-conformance |
 | AP25 | Bounded Evolution Band | §59b capable evolution, §62c envelope gate | capability ceiling, sweet-spot band |
+
+# 62m. Extended Construct Catalogs
+
+`urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
+
+## Mechanism Catalog (6 entries)
+
+| ID | Name | Spec | Provides |
+|---|---|---|---|
+| QSM | Quality Streak Mechanism | §62c | quality streak counter, regression checkpoint gate |
+| SSB | Sweet-Spot Band | §62c §59b | maturity classification, over-engineering detection |
+| CEG | Capability Envelope Gate | §62c | ceiling enforcement, surface growth gate |
+| TAG | Technique Applicability Gate | §62h | context-gated execution, applicability scoring |
+| DCG | Discovery Credit Gate | §62e | discovery budget enforcement, credit gate |
+| PSD | Progress Stagnation Detector | §62c | stagnation detection, REPAIRING lifecycle trigger |
+
+## Schema Catalog (20 entries)
+
+Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
+
+| ID | Name | Prefix | Spec |
+|---|---|---|---|
+| GoalRecord | GoalRecord | goal- | §39 |
+| ObjectiveRecord | ObjectiveRecord | obj- | §40 |
+| PlanRecord | PlanRecord | plan- | §41 |
+| EvidenceRecord | EvidenceRecord | ev- | §44 |
+| DecisionRecord | DecisionRecord | dec- | §55 |
+| PolicyRecord | PolicyRecord | pol- | §72 |
+| HardConstraint | HardConstraint | hco- | §72 |
+| AssessmentRecord | AssessmentRecord | asr- | §37 |
+| DiscoveryRecord | DiscoveryRecord | dsc- | §36 |
+| MarketSignal | MarketSignal | mks- | §59 |
+| FitHypothesis | FitHypothesis | fhy- | §59 |
+| OwnershipMarker | OwnershipMarker | omk- | §63 |
+| ScheduledTask | ScheduledTask | sched- | §42 |
+| QualityDelta | QualityDelta | qdelta- | §61 |
+| IntegrityGap | IntegrityGap | igap- | §62l |
+| CapabilityStatement | CapabilityStatement | cap- | §59b |
+| OperationRecord | OperationRecord | op- | §53 |
+| BridgeRecord | BridgeRecord | brd- | §62i AP11 |
+| OrchestratorRecord | OrchestratorRecord | orch- | §62i AP12 |
+| CheckpointRecord | CheckpointRecord | checkpoint- | §61 |
+| DerivedManifestRef | DerivedManifestRef | dmr- | §62j |
+
+## Protocol Catalog (2 entries)
+
+| ID | Name | Steps | Spec |
+|---|---|---|---|
+| EUP | EffectUncertaintyProtocol | classify INDETERMINATE → hold before retry → preserve durable record | §62l |
+| OGP | OperatorGateProtocol | surface BLOCKING gap → hold state → await clearance → emit gate event | §62l |
+
+## Contract Catalog (6 entries)
+
+| ID | Name | Provides | Spec |
+|---|---|---|---|
+| GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (20 kinds), canonical severity | §62l |
+| ISC | InspectionSurface | structured health output (11 categories) | §62l |
+| ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
+| RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
+| ABM | AuthorityBoundaryModel | delegated/reserved categories, scope-to-authority mapping | §14-16 |
+
+## DerivedConstructSet Citizen
+
+Output produced by `urace derive` when `--kind` includes any non-pattern kind.
+
+| Field | Type | Description |
+|---|---|---|
+| `construct_set_id` | ID (prefix `cset-`) | Stable identity |
+| `derived_from` | string | Always `"URACE"` |
+| `spec_version` | string | URACE spec version at derivation time |
+| `intent` | string | Intent text provided by operator |
+| `generated_at` | ISO-8601 | Derivation timestamp |
+| `adopted_constructs` | list | Each entry: `construct_id, name, kind, summary, provides, spec_section` |
+| `kinds_present` | list[string] | Sorted unique kinds in adopted_constructs |
+
+**`suggest_constructs_from_intent(intent, kinds, top_n)`**: ranks all entries in `CONSTRUCT_CATALOG` by keyword overlap and construct-affinity table bonus, filtered to the requested kinds. Returns `{construct_id, name, kind, score, summary}` entries.
 
 # 63. Concurrency
 
