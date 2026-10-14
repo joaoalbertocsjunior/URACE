@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r35**
+**Specification version: 2026-10-14-r36**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3558,6 +3558,8 @@ State {
   value_density_history  OPTIONAL  list[ValueDensityRecord]; time-series of value density snapshots
   product_versions       OPTIONAL  list[ProductVersion]; one record per milestone achievement; append-only
   test_run_records       OPTIONAL  list[TestRunRecord]; test execution results; feeds QualityDelta
+  derivation_records     OPTIONAL  list[DerivationRecord]; audit trail of derive invocations (r36)
+  derivation_refs        OPTIONAL  list[DerivedManifestRef]; formal saved manifest refs — canonical from r36; coexists with derived_manifest_refs for backward compat
 }
 ```
 
@@ -7161,6 +7163,46 @@ DerivedSystemManifest {
 
 Uses canonical: Identifier (manifest_id), iso_timestamp (generated_at).
 
+**DerivedManifestRef citizen.** A lightweight reference to a saved DerivedSystemManifest, stored in `state.derivation_refs`. Each `--save` creates or replaces the `DerivedManifestRef` for this manifest.
+
+```
+DerivedManifestRef {
+  id               REQUIRED  Identifier; prefix "dmr-"
+  manifest_id      REQUIRED  string; stable ID of the referenced manifest
+  spec_version     REQUIRED  string; spec version at time of derivation
+  generated_at     REQUIRED  string; ISO-8601 timestamp
+  adopted_pattern_ids REQUIRED list of string; pattern IDs used
+  intent           REQUIRED  string; derivation intent
+}
+```
+
+**DerivationRecord citizen.** Audit log entry for every `urace derive` invocation that produces a manifest, applies capabilities, refreshes, or drafts a milestone. Appended to `state.derivation_records`.
+
+```
+DerivationRecord {
+  id               REQUIRED  Identifier; prefix "drv-"
+  kind             REQUIRED  DerivationKind
+  manifest_id      OPTIONAL  string; set when kind=MANIFEST or REFRESH
+  pattern_ids      REQUIRED  list of string; patterns involved
+  spec_version     REQUIRED  string; spec version at execution time
+  derived_at       REQUIRED  string; ISO-8601 timestamp
+  capabilities_applied OPTIONAL int; count of CapabilityStatements registered, when kind=CAPABILITY_APPLY
+  milestone_drafted OPTIONAL boolean; True when kind=MILESTONE_DRAFT produced a draft
+  delta_summary    OPTIONAL  string; human-readable summary of changes when kind=REFRESH
+}
+```
+
+**DerivationKind enum.**
+
+```
+DerivationKind  MANIFEST | REFRESH | CAPABILITY_APPLY | MILESTONE_DRAFT
+  MANIFEST       — standard derive --patterns run
+  REFRESH        — re-derive saved manifest(s) with latest spec
+  CAPABILITY_APPLY — --apply-capabilities wrote caps into config
+  MILESTONE_DRAFT  — --derive-milestone produced a draft ProductMilestone
+```
+
+
 **Stale-manifest detection contract.** When the governing spec is updated, any stored DerivedSystemManifest whose `spec_version` differs from the new version MUST be surfaced as a `derived-manifest-stale` warning. The warning MUST include the `manifest_id`, the stale version, and the candidate version. Stale detection is a warning, not a blocker.
 
 **Relation to AP0 and AP2.** AP24 requires AP0 (Citizen Schema Identity) to give every PatternEntry, PatternAdoptionRecord, PatternExclusionRecord, and DerivedSystemManifest a stable identity, and AP2 (Schema Contract) to enforce the schema invariants at write time.
@@ -7310,8 +7352,22 @@ The canonical schemas for this section — `PatternEntry`, `PatternAdoptionRecor
 ```
 urace derive [--patterns <comma-list>] [--intent <text>]
              [--exclude <comma-list>] [--exclude-reason <text>]
-             [--out <path>] [--json]
+             [--out <path>] [--save] [--json]
+             [--derive-capabilities] [--apply-capabilities]
+             [--refresh [--manifest-id <id>]]
+             [--show-delta]
+             [--derive-milestone]
 ```
+
+**`--refresh`**: re-derives all saved DerivedManifestRefs (or only the one matching `--manifest-id`) using their stored `adopted_pattern_ids` and `intent`. Generates a new DerivedSystemManifest per ref, updates the stored DerivedManifestRef in state, creates a DerivationRecord(kind=REFRESH). If `--show-delta` is also set, the output includes: new patterns available since last derive, capability gaps that appeared or closed, changed dependency resolution. `--refresh` MUST NOT require `--patterns`; it reads from state.
+
+**`--apply-capabilities`**: requires `--derive-capabilities` or `--patterns` to be set. Takes all capability drafts produced by `--derive-capabilities` and writes each as a `CapabilityStatement` entry in `Config.capability_envelope.capabilities` (appending if not already present, matching by name). Produces a DerivationRecord(kind=CAPABILITY_APPLY, capabilities_applied=N). MUST NOT overwrite an existing CapabilityStatement; only adds absent ones.
+
+**`--derive-milestone`**: reads `state.capability_states` (or Config.capability_envelope) and produces a draft `ProductMilestone` whose `capability_gates` list targets all capabilities currently ABSENT or PARTIAL. The draft is printed (or written to `--out`) but NOT autonomously written to state; operator review is required. Produces a DerivationRecord(kind=MILESTONE_DRAFT).
+
+**`--show-delta`**: used alongside `--refresh`. For each refreshed manifest, outputs the diff: added patterns, removed patterns (if dep graph changed), new capability gaps, closed capability gaps.
+
+**DerivationRecord audit trail.** Every `urace derive` invocation that produces a manifest, applies capabilities, refreshes, or drafts a milestone MUST append a `DerivationRecord` to `state.derivation_records`.
 
 **Without `--patterns`**: lists all available patterns with their tier, requires, and provides fields. No state or config access required.
 
