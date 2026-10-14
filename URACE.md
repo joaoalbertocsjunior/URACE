@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r32**
+**Specification version: 2026-10-12-r33**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3413,6 +3413,14 @@ Config {
   operator_patterns OPTIONAL  list of {id, pattern, default_response}
   change_explanations OPTIONAL {mode: disabled | auto | enabled}
   analytics_export  OPTIONAL  {mode: DISABLED | ON_DEMAND | ON_CHECKPOINT}
+  staleness_windows  OPTIONAL  {
+                               decision_seconds: int; default 2592000 (30 d)
+                               evidence_seconds: int; default 604800 (7 d)
+                               rules_seconds:    int; default 7776000 (90 d)
+                               by_scope: OPTIONAL map[ProductScope → int]; per-scope
+                                         decision staleness window override;
+                                         absent scope falls back to decision_seconds
+                             }
   context_budget   OPTIONAL  {
                                target_utilization:   float 0.0–1.0 (default 0.70)
                                hard_cap_fraction:    float 0.0–1.0 (default 0.90)
@@ -4488,13 +4496,24 @@ STALENESS SCAN (per assessment cycle, SD=True)
 
   DOMAIN: Decisions
     FOR EACH DecisionRecord WHERE status == CURRENT:
+      scope        = DecisionRecord.scope if present, else "*"
+      scope_window = config.staleness_windows.by_scope[scope]
+                     IF present, ELSE config.staleness_windows.decision_seconds
       decision_age = now − decided_at
-      IF decision_age > decision_freshness_window
+      IF decision_age > scope_window
          AND (Intent changed since decided_at
               OR Authority changed since decided_at
               OR basis_evidence_ids reference Evidence superseded since decided_at):
         → emit IntegrityGap(kind="stale-decision", severity=WARNING,
-                            detail="DecisionRecord {id} age={age}; basis may have changed")
+                            detail="DecisionRecord {id} scope={scope} age={age}; basis may have changed")
+        → produce PendingValidation(
+            id=pending_validations identifier,
+            source_operation_id=DecisionRecord.id,
+            kind="stale-decision-revalidation",
+            blocked_on_capability="decision-revalidation",
+            queued_at=now,
+            stale_reason="decision_age exceeds staleness window for scope"
+          )
 
   DOMAIN: Evidence
     FOR EACH Evidence WHERE kind IN [external-metric, market-signal, external-observation]:
@@ -4511,7 +4530,7 @@ STALENESS SCAN (per assessment cycle, SD=True)
                             detail="Rule {id} has no supporting Evidence in {age}d")
 ```
 
-**Proportionality contract.** Staleness detection is self-determinable (`SD = True`); it MUST NOT consume executor credits. **Non-blocking contract.** All staleness gaps are `WARNING` severity, never `BLOCKING`; they surface for operator attention but MUST NOT halt the lifecycle. **Configuration contract.** Freshness windows (`decision_freshness_window`, `evidence_freshness_window`, `rule_freshness_window`) MUST be declared in Config Document before the first staleness scan. Absent configuration MAY defer the domain scan and MUST NOT produce false positives.
+**Proportionality contract.** Staleness detection is self-determinable (`SD = True`); it MUST NOT consume executor credits. **Non-blocking contract.** All staleness gaps are `WARNING` severity, never `BLOCKING`; they surface for operator attention but MUST NOT halt the lifecycle. **Configuration contract.** Freshness windows (`decision_freshness_window`, `evidence_freshness_window`, `rule_freshness_window`) MUST be declared in Config Document (`staleness_windows`) before the first staleness scan. Per-scope overrides MUST be declared under `staleness_windows.by_scope`; absent scopes fall back to the global `decision_seconds` window. Absent configuration MAY defer the domain scan and MUST NOT produce false positives.
 
 ## Context Budget Mechanism
 
@@ -4531,6 +4550,10 @@ CONTEXT BUDGET EVALUATION (before each executor delegation, SD=True)
   3. IF estimated_tokens > hard_cap_fraction * executor_context_cap:
        → GRACEFUL DEGRADATION:
            (a) evict oldest ContextInput entries (oldest first) until within hard_cap_fraction
+           (a') Eviction priority order (AP24 tier): INTEGRATED-class ContextInput
+                entries MUST be evicted first, then COMPOSITIONAL, then
+                FOUNDATIONAL last. This preserves minimum viable reasoning
+                context under budget pressure.
            (b) replace evicted payload with summary token (CompactionSummary-equivalent)
            (c) record Evidence(kind="context-budget-degraded",
                                evicted_count=N, remaining_count=M, cap=executor_context_cap)
@@ -4543,7 +4566,30 @@ CONTEXT BUDGET EVALUATION (before each executor delegation, SD=True)
   5. PROCEED with delegation at current context size
 ```
 
-**Executor-agnostic contract.** `executor_context_cap` MUST be declared per executor class in Config.context_budget; it MUST NOT be hard-coded in the spec or runtime. **Graceful-degradation-first contract.** The mechanism MUST prefer graceful eviction with summary over hard rejection. Hard rejection is the last resort, applied only when graceful degradation cannot fit within `hard_cap_fraction`. **Reversibility contract.** Evicted ContextInput entries MUST still appear in the Evidence log; they are excluded from the delegation payload, not deleted from State. **SD contract.** Token estimation and budget comparison are locally computable; this mechanism is `SD = True` and MUST NOT delegate to an executor to evaluate its own outcome.
+**Executor-agnostic contract.** `executor_context_cap` MUST be declared per executor class in Config.context_budget; it MUST NOT be hard-coded in the spec or runtime. **Graceful-degradation-first contract.** The mechanism MUST prefer graceful eviction with summary over hard rejection. Hard rejection is the last resort, applied only when graceful degradation cannot fit within `hard_cap_fraction`. **Reversibility contract.** Evicted ContextInput entries MUST still appear in the Evidence log; they are excluded from the delegation payload, not deleted from State. **SD contract.** Token estimation and budget comparison are locally computable; this mechanism is `SD = True` and MUST NOT delegate to an executor to evaluate its own outcome. **Capability-class priority contract.** When evicting ContextInput entries under budget pressure, INTEGRATED-class entries MUST be evicted before COMPOSITIONAL, and COMPOSITIONAL before FOUNDATIONAL. An eviction that removes a FOUNDATIONAL-class entry while INTEGRATED-class entries remain is a priority inversion and MUST surface as an IntegrityGap(kind="context-budget-priority-inversion", severity=WARNING).
+
+---
+
+## Wake Registration Verification Mechanism
+
+Verifies that durable wake registrations recorded in `State.wake_registry` are still active in the current environment on lifecycle restart. Implements §67 restart verification requirement. `SD = True` — no executor credits consumed.
+
+```
+WAKE REGISTRATION VERIFICATION (on lifecycle restart)
+
+  FOR EACH WakeRegistration in State.wake_registry:
+    1. Attempt to confirm the registration is still active in the current environment
+       (e.g. check that the scheduled trigger or file-system watcher still exists).
+    2. IF registration cannot be verified as active:
+         → emit IntegrityGap(kind="wake-integrity-gap", severity=WARNING,
+                             detail="WakeRegistration {id} cannot be verified as active")
+         → attempt re-establishment if authorized and technically feasible
+         → IF re-establishment fails: retain IntegrityGap in lifecycle inspection output
+    3. IF registration is verified active:
+         → set WakeRegistration.verified_at = now()
+```
+
+**Registration contract.** Every WakeRegistration MUST carry: `id` (Identifier), `kind` (str), `scheduled_at` (timestamp), `condition` (str describing the lifecycle condition it observes). **Verification contract.** On restart, every entry in `wake_registry` MUST be verified. An entry that cannot be verified MUST surface a named `wake-integrity-gap`. URACE MUST NOT represent dormancy as durably wakeable when any entry carries an unresolved wake-integrity-gap. `SD = True` — verification reads only local environment state.
 
 ---
 
@@ -5843,6 +5889,8 @@ ProducerConsumerContract = {
 ```
 
 **Reuse contract.** Any two components that exchange data MUST document their exchange as a named ProducerConsumerContract. Implicit knowledge of inter-component data shape is a contract violation.
+
+**Validation contract.** Every runtime that records named ProducerConsumerContract instances MUST validate that all required fields (name, producer, consumer, artifact, producer_must, consumer_may_assume, violation_protocol, idempotent) are present and that violation_protocol is one of REJECT | QUARANTINE | ALERT. An instance with a missing required field or invalid violation_protocol is a schema conformance violation.
 
 **Canonical instances.**
 - `InputQueue → CycleOrchestrator` — inputs written by executor, consumed at safe boundary
