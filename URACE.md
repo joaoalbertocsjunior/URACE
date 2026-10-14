@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r48**
+**Specification version: 2026-10-14-r49**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2198,6 +2198,8 @@ Reconciliation produces Evidence.
 
 ## Crash-Consistent Acceptance
 
+The four-phase journal and crash-recovery sequence implement **AP27 — Transaction Recovery Protocol** (§62i).
+
 Where one accepted increment may change multiple artifacts or may be interrupted between Product mutation and lifecycle-state persistence, URACE MUST preserve enough durable information to reconcile the whole acceptance boundary.
 
 The implementation SHOULD distinguish at least the semantic equivalents of:
@@ -2264,6 +2266,8 @@ ACCEPTED PRODUCT STATE → ACTIVE lifecycle
 `done` is not a checkpoint.
 
 An Operation passes through a distinct `ACCEPTED` status between independent validation passing and the lifecycle becoming `ACTIVE` again. The `ACCEPTED` status records that the validation gate was satisfied; the subsequent transition to `ACTIVE` records that the lifecycle is ready for new work. These MUST NOT be collapsed into a single transition; each MUST be recorded as a durable status-transition event. An implementation that moves directly from `VALIDATING` to `ACTIVE` without an intervening `ACCEPTED` record MUST surface this as a `missing-acceptance-status` WARNING in the lifecycle inspection output.
+
+The executor≠validator separation, pending-preservation, and capability-restoration trigger implement **AP28 — Independent Validation Gate** (§62i).
 
 An Executor result, claim or completion signal MUST be treated as an Observation until independent validation confirms it satisfies applicable guardrails, integrity checks and Authorization boundaries. URACE MUST NOT advance Product state from Observation to Accepted solely because an Executor reports completion; advancement requires an explicit attributable validation act that was not performed by the same execution context that produced the result. Where validation capability is temporarily unavailable, the Observation MUST be preserved as pending validation rather than automatically accepted by elapsed time or repeated Executor confirmation. A model's self-assessed certainty, a confidence score or a second invocation of the same Executor MUST NOT substitute for an independent validation boundary.
 
@@ -2570,7 +2574,7 @@ MILESTONE N ──active──► gates evaluated each cycle
 
 Executor confidence is not validation. `accept(op) ↔ validate(op).verdict = VALIDATED ∧ ¬rollback_needed(op)` Snapshot-before/after state preservation and atomic delta journaling implement AP16 — State Snapshot + Delta Log (§62i). Validation of Authority compliance, Intent consistency, schema conformance, and constraint satisfaction implements AP2 — Citizen Schema (§62i).
 
-**Compliance recording contract.** After every independent validation gate evaluation, the lifecycle MUST append one ComplianceRecord per domain evaluated, and MUST update the corresponding ComplianceState entry. A validation gate evaluation that does not produce a ComplianceRecord for each assessed domain is a `compliance-record-missing` WARNING IntegrityGap. This canonizes what the gate already evaluates — it adds persistence and queryability, not new validation behavior.
+**Compliance recording contract.** This contract implements **AP37 — Compliance Posture Tracker** (§62i) and **ComplianceRecordingContract** (§62l). After every independent validation gate evaluation, the lifecycle MUST append one ComplianceRecord per domain evaluated, and MUST update the corresponding ComplianceState entry. A validation gate evaluation that does not produce a ComplianceRecord for each assessed domain is a `compliance-record-missing` WARNING IntegrityGap. This canonizes what the gate already evaluates — it adds persistence and queryability, not new validation behavior.
 
 Validation SHOULD assess where applicable:
 
@@ -2993,7 +2997,7 @@ If the Rule Ledger is unavailable at outcome time, URACE MUST surface this as a 
 
 ## Append-Only Invariant
 
-The Rule Ledger MUST be append-only with supersession (AP3 — Append-Only Log, §62i). Rules MUST NOT be deleted from the Ledger. A rule that is no longer active MUST be marked deactivated or superseded with an attributed timestamp and reason, preserving the full historical chain. Any query against the Ledger MUST be able to reconstruct the complete active rule set at any prior accepted change by replaying the binding record.
+The L0/L1/L2 immutability tiers, rule DAG, conflict detection, and change binding implement **AP35 — Governance Ledger** (§62i). The Rule Ledger MUST be append-only with supersession (AP3 — Append-Only Log, §62i). Rules MUST NOT be deleted from the Ledger. A rule that is no longer active MUST be marked deactivated or superseded with an attributed timestamp and reason, preserving the full historical chain. Any query against the Ledger MUST be able to reconstruct the complete active rule set at any prior accepted change by replaying the binding record.
 
 ## Bootstrap Seeding
 
@@ -3079,7 +3083,7 @@ The runtime accepts free-form text and direct commands through a single top-leve
 
 # 62b. Citizen Schemas
 
-**Cross-reference note.** Several schemas in this section carry parenthetical citations of the form `(§62i APxx)`. These are forward cross-references to the Architectural Meta-Patterns defined in §62i. The AP0–AP24 formal definitions reside exclusively in §62i; the citations here are attributions that name the source section, not duplicate definitions. A reader may proceed through §62b without requiring §62i, treating each `(§62i APxx)` note as "see §62i for the full definition of this pattern."
+**Cross-reference note.** Several schemas in this section carry parenthetical citations of the form `(§62i APxx)`. These are forward cross-references to the Architectural Meta-Patterns defined in §62i. The AP0–AP37 formal definitions reside exclusively in §62i; the citations here are attributions that name the source section, not duplicate definitions. A reader may proceed through §62b without requiring §62i, treating each `(§62i APxx)` note as "see §62i for the full definition of this pattern."
 
 All named citizens produced or consumed by a URACE lifecycle MUST conform to the schemas defined in this section. An implementation that omits a REQUIRED field or misrepresents its type violates this contract and MUST surface the violation as a named integrity gap on load. Fields marked OPTIONAL MAY be omitted when not applicable; an absent OPTIONAL field MUST be treated as its stated default.
 
@@ -4322,6 +4326,8 @@ Each phase MUST be written to the transaction journal on disk before transitioni
 
 ## Authority Resolution Mechanism
 
+This mechanism implements **AP35 — Governance Ledger** (§62i).
+
 Every proposed Operation MUST pass authority resolution before execution. Authority resolution consults the active Rule Ledger to determine whether the proposed scope and action are permitted.
 
 ```
@@ -4343,6 +4349,8 @@ PROPOSED OPERATION (scope, objective)
 **Denial record contract.** Every DENIED Operation MUST produce an Evidence record of kind `authority-resolution-denied` with a human-readable reason. The Operation MUST NOT proceed silently.
 
 ## Digest Computation
+
+The fixed algorithms and chain-continuity invariant implement **AP36 — Digest Chain Consistency** (§62i).
 
 Three distinct digest computations are used across the citizen schemas. All three MUST be deterministic: the same inputs MUST always produce the same digest.
 
@@ -4431,6 +4439,8 @@ normalized_weight[scope] = raw_weight[scope] / total
 
 ## External Metric Collection Mechanism
 
+The structured observation, failure-streak tracking, and isolation contract implement **AP13 — Observer** (§62i).
+
 The External Metric Collection mechanism gathers observations from configured external metric sources when the mode permits it.
 
 ```
@@ -4471,6 +4481,8 @@ ExternalMetricState.next_collection_at = now() + collection_interval
 
 ## Destination Anchor Integrity Mechanism
 
+The digest-based drift detection and operator-acknowledgement gate implement **AP35 — Governance Ledger** (§62i) and **OperatorGateProtocol** (§62l).
+
 The Destination Anchor is verified on every lifecycle cycle start to detect unauthorized drift in governing intent.
 
 ```
@@ -4501,6 +4513,8 @@ ON LIFECYCLE CYCLE START:
 **Immutability contract.** Once established, `destination_anchor` MUST NOT be updated by any autonomous operation other than the explicit acknowledgement path. A runtime that updates `destination_anchor` without an attributable operator command MUST be treated as a governance integrity failure.
 
 ## Self-Evolution Eligibility Gate Mechanism
+
+This mechanism implements **AP34 — Self-Evolution Eligibility Gate** (§62i).
 
 Every Executor proposal for a self-evolution or re-bootstrap Objective MUST pass through a deterministic policy gate before the proposal may be accepted as an Objective candidate. The gate reads the durable `self_evolution_policy` record and the ExecutorProposal fields; it MUST NOT consult the Executor again.
 
@@ -4786,7 +4800,7 @@ CONTEXT BUDGET EVALUATION (before each executor delegation, SD=True)
 
 ## Wake Registration Verification Mechanism
 
-Verifies that durable wake registrations recorded in `State.wake_registry` are still active in the current environment on lifecycle restart. Implements §67 restart verification requirement. `SD = True` — no executor credits consumed.
+This mechanism implements **WakeRegistrationVerification** (§62l) and **AP29 — Dormancy/Wakeability Contract** (§62i). Verifies that durable wake registrations recorded in `State.wake_registry` are still active in the current environment on lifecycle restart. Implements §67 restart verification requirement. `SD = True` — no executor credits consumed.
 
 ```
 WAKE REGISTRATION VERIFICATION (on lifecycle restart)
@@ -7416,6 +7430,281 @@ BoundedEvolutionBand = {
 
 ---
 
+## AP26 — Lifecycle State Machine
+
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [AP0, AP3]` · `provides: guarded lifecycle transitions, durable state recording, 12 named lifecycle states, entry/exit condition enforcement, inspectable state without Executor invocation`
+
+A Lifecycle State Machine defines a finite set of named lifecycle states, each with defined entry conditions, exit conditions, and transition guards. State transitions are deterministic and MUST be durably recorded before the new state is entered. The machine is authoritative for all lifecycle-state decisions; implicit or inferred states are prohibited.
+
+**Roles.**
+- `State` — a durable named lifecycle condition with defined entry/exit semantics
+- `Transition` — a guarded, atomic move from one State to another
+- `Guard` — entry or exit condition that MUST be satisfied before transition
+- `Trigger` — a qualifying event that initiates a Transition
+
+**Constraints.**
+- Every Transition MUST be atomic and durably recorded before entry into the new State.
+- No State may be entered without a qualifying Trigger.
+- No State may be exited while its exit Guard is unsatisfied.
+- The current State MUST be inspectable without Executor invocation (SD=True).
+- Implicit or inferred states are prohibited; every reachable State MUST be named.
+
+**Implementation.** §64 Lifecycle State Machine (12 states: ASSESSING, ACTIVE, VALIDATING, RECONCILING, REPAIRING, WAITING_FOR_CAPACITY, WAITING_FOR_CONDITION, WAITING_FOR_SCHEDULE, WAITING_FOR_AUTHORITATIVE_DECISION, BLOCKED, PAUSED, DORMANT). Governs all lifecycle-state transitions throughout the specification.
+
+---
+
+## AP27 — Transaction Recovery Protocol
+
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [AP3, AP16]` · `provides: crash-consistent mutation, four-phase durable journal, deterministic recovery disposition, phase-specific rollback/roll-forward`
+
+A four-phase durable journal that guarantees crash-consistent mutation and deterministic recovery. Each phase transition is durably written before the corresponding action is taken; recovery re-enters at the last durable phase and applies the phase-specific disposition (rollback or roll-forward).
+
+**Roles.**
+- `Journal` — the durable, phase-progressive record of a single mutation
+- `Phase` — one of PREPARED, APPLYING, APPLIED, VALIDATED
+- `Disposition` — the phase-specific recovery action (rollback or roll-forward)
+- `Checkpoint` — the durable accepted state after VALIDATED phase
+
+**Constraints.**
+- Phase write MUST precede the corresponding action.
+- On recovery: PREPARED → unconditional rollback; APPLYING → unconditional rollback; APPLIED → re-run validation; VALIDATED → treat as committed.
+- A Journal MUST NOT be deleted before its Checkpoint is durable.
+- Partial APPLYING phase: affected artifacts MUST be individually preserved in durable state.
+
+**Implementation.** §52–§53 Crash-Consistent Acceptance, §62c Transaction Mechanism. Governs all Operation acceptance boundaries.
+
+---
+
+## AP28 — Independent Validation Gate
+
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [AP4, AP14]` · `provides: executor≠validator separation, pending-preservation, capability-restoration trigger, PendingValidation citizen, ValidationVerdict`
+
+An architectural separation where the entity that produces a result is categorically different from the entity that validates it. Executor confidence is never a substitute for independent validation. Pending validation obligations survive executor replacement and MUST be preserved until validation capability is restored.
+
+**Roles.**
+- `Producer` — the context that generates a result (executor)
+- `Validator` — an independent context that verifies the result
+- `PendingValidation` — a durable record of an unresolved validation obligation
+- `ValidationVerdict` — the authoritative outcome (VALIDATED or requires rollback)
+
+**Constraints.**
+- Producer and Validator MUST be categorically different contexts.
+- Executor confidence MUST NOT substitute for a ValidationVerdict.
+- Validation capability unavailability MUST preserve the PendingValidation; elapsed time MUST NOT advance state to accepted.
+- Inconclusive validation MUST be distinguished from validation capability unavailability.
+- Capability restoration is a qualifying reassessment trigger for all PendingValidations.
+
+**Implementation.** §54 Validation, §60 Validation gate, §64 VALIDATING state, §62b PendingValidation citizen.
+
+---
+
+## AP29 — Dormancy/Wakeability Contract
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP0, AP3]` · `provides: verified dormancy entry, cost-bounded liveness path, WakeRegistration citizen, wake-integrity-gap, dormancy prohibition while gap exists`
+
+An autonomous system is legitimately DORMANT only when (a) no justified authorized action exists AND (b) a verified, cost-bounded wakeability mechanism observes a qualifying change. A system without a verifiable liveness path is stopped, not dormant.
+
+**Roles.**
+- `DormancyState` — valid autonomous non-activity while liveness path is verified
+- `WakeabilityMechanism` — the concrete mechanism (scheduler, callback, poller, file-watcher) that observes a qualifying change
+- `LivenessPath` — the verified, cost-bounded route back to assessment
+- `WakeRegistration` — a durable record of an active wakeability mechanism
+
+**Constraints.**
+- Dormancy MUST NOT be declared unless a verified WakeabilityMechanism exists.
+- The LivenessPath MUST be cost-bounded; unbounded credit-spend per wake cycle violates this contract.
+- WakeRegistrations MUST be verified active at every restart; unverifiable entries MUST produce a wake-integrity-gap.
+- Wake latency MUST be bounded by a configured ceiling.
+- Discovery Yield Exhaustion dormancy MUST hold at the discovery backoff ceiling.
+
+**Implementation.** §66 Autonomous Operation, §67 Dormancy and Wakeability, §62c Wake Registration Verification Mechanism, §62c Discovery Credit Gate.
+
+---
+
+## AP30 — Partial Blocking Dependency Graph
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP0, AP3]` · `provides: DAG-based minimum blocked-set computation, cycle detection, topological evaluation order, OperationDependency citizen`
+
+When a blocking condition affects one scope, only the minimal dependent scope set is blocked. Dependencies are declared as a directed acyclic graph; the blocked set is the transitive closure over the dependency graph from the blocked node. Unaffected scopes continue independently.
+
+**Roles.**
+- `DependencyGraph` — the DAG of declared operation dependencies
+- `BlockedNode` — the operation or scope directly subject to a blocking condition
+- `BlockedSet` — the transitive closure over the DependencyGraph from the BlockedNode
+- `UnaffectedScope` — any operation or scope outside the BlockedSet; continues independently
+
+**Constraints.**
+- The DependencyGraph MUST be acyclic; URACE MUST validate the DAG invariant before scheduling.
+- The BlockedSet MUST be the minimum sufficient set; over-blocking is wasteful but not a violation.
+- DAG-computed blocking MUST supersede heuristic scope estimation.
+- Cycle detection MUST occur before any operation in a cyclic cluster is scheduled.
+- Topological evaluation order: FOUNDATIONAL before COMPOSITIONAL before INTEGRATED (AP24).
+
+**Implementation.** §65 Partial Blocking, §62b OperationDependency citizen.
+
+---
+
+## AP31 — Safe Runtime Activation
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP27, AP16, AP4]` · `provides: isolated candidate preparation, crash-consistent activation boundary, fallback preservation, post-start health confirmation, stable promotion`
+
+A new runtime candidate is prepared outside the active runtime, validated against accepted tests, activated through a crash-consistent boundary, and promoted to stable only after post-start health confirmation. The prior runtime is preserved as a rollback fallback until stable promotion.
+
+**Roles.**
+- `Candidate` — the new runtime prepared in an isolated environment outside the active runtime
+- `Active` — the currently executing runtime
+- `Stable` — the Candidate after successful post-start health confirmation and promotion
+- `Fallback` — the prior Active runtime, preserved until Stable promotion
+
+**Constraints.**
+- Candidate MUST be prepared outside the Active runtime.
+- Accepted and candidate tests MUST pass before activation.
+- Activation boundary MUST be crash-consistent (AP27 Transaction Recovery Protocol applies).
+- Fallback MUST be preserved until Stable promotion.
+- Any failure before Stable promotion MUST restore the Fallback.
+- Authoritative spec and durable state MUST be preserved across activation.
+
+**Implementation.** §74 Safe Runtime Activation, §62c Self-Evolution Eligibility Gate.
+
+---
+
+## AP32 — Single-Writer Ownership Lock
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP0, AP3]` · `provides: durable ownership attribution, liveness-verified single-writer, OwnershipMarker citizen, INDETERMINATE liveness path, stale-overwrite prohibition`
+
+A durable record (OwnershipMarker) attributes write access to a single runtime instance at a time. Liveness is verified via process signal or equivalent mechanism. When liveness is INDETERMINATE, only authenticated operator clearance may proceed. Stale-overwrite is categorically prohibited.
+
+**Roles.**
+- `OwnershipMarker` — the durable record attributing write ownership to one runtime instance
+- `LivenessCheck` — verification of owner process activity via signal or equivalent
+- `OperatorClearance` — the authenticated override path when liveness is INDETERMINATE
+
+**Constraints.**
+- Stale-overwrite is PROHIBITED under all conditions.
+- INDETERMINATE liveness MUST route to OperatorClearance; autonomous clearance is prohibited (OperatorGateProtocol, §62l).
+- OwnershipMarker is cleared only by the owning instance or by authenticated operator action.
+- ConcurrencyPolicy governs maximum concurrent runtimes and liveness timeout.
+
+**Implementation.** §63 Concurrency and Ownership, §62b OwnershipMarker citizen.
+
+---
+
+## AP33 — Policy Enforcement Gate
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP4, AP0]` · `provides: pre-commit scope-intersection policy evaluation, HARD violation blocking, SOFT violation warning with override path, gate-before-commit ordering`
+
+Immediately before any consequential commit, all active PolicyRecords and HardConstraints whose scope intersects the operation scope are evaluated. HARD violations block unconditionally. SOFT violations surface a warning with a DecisionRecord override path. The gate fires before the commit is finalized.
+
+**Roles.**
+- `PolicyRecord` — a soft behavioral constraint with ADVISORY or APPROVAL_REQUIREMENT enforcement
+- `HardConstraint` — an unconditional blocker that cannot be overridden autonomously
+- `ScopeIntersection` — the applicability filter matching constraint scope to operation scope
+- `EnforcementGate` — the pre-commit evaluation step
+
+**Constraints.**
+- Gate MUST fire before consequential commit for every operation.
+- ScopeIntersection determines applicability; non-intersecting constraints are skipped.
+- HARD violation → BLOCK; no autonomous override path.
+- SOFT violation → WARNING; override requires a DecisionRecord.
+- Gate-before-commit ordering MUST be preserved; late enforcement is a violation.
+
+**Implementation.** §72 Policy Enforcement, §62b PolicyRecord and HardConstraint citizens.
+
+---
+
+## AP34 — Self-Evolution Eligibility Gate
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP4, AP0, AP3]` · `provides: 3-mode eligibility gate (DISABLED/NECESSARY_ONLY/CONTINUOUS), gate-before-authority ordering, fail-closed default, durable GateDecision before downstream action`
+
+Before any self-modification proceeds, a three-mode gate evaluates eligibility against durable policy. The gate is executor-agnostic, reads only durable state, and fails closed. Gate evaluation is durably recorded before any downstream action.
+
+**Roles.**
+- `EligibilityMode` — DISABLED, NECESSARY_ONLY, or CONTINUOUS
+- `ExecutorProposal` — the executor's necessity assertion (self_evolution_necessary, necessity_evidence, lower_impact_route_sufficient)
+- `GateDecision` — the durable evaluation record produced before downstream action
+
+**Constraints.**
+- Gate MUST fire before Authority Resolution for self-modification.
+- DISABLED → no self-modification permitted under any circumstance.
+- NECESSARY_ONLY → ExecutorProposal MUST assert necessity + provide necessity_evidence + confirm no lower-impact route.
+- Gate reads only durable state (SD=True); no Executor invocation to determine gate outcome.
+- On unreadable policy: fail-closed to NECESSARY_ONLY.
+- Every evaluation MUST produce a durable GateDecision before any downstream action.
+
+**Implementation.** §62c Self-Evolution Eligibility Gate, §74 Self-Evolution.
+
+---
+
+## AP35 — Governance Ledger
+
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [AP0, AP3]` · `provides: L0/L1/L2 immutability tiers, rule DAG (SUPERSEDES/REFINES/REQUIRES/CONFLICTS_WITH/DERIVED_FROM), conflict detection, ConflictHold, ChangeBinding, decaying confidence for system-inferred rules`
+
+A hierarchical, append-only rule store with three immutability tiers and a directed acyclic graph of rule relationships. Conflict detection is mandatory; conflicting rules are held pending resolution. System-inferred rules carry decaying confidence scores.
+
+**Roles.**
+- `Rule` — a governed behavioral constraint with kind, scope, immutability tier, and lifecycle
+- `ImmutabilityTier` — L0 (unconditional prohibition), L1 (Authority-immutable), L2 (mutable within Authority)
+- `RuleDAG` — the directed graph of SUPERSEDES, REFINES, REQUIRES, CONFLICTS_WITH, DERIVED_FROM relationships
+- `ConflictHold` — the suspended state for conflicting rules awaiting resolution
+- `ChangeBinding` — the temporal record linking a Change to the rules active at acceptance
+
+**Constraints.**
+- Ledger is append-only with supersession (AP3); rules MUST NOT be deleted.
+- L0 violations MUST be denied unconditionally; no override path.
+- L1 rules MUST NOT change except by Authority action.
+- Conflicting rules MUST be detected on insertion and held until resolved.
+- System-inferred rule confidence MUST decay in the absence of supporting Evidence.
+- ChangeBinding MUST record the full active rule snapshot at acceptance time.
+
+**Implementation.** §62a Rule Ledger, §62c Authority Resolution Mechanism, §62c Destination Anchor Integrity Mechanism.
+
+---
+
+## AP36 — Digest Chain Consistency
+
+**Derivation metadata.** `standalone: false` · `tier: COMPOSITIONAL` · `requires: [AP3, AP16, AP22]` · `provides: fixed SHA-256 digest algorithm, chain-continuity invariant (state_after[N]=state_before[N+1]), provenance-violation detection, three distinct digest types`
+
+A sequence of durable state snapshots where each snapshot's digest is computed by a fixed, deterministic algorithm over canonical sorted content. The digest of the state after accepting snapshot N MUST equal the digest of the state before producing snapshot N+1. Any break in the chain is a provenance violation.
+
+**Roles.**
+- `StateDigest` — the SHA-256 hash of canonical sorted state content
+- `ChainLink` — the invariant: state_after_digest[N] = state_before_digest[N+1]
+- `DigestAlgorithm` — the fixed, deterministic computation (canonical sorted JSON, stable encoding)
+- `ProvenanceViolation` — a detected chain break, surfaced as IntegrityGap
+
+**Constraints.**
+- DigestAlgorithm MUST be fixed; implementations MUST NOT vary serialization.
+- ChainLink invariant MUST be verified on every recovery.
+- A detected chain break MUST be surfaced as an IntegrityGap before any further mutation.
+- Three distinct digest algorithms apply: Product Digest (sorted product files), Rule Snapshot Digest (sorted active rules as JSON), State Digest (canonical state content).
+
+**Implementation.** §62c Digest Computation Contract, §62e CognitiveResumeContext, §62b DigestValue canonical type.
+
+---
+
+## AP37 — Compliance Posture Tracker
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP28, AP3, AP0]` · `provides: per-domain compliance trajectory (append-only), live accumulator (consecutive_clean/last_checked_at/violation_refs), compliance-record-missing gap, SD=True compliance inspection`
+
+Per-domain compliance evaluation outcomes are persisted as an append-only trajectory and a live accumulator. After every independent validation gate evaluation, one record per assessed domain MUST be appended. The accumulator tracks consecutive clean counts, last evaluation timestamps, and violation references across executor replacements.
+
+**Roles.**
+- `ComplianceRecord` — the immutable per-domain evaluation outcome appended after each gate evaluation
+- `ComplianceState` — the live per-domain accumulator (consecutive_clean, last_checked_at, violation_refs)
+- `ComplianceDomain` — one of: authority, intent, schema, constraint, governance
+- `CompliancePosture` — the current per-domain COMPLIANT/NON_COMPLIANT/UNKNOWN state
+
+**Constraints.**
+- One ComplianceRecord per domain MUST be appended after every independent validation gate evaluation.
+- Absence of a ComplianceRecord for an assessed domain is a `compliance-record-missing` WARNING IntegrityGap.
+- ComplianceState MUST persist across executor replacement; it is product-level durable state.
+- `consecutive_clean` MUST increment on COMPLIANT and reset to 0 on NON_COMPLIANT.
+- The `urace /compliance` command is SD=True; zero executor invocations required.
+
+**Implementation.** §60 Compliance Recording Contract, §62b ComplianceRecord and ComplianceState citizens, r48.
+
+---
+
 ## Canonical Scalar Catalog
 
 All primitive value types used in citizen schemas. Every field that holds one of these types MUST reference the canonical scalar name.
@@ -7495,7 +7784,7 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
 
 # 62j. Derivation Framework
 
-This section implements **AP24 — Derivation Framework** (§62i). The runtime mechanism described here is the URACE instantiation of AP24: the PatternCatalog is defined in §62i (AP0–AP25), the resolver implements the AP24 dependency resolution contract, and the manifest output is a `DerivedSystemManifest` citizen.
+This section implements **AP24 — Derivation Framework** (§62i). The runtime mechanism described here is the URACE instantiation of AP24: the PatternCatalog is defined in §62i (AP0–AP37), the resolver implements the AP24 dependency resolution contract, and the manifest output is a `DerivedSystemManifest` citizen.
 
 URACE is specification-first: an implementation MUST conform to the spec. But a **derived system** — a new system built by adopting a chosen subset of URACE architectural patterns — is NOT required to conform to any pattern it has not explicitly adopted. The Derivation Framework is the canonical mechanism for declaring, resolving, and documenting that adoption.
 
@@ -7507,7 +7796,7 @@ This guarantee applies to ALL patterns including foundational ones. A derived sy
 
 ## Pattern Adoption Tiers
 
-Every AP0–AP24 carries a **derivation metadata block** declaring its tier, standalone status, dependency list, and capabilities. Three tiers exist:
+Every AP0–AP37 carries a **derivation metadata block** declaring its tier, standalone status, dependency list, and capabilities. Three tiers exist:
 
 | Tier | Definition | Pattern IDs |
 |------|-----------|-------------|
@@ -7743,6 +8032,57 @@ FULL_LIFECYCLE   — re-examine Authority, Intent, all active Plans and the curr
 
 ---
 
+## CognitiveResetRecoveryProtocol
+
+A **cognitive reset** occurs when an Executor loses its working context but durable state is intact. The CognitiveResetRecoveryProtocol defines the mandatory recovery sequence. Cognitive reset is distinct from data loss; an Executor incapable of CRC injection is not lifecycle-replaceable.
+
+**Protocol steps (MUST be followed in order):**
+1. **Regenerate CRC.** Produce a fresh CognitiveResumeContext (§62e) from durable state.
+2. **Verify state_digest.** Compute the current state digest and verify it matches the CRC's recorded digest. A mismatch is a provenance violation (AP36).
+3. **Inject CRC.** Provide the CRC to the resuming Executor as the sole context source.
+4. **Resume from cycle_phase.** Resume at the cycle phase recorded in the CRC; do not restart the full assessment.
+5. **Treat pending_validations and blocking_gaps as authoritative.** These are durable obligations; do not re-derive them.
+6. **Apply Transaction recovery if pending.** If a pending_transaction exists, apply AP27 phase-specific disposition before any other action.
+
+**Recovery-of-recovery guard.** If recovery is itself interrupted, the subsequent restart MUST treat partial recovery as a new INDETERMINATE boundary, re-establish from the last durable checkpoint, preserve the interrupted recovery's durable record, and surface repair-exhausted after a bounded depth rather than recursing indefinitely.
+
+**Citizens using CognitiveResetRecoveryProtocol:** CognitiveResumeContext (§62e). Referenced from: §73 Cognitive Reset Recovery.
+
+---
+
+## WakeRegistrationVerification
+
+At every restart, all durable WakeRegistration records MUST be verified active in the current environment. This is the mandatory verification step for AP29 — Dormancy/Wakeability Contract.
+
+**Protocol steps:**
+1. **Enumerate durable WakeRegistrations.** Read all WakeRegistration records from durable state.
+2. **Verify each registration.** Attempt to confirm the registration is active and observable in the current runtime environment (scheduler entry exists, callback is registered, poller is running, file-watcher is active).
+3. **Classify result.** Each registration is VERIFIED, UNVERIFIABLE, or STALE.
+4. **Emit wake-integrity-gap for unverifiable entries.** Each UNVERIFIABLE or STALE entry MUST produce an IntegrityGap(kind="wake-integrity-gap", severity=WARNING) before any dormancy declaration.
+5. **Re-establish if possible.** Attempt to re-establish STALE or UNVERIFIABLE registrations using the same mechanism configuration.
+6. **Prohibit dormancy while wake-integrity-gap exists.** The lifecycle MUST NOT declare DORMANT state while any unresolved wake-integrity-gap exists.
+
+**Citizens using WakeRegistrationVerification:** WakeRegistration (§62c). Referenced from: §66, §67, §62c Wake Registration Verification Mechanism.
+
+---
+
+## ComplianceRecordingContract
+
+After every independent validation gate evaluation (AP28), the lifecycle MUST persist compliance outcomes per domain into the append-only trajectory and update the live accumulator. This is the mandatory persistence obligation for AP37 — Compliance Posture Tracker.
+
+**Protocol steps:**
+1. **Identify assessed domains.** Collect all domains evaluated in the gate run: authority, intent, schema, constraint (and governance if evaluated separately).
+2. **Classify each domain.** Determine COMPLIANT, NON_COMPLIANT, or UNKNOWN for each assessed domain.
+3. **Append ComplianceRecord per domain.** For each assessed domain, append one ComplianceRecord (§62b) with the domain, status, operation_id, and evaluated_at timestamp.
+4. **Update ComplianceState per domain.** Update the corresponding ComplianceState entry: increment consecutive_clean on COMPLIANT; reset to 0 and append violation_ref on NON_COMPLIANT; update last_checked_at.
+5. **Emit compliance-record-missing gap if absent.** If a domain was assessed but no ComplianceRecord was appended, emit IntegrityGap(kind="compliance-record-missing", severity=WARNING).
+
+**Self-determination.** The `urace /compliance` command is SD=True — it reads only durable state (compliance_records, compliance_state) and requires no Executor invocation.
+
+**Citizens using ComplianceRecordingContract:** ComplianceRecord, ComplianceState (§62b). Referenced from: §60 Compliance Recording Contract, §62c validation gate wiring.
+
+---
+
 ## InspectionSurface Contract
 
 The **InspectionSurface** is the structured output produced by `urace check` and any lifecycle inspection command. Its schema is defined once here; all sections that require items to be "surfaced in inspection output" specify only the category and kind, not the output structure.
@@ -7831,6 +8171,18 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | AP23 | Justification Chain | §62g justification system, `urace why` | reasoning chain traversal |
 | AP24 | Derivation Framework | §62j derivation, `urace derive` | DerivedSystemManifest, zero-conformance |
 | AP25 | Bounded Evolution Band | §59b capable evolution, §62c envelope gate | capability ceiling, sweet-spot band |
+| AP26 | Lifecycle State Machine | §64 Lifecycle States | 12-state machine with guarded transitions and durable recording |
+| AP27 | Transaction Recovery Protocol | §52–§53, §62c Transaction Mechanism | 4-phase journal with crash-consistent rollback/roll-forward |
+| AP28 | Independent Validation Gate | §54, §60, §62b PendingValidation | executor≠validator separation; pending-preservation; capability-restoration trigger |
+| AP29 | Dormancy/Wakeability Contract | §66, §67, §62c Wake Registration | verified wakeability mechanism; cost-bounded liveness path |
+| AP30 | Partial Blocking Dependency Graph | §65, §62b OperationDependency | DAG-based minimum blocked-set computation |
+| AP31 | Safe Runtime Activation | §74 Safe Runtime Activation | blue-green deployment with crash-consistent promotion |
+| AP32 | Single-Writer Ownership Lock | §63, §62b OwnershipMarker | durable liveness-verified ownership attribution |
+| AP33 | Policy Enforcement Gate | §72, §62b PolicyRecord, HardConstraint | pre-commit scope-intersection policy evaluation |
+| AP34 | Self-Evolution Eligibility Gate | §62c Self-Evolution Gate, §74 | 3-mode gate; gate-before-authority; fail-closed |
+| AP35 | Governance Ledger | §62a Rule Ledger, §62c Authority Resolution | L0/L1/L2 immutability; rule DAG; conflict detection |
+| AP36 | Digest Chain Consistency | §62c Digest Computation, §62e CRC | fixed SHA-256 algorithm; chain-continuity invariant |
+| AP37 | Compliance Posture Tracker | §60, §62b ComplianceRecord/State | per-domain trajectory + accumulator; compliance-record-missing gap |
 
 # 62m. Extended Construct Catalogs
 
@@ -7875,12 +8227,32 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CheckpointRecord | CheckpointRecord | checkpoint- | §61 |
 | DerivedManifestRef | DerivedManifestRef | dmr- | §62j |
 
-## Protocol Catalog (2 entries)
+## Protocol Catalog (5 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
 | EUP | EffectUncertaintyProtocol | classify INDETERMINATE → hold before retry → preserve durable record | §62l |
 | OGP | OperatorGateProtocol | surface BLOCKING gap → hold state → await clearance → emit gate event | §62l |
+| CRRP | CognitiveResetRecoveryProtocol | 6-step cognitive reset recovery | §62l |
+| WRV | WakeRegistrationVerification | restart wakeability audit | §62l |
+| CRC_C | ComplianceRecordingContract | per-domain compliance persistence | §62l |
+
+## AP Pattern Abbreviations (r49 additions)
+
+| ID | Name | Summary | Spec |
+|---|---|---|---|
+| LSM | Lifecycle State Machine | guarded transition machine; 12 states | §62i AP26 |
+| TRP | Transaction Recovery Protocol | 4-phase journal; crash-consistent | §62i AP27 |
+| IVG | Independent Validation Gate | executor≠validator; pending-preservation | §62i AP28 |
+| DWC | Dormancy/Wakeability Contract | verified liveness path; cost-bounded | §62i AP29 |
+| PBG | Partial Blocking Dependency Graph | DAG blocked-set; minimum scope | §62i AP30 |
+| SRA | Safe Runtime Activation | blue-green; crash-consistent promotion | §62i AP31 |
+| SWL | Single-Writer Ownership Lock | durable ownership; liveness-verified | §62i AP32 |
+| PEG | Policy Enforcement Gate | pre-commit scope-intersection check | §62i AP33 |
+| SEG | Self-Evolution Eligibility Gate | 3-mode; gate-before-authority | §62i AP34 |
+| GVL | Governance Ledger | L0/L1/L2; rule DAG; conflict hold | §62i AP35 |
+| DCC | Digest Chain Consistency | fixed SHA-256; chain invariant | §62i AP36 |
+| CPT | Compliance Posture Tracker | per-domain trajectory + accumulator | §62i AP37 |
 
 ## Contract Catalog (6 entries)
 
@@ -7953,7 +8325,7 @@ Locks, leases or ownership markers left by interrupted runtimes MUST be reconcil
 
 When liveness of an existing ownership marker cannot be established through available environment-level signals — such as process existence, heartbeat record age, or an equivalent mechanism — URACE MUST surface the marker as a named unresolved ownership boundary in the lifecycle inspection output and MUST NOT silently supersede it based on elapsed time alone. An authorized operator clearance of the marker through an authenticated lifecycle command is the only valid path to ownership acquisition when liveness is indeterminate; the clearance MUST be recorded as a durable event. An implementation that silently times out an ownership marker without attributable proof of owner absence violates the stale-overwrite prohibition stated above.
 
-**OwnershipMarker citizen schema.** Every lock, lease or ownership claim written to durable state MUST conform to this schema.
+**OwnershipMarker citizen schema.** The durable ownership attribution and liveness verification implement **AP32 — Single-Writer Ownership Lock** (§62i). Every lock, lease or ownership claim written to durable state MUST conform to this schema.
 
 ```
 OwnershipMarker {
@@ -7989,6 +8361,8 @@ Config.concurrency_policy OPTIONAL {
 ---
 
 # 64. Lifecycle States
+
+This section implements **AP26 — Lifecycle State Machine** (§62i).
 
 Conceptual equivalents:
 
@@ -8070,7 +8444,7 @@ When a new Objective is proposed while a partial blocking condition is active, U
 
 When an already-admitted and in-progress Objective encounters, during execution of one of its Operations, a new direct or transitive dependency on a retained, denied or unresolved decision — for example, because a required authorization became retained after admission or a previously resolved decision was revoked while the Objective was executing — URACE MUST apply the minimum-scope blocking principle within that Objective's remaining Operations. Operations with a direct or transitive dependency on the blocking condition MUST be suspended and preserved in pending-eligibility state; Operations without such a dependency MUST continue at their next eligible lifecycle boundary. The in-progress Objective MUST NOT be retired or abandoned solely because one of its Operations cannot proceed; the minimum-scope blocking rule applies within an in-progress Objective across its Operations in the same way it applies across Objectives within the lifecycle. The in-progress Objective's blocked Operations MUST be surfaced in the inspection output as a named partially-blocked workstream, attributed to the same unresolved decision record that governs newly proposed Objectives blocked by the same condition.
 
-**OperationDependency DAG computation.** When `OperationDependency` records (§62b) exist in State, the minimum-scope blocked set for a blocked Operation MUST be computed as the forward-reachable set from that Operation in the `OperationDependency` DAG, filtered by dependency kind:
+**OperationDependency DAG computation.** The DAG-based minimum blocked-set computation implements **AP30 — Partial Blocking Dependency Graph** (§62i). When `OperationDependency` records (§62b) exist in State, the minimum-scope blocked set for a blocked Operation MUST be computed as the forward-reachable set from that Operation in the `OperationDependency` DAG, filtered by dependency kind:
 
 - `FINISH_TO_START`: the dependent (`to_id`) Operation is blocked at start when the blocking (`from_id`) Operation is blocked. This is the hard-dependency case.
 - `START_TO_START`: the dependent Operation is blocked at start only if the blocking Operation's own start is also blocked. If the blocking Operation has started (even if not finished), the dependent may start.
@@ -8101,6 +8475,8 @@ AUTONOMY
 ```
 
 These are distinct.
+
+The viable-mechanism requirement and cost-bounded liveness path implement **AP29 — Dormancy/Wakeability Contract** (§62i).
 
 A dormant condition is wakeable only when a viable mechanism or durable responsibility can actually observe a qualifying change and cause reassessment. Merely recording a future condition without an observer, schedule, callback, poller or equivalent activation path does not establish wakeability.
 
@@ -8500,7 +8876,7 @@ Policy governs where applicable:
 
 Policy SHOULD constrain autonomy, not replace it. Where policy establishes a boundary while leaving choices open, URACE SHOULD choose autonomously within that boundary.
 
-**Enforcement gate.** The policy gate fires at step 11 of the canonical decision loop (§77) — immediately before consequential commit. Every Operation MUST be checked against all ACTIVE PolicyRecords and HardConstraints whose scope intersects the Operation's scope. A gate that finds a HARD constraint violation MUST block and surface; it MUST NOT defer to a later cycle.
+**Enforcement gate.** This section implements **AP33 — Policy Enforcement Gate** (§62i). The policy gate fires at step 11 of the canonical decision loop (§77) — immediately before consequential commit. Every Operation MUST be checked against all ACTIVE PolicyRecords and HardConstraints whose scope intersects the Operation's scope. A gate that finds a HARD constraint violation MUST block and surface; it MUST NOT defer to a later cycle.
 
 **PolicyRecord citizen schema.**
 
@@ -8609,6 +8985,8 @@ When a recovery attempt is itself interrupted before completing reconciliation �
 
 ## Cognitive reset recovery
 
+This section implements **CognitiveResetRecoveryProtocol** (§62l).
+
 A cognitive reset occurs when an Executor loses working context — through replacement, context-window eviction, restart, or any mechanism that discards in-process reasoning — without any change to durable URACE state. A cognitive reset is not a data loss event; it is a context reconstitution event and MUST NOT be treated as a crash or storage interruption requiring Transaction recovery unless a pending_transaction is independently present in the CognitiveResumeContext.
 
 Recovery from a cognitive reset proceeds as follows:
@@ -8691,6 +9069,8 @@ DISCOVER LIMITATION / OPPORTUNITY
 
 ## Executor Proposal Schema
 
+This section implements **AP34 — Self-Evolution Eligibility Gate** (§62i).
+
 When an Executor proposes a self-evolution Objective during discovery, the proposal MUST carry the following fields to enable the self-evolution policy gate:
 
 ```
@@ -8747,6 +9127,8 @@ A running URACE evolving itself does not automatically rewrite `URACE.md`.
 Normal Product evolution and authorized runtime self-evolution MUST NOT require re-bootstrap merely because they occur.
 
 ## Safe Runtime Activation
+
+The isolated preparation, crash-consistent activation, and fallback-preservation implement **AP31 — Safe Runtime Activation** (§62i).
 
 Runtime self-evolution MUST NOT overwrite the only runnable implementation before the candidate is independently validated.
 
@@ -9935,6 +10317,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r49 | 2026-10-14 | spec+runtime | Full Patternization Pass: AP26–AP37 (12 new architectural meta-patterns); CognitiveResetRecoveryProtocol, WakeRegistrationVerification, ComplianceRecordingContract added to §62l; cross-reference wires to AP26–AP37 in §52–§54, §60, §62a, §62c, §63–§67, §72–§74; §62b cross-reference note AP0–AP24→AP0–AP37; PatternMechanismMapping extended; 72 building blocks |
 | r48 | 2026-10-14 | spec+runtime | Compliance Canonization: ComplianceRecord + ComplianceState citizens; compliance_records/compliance_state State fields; §54 compliance recording contract; urace /compliance command; Data Interchange canonical note |
 | r47 | 2026-10-14 | runtime-only | Extract shared helpers: `_aggregate_scores`, `_affinity_match`, `_make_catalog_digest_fns`, `_suggest_unadopted_for_refs`, `_refresh_derived_refs`; fix digest update in refresh |
 | r46 | 2026-10-14 | spec+runtime | New-construct suggestion + construct/pattern update detection on `urace update download/explain`; `construct_digests`/`pattern_digests` in saved refs; DeriveUpdateSuggestion + ConstructUpdateDetection contracts |
