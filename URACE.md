@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r39**
+**Specification version: 2026-10-14-r40**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -7487,7 +7487,8 @@ The canonical schemas for this section — `PatternEntry`, `PatternAdoptionRecor
 ## `urace derive` Command Contract (AP24 — Derivation Framework instantiation, §62i)
 
 ```
-urace derive [--patterns <comma-list>] [--intent <text>]
+urace derive [<intent>]
+             [--patterns <comma-list>] [--suggest] [--from-goals]
              [--exclude <comma-list>] [--exclude-reason <text>]
              [--out <path>] [--save] [--json]
              [--derive-capabilities] [--apply-capabilities]
@@ -7495,6 +7496,16 @@ urace derive [--patterns <comma-list>] [--intent <text>]
              [--show-delta]
              [--derive-milestone]
 ```
+
+**r40 — Intent-first interface.** `<intent>` is the primary positional argument. When provided, `urace derive` runs `suggest_patterns_from_intent` to rank patterns by keyword and affinity overlap, then builds a manifest from the top suggestions. `--patterns` is a complementary and optional argument: when combined with `<intent>`, explicit pattern IDs are merged with intent-suggested IDs (explicit takes precedence; intent adds non-overlapping suggestions). When `<intent>` is omitted and `--patterns` is not set, the catalog browse is shown.
+
+**`--suggest`**: dry-run intent matching — prints ranked pattern suggestions without building a manifest. Requires `<intent>`.
+
+**`--from-goals`**: reads Goals from current state and derives a ranked pattern suggestion list by running `patterns_from_goals` across all goal titles/descriptions. Prints suggestions and a ready-to-copy `--patterns` argument. Does not build a manifest.
+
+**`suggest_patterns_from_intent(intent, top_n) → list[SuggestionEntry]`**: scores each AP in the catalog by (a) keyword overlap between intent tokens and pattern name/summary/provides, plus (b) affinity-table bonus for domain stems (event, compaction, retry, circuit, schedule, etc.). Returns top-N entries sorted descending by score, each containing `{pattern_id, name, tier, score, summary}`.
+
+**`patterns_from_goals(goals, top_n) → list[SuggestionEntry]`**: aggregates `suggest_patterns_from_intent` across all goal texts, sums scores, deduplicates, and returns top-N ranked entries. Used by `--from-goals`.
 
 **`--refresh`**: re-derives all saved DerivedManifestRefs (or only the one matching `--manifest-id`) using their stored `adopted_pattern_ids` and `intent`. Generates a new DerivedSystemManifest per ref, updates the stored DerivedManifestRef in state, creates a DerivationRecord(kind=REFRESH). If `--show-delta` is also set, the output includes: new patterns available since last derive, capability gaps that appeared or closed, changed dependency resolution. `--refresh` MUST NOT require `--patterns`; it reads from state.
 
@@ -7506,9 +7517,11 @@ urace derive [--patterns <comma-list>] [--intent <text>]
 
 **DerivationRecord audit trail.** Every `urace derive` invocation that produces a manifest, applies capabilities, refreshes, or drafts a milestone MUST append a `DerivationRecord` to `state.derivation_records`.
 
-**Without `--patterns`**: lists all available patterns with their tier, requires, and provides fields. No state or config access required.
+**Without `<intent>` and without `--patterns`**: lists all available patterns with their tier, requires, and provides fields. No state or config access required.
 
-**With `--patterns`**: resolves dependencies, builds a `DerivedSystemManifest`, and outputs it. If `--out` is provided, the manifest is written atomically to that path. If `--json`, the manifest is printed as a JSON document. Otherwise, a human-readable pattern guide is printed.
+**With `<intent>` (no `--patterns`)**: auto-suggests patterns via `suggest_patterns_from_intent`, resolves dependencies, builds and outputs a `DerivedSystemManifest`. Prints which patterns were suggested before the manifest.
+
+**With `--patterns` only**: resolves dependencies, builds a `DerivedSystemManifest`, and outputs it. If `--out` is provided, the manifest is written atomically to that path. If `--json`, the manifest is printed as a JSON document. Otherwise, a human-readable pattern guide is printed.
 
 **`--exclude` requires `--exclude-reason`**. An `--exclude` without `--exclude-reason` is an error. This enforces the acknowledged exclusion contract.
 
