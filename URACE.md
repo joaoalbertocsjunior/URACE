@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r46**
+**Specification version: 2026-10-14-r47**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -9884,6 +9884,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r47 | 2026-10-14 | runtime-only | Extract shared helpers: `_aggregate_scores`, `_affinity_match`, `_make_catalog_digest_fns`, `_suggest_unadopted_for_refs`, `_refresh_derived_refs`; fix digest update in refresh |
 | r46 | 2026-10-14 | spec+runtime | New-construct suggestion + construct/pattern update detection on `urace update download/explain`; `construct_digests`/`pattern_digests` in saved refs; DeriveUpdateSuggestion + ConstructUpdateDetection contracts |
 | r45 | 2026-10-14 | spec+runtime | `--opt-in-constructs` replaces `--opt-in-patterns` (alias kept); ConstructSetRef citizen + stale-construct-set detection; `--save`/`--refresh` wired for DerivedConstructSet; `construct_set_refs` in initial state |
 | r44 | 2026-10-14 | spec+runtime | `--from-constraints`: HardConstraint-to-construct suggestion; `--from-inspection`: InspectionSurface gap-to-construct suggestion; ConstraintDerivedSuggestion + GapDerivedSuggestion contracts |
