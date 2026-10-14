@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r45**
+**Specification version: 2026-10-14-r46**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -7548,7 +7548,7 @@ urace derive [<intent>]
 
 A `DerivedSystemManifest` MUST conform to the `DerivedSystemManifest` citizen schema. It is a lifecycle artifact: it carries a stable `manifest_id`, was generated at a declared timestamp, references a specific URACE spec version, and is traceable. Implementations that store or transmit a manifest SHOULD treat it as a citizen record and include it in their evidence log.
 
-**Manifest and construct set persistence.** `urace derive --save` stores a manifest reference in `state.derived_manifest_refs` (pattern kind) or a ConstructSetRef in `state.construct_set_refs` (non-pattern kinds) — a list of `DerivedManifestRef` records: `{manifest_id, spec_version, generated_at, adopted_pattern_ids, intent}`. This enables the update system to detect stale manifests. Manifests written only to `--out` are not tracked in state.
+**Manifest and construct set persistence.** `urace derive --save` stores a manifest reference in `state.derived_manifest_refs` (pattern kind) or a ConstructSetRef in `state.construct_set_refs` (non-pattern kinds); each saved reference includes a `pattern_digests` / `construct_digests` fingerprint map for update detection — a list of `DerivedManifestRef` records: `{manifest_id, spec_version, generated_at, adopted_pattern_ids, intent}`. This enables the update system to detect stale manifests. Manifests written only to `--out` are not tracked in state.
 
 A derived system's compliance obligation is exactly: **every adopted pattern's normative requirements apply; no unadopted pattern's normative requirements apply.** This is the complete and closed contract.
 
@@ -7883,6 +7883,8 @@ A lightweight reference to a saved DerivedConstructSet, stored in `state.constru
 | `intent` | string | Original intent text |
 
 **Stale-construct-set detection contract.** When the governing spec is updated, any stored ConstructSetRef whose `spec_version` differs from the new version MUST be surfaced as a `derived-construct-set-stale` warning. The warning MUST include the `construct_set_id`, the stale version, and the candidate version. Stale detection is a warning, not a blocker. **Refresh contract.** `urace derive --kind ... --refresh` re-derives all saved ConstructSetRefs (or the one matching `--manifest-id`) using their stored `adopted_construct_ids` and `intent`, writes updated refs to `state.construct_set_refs`, and appends a DerivationRecord of kind `CONSTRUCT_SET_REFRESH`.
+
+**New-construct suggestion contract (r46).** On `urace update download` and `urace update explain`, for each saved ConstructSetRef the system MUST run IntentSuggestionEngine over the stored `intent`, filter out already-adopted construct IDs, and surface the top-N results as new-construct suggestions. Output MUST include the construct_set_id, intent, and suggestion list. This surfaces newly-added constructs that match the operator's original intent without requiring manual re-querying. **Construct update detection contract (r46).** If a saved ConstructSetRef includes `construct_digests`, the system MUST compare stored digests against current catalog entries for all adopted construct IDs. Any mismatch indicates the construct was updated since derivation and MUST be surfaced as a `construct update available` notice with the affected IDs and a ready-to-run `urace derive --refresh` command. The same detection applies to saved DerivedManifestRefs via `pattern_digests`.
 
 # 63. Concurrency
 
@@ -9882,6 +9884,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r46 | 2026-10-14 | spec+runtime | New-construct suggestion + construct/pattern update detection on `urace update download/explain`; `construct_digests`/`pattern_digests` in saved refs; DeriveUpdateSuggestion + ConstructUpdateDetection contracts |
 | r45 | 2026-10-14 | spec+runtime | `--opt-in-constructs` replaces `--opt-in-patterns` (alias kept); ConstructSetRef citizen + stale-construct-set detection; `--save`/`--refresh` wired for DerivedConstructSet; `construct_set_refs` in initial state |
 | r44 | 2026-10-14 | spec+runtime | `--from-constraints`: HardConstraint-to-construct suggestion; `--from-inspection`: InspectionSurface gap-to-construct suggestion; ConstraintDerivedSuggestion + GapDerivedSuggestion contracts |
 | r43 | 2026-10-14 | spec | Purge all runtime-specific function/variable names from spec body; add Revision Log (§81); all contracts now stated in executor-agnostic terms |
