@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r36**
+**Specification version: 2026-10-14-r37**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -1567,6 +1567,42 @@ Discovery MAY reveal a better route or delegated destination.
 
 Discovery does not create Authority.
 
+**DiscoveryRecord citizen schema.** Each discovery cycle MUST produce a DiscoveryRecord capturing what was found, what was evaluated, and what was surfaced.
+
+```
+DiscoveryRecord {
+  id                      REQUIRED  Identifier; prefix "dsc-"
+  cycle_id                REQUIRED  string; stable ID for this discovery run
+  started_at              REQUIRED  string; ISO-8601 timestamp
+  completed_at            OPTIONAL  string; ISO-8601 timestamp; absent if interrupted
+  cycle_status            REQUIRED  DiscoveryCycleStatus
+  categories_evaluated    REQUIRED  list of string; e.g. "goals", "triggers", "pending_objectives"
+  categories_skipped      OPTIONAL  list of DiscoverySkip; skipped categories with reason
+  candidates_found        REQUIRED  int; count of candidate Objectives surfaced
+  candidates_rejected     REQUIRED  int; count of candidates evaluated and rejected
+  surfaced_objective_ids  OPTIONAL  list of string; Objective IDs promoted to eligible
+  budget_status           OPTIONAL  string; DiscoveryBudgetStatus value at start of cycle
+  error_detail            OPTIONAL  string; set when cycle_status = ERROR_INTERRUPTED
+}
+
+DiscoverySkip {
+  category    REQUIRED  string
+  reason      REQUIRED  string; "capability_unavailable" | "resource_constraint" | "error"
+  blocked_on  OPTIONAL  string; what must change before this category can be evaluated
+}
+```
+
+**DiscoveryCycleStatus enum.**
+```
+COMPLETE           — all registered input categories evaluated; dormancy conclusion authoritative
+INCOMPLETE         — capability or resource gap prevented full evaluation; dormancy conclusion not authoritative
+ERROR_INTERRUPTED  — enumeration error; specific category and error preserved; requires recovery
+```
+
+**Discovery scoring contract.** The question "what most justifies action now?" is answered by ranking each candidate Objective on: `score = (intent_alignment × evidence_weight) + information_gain − cost − risk`. Intent alignment is computed from the Objective's relationship to governing Intent (direct → 1.0; indirect → 0.5; tangential → 0.1). Evidence weight is the credibility-weighted sum of supporting Evidence. Information gain is estimated from uncertainty reduction. Cost and risk reduce the score proportionally. The highest-scoring eligible authorized Objective is selected.
+
+**State Document.** `discovery_records` OPTIONAL list of DiscoveryRecord.
+
 ---
 
 # 37. Assessment
@@ -1611,6 +1647,35 @@ URACE SHOULD preserve decision basis rather than hidden chain-of-thought.
 When a required assessment input — Authority, Intent, State, or Evidence — is absent or below minimum quality for sound navigation, URACE MUST surface the missing input as a specific blocking gap before selecting or executing any dependent Objective. URACE MUST retain the incomplete assessment record and all available inputs intact, and MUST NOT proceed with an inferred or defaulted substitute for a missing required input where that substitute would conceal an actual navigation boundary.
 
 The assessment cycle implements AP8 — Fixpoint Calculus (§62i): gaps are detected iteratively until convergence is reached (no new gaps surfaced in the current cycle).
+
+**AssessmentRecord citizen schema.** Every assessment cycle boundary SHOULD produce an AssessmentRecord — a durable record of what was evaluated and what was concluded.
+
+```
+AssessmentRecord {
+  id                   REQUIRED  Identifier; prefix "asr-"
+  assessed_at          REQUIRED  string; ISO-8601 timestamp
+  lifecycle_phase      REQUIRED  string; which phase triggered this assessment
+  authority_ids        REQUIRED  list of string; Authority record IDs evaluated
+  intent_id            REQUIRED  string; governing Intent ID at assessment time
+  evidence_ids         OPTIONAL  list of string; Evidence IDs considered
+  technique_results    OPTIONAL  map of technique_id → SD result; from TAS (§62h)
+  discovered_objective_ids OPTIONAL list of string; Objective IDs surfaced
+  blocked_categories   OPTIONAL  list of string; categories skipped with reason
+  cycle_status         REQUIRED  AssessmentCycleStatus
+  incomplete_reason    OPTIONAL  string; set when cycle_status != COMPLETE
+}
+```
+
+**AssessmentCycleStatus enum.**
+```
+COMPLETE           — all input categories evaluated; conclusion is authoritative
+CAPABILITY_SKIPPED — one or more categories skipped due to unavailable capability
+ERROR_INTERRUPTED  — enumeration error halted the cycle; conclusion is partial
+```
+
+**TAS wiring.** Each assessment cycle MUST invoke the TechniqueApplicabilityGate (§62h) before selecting techniques. The gate's per-technique SD result MUST be recorded in `AssessmentRecord.technique_results`. An assessment that skips the gate violates the technique applicability contract.
+
+**State Document.** `assessment_records` OPTIONAL list of AssessmentRecord.
 
 ---
 
@@ -2374,6 +2439,69 @@ OR SURFACE       EVALUATE
 CONFLICT         DESTINATION
                  EVOLUTION
 ```
+
+**MarketSignal citizen schema.** A MarketSignal is a credible, time-stamped external observation bearing on whether the Product's current direction satisfies a market-dependent outcome.
+
+```
+MarketSignal {
+  id              REQUIRED  Identifier; prefix "mks-"
+  kind            REQUIRED  MarketSignalKind
+  observed_at     REQUIRED  string; ISO-8601 timestamp
+  source          REQUIRED  string; origin of the signal (e.g. "user-interview", "metric-system", "external-api")
+  description     REQUIRED  string; human-readable signal description
+  confidence      REQUIRED  FitConfidence
+  intent_id       REQUIRED  string; governing Intent this signal is relative to
+  evidence_ids    OPTIONAL  list of string; Evidence IDs that carry the underlying data
+  hypothesis_ids  OPTIONAL  list of string; FitHypothesis IDs this signal informs
+}
+```
+
+**FitHypothesis citizen schema.** A FitHypothesis is a falsifiable belief about whether a specific Product behavior or outcome contributes to market fit under governing Intent.
+
+```
+FitHypothesis {
+  id              REQUIRED  Identifier; prefix "fhy-"
+  description     REQUIRED  string; the falsifiable claim
+  intent_id       REQUIRED  string; governing Intent this hypothesis is relative to
+  status          REQUIRED  FitHypothesisStatus
+  confidence      REQUIRED  FitConfidence
+  supporting_signal_ids  OPTIONAL  list of string; MarketSignal IDs that support
+  refuting_signal_ids    OPTIONAL  list of string; MarketSignal IDs that refute
+  created_at      REQUIRED  string; ISO-8601 timestamp
+  last_updated_at REQUIRED  string; ISO-8601 timestamp
+}
+```
+
+**MarketSignalKind enum.**
+```
+USER_BEHAVIOR     — observed user action or usage pattern
+USER_FEEDBACK     — direct user statement or survey response
+RETENTION_SIGNAL  — cohort retention, churn, or re-engagement metric
+CONVERSION_SIGNAL — funnel or activation metric
+COMPETITOR_SIGNAL — market positioning or competitive movement
+EXTERNAL_METRIC   — third-party or platform metric
+REVENUE_SIGNAL    — payment, subscription, or monetization event
+```
+
+**FitConfidence enum.**
+```
+STRONG    — multiple corroborating independent signals; high credibility
+MODERATE  — some corroboration; credible but not conclusive
+WEAK      — single signal; low corroboration; treat as hypothesis prompt only
+ABSENT    — no current supporting signal; hypothesis is ungrounded
+```
+
+**FitHypothesisStatus enum.**
+```
+ACTIVE      — hypothesis is current; URACE may act on it within Authority
+VALIDATED   — sufficient Evidence confirms the hypothesis; treated as a navigation anchor
+REFUTED     — sufficient Evidence contradicts the hypothesis; URACE must not rely on it
+STALE       — no fresh signal has updated the hypothesis within the staleness window
+```
+
+**Market-feedback integration.** URACE MUST evaluate active FitHypotheses during each assessment cycle when the Product is in FORMING, CAPABLE, or OPTIMIZED maturity. A VALIDATED hypothesis with HIGH confidence MAY inform route selection within delegated Authority. A REFUTED hypothesis MUST trigger reassessment of any Plan that relied on it. A STALE hypothesis MUST surface as a PendingValidation. MarketSignal does not create Authority.
+
+**State Document.** `market_signals` OPTIONAL list of MarketSignal; `fit_hypotheses` OPTIONAL list of FitHypothesis.
 
 # 59b. Product Capable Evolution
 
@@ -7458,6 +7586,39 @@ Locks, leases or ownership markers left by interrupted runtimes MUST be reconcil
 
 When liveness of an existing ownership marker cannot be established through available environment-level signals — such as process existence, heartbeat record age, or an equivalent mechanism — URACE MUST surface the marker as a named unresolved ownership boundary in the lifecycle inspection output and MUST NOT silently supersede it based on elapsed time alone. An authorized operator clearance of the marker through an authenticated lifecycle command is the only valid path to ownership acquisition when liveness is indeterminate; the clearance MUST be recorded as a durable event. An implementation that silently times out an ownership marker without attributable proof of owner absence violates the stale-overwrite prohibition stated above.
 
+**OwnershipMarker citizen schema.** Every lock, lease or ownership claim written to durable state MUST conform to this schema.
+
+```
+OwnershipMarker {
+  id              REQUIRED  Identifier; prefix "omk-"
+  owner_id        REQUIRED  string; identity of the runtime or process that holds this marker
+  scope           REQUIRED  string; what the marker claims ownership over
+  acquired_at     REQUIRED  string; ISO-8601 timestamp
+  heartbeat_at    OPTIONAL  string; ISO-8601 timestamp; last confirmed-live signal
+  status          REQUIRED  OwnershipMarkerStatus; default HELD
+  cleared_at      OPTIONAL  string; ISO-8601 timestamp; set when status=CLEARED
+  cleared_by      OPTIONAL  string; operator Input id or "self" for voluntary release
+}
+```
+
+**OwnershipMarkerStatus enum.**
+```
+HELD    — marker is active; owner is presumed live
+STALE   — liveness cannot be confirmed; blocked pending operator clearance
+CLEARED — marker was explicitly cleared through authenticated lifecycle command
+```
+
+**ConcurrencyPolicy config field.**
+```
+Config.concurrency_policy OPTIONAL {
+  max_concurrent_runtimes  OPTIONAL  int; default 1
+  liveness_timeout_seconds OPTIONAL  int; seconds before an unheartbeated marker is treated as STALE; default 300
+  clearance_requires_operator OPTIONAL bool; default true
+}
+```
+
+**State Document.** `ownership_markers` OPTIONAL list of OwnershipMarker.
+
 ---
 
 # 64. Lifecycle States
@@ -7954,24 +8115,88 @@ LIVENESS
 
 # 72. Safety, Constraints and Policy
 
-HARD constraints MUST NOT be overridden.
+HARD constraints MUST NOT be overridden under any circumstances — not by Evidence, Priority, Authority delegation, executor recommendation, or market pressure. A hard constraint violation is a blocking integrity gap; URACE MUST halt the dependent action and surface the constraint as a named BLOCKING gap before any effect is committed.
+
+SOFT constraints MAY be overridden by an explicit, attributable DecisionRecord that acknowledges the constraint, documents the justification, and scopes the override to a specific Operation.
 
 Policy governs where applicable:
+- prohibited actions
+- reserved decisions
+- approvals
+- budgets
+- external interaction
+- privacy
+- risk
+- self-modification
+- delegation
+- termination
 
-- prohibited actions;
-- reserved decisions;
-- approvals;
-- budgets;
-- external interaction;
-- privacy;
-- risk;
-- self-modification;
-- delegation;
-- termination.
+Policy SHOULD constrain autonomy, not replace it. Where policy establishes a boundary while leaving choices open, URACE SHOULD choose autonomously within that boundary.
 
-Policy SHOULD constrain autonomy, not replace it.
+**Enforcement gate.** The policy gate fires at step 11 of the canonical decision loop (§77) — immediately before consequential commit. Every Operation MUST be checked against all ACTIVE PolicyRecords and HardConstraints whose scope intersects the Operation's scope. A gate that finds a HARD constraint violation MUST block and surface; it MUST NOT defer to a later cycle.
 
-Where policy establishes a boundary while leaving choices open, URACE SHOULD choose autonomously.
+**PolicyRecord citizen schema.**
+
+```
+PolicyRecord {
+  id              REQUIRED  Identifier; prefix "pol-"
+  kind            REQUIRED  PolicyKind
+  status          REQUIRED  PolicyStatus; default ACTIVE
+  description     REQUIRED  string; human-readable policy statement
+  scope           REQUIRED  string; scope path this policy applies to ("*" = all)
+  enforcement     REQUIRED  ConstraintEnforcement; HARD or SOFT
+  authority_basis REQUIRED  string; which Authority record establishes this policy
+  established_at  REQUIRED  string; ISO-8601 timestamp
+  suspended_at    OPTIONAL  string; ISO-8601 timestamp; set when status=SUSPENDED
+  revoked_at      OPTIONAL  string; ISO-8601 timestamp; set when status=REVOKED
+  revocation_reason OPTIONAL string
+}
+```
+
+**HardConstraint citizen schema.**
+
+```
+HardConstraint {
+  id              REQUIRED  Identifier; prefix "hco-"
+  description     REQUIRED  string; what is prohibited
+  scope           REQUIRED  string; scope path ("*" = all)
+  established_at  REQUIRED  string; ISO-8601 timestamp
+  authority_basis REQUIRED  string; which Authority record establishes this constraint
+  violation_count OPTIONAL  int; number of blocked attempts; default 0
+}
+```
+
+**PolicyKind enum.**
+```
+PROHIBITION         — action class is forbidden
+PERMISSION          — action class is explicitly permitted (narrows defaults)
+APPROVAL_REQUIREMENT — action class requires an attributed DecisionRecord before proceeding
+BUDGET              — resource expenditure is capped
+PRIVACY             — data disclosure or persistence is restricted
+RISK                — risk exposure ceiling
+SELF_MODIFICATION   — constrains autonomous self-evolution scope
+DELEGATION          — constrains who may receive delegated Authority
+TERMINATION         — governs when and how lifecycle may terminate
+```
+
+**PolicyStatus enum.**
+```
+ACTIVE      — policy is in force
+SUSPENDED   — policy is temporarily inactive; must not be applied; reason preserved
+REVOKED     — policy has been permanently removed; preserved for audit
+```
+
+**ConstraintEnforcement enum.**
+```
+HARD  — violation blocks; no override permitted
+SOFT  — violation surfaces warning; attributable DecisionRecord may override
+```
+
+**State Document fields.**
+`policy_records` OPTIONAL list of PolicyRecord
+`hard_constraints` OPTIONAL list of HardConstraint
+
+**Bootstrap contract.** If no HardConstraint or PolicyRecord exists at bootstrap, URACE MUST record a WARNING IntegrityGap(kind="no-hard-constraints-declared") to prompt the operator to establish safety boundaries. The absence of declared constraints does not imply no constraints; it implies unverifiable constraints.
 
 ---
 
@@ -8217,6 +8442,25 @@ An Executor's context window is a runtime resource, not a lifecycle invariant. U
 
 An implementation MUST keep lifecycle state, Authority/Intent resolution, Evidence, discovery, planning, execution, validation, checkpoints, recovery and capability selection distinguishable and replaceable. One component MAY implement several boundaries when their state and effects remain distinguishable; environment-specific interfaces MAY differ while preserving their Operations. It SHOULD use the smallest inspectable structure that satisfies the Product and environment and MUST NOT build heavyweight IAM, RBAC, workflow, Scheduler, event, transaction or market-fit systems merely because URACE defines corresponding semantics.
 
+**Minimum viable behaviors.** A minimal but complete implementation MUST satisfy the following §78 test categories before claiming conformance:
+
+- Destination / Intent: A, B, C, D, E, F, G, H
+- Navigation: I, J, K, L, M, N, O, P, Q, R
+- Authority: S, T, U, V, W, X, Y, Z, AA, AB, AC, AD, AE, AF
+- Evidence: AG, AH, AI, AJ, AK, AL, AM, AN, AO, AP, AQ, AR
+- Liveness: BR, BS, BT, BU, BV, BW, BX, BZ, CB, CD
+- Anti-Leak: CE, CF, CG, CH, CI, CJ, CK, CL, CM, CQ, CR, CS, CT, CU
+
+An implementation that satisfies all of the above and no more constitutes a minimal conformant implementation. Features beyond this set are optional capability extensions.
+
+**Completeness criteria.** An implementation is complete when:
+1. Every required §78 test ID above maps to an implemented mechanism verifiable by inspection or by a passing TestRunRecord(kind=CAPABILITY_GATE).
+2. Every normative "MUST" requirement in §77 canonical decision loop steps 1–16 maps to an implemented mechanism.
+3. Every citizen schema in §62b with "REQUIRED" fields has a registered validator.
+4. Bootstrap produces an attributable report enumerating: implemented mechanisms, unsupported optional capabilities, and any §78 test IDs not yet satisfied with their blocking reason.
+
+**Implementation surface contract.** A minimal implementation MUST NOT claim conformance by satisfying tests through mocks that do not correspond to real mechanisms. The behavioral test for each §78 entry requires that the corresponding mechanism exists in durable code and produces verifiable state changes observable through `urace check` or `urace vitals`.
+
 ---
 
 # 77. Canonical Operating Contract
@@ -8346,111 +8590,264 @@ Expect: resume autonomously.
 
 **S — Authority Is Not Priority**
 
+Given an Objective has high Priority under delegated Authority, but a separate higher-priority Objective lies outside delegated scope.
+Expect: URACE pursues only the in-scope Objective; Priority does not expand scope.
+
 **T — Authority Is Not Evidence**
+
+Given strong Evidence supports an action not covered by delegated Authority.
+Expect: URACE does not take the action; Evidence informs navigation but does not grant Authority.
 
 **U — Capability Is Not Authority**
 
+Given URACE is technically capable of taking an action not covered by delegated Authority.
+Expect: capability does not authorize the action; it remains outside scope.
+
 **V — Delegation Bound**
+
+Given Authority delegates Product navigation within purpose X but not beyond it.
+Expect: URACE operates within X and surfaces any discovered opportunity outside X for authoritative decision.
 
 **W — Recursive Delegation Bound**
 
+Given URACE receives delegated Authority and could further delegate a subset of it to an Executor.
+Expect: URACE may delegate only within the scope it received; it cannot grant more than it holds.
+
 **X — Authority Provenance**
+
+Given a decision was made under Authority A, which is later found to have been granted by an unauthenticated source.
+Expect: URACE surfaces the provenance failure, flags affected decisions as provenance-unverified, and halts dependent uncommitted work pending reauthorization.
 
 **Y — Authority Conflict**
 
+Given two Authority records grant overlapping but contradictory instructions.
+Expect: URACE applies the conflict resolution rules of §14–§16 and does not silently prefer one over the other; the conflict is surfaced in inspection output.
+
 **Z — Authority Revocation**
+
+Given a previously delegated Authority is revoked.
+Expect: URACE immediately stops relying on the revoked Authority for new decisions; accepted decisions already committed are preserved with attributed provenance.
 
 **AA — Revocation Does Not Rewrite History**
 
+Given Authority is revoked after an Operation was already accepted and checkpointed.
+Expect: the accepted checkpoint is preserved; revocation applies prospectively only; history is not altered.
+
 **AB — Stable Delegation Does Not Require Reapproval**
+
+Given delegated Authority has not changed and a new cycle begins.
+Expect: URACE proceeds under existing delegation without requesting reapproval.
 
 **AC — Reserved Decision Only**
 
+Given a decision falls within a reserved scope while other work lies within delegated scope.
+Expect: only the reserved-scope work is blocked; delegated-scope work continues unblocked.
+
 **AD — Partial Blocking**
+
+Given one scope is blocked waiting for an authoritative decision while another scope has justified authorized work.
+Expect: the unblocked scope advances autonomously; URACE does not treat a partial block as a full lifecycle halt.
 
 **AE — Broad Delegation Produces Broad Autonomy**
 
+Given the authoritative source delegates broad navigational authority over a Product domain.
+Expect: URACE exercises that authority without requesting confirmation for each sub-decision; broad delegation means broad autonomous operation.
+
 **AF — Authority Cannot Self-Expand**
+
+Given URACE identifies an opportunity that would require Authority beyond its current delegation.
+Expect: URACE surfaces the opportunity and the missing Authority; it does not manufacture the missing Authority or proceed without it.
 
 ## Evidence
 
 **AG — External Evidence First-Class**
 
+Given an external metric or observation contradicts an internal assumption.
+Expect: the external Evidence is treated as first-class; internal assumption is flagged for revalidation.
+
 **AH — Evidence Quality**
+
+Given Evidence is present but below minimum credibility threshold (e.g., single-source, unverified claim).
+Expect: URACE records its quality level and does not treat low-quality Evidence as equal to high-quality Evidence in navigation decisions.
 
 **AI — Evidence Relevance**
 
+Given Evidence is credible but concerns a scope unrelated to the current Objective.
+Expect: URACE records it as available but does not apply it to unrelated navigation decisions.
+
 **AJ — Contradictory Evidence**
+
+Given two credible Evidence records conflict on the same observable fact.
+Expect: URACE preserves both, records the conflict, and does not silently discard either; the conflict is surfaced as uncertainty before dependent decisions.
 
 **AK — Executor Claim vs Evidence**
 
+Given an Executor claims an effect occurred but no independent external Evidence confirms it.
+Expect: URACE treats the Executor claim as unconfirmed; it does not elevate an executor claim to validated Evidence without independent corroboration or explicit policy.
+
 **AL — External Reality Precedence**
+
+Given lifecycle state records outcome X but external observation shows outcome Y.
+Expect: URACE updates its assessment to reflect external reality; internal state is corrected, not defended.
 
 **AM — Weak External Evidence**
 
+Given external Evidence is present but low-confidence (single signal, no corroboration).
+Expect: URACE records the Evidence with its confidence level; it may inform but does not determine navigation unless confidence threshold is met.
+
 **AN — Intent Does Not Override Reality**
+
+Given governing Intent implies outcome X but Evidence shows X is not occurring.
+Expect: URACE preserves Intent as the destination while updating assessment to reflect reality; Intent does not override observation.
 
 **AO — Reality Does Not Create Authority**
 
+Given Evidence strongly supports taking an action outside delegated Authority.
+Expect: Evidence does not create Authorization; the action remains unauthorized regardless of Evidence quality.
+
 **AP — Evidence Changes Route**
+
+Given Evidence shows the current Plan is not producing progress toward the destination.
+Expect: URACE autonomously adapts the route within Authority; Evidence is sufficient justification for route change.
 
 **AQ — Evidence Changes Delegated Destination**
 
+Given Evidence shows a delegated subordinate destination is no longer appropriate within governing purpose.
+Expect: URACE may autonomously revise the delegated destination within its delegated scope; governing purpose is preserved.
+
 **AR — Evidence Cannot Change Retained Destination**
+
+Given Evidence suggests a different retained destination would be more valuable.
+Expect: URACE preserves the retained destination; Evidence may justify surfacing the conflict but cannot authorize destination replacement.
 
 ## Trigger / Plan / Scheduler
 
 **AS — Trigger Without Mutation**
 
+Given a Trigger fires but assessment finds no justified authorized action.
+Expect: the Trigger is recorded; no lifecycle state mutation occurs; URACE may re-enter dormancy.
+
 **AT — Trigger Mechanism Replacement**
+
+Given the configured trigger observation mechanism is replaced with an equivalent.
+Expect: previously registered wake conditions survive; no triggers are silently lost during the replacement.
 
 **AU — Trigger Storm**
 
+Given many Triggers fire in rapid succession representing the same underlying change.
+Expect: URACE deduplicates or rate-limits the triggers; it does not re-evaluate redundant identical Triggers separately.
+
 **AV — Unknown Trigger Source**
+
+Given a Trigger arrives from an unrecognized or unauthenticated source.
+Expect: URACE does not treat the unknown-source Trigger as authoritative; it may be logged as a candidate observation subject to quality assessment.
 
 **AW — Trigger Persistence**
 
+Given a Trigger fires while the lifecycle is BLOCKED.
+Expect: the Trigger is durably queued; it is not lost and is evaluated at the next unblocked lifecycle boundary.
+
 **AX — Trigger Is Not Evidence**
+
+Given a Trigger indicates that a change may have occurred.
+Expect: the Trigger prompts reassessment; it does not itself constitute Evidence; assessment must evaluate whether the change is real and relevant.
 
 **AY — Trigger Is Not Authority**
 
+Given a Trigger fires for an action that would require Authority not yet delegated.
+Expect: the Trigger prompts assessment; assessment finds the required Authority absent; the action is blocked pending Authority resolution.
+
 **AZ — Plan Persistence**
+
+Given an Executor is replaced mid-Plan.
+Expect: the Plan survives; the replacement Executor resumes from the current Plan state rather than creating a new Plan.
 
 **BA — Planner Replacement**
 
+Given the Planner component is replaced.
+Expect: previously accepted Plans remain valid; the new Planner does not invalidate accepted work.
+
 **BB — Scheduler Replacement**
+
+Given the Scheduler component is replaced.
+Expect: registered scheduled conditions survive; no scheduled wake conditions are lost.
 
 **BC — Schedule Is Not Justification**
 
+Given a Schedule fires for a planned Operation.
+Expect: URACE reassesses justification at the schedule boundary; a due schedule does not automatically authorize execution if premises have materially changed.
+
 **BD — Plan Completion Is Not Lifecycle Completion**
+
+Given the current Plan's final step is accepted.
+Expect: URACE reassesses whether further justified work exists before entering dormancy; lifecycle continues until no justified authorized action exists.
 
 ## Execution Integrity
 
 **BE — Stale Authority Before Commit**
 
+Given Authority basis has been revoked between planning and pre-commit revalidation.
+Expect: URACE detects the stale Authority at pre-commit check (step 11 of canonical loop), blocks the commit, and surfaces the revocation as a blocking gap.
+
 **BF — Stale Intent Before Commit**
+
+Given governing Intent has changed between planning and pre-commit revalidation.
+Expect: URACE detects the changed Intent at pre-commit check, blocks or re-evaluates the pending Operation, and surfaces the dependency.
 
 **BG — Stale Product State**
 
+Given the Operation was planned against state version S12 but state is now S13 due to an intervening commit.
+Expect: URACE detects the state version mismatch, does not overwrite S13 with stale assumptions, and reconciles or replans.
+
 **BH — Concurrent State Update**
+
+Given two runtimes attempt to commit against the same state version simultaneously.
+Expect: exactly one commit succeeds; the other detects the version conflict and reconciles rather than silently overwriting.
 
 **BI — Duplicate Operation**
 
+Given an Operation with the same idempotency key is submitted twice.
+Expect: the second submission is recognized as a duplicate; its effect is not applied a second time; the first result is returned or preserved.
+
 **BJ — Crash Before Effect**
+
+Given the process crashes after planning and writing effect intent but before the external effect is committed.
+Expect: recovery detects the uncommitted effect intent, does not assume the effect occurred, and either retries safely or surfaces the uncertainty.
 
 **BK — Crash After Effect Before Persistence**
 
+Given an external effect is committed but the process crashes before the acceptance record is durably persisted.
+Expect: recovery detects the INDETERMINATE state, reconciles against external reality, and durably records the correct disposition without assuming success or failure.
+
 **BL — Indeterminate Effect**
+
+Given an Operation's external effect status cannot be determined from available signals.
+Expect: URACE preserves the effect as INDETERMINATE in durable state; it does not assume success, failure, or retry safety without independent reconciliation.
 
 **BM — Executor Says Failed but Effect Occurred**
 
+Given the Executor returns a failure result but external observation shows the effect was applied.
+Expect: URACE trusts external observation over executor claim; the effect is recorded as externally confirmed; retry is suppressed.
+
 **BN — Executor Says Success but Effect Missing**
+
+Given the Executor returns success but external observation shows the effect did not occur.
+Expect: URACE trusts external observation; the Operation is not accepted as successful; the discrepancy is preserved as Evidence.
 
 **BO — Attempt Is Not Acceptance**
 
+Given an Operation is attempted but validation has not completed.
+Expect: URACE does not checkpoint the Operation as accepted; attempt and acceptance are distinct lifecycle phases.
+
 **BP — External Success Is Not Product Acceptance**
 
+Given an external system confirms a change was applied.
+Expect: URACE still requires its own validation step; external confirmation is Evidence, not URACE acceptance.
+
 **BQ — Decision Basis Reconstruction**
+
+Given an accepted DecisionRecord must be audited.
+Expect: the full basis — Authority, Intent, Evidence, state reference, constraints, assumptions — is reconstructable from durable state without invoking a new Executor or restating any input.
 
 ## Liveness
 
