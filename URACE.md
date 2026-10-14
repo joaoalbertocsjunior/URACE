@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-12-r33**
+**Specification version: 2026-10-12-r34**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2375,6 +2375,35 @@ CONFLICT         DESTINATION
                  EVOLUTION
 ```
 
+# 59b. Product Capable Evolution
+
+Not all progress is improvement. A Product reaches its **capable sweet spot** when every required capability is present, complexity remains within its declared envelope, and value density — the ratio of delivered value to product surface area — meets or exceeds its configured floor. Growth beyond that point is not advancement; it is scope creep and maintenance burden.
+
+**Capable ≠ Maximal.** The goal of Product evolution is not to maximize scope, feature count, or quality scores in isolation. It is to reach and sustain the smallest, most cohesive Product surface that fully satisfies governing Intent.
+
+**Three evolution phases:**
+```text
+BOOTSTRAPPING → FORMING → CAPABLE → OPTIMIZED → OVER_ENGINEERED
+```
+- `BOOTSTRAPPING`: core capabilities not yet defined or partially absent
+- `FORMING`: capabilities being built out; completeness below target
+- `CAPABLE`: all required capabilities present; complexity within envelope; value density above floor — the **sweet spot**
+- `OPTIMIZED`: capable state with demonstrably improved value density; still within envelope
+- `OVER_ENGINEERED`: capability or complexity exceeds envelope ceiling; value density declining
+
+**Four evolution modes, mapped to contribution kind:**
+- `CAPABILITY_DEFINING`: establishes a new required capability; valid only in BOOTSTRAPPING/FORMING
+- `CAPABILITY_COMPLETING`: brings a PARTIAL capability to CAPABLE; valid only in FORMING
+- `QUALITY_IMPROVING`: raises quality of an existing CAPABLE capability without expanding surface; always valid
+- `COMPLEXITY_REDUCING`: reduces surface while preserving capability; always valid
+- `MILESTONE_TARGETING`: explicitly targets achieving a declared ProductMilestone gate; valid while milestone is active
+
+**Governing invariant.** When a Product has reached `CAPABLE` maturity level, URACE MUST NOT select objectives of kind `CAPABILITY_DEFINING` unless a governing authority explicitly authorizes capability scope expansion. Adding capability to an already-capable Product is a scope decision, not an autonomous improvement decision. `COMPLEXITY_REDUCING` and `QUALITY_IMPROVING` remain autonomously authorized at any maturity level.
+
+**Value density.** `value_density = sum(capability.value_weight × (capability_status == CAPABLE ? 1.0 : completeness_fraction)) / product_surface_measure`. A declining value density trend after reaching CAPABLE signals over-engineering risk. URACE MUST surface value density as a core vital alongside quality streak and execution budget. `SD(ValueDensity, S) = True` — locally computable.
+
+**Capability Envelope Gate.** A change that increases product surface measure (lines, schemas, mechanisms, AP patterns) beyond the configured complexity ceiling while the Product is already at CAPABLE or OPTIMIZED maturity MUST be gated. URACE MUST emit an IntegrityGap(kind="capability-envelope-breach", severity=WARNING) and MUST NOT accept the change without a DecisionRecord explicitly justifying the surface expansion.
+
 ---
 
 # 60. Validation and Acceptance
@@ -3426,6 +3455,16 @@ Config {
                                hard_cap_fraction:    float 0.0–1.0 (default 0.90)
                                executor_context_cap: int; token capacity of executor class
                              }
+  capability_envelope  OPTIONAL  {
+                                   capabilities:          list[CapabilityStatement]; declared required capabilities
+                                   completeness_target:   UnitFloat (default 1.0); fraction of caps that must be
+                                                          CAPABLE to reach CAPABLE maturity level
+                                   complexity_ceiling:    OPTIONAL int; max product_surface_measure
+                                   value_density_floor:   OPTIONAL float; minimum value_density
+                                   surface_unit:          OPTIONAL string; "lines" | "schema_count" | custom
+                                                          (default "lines")
+                                   milestones:            OPTIONAL list[ProductMilestone]
+                                 }
 }
 ```
 
@@ -3489,6 +3528,9 @@ State {
   quality_deltas         OPTIONAL  list[QualityDelta]; rolling quality trajectory per scope (AP9)
   quality_state          OPTIONAL  list[QualityStateEntry]; per-scope streak accumulators; one entry per scope; initialized empty
   reingestion_records    OPTIONAL  list[ReIngestionRecord]; append-only log of re-ingestion events
+  sweet_spot_assessments OPTIONAL  list[SweetSpotAssessment]; history of sweet spot evaluations; latest is current
+  capability_states      OPTIONAL  list[CapabilityEnvelopeEntry]; one entry per declared capability
+  value_density_history  OPTIONAL  list[ValueDensityRecord]; time-series of value density snapshots
 }
 ```
 
@@ -4591,6 +4633,89 @@ WAKE REGISTRATION VERIFICATION (on lifecycle restart)
 
 **Registration contract.** Every WakeRegistration MUST carry: `id` (Identifier), `kind` (str), `scheduled_at` (timestamp), `condition` (str describing the lifecycle condition it observes). **Verification contract.** On restart, every entry in `wake_registry` MUST be verified. An entry that cannot be verified MUST surface a named `wake-integrity-gap`. URACE MUST NOT represent dormancy as durably wakeable when any entry carries an unresolved wake-integrity-gap. `SD = True` — verification reads only local environment state.
 
+## Sweet Spot Evaluation Mechanism
+
+Assesses the Product's current maturity position on the capable evolution curve. Runs each assessment cycle. `SD = True` — no executor credits consumed. Produces a SweetSpotAssessment citizen and a ValueDensityRecord.
+
+```
+SWEET SPOT EVALUATION (per assessment cycle, SD=True)
+
+  1. Read Config.capability_envelope (if absent: skip, maturity_level = BOOTSTRAPPING)
+  2. Read State.capability_states → list[CapabilityEnvelopeEntry]
+     Compute:
+       capability_completeness = count(entries WHERE status == CAPABLE) / total_declared_caps
+       weighted_completeness   = sum(cap.value_weight × entry.completeness_fraction)
+                                 for each (cap, entry) pair
+
+  3. Estimate product_surface_measure:
+       count lines in config.product_files (or use stored document_metrics if available)
+
+  4. Compute value_density = weighted_completeness / max(product_surface_measure, 1)
+     (normalized; or use configured surface_unit if declared)
+
+  5. Resolve ProductMaturityLevel:
+       IF total_declared_caps == 0:
+         maturity_level = BOOTSTRAPPING
+       ELIF capability_completeness < Config.capability_envelope.completeness_target:
+         maturity_level = FORMING
+       ELIF capability_completeness >= completeness_target
+            AND (complexity_ceiling absent OR surface_measure <= ceiling)
+            AND (value_density_floor absent OR value_density >= floor):
+         IF value_density > best_observed_value_density (from history):
+           maturity_level = OPTIMIZED
+         ELSE:
+           maturity_level = CAPABLE
+       ELIF surface_measure > complexity_ceiling (if declared):
+         maturity_level = OVER_ENGINEERED
+       ELSE:
+         maturity_level = CAPABLE
+
+  6. Evaluate active ProductMilestone (if Config.capability_envelope.milestones not empty):
+       Find milestone WHERE status == ACTIVE
+       Check all milestone gates simultaneously:
+         - all capability_gates have CAPABLE status in State.capability_states
+         - all quality_gates satisfied in State.quality_state
+         - surface_measure <= milestone.complexity_ceiling (if declared)
+         - value_density >= milestone.value_density_floor (if declared)
+       IF all gates pass:
+         → set milestone.status = ACHIEVED; milestone.achieved_at = now()
+         → record Evidence(kind="milestone-achieved", milestone_id=milestone.id)
+
+  7. Write SweetSpotAssessment to State.sweet_spot_assessments
+  8. Write ValueDensityRecord to State.value_density_history
+  9. IF maturity_level == OVER_ENGINEERED:
+       → emit IntegrityGap(kind="over-engineered", severity=WARNING,
+                           detail="Product surface exceeds capability_envelope ceiling")
+```
+
+**Assessment contract.** Every assessment cycle MUST produce exactly one SweetSpotAssessment. A cycle that skips this mechanism MUST record the skip reason. **SD contract.** `SD(SweetSpotEvaluationMechanism, S) = True` — locally computable. **Milestone idempotency.** An ACHIEVED milestone MUST NOT be re-evaluated to ACTIVE; re-evaluation of an ACHIEVED milestone is a no-op unless a capability regression invalidates a gate.
+
+## Capability Envelope Gate Mechanism
+
+Gates changes that would increase product surface measure beyond the configured complexity ceiling while the Product is already at CAPABLE or OPTIMIZED maturity. Operates as an additive pre-acceptance gate.
+
+```
+CAPABILITY ENVELOPE GATE (before each accepted-product-change, SD=True)
+
+  1. IF Config.capability_envelope absent: PASS (gate inactive)
+  2. Read current maturity_level from latest SweetSpotAssessment
+     IF maturity_level NOT IN {CAPABLE, OPTIMIZED}: PASS (gate only active at/beyond capable)
+  3. IF Config.capability_envelope.complexity_ceiling absent: PASS
+  4. Estimate post-change surface_measure
+     IF post_change_surface > complexity_ceiling:
+       → Check for DecisionRecord(kind=CAPABILITY_SCOPE_EXPANSION, scope matches operation scope,
+                                  decided_at >= operation.created_at)
+         IF absent:
+           → emit IntegrityGap(kind="capability-envelope-breach", severity=WARNING,
+                               detail="change increases surface beyond ceiling at CAPABLE maturity")
+           → PENDING (do not ACCEPT)
+         IF present:
+           → PASS (authorized expansion)
+     ELSE: PASS
+```
+
+**Additive contract.** This gate fires ONLY when: (a) a capability_envelope is configured; (b) the Product is currently CAPABLE or OPTIMIZED; (c) the proposed change increases surface beyond the ceiling. It MUST NOT block COMPLEXITY_REDUCING changes. **Non-blocking for unconfigured products.** A Product with no declared capability_envelope is unaffected by this gate. Uses: SweetSpotAssessment (maturity_level), DecisionRecord (CAPABILITY_SCOPE_EXPANSION), Config.capability_envelope.
+
 ---
 
 # 62d. Canonical Primitives
@@ -5221,6 +5346,102 @@ OperationDependency {
 
 **DAG invariant.** OperationDependency edges in a Plan MUST be acyclic. A cycle is a Plan integrity violation; URACE MUST NOT schedule any operation in a cyclic cluster until the cycle is resolved. Topological sort order (FOUNDATIONAL first, INTEGRATED last — AP24 §62i) MUST be honored. **Kind semantics.** `FINISH_TO_START`: to_id may not start until from_id is complete. `START_TO_START`: to_id may not start until from_id has started. `FINISH_TO_FINISH`: to_id may not finish until from_id has finished. Uses canonical: Identifier (from_id, to_id), ProductScope (scope). Used in: Plan.dependencies (§40).
 
+## CapabilityStatement
+
+A named, testable unit of capability the Product must possess to reach its capable sweet spot. Capability statements are declared in Config.capability_envelope and tracked in State.capability_states.
+
+```
+CapabilityStatement {
+  id              REQUIRED  Identifier; prefix "cap"
+  name            REQUIRED  string; human-readable capability name
+  description     REQUIRED  string; what this capability enables
+  scope           REQUIRED  ProductScope
+  tier            REQUIRED  FOUNDATIONAL | COMPOSITIONAL | INTEGRATED  (AP24 tiers)
+  value_weight    REQUIRED  UnitFloat; relative contribution to product value (weights sum to 1.0 across all caps)
+  test_criteria   OPTIONAL  string; how to assess whether this capability is CAPABLE
+}
+```
+
+**Completeness contract.** Every declared CapabilityStatement MUST have a corresponding CapabilityEnvelopeEntry in State.capability_states. An implementation that tracks State.capability_states without an entry for a declared capability MUST surface this as IntegrityGap(kind="capability-state-missing", severity=BLOCKING). **Value weight contract.** value_weight values across all CapabilityStatements in a scope MUST sum to ≤ 1.0; exceeding 1.0 is a configuration error. Uses canonical: Identifier (id), ProductScope (scope), UnitFloat (value_weight). Used in: Config.capability_envelope.capabilities, State.capability_states.
+
+## CapabilityEnvelopeEntry
+
+Records the current status of a single declared CapabilityStatement in the live Product. One entry per declared capability, updated each assessment cycle.
+
+```
+CapabilityEnvelopeEntry {
+  capability_id          REQUIRED  Identifier; references CapabilityStatement.id
+  status                 REQUIRED  CapabilityStatus
+  completeness_fraction  REQUIRED  UnitFloat; 0.0 = ABSENT, 1.0 = CAPABLE or beyond
+  last_assessed_at       REQUIRED  timestamp
+  evidence_refs          OPTIONAL  list[Identifier]; Evidence supporting this status
+  notes                  OPTIONAL  string
+}
+```
+
+**Monotone floor contract.** Once a capability reaches `CAPABLE`, completeness_fraction MUST NOT decrease below 1.0 without a DecisionRecord justifying the regression (analogous to X2 checkpoint gate). **AP9 alignment.** CapabilityEnvelopeEntry.completeness_fraction implements AP9 — Monotone Accumulator for the capability floor. Uses canonical: Identifier (capability_id), UnitFloat (completeness_fraction), TemporalFields (last_assessed_at). Used in: State.capability_states.
+
+## ProductMilestone
+
+A named, gated state that formally represents the Product having reached a validated capable sweet spot. All capability gates, quality gates, and complexity bounds must be simultaneously satisfied for the milestone to be achieved.
+
+```
+ProductMilestone {
+  id                  REQUIRED  Identifier; prefix "mst"
+  name                REQUIRED  string
+  description         REQUIRED  string; what "capable" means at this milestone
+  capability_gates    REQUIRED  list[Identifier]; CapabilityStatement ids that must be CAPABLE
+  quality_gates       OPTIONAL  list[{scope: ProductScope, min_streak: int}]; per-scope quality streak floor
+  complexity_ceiling  OPTIONAL  int; maximum product_surface_measure at this milestone
+  value_density_floor OPTIONAL  float; minimum value_density at this milestone
+  status              REQUIRED  PENDING | ACTIVE | ACHIEVED | SUPERSEDED
+  achieved_at         OPTIONAL  timestamp | null; set when status transitions to ACHIEVED
+  superseded_by       OPTIONAL  Identifier; next milestone id if status = SUPERSEDED
+}
+```
+
+**Gate contract.** A ProductMilestone transitions from ACTIVE to ACHIEVED only when ALL of the following are simultaneously true: every capability in capability_gates has status CAPABLE; all quality_gates are satisfied (if declared); product_surface_measure ≤ complexity_ceiling (if declared); value_density ≥ value_density_floor (if declared). Partial satisfaction MUST NOT advance the milestone. **Idempotency contract.** Milestone achievement check is PURE; re-evaluating an ACHIEVED milestone MUST NOT change its status unless a regression invalidates a gate. Uses canonical: Identifier (id, superseded_by), ProductScope (scope in quality_gates), TemporalFields (achieved_at). Used in: Config.capability_envelope.milestones, State (referenced by SweetSpotAssessment).
+
+## SweetSpotAssessment
+
+The output of one execution of the Sweet Spot Evaluation Mechanism. Records the Product's maturity position and value density at a point in time.
+
+```
+SweetSpotAssessment {
+  id                        REQUIRED  Identifier; prefix "ssa"
+  assessed_at               REQUIRED  timestamp
+  maturity_level            REQUIRED  ProductMaturityLevel
+  capability_completeness   REQUIRED  UnitFloat; fraction of declared capabilities at CAPABLE status
+  value_density             REQUIRED  float ≥ 0.0; sum(weight × completeness) / surface_measure
+  product_surface_measure   REQUIRED  int ≥ 0; proxy for product surface area (e.g. line count)
+  active_milestone_id       OPTIONAL  Identifier | null; current active ProductMilestone if any
+  milestone_status          OPTIONAL  PENDING | ACHIEVED | null
+  capability_gaps           OPTIONAL  list[Identifier]; CapabilityStatement ids not yet CAPABLE
+  over_engineered_caps      OPTIONAL  list[Identifier]; ids with status OVER_ENGINEERED
+  notes                     OPTIONAL  string
+}
+```
+
+**SD contract.** `SD(SweetSpotEvaluationMechanism, S) = True` — all inputs (capability states, product surface, quality state) are locally computable without executor credits. **Frequency contract.** One SweetSpotAssessment per assessment cycle; duplicate assessments within the same cycle MUST be deduplicated by assessed_at. Uses canonical: Identifier (id, active_milestone_id), UnitFloat (capability_completeness, value_density as UnitFloat when ≤ 1.0), TemporalFields (assessed_at). Used in: State.sweet_spot_assessments.
+
+## ValueDensityRecord
+
+A time-series record of product value density. Enables trend analysis: a declining trend after reaching CAPABLE signals over-engineering risk.
+
+```
+ValueDensityRecord {
+  id               REQUIRED  Identifier; prefix "vdr"
+  recorded_at      REQUIRED  timestamp
+  value_density    REQUIRED  float ≥ 0.0; same formula as SweetSpotAssessment.value_density
+  surface_measure  REQUIRED  int ≥ 0
+  delta            OPTIONAL  float | null; change from previous record (positive = improving density)
+  trend            OPTIONAL  IMPROVING | NEUTRAL | DECLINING | null
+  assessment_id    OPTIONAL  Identifier; SweetSpotAssessment that produced this record
+}
+```
+
+**AP9 alignment.** value_density SHOULD NOT decline below the best observed value_density at the CAPABLE milestone; a declining trend after CAPABLE is a WARNING. **Trend contract.** `delta` and `trend` MUST be computed relative to the immediately preceding ValueDensityRecord for the same scope; first record has null delta and null trend. Uses canonical: Identifier (id, assessment_id), TemporalFields (recorded_at). Used in: State.value_density_history.
+
 ---
 
 # 62e. Infrastructure Schemas
@@ -5449,6 +5670,58 @@ SpecAuditState {
 ```
 
 **Freshness contract.** On each assessment cycle, the lifecycle MUST compare `spec_audit_state.spec_version` to the running spec version. When they differ, a fresh audit is due before the next executor discovery cycle. When no `spec_audit_state` exists, a fresh audit is due immediately. **Determinism contract.** Given the same spec text, two audit runs MUST produce identical `SpecAuditState` values. Any dependency on execution time, random state, or external resources violates this contract. Uses TemporalFields: last_audited_at (as created_at for the audit run).
+
+## ProductMaturityLevel
+
+The current position of a Product on the capable evolution curve.
+
+```
+ProductMaturityLevel {
+  values:
+    BOOTSTRAPPING  — capabilities not yet defined or largely absent
+    FORMING        — capabilities being built; completeness below target
+    CAPABLE        — all required capabilities present; complexity within envelope;
+                     value density above floor — the sweet spot
+    OPTIMIZED      — capable state with demonstrably improved value density
+    OVER_ENGINEERED — capability or complexity exceeds envelope ceiling;
+                      value density declining
+}
+```
+
+**Transition contract.** BOOTSTRAPPING → FORMING → CAPABLE is the nominal forward path. CAPABLE → OPTIMIZED is valid. CAPABLE or OPTIMIZED → OVER_ENGINEERED requires corrective action. Any maturity level may regress to FORMING if a capability gate fails. OVER_ENGINEERED MUST NOT advance to CAPABLE without a COMPLEXITY_REDUCING change bringing surface back within the ceiling.
+
+## CapabilityStatus
+
+The status of a single CapabilityStatement in the current Product state.
+
+```
+CapabilityStatus {
+  values:
+    ABSENT          — capability not present in Product
+    PARTIAL         — capability partially implemented; completeness_fraction in (0.0, 1.0)
+    CAPABLE         — capability fully present; completeness_fraction == 1.0
+    OVER_ENGINEERED — capability present but implementation exceeds its declared scope or value weight
+}
+```
+
+**Invariant.** `completeness_fraction == 1.0 ↔ status IN {CAPABLE, OVER_ENGINEERED}`. A status of OVER_ENGINEERED does not decrease capability_completeness count but MUST trigger a WARNING.
+
+## CapabilityContributionKind
+
+The role of an Objective or Operation with respect to the Product's capability evolution.
+
+```
+CapabilityContributionKind {
+  values:
+    CAPABILITY_DEFINING    — establishes a new required capability; authorized only during BOOTSTRAPPING/FORMING
+    CAPABILITY_COMPLETING  — brings a PARTIAL capability to CAPABLE
+    QUALITY_IMPROVING      — raises quality of existing CAPABLE capability without expanding surface
+    COMPLEXITY_REDUCING    — reduces surface while preserving capability; always authorized
+    MILESTONE_TARGETING    — explicitly targets achieving a declared ProductMilestone gate
+}
+```
+
+**Authorization contract.** `CAPABILITY_DEFINING` MUST NOT be selected autonomously when Product maturity_level is CAPABLE or OPTIMIZED unless a governing authority explicitly authorizes capability scope expansion (recorded as DecisionRecord(kind=CAPABILITY_SCOPE_EXPANSION)). `QUALITY_IMPROVING` and `COMPLEXITY_REDUCING` are always autonomously authorized.
 
 ---
 
@@ -6715,6 +6988,35 @@ Uses canonical: Identifier (manifest_id), iso_timestamp (generated_at).
 
 ---
 
+## AP25 — Bounded Evolution Band
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP9, AP2, AP4]` · `provides: capable sweet-spot enforcement, complexity ceiling, value density floor, capability completeness floor, maturity level classification`
+
+A Bounded Evolution Band defines the zone in which a Product is "capable": above a capability completeness floor (AP9 monotone accumulator governs the floor), below a complexity ceiling, and above a value density threshold. Evolution that keeps the Product within this band is valid; evolution that pushes below the floor is a regression; evolution that pushes above the ceiling is over-engineering.
+
+**Definition.**
+```
+BoundedEvolutionBand = {
+  floor:           minimum capability state the Product must maintain (AP9 governs floor monotonicity)
+  ceiling:         maximum surface measure before growth becomes over-engineering
+  density_floor:   minimum value delivered per unit of surface
+  sweet_spot_zone: { floor ≤ capability_completeness ≤ 1.0
+                   ∧ surface_measure ≤ ceiling
+                   ∧ value_density ≥ density_floor }
+}
+```
+
+**Key contrast with AP9.** AP9 (Monotone Accumulator) provides the floor — a value that MUST NOT decrease. AP25 adds the ceiling: a value that MUST NOT be exceeded without justification. Together they define the band. Without a ceiling, monotone accumulation produces bloat.
+
+**Reuse contract.** Any subsystem that governs Product evolution MUST declare its bounded evolution band. Implicit ceilings (undeclared maximums) are architectural gaps. The band MUST be declared in Config.capability_envelope.
+
+**Canonical instances.**
+- `CapabilityEnvelope → Sweet Spot Evaluation Mechanism` — capability completeness floor + complexity ceiling
+- `ValueDensityRecord → SweetSpotAssessment` — density floor trend monitoring
+- `ProductMilestone → Capability Envelope Gate` — gate that enforces ceiling at CAPABLE maturity
+
+---
+
 ## Canonical Scalar Catalog
 
 All primitive value types used in citizen schemas. Every field that holds one of these types MUST reference the canonical scalar name.
@@ -7226,6 +7528,8 @@ URACE MUST NOT repeatedly:
 - use caution as justification for abandoning autonomy;
 - ask the authoritative source to navigate decisions URACE owns;
 - terminate ownership because work converged.
+
+URACE MUST enforce the Capability Envelope Gate (§62c) on every accepted-product-change when a capability_envelope is configured. Exceeding the complexity_ceiling at CAPABLE maturity without a DecisionRecord(kind=CAPABILITY_SCOPE_EXPANSION) violates the not-more-is-better invariant established by AP25 (§62i).
 
 URACE MUST also resist informational and implementation bloat. It SHOULD avoid recording unchanged high-frequency observations, duplicate checkpoints, repeated failure text, redundant guidance, unused abstraction layers and speculative capabilities without decision value. It SHOULD use proportionate retention, summaries, digests, archives or compaction while preserving accepted decisions, Authority, material Evidence, unresolved effects and recovery integrity.
 
