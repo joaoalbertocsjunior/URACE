@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r38**
+**Specification version: 2026-10-14-r39**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -7572,6 +7572,8 @@ The following scenarios that could produce gaps are pre-closed by this framework
 # 62l. Shared Reuse Contracts
 
 This section defines nine named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+
+**r39 runtime wiring:** All nine constructs are enforced at runtime — `_emit_gap()` validates every IntegrityGap kind against `IntegrityGapCatalog`; `_build_inspection_surface()` drives `urace check` output; `check_governing_record_fields()` is called by `PolicyRecord` and `HardConstraint` validators; `_require_iso_timestamp()` enforces `TemporalFields` on all seven r37 citizens; `determine_revalidation_scope()` and `check_authority_closure()` are available for all trigger handlers; `PATTERN_MECHANISM_MAP` maps every AP0–AP25 to its sections and key_provides.
 
 ---
 
