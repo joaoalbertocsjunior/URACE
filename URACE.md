@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r42**
+**Specification version: 2026-10-14-r43**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -4849,7 +4849,7 @@ SWEET SPOT EVALUATION (per assessment cycle, SD=True)
 
   6a. IF milestone was just achieved (gates all passed):
         → create ProductVersion:
-            id = identifier("pver"),
+            id = <new id with prefix "pver-">,
             version = active_milestone.version,
             milestone_id = active_milestone.id,
             achieved_at = now(),
@@ -6507,7 +6507,7 @@ f idempotent ⟺ ∀ x : f(f(x)) = f(x)
 **Idempotency classes.**
 | Class | Definition | URACE examples |
 |---|---|---|
-| PURE | `f(f(x)) = f(x)` | `save_state`, `spec_audit`, `validate_operation` |
+| PURE | `f(f(x)) = f(x)` | state snapshot write, spec structural audit, operation validation |
 | AT_MOST_ONCE | Side effects occur at most once; retries are no-ops | executor call (guarded by dedup) |
 | AT_LEAST_ONCE | Safe to retry; may produce duplicate records | evidence append (records carry `id`, dedup on read) |
 | EXACTLY_ONCE | Guaranteed single effect; requires coordination | compaction commit (write + swap, atomic) |
@@ -6923,7 +6923,7 @@ Reconstruction: state_at(t) = apply_deltas(earliest_snapshot_before(t), deltas_s
 **Durable write protocol.** Every mutation to `snapshot` MUST:
 1. Apply the mutation.
 2. Append a corresponding entry to the relevant `delta_log` (evidence, status_transitions, etc.).
-3. Write both atomically via `atomic_write_json` (§62f).
+3. Write both atomically per the atomic write contract (§62f).
 
 A mutation that updates the snapshot without appending a delta log entry violates the causal provenance chain (AP6).
 
@@ -7454,7 +7454,7 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
 
 # 62j. Derivation Framework
 
-This section implements **AP24 — Derivation Framework** (§62i). The runtime mechanism described here is the URACE instantiation of AP24: the PatternCatalog is `PATTERN_CATALOG` (§62i AP0–AP24), the resolver implements the AP24 dependency resolution contract, and the manifest output is a `DerivedSystemManifest` citizen.
+This section implements **AP24 — Derivation Framework** (§62i). The runtime mechanism described here is the URACE instantiation of AP24: the PatternCatalog is defined in §62i (AP0–AP25), the resolver implements the AP24 dependency resolution contract, and the manifest output is a `DerivedSystemManifest` citizen.
 
 URACE is specification-first: an implementation MUST conform to the spec. But a **derived system** — a new system built by adopting a chosen subset of URACE architectural patterns — is NOT required to conform to any pattern it has not explicitly adopted. The Derivation Framework is the canonical mechanism for declaring, resolving, and documenting that adoption.
 
@@ -7502,15 +7502,15 @@ urace derive [<intent>]
 
 **r41 — Construct kinds.** `--kind` selects which construct catalog(s) to search and derive from. Default is `pattern` (existing behavior, backward compatible). `all` searches all 60 constructs across all five kinds. When a non-pattern kind is used, `urace derive` produces a `DerivedConstructSet` (id prefix `cset-`) instead of a `DerivedSystemManifest`. `--kind` can be comma-separated for multi-kind derivation (e.g. `--kind mechanism,schema`). All existing `--kind pattern` behavior is unchanged.
 
-**r40 — Intent-first interface.** `<intent>` is the primary positional argument. When provided, `urace derive` runs `suggest_patterns_from_intent` to rank patterns by keyword and affinity overlap, then builds a manifest from the top suggestions. `--constructs` is a complementary and optional argument (`--patterns` is a backward-compat alias): when combined with `<intent>`, explicit pattern IDs are merged with intent-suggested IDs (explicit takes precedence; intent adds non-overlapping suggestions). When `<intent>` is omitted and `--patterns` is not set, the catalog browse is shown.
+**r40 — Intent-first interface.** `<intent>` is the primary positional argument. When provided, `urace derive` runs the IntentSuggestionEngine to rank patterns by keyword and affinity overlap, then builds a manifest from the top suggestions. `--constructs` is a complementary and optional argument (`--patterns` is a backward-compat alias): when combined with `<intent>`, explicit pattern IDs are merged with intent-suggested IDs (explicit takes precedence; intent adds non-overlapping suggestions). When `<intent>` is omitted and `--constructs` is not set, the catalog browse is shown.
 
 **`--suggest`**: dry-run intent matching — prints ranked pattern suggestions without building a manifest. Requires `<intent>`.
 
-**`--from-goals`**: reads Goals from current state and derives a ranked pattern suggestion list by running `patterns_from_goals` across all goal titles/descriptions. Prints suggestions and a ready-to-copy `--constructs` argument. Does not build a manifest.
+**`--from-goals`**: reads Goals from current state and derives a ranked pattern suggestion list using GoalDerivedSuggestion across all goal titles/descriptions. Prints suggestions and a ready-to-copy `--constructs` argument. Does not build a manifest.
 
-**`suggest_patterns_from_intent(intent, top_n) → list[SuggestionEntry]`**: scores each AP in the catalog by (a) keyword overlap between intent tokens and pattern name/summary/provides, plus (b) affinity-table bonus for domain stems (event, compaction, retry, circuit, schedule, etc.). Returns top-N entries sorted descending by score, each containing `{pattern_id, name, tier, score, summary}`.
+**IntentSuggestionEngine (pattern mode):** scores each entry in the PatternCatalog by (a) keyword overlap between intent tokens and the entry's name/summary/provides, plus (b) domain-affinity bonus for recognized stems (event, compaction, retry, circuit, schedule, etc.). Returns top-N results sorted descending by score, each containing `{pattern_id, name, tier, score, summary}`. Any conforming implementation MAY use any scoring strategy that preserves this rank-by-relevance contract.
 
-**`patterns_from_goals(goals, top_n) → list[SuggestionEntry]`**: aggregates `suggest_patterns_from_intent` across all goal texts, sums scores, deduplicates, and returns top-N ranked entries. Used by `--from-goals`.
+**GoalDerivedSuggestion:** aggregates IntentSuggestionEngine results across all goal title/description texts, sums scores per pattern, deduplicates, and returns top-N ranked entries. Used by `--from-goals`.
 
 **`--refresh`**: re-derives all saved DerivedManifestRefs (or only the one matching `--manifest-id`) using their stored `adopted_pattern_ids` and `intent`. Generates a new DerivedSystemManifest per ref, updates the stored DerivedManifestRef in state, creates a DerivationRecord(kind=REFRESH). If `--show-delta` is also set, the output includes: new patterns available since last derive, capability gaps that appeared or closed, changed dependency resolution. `--refresh` MUST NOT require `--constructs`; it reads from state.
 
@@ -7524,7 +7524,7 @@ urace derive [<intent>]
 
 **Without `<intent>` and without `--constructs`**: lists all available patterns with their tier, requires, and provides fields. No state or config access required.
 
-**With `<intent>` (no `--constructs`)**: auto-suggests patterns via `suggest_patterns_from_intent`, resolves dependencies, builds and outputs a `DerivedSystemManifest`. Prints which patterns were suggested before the manifest.
+**With `<intent>` (no `--constructs`)**: auto-suggests patterns via the IntentSuggestionEngine, resolves dependencies, builds and outputs a `DerivedSystemManifest`. Prints which patterns were suggested before the manifest.
 
 **With `--constructs` only**: resolves dependencies, builds a `DerivedSystemManifest`, and outputs it. If `--out` is provided, the manifest is written atomically to that path. If `--json`, the manifest is printed as a JSON document. Otherwise, a human-readable pattern guide is printed.
 
@@ -7591,7 +7591,7 @@ The following scenarios that could produce gaps are pre-closed by this framework
 
 This section defines nine named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**r39 runtime wiring:** All nine constructs are enforced at runtime — `_emit_gap()` validates every IntegrityGap kind against `IntegrityGapCatalog`; `_build_inspection_surface()` drives `urace check` output; `check_governing_record_fields()` is called by `PolicyRecord` and `HardConstraint` validators; `_require_iso_timestamp()` enforces `TemporalFields` on all seven r37 citizens; `determine_revalidation_scope()` and `check_authority_closure()` are available for all trigger handlers; `PATTERN_MECHANISM_MAP` maps every AP0–AP25 to its sections and key_provides.
+**Enforcement contract (§62l).** All nine constructs defined in this section MUST be enforced at runtime by any conforming implementation: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare TemporalFields conformance MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations.
 
 ---
 
@@ -7858,7 +7858,7 @@ Output produced by `urace derive` when `--kind` includes any non-pattern kind.
 | `adopted_constructs` | list | Each entry: `construct_id, name, kind, summary, provides, spec_section` |
 | `kinds_present` | list[string] | Sorted unique kinds in adopted_constructs |
 
-**`suggest_constructs_from_intent(intent, kinds, top_n)`**: ranks all entries in `CONSTRUCT_CATALOG` by keyword overlap and construct-affinity table bonus, filtered to the requested kinds. Returns `{construct_id, name, kind, score, summary}` entries.
+**IntentSuggestionEngine (construct mode):** ranks all entries in the ConstructCatalog by keyword overlap and domain-affinity bonus, filtered to the requested kinds. Returns `{construct_id, name, kind, score, summary}` results. Any conforming implementation MAY use any scoring strategy that preserves rank-by-relevance.
 
 # 63. Concurrency
 
@@ -9700,7 +9700,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `patternopt` | PatternAdoptionRecord, pattern adoption, pattern opt-in |
 | `standaloneap` | standalone pattern, standalone=true, foundational pattern |
 | `derivedep` | PatternExclusionRecord, excluded dep, transitive dep exclusion, dependency resolution |
-| `patterncatl` | Pattern Catalog, PATTERN_CATALOG, AP0-AP19 catalog, architectural pattern catalog |
+| `patterncatl` | Pattern Catalog, PatternCatalog, AP0-AP25 catalog, architectural pattern catalog |
 | `optinpat` | opt-in patterns, --opt-in-patterns, opted_in_patterns, per-pattern update selection |
 | `stalemfst` | stale manifest, derived-manifest-stale, DerivedManifestRef staleness, stale spec_version |
 
@@ -9847,3 +9847,35 @@ These MUST be treated as command-local until unified. A future revision SHOULD s
 # 80. Final Invariant
 
 > **URACE persistently drives the Product toward the highest applicable non-delegated authoritative Intent. The authoritative source controls whatever destination-setting Authority it retains and may delegate any subordinate destination or navigation decision it chooses; URACE MUST preserve that retained boundary and MUST NOT invent, broaden or reason around delegation. Within valid delegated Authority, however, URACE owns the journey: it independently observes reality, discovers opportunities and problems, assesses Evidence, identifies uncertainty, chooses Objectives, prioritizes, plans, experiments, selects replaceable executors, executes, learns, corrects course, validates, checkpoints, repairs, recovers, becomes dormant and reactivates without requiring the authoritative source to navigate decisions already delegated. Evidence constrains what URACE may defensibly believe about the conditions of the journey and may justify route changes or authorized destination evolution, but Evidence, Product Value, Priority, urgency, market pressure, executor capability, recommendation and convenience MUST NOT independently change a retained destination or create Authority. When a route fails, URACE changes the route; when a delegated destination should change, URACE may change it when sufficiently justified; when a retained destination appears infeasible, URACE preserves reality and the authoritative boundary rather than silently redefining either. Retained, denied or unresolved decisions block only dependent scope where possible, while independent authorized Product evolution continues. Materially stale consequential decisions are proportionately revalidated without converting Authority into an approval loop; attempts, effects, observations, validation and acceptance remain distinct; uncertain effects remain explicitly indeterminate until reconciled; accepted progress is checkpointed; and persistent autonomous ownership remains live through both active operation and efficient dormancy until an explicit authoritative terminal condition ends it. In short: the authoritative source chooses the destination it wishes to retain; URACE drives the boat.**
+
+---
+
+# 81. Revision Log
+
+This log records every specification revision. Revisions tagged `runtime-only` introduced no new normative spec contract; they are logged here to maintain version continuity and to make the scope of each change auditable. Revisions tagged `spec` added or changed normative content in this document. Revisions tagged `spec+runtime` did both.
+
+Revisions prior to r22 are recorded in the git commit history. This log covers r22 onwards.
+
+| Version | Date | Scope | Summary |
+|---|---|---|---|
+| r43 | 2026-10-14 | spec | Purge all runtime-specific function/variable names from spec body; add Revision Log (§81); all contracts now stated in executor-agnostic terms |
+| r42 | 2026-10-14 | spec | `--constructs` canonical arg; `--patterns` backward-compat alias; "Building Blocks" canonical user-facing name for 60 derivable constructs |
+| r41 | 2026-10-14 | spec | §62m Extended Construct Catalogs: Mechanism (6), Schema (20), Protocol (2), Contract (6); `--kind` flag; DerivedConstructSet citizen; ConstructCatalog; IntentSuggestionEngine construct mode |
+| r40 | 2026-10-14 | spec | Intent-first `urace derive`: positional `<intent>` arg; `--suggest` dry-run; `--from-goals`; IntentSuggestionEngine contract; GoalDerivedSuggestion |
+| r39 | 2026-10-14 | runtime-only | §62l enforcement wiring pass — no new normative spec contracts added; existing contracts from r38 implemented in reference runtime |
+| r38 | 2026-10-14 | spec | §62l Shared Reuse Contracts: GoverningRecord cluster, EffectUncertaintyProtocol, OperatorGateProtocol, AuthorityClosureInvariant, RevalidationScope, InspectionSurface, IntegrityGapCatalog (20 kinds), PatternMechanismMapping |
+| r37 | 2026-10-14 | spec | §72 PolicyRecord/HardConstraint/PolicyKind/PolicyStatus/ConstraintEnforcement; §37 AssessmentRecord; §36 DiscoveryRecord/DiscoveryCycleStatus; §59 MarketSignal/FitHypothesis; §63 OwnershipMarker/ConcurrencyPolicy; §76 minimum viable behaviors list |
+| r36 | 2026-10-14 | spec | DerivedManifestRef (dmr-), DerivationRecord (drv-), DerivationKind enum; `urace derive` --refresh/--apply-capabilities/--derive-milestone/--show-delta; derivation_records/derivation_refs State fields |
+| r35 | 2026-10-14 | spec | Milestone chain; TestRecord as citizen; pattern→capability gap detection; `--opt-in-patterns` AP range extended to AP0–AP25 |
+| r34 | 2026-10-14 | spec | AP25 Bounded Evolution Band; full wiring pass over quality/resilience/orchestration patterns |
+| r33 | 2026-10-14 | spec | Quality/resilience architectural wiring pass |
+| r32 | 2026-10-14 | spec | AP24 Derivation Framework; pattern count updated to 25 |
+| r30–r31 | 2026-10-14 | spec | Comprehensive quality/resilience/orchestration pass; pattern count 24→25 |
+| r29 | 2026-10-14 | spec | AP range reference updated AP0–AP19 → AP0–AP24 |
+| r28 | 2026-10-14 | spec | Stale manifest detection; update system integration with derived manifests |
+| r27 | 2026-10-14 | spec | Skip-by-default derive contract; `--opt-in-patterns` flag; update orchestration |
+| r26 | 2026-10-14 | spec | §62j Derivation Framework; DerivedSystemManifest; PatternCatalog AP0–AP24; `urace derive` command |
+| r25 | 2026-10-14 | spec | AP20–AP23 (Circuit Breaker, Compaction, Checkpoint, Justification Chain) |
+| r24 | 2026-10-14 | spec | §62i AP17–AP19 (Formula Rule Pairs, Scheduled Task, Customization Layer) |
+| r23 | 2026-10-14 | spec | §62i AP11–AP16 (Bridge, Orchestrator, Observer, Input Queue, Event Bus, State Snapshot) |
+| r22 | 2026-10-14 | spec | Canonical term coverage: Primitive, Communication, Diagram, Method; §81 stems +14; §62a /prefix fix |
