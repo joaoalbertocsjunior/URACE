@@ -98,4 +98,4 @@ Add `--suggest` to preview matches before committing. `--kind all` searches acro
 
 ## Consequential Use
 
-URACE cannot guarantee revenue, legality or favorable results. Whoever deploys it remains responsible for access, supervision and compliance. Publishing URACE does not make its contributors the operator or a professional adviser. URACE uses the [MIT License](LICENSE).
+URACE cannot guarantee revenue, legality or favorable results. Whoever deploys it remains responsible for access, supervision and compliance. Publishing URACE does not make its contributors the operator or a professional adviser. URACE is dedicated to the public domain under [CC0 1.0 Universal](LICENSE).
