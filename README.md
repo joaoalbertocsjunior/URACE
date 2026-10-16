@@ -86,7 +86,7 @@ Use `urace /help compact` for details.
 
 ## Reuse URACE Building Blocks The Way You Want
 
-Take any of URACE's 72 building blocks — patterns, mechanisms, schemas, protocols, and contracts — for your own project, no lifecycle required. Describe what you're building and URACE picks matching blocks automatically:
+Take any of URACE's building blocks — patterns, mechanisms, schemas, protocols, and contracts — for your own project, no lifecycle required. Describe what you're building and URACE picks matching blocks automatically:
 
 ```
 urace derive "resilient event log with compaction"

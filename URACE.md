@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r56**
+**Specification version: 2026-10-16-r57**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -8335,9 +8335,9 @@ urace derive [<intent>]
              [--derive-milestone]
 ```
 
-**r42 — `--constructs` canonical arg.** `--constructs` is the canonical argument for specifying explicit construct or pattern IDs. `--patterns` remains a fully supported backward-compat alias — all existing invocations continue to work unchanged. "Building Blocks" is the canonical user-facing name for the set of 60 derivable constructs (README, section headers).
+**r42 — `--constructs` canonical arg.** `--constructs` is the canonical argument for specifying explicit construct or pattern IDs. `--patterns` remains a fully supported backward-compat alias — all existing invocations continue to work unchanged. "Building Blocks" is the canonical user-facing name for the set of derivable constructs (README, section headers). The count is defined by the ConstructKindRegistry (§62n) and ExtendedConstructCatalogs (§62m) at the current spec version.
 
-**r41 — Construct kinds.** `--kind` selects which construct catalog(s) to search and derive from. Default is `pattern` (existing behavior, backward compatible). `all` searches all 60 constructs across all five kinds. When a non-pattern kind is used, `urace derive` produces a `DerivedConstructSet` (id prefix `cset-`) instead of a `DerivedSystemManifest`. `--kind` can be comma-separated for multi-kind derivation (e.g. `--kind mechanism,schema`). All existing `--kind pattern` behavior is unchanged.
+**r41 — Construct kinds.** `--kind` selects which construct catalog(s) to search and derive from. Default is `pattern` (existing behavior, backward compatible). `all` searches all constructs across all five kinds (count defined by §62n ConstructKindRegistry + §62m catalogs at the current spec version). When a non-pattern kind is used, `urace derive` produces a `DerivedConstructSet` (id prefix `cset-`) instead of a `DerivedSystemManifest`. `--kind` can be comma-separated for multi-kind derivation (e.g. `--kind mechanism,schema`). All existing `--kind pattern` behavior is unchanged.
 
 **r40 — Intent-first interface.** `<intent>` is the primary positional argument. When provided, `urace derive` runs the IntentSuggestionEngine to rank patterns by keyword and affinity overlap, then builds a manifest from the top suggestions. `--constructs` is a complementary and optional argument (`--patterns` is a backward-compat alias): when combined with `<intent>`, explicit pattern IDs are merged with intent-suggested IDs (explicit takes precedence; intent adds non-overlapping suggestions). When `<intent>` is omitted and `--constructs` is not set, the catalog browse is shown.
 
@@ -8856,7 +8856,7 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 
 **Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: [AP24]`
 
-The complete mapping from AP patterns (§62i) to the spec sections that implement them, enabling the `urace derive` system and `--opt-in-patterns` to operate on a structured lookup rather than full-text parsing.
+The complete mapping from AP patterns (§62i) to the spec sections that implement them, enabling the `urace derive` system and `--opt-in-constructs` to operate on a structured lookup rather than full-text parsing.
 
 | AP | Pattern name | Implementing section(s) | Key provides |
 |---|---|---|---|
@@ -8903,7 +8903,7 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
 
-## Mechanism Catalog (6 entries)
+## Mechanism Catalog (7 entries)
 
 | ID | Name | Spec | Provides |
 |---|---|---|---|
@@ -8913,8 +8913,9 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | TAG | Technique Applicability Gate | §62h | context-gated execution, applicability scoring |
 | DCG | Discovery Credit Gate | §62e | discovery budget enforcement, credit gate |
 | PSD | Progress Stagnation Detector | §62c | stagnation detection, REPAIRING lifecycle trigger |
+| MBV | Metric Baseline Verification | §62c | cycle-start metric immutability audit, mutation_requires enforcement |
 
-## Schema Catalog (20 entries)
+## Schema Catalog (23 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -8941,8 +8942,11 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | OrchestratorRecord | OrchestratorRecord | orch- | §62i AP12 |
 | CheckpointRecord | CheckpointRecord | checkpoint- | §61 |
 | DerivedManifestRef | DerivedManifestRef | dmr- | §62j |
+| MetricEffect | MetricEffect | meffect- | §62b |
+| ChunkingPolicy | ChunkingPolicy | — | §62f |
+| Chunk | Chunk | chunk- | §62f |
 
-## Protocol Catalog (5 entries)
+## Protocol Catalog (6 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -8951,6 +8955,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CRRP | CognitiveResetRecoveryProtocol | 6-step cognitive reset recovery | §62l |
 | WRV | WakeRegistrationVerification | restart wakeability audit | §62l |
 | CRC_C | ComplianceRecordingContract | per-domain compliance persistence | §62l |
+| CEP | ConstructElevationProtocol | 4-gate elevation test for promoting concepts to named constructs | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -8974,7 +8979,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (20 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (50 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -11072,8 +11077,8 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `patternopt` | PatternAdoptionRecord, pattern adoption, pattern opt-in |
 | `standaloneap` | standalone pattern, standalone=true, foundational pattern |
 | `derivedep` | PatternExclusionRecord, excluded dep, transitive dep exclusion, dependency resolution |
-| `patterncatl` | Pattern Catalog, PatternCatalog, AP0-AP25 catalog, architectural pattern catalog |
-| `optinpat` | opt-in patterns, --opt-in-patterns, opted_in_patterns, per-pattern update selection |
+| `patterncatl` | Pattern Catalog, PatternCatalog, AP0-AP37 catalog, architectural pattern catalog |
+| `optinpat` | opt-in patterns, --opt-in-patterns, --opt-in-constructs, opted_in_patterns, opted_in_constructs, per-pattern update selection, per-construct update selection |
 | `stalemfst` | stale manifest, derived-manifest-stale, DerivedManifestRef staleness, stale spec_version |
 
 ## Audit Content
@@ -11128,6 +11133,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r57 | 2026-10-16 | spec | §62m catalog alignment: Mechanism Catalog +1 (MBV); Schema Catalog +3 (MetricEffect, ChunkingPolicy, Chunk); Protocol Catalog +1 (CEP); Contract Catalog IGC count 20→50; derive contract stale counts removed (now §62n-authoritative); PMM description --opt-in-patterns→--opt-in-constructs; stem vocabulary patterncatl AP0-AP25→AP0-AP37; optinpat --opt-in-constructs added |
 | r56 | 2026-10-16 | spec+runtime | Full verification pass: NSS §62n compliance check — all violations corrected; no-degradation audit — AP0–AP37, all Protocols, all Mechanisms, all Schemas verified present; IntegrityGapCatalog monotonic growth verified (all gap kinds from r48+ present); all revision log entries r1–r56 verified accurate; section numbering verified (no gaps or duplicates); ConstructKindRegistry updated to include r54/r55 additions (MetricEffect, ChunkingPolicy, Chunk); Metric Baseline Verification registered in Mechanisms table; §62n Base Rule marked universal |
 | r55 | 2026-10-16 | spec+runtime | JOINS pass: universal/scoped construct wiring: §62b: CitizenBase/AuthorizedCitizen/TemporalCitizen marked universal; §62i: AP0 Citizen + AP7 Canonical Reduction marked universal; §62l: IntegrityGapCatalog emission pattern marked universal; §62n: RFC 2119 normative force marked universal; §62f: compaction blocked when lifecycle_state=BLOCKED (anchor-drift guard) + destination-anchor guard subsection; §62f: lifecycle boundary requirement references last CheckpointRecord; §62c: Re-Ingestion baseline from last CheckpointRecord; PARTS→PARTS scope notes: DiscoveryBudgetStatus (Discovery domain §36–§43), WakeRegistration (Dormancy/Wake §64–§67), ChunkingPolicy+Chunk (Compaction §62f), AssessmentRecord (TAS §62h + §37); Runtime: destination_anchor guard in compaction path; CheckpointRecord baseline in staleness detection |
 | r54 | 2026-10-16 | spec+runtime | Gap closure pass (7 items from r53 audit): §62f: compaction authorization staleness contract (86400s window) + compaction-authorization-stale WARNING gap; §62b: MetricEffect citizen schema (IMPROVEMENT/DRIFT/REGRESSION/NEUTRAL); §62b: metric_effects OPTIONAL added to State Document; §62b: Operation validation_evidence_id + validation_skipped_reason fields + validation evidence contract; §62l: validation-evidence-missing + compaction-authorization-stale gap kinds; Runtime: citizen-base-violation load-time conformance check; objective-lifecycle chunking grouping logic (_compact_with_chunking); immutable field mutation detection (id/created_at); authority_basis active-rule binding validation |
