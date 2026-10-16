@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r59**
+**Specification version: 2026-10-16-r60**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -8962,6 +8962,37 @@ The ConstructElevationProtocol governs when and how a concept is promoted from a
 
 ---
 
+## Spec Construction Protocol (SCP)
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `id: SCP` · `introduced_in: 2026-10-16-r60` · `governed-by: §62n`
+
+**Used in:** (universal — all spec revisions)
+
+**Intent.** A pre-extension gate that enforces definition-first ordering, revision completeness declaration, and single-pass atomic extension across all spec revisions. SCP prevents the "reference-before-definition" gap pattern by requiring every concept to be formally defined before it is normatively referenced. SCP is self-applying: the r60 revision that introduces SCP is itself the first revision to comply with it.
+
+**Gate 1 — Definition-first ordering.**
+Before any normative statement (containing MUST, SHALL, SHOULD, or MAY) may reference a concept `X`, `X` MUST appear in the spec's formal index at a document position prior to the reference. The formal index comprises: Config schema (§62e), citizen schemas (§62b), ConstructKindRegistry (§62n), IntegrityGapCatalog (§62l), and stem vocabulary (§81). A forward reference — referencing `X` before `X` is defined — is a violation of Gate 1.
+
+**Gate 2 — Revision completeness declaration.**
+Every revision log entry MUST include a `**New external references:**` field. This field MUST enumerate every Config field, schema field, enum value, IGC gap kind, and construct identifier introduced by the revision. Each entry MUST include the document section where the definition appears. If the revision introduces no new external references, the field MUST read `none`. A revision log entry that omits this field is a Gate 2 violation.
+
+**Gate 3 — Single-pass atomic extension.**
+A revision MUST define and reference every concept in a single atomic diff. "Define in a future revision" is permitted only for SHOULD-level or MAY-level statements using a named stub. It is PROHIBITED for MUST-level or SHALL-level statements. A MUST-level normative statement that references an undefined concept is simultaneously a Gate 1 violation and a Gate 3 violation.
+
+**Violation contract.**
+- Gate 1 violation: BLOCKING gap of kind `scp-forward-reference` with fields `referencing_section`, `undefined_concept`, `revision`.
+- Gate 2 violation: WARNING gap of kind `scp-incomplete-revision-declaration` with field `revision`.
+- Gate 3 violation: BLOCKING gap of kind `scp-atomic-extension-violation` with fields `concept`, `revision`, `normative_force` (MUST|SHALL).
+
+**Retroactive applicability.** Revisions prior to r60 predate SCP and are exempt from Gate 1 and Gate 3 enforcement. They are exempt from Gate 2 but SHOULD include a `**New external references:** (predates SCP — not declared)` annotation when the revision log is audited. SCP is fully binding from r60 onward.
+
+**Derivation metadata.** `standalone: false` · `tier: FOUNDATIONAL` · `requires: [§62n NSS, §62l IGC]` · `provides: definition-first ordering enforcement, revision completeness declaration, atomic extension guarantee`
+
+**Citizens using SCP:** (none — governs the specification's own extension integrity).
+**Referenced from:** §62n ConstructKindRegistry, §82 Revision Log.
+
+---
+
 ## IntegrityGapCatalog
 
 **Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
@@ -9046,6 +9077,9 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `milestone-chain-integrity-failure` | BLOCKING | §59b ProductMilestone | Fix dangling reference or cycle in milestone chain |
 | `effect-unreconcilable` | WARNING | §52 Effect Reconciliation | Operator review required before closing Operation |
 | `stale-manifest-override` | WARNING | §62j Stale DerivedManifestRef | Surfaced until manifest is refreshed |
+| `scp-forward-reference` | BLOCKING | §62n SCP Gate 1 | A normative statement references a concept not yet defined in the formal index at point of reference |
+| `scp-incomplete-revision-declaration` | WARNING | §62n SCP Gate 2 | A revision log entry is missing the required New external references field |
+| `scp-atomic-extension-violation` | BLOCKING | §62n SCP Gate 3 | A MUST/SHALL statement references a concept that is not defined in the same revision |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -9163,7 +9197,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ChunkingPolicy | ChunkingPolicy | — | §62f |
 | Chunk | Chunk | chunk- | §62f |
 
-## Protocol Catalog (6 entries)
+## Protocol Catalog (7 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -9173,6 +9207,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | WRV | WakeRegistrationVerification | restart wakeability audit | §62l |
 | CRC_C | ComplianceRecordingContract | per-domain compliance persistence | §62l |
 | CEP | ConstructElevationProtocol | 4-gate elevation test for promoting concepts to named constructs | §62l |
+| SCP | SpecConstructionProtocol | 3-gate pre-extension enforcement: definition-first, completeness declaration, single-pass atomicity | §62n |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -9196,7 +9231,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (50 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (79 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -9407,6 +9442,7 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | IGC | IntegrityGapCatalog | FOUNDATIONAL | true |
 | PMM | PatternMechanismMapping | INTEGRATED | false |
 | CEP | ConstructElevationProtocol | FOUNDATIONAL | true |
+| SCP | SpecConstructionProtocol | FOUNDATIONAL | false |
 
 ### Mechanisms (§62c)
 
@@ -11308,6 +11344,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `patterncatl` | Pattern Catalog, PatternCatalog, AP0-AP37 catalog, architectural pattern catalog |
 | `optinpat` | opt-in patterns, --opt-in-patterns, --opt-in-constructs, opted_in_patterns, opted_in_constructs, per-pattern update selection, per-construct update selection |
 | `stalemfst` | stale manifest, derived-manifest-stale, DerivedManifestRef staleness, stale spec_version |
+| `specconstruct` | Spec Construction Protocol, SCP, definition-first ordering, revision completeness declaration, single-pass atomic extension, pre-extension gate |
 
 ## Audit Content
 
@@ -11365,8 +11402,15 @@ This log records every specification revision. Revisions tagged `runtime-only` i
 
 Revisions prior to r22 are recorded in the git commit history. This log covers r22 onwards.
 
+**Revision completeness declaration.** Each revision log entry from r60 onward MUST include:
+
+  **New external references:** `<item>` → defined at `<section>` [, ...]
+
+Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_bytes`, `EffectType enum`, `scp-forward-reference IGC kind`) and `<section>` is the spec section where the definition appears. This field is required by SCP Gate 2 (§62n).
+
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r60 | 2026-10-16 | spec | Spec Construction Protocol. Introduced SCP as a FOUNDATIONAL Protocol in §62n: three-gate pre-extension enforcement (Gate 1: definition-first ordering, Gate 2: revision completeness declaration, Gate 3: single-pass atomic extension). Added 3 IGC gap kinds: `scp-forward-reference` (BLOCKING), `scp-incomplete-revision-declaration` (WARNING), `scp-atomic-extension-violation` (BLOCKING). Updated IGC count 76→79. Added SCP to Protocol Catalog (§62m, 6→7 entries), ConstructKindRegistry (§62n), and stem vocabulary `specconstruct` (§81). Added Revision Completeness Declaration schema to §82 Revision Log format. SCP is binding from r60 onward; revisions prior to r60 are exempt. SCP is self-applying: this revision is the first to comply with it. **New external references:** `SCP` Protocol construct → defined at §62n SCP section (this revision); `scp-forward-reference` IGC kind → defined at §62l IGC table (this revision); `scp-incomplete-revision-declaration` IGC kind → defined at §62l IGC table (this revision); `scp-atomic-extension-violation` IGC kind → defined at §62l IGC table (this revision); `specconstruct` stem → defined at §81 stem vocabulary table (this revision) |
 | r59 | 2026-10-16 | spec | r58 gap closure. Added 9 Config subschemas to §62e: `staleness` (hours-based, supersedes legacy `staleness_windows`), `context_budget_r58` (`hard_cap_fraction`, `min_floor_fraction`), `wake` (`max_stale_hours`), `test_coverage` (`freshness_hours`), `sweet_spot` (`value_density_floor`), `retention` (`auto_trigger_bytes`), `metric_sources` (`registry`, `search_endpoint`), `archive_search_paths`, `generated_file_globs`. Added `replaces` field to WakeRegistration schema. Added `effect_type` field and `EffectType` enum to Operation schema. Added `Role` column to PatternMechanismMapping table with PRIMARY/SUPPORTING values. Added `auto_clearable` field description to ConstructKindRegistry. Aligned SDM staleness default prose to reference `Config.staleness` subschema explicitly. |
 | r58 | 2026-10-16 | spec | 20-gap reliability hardening. Added invocation contract, traversal rules, Evidence weighting, and human-readable format to §62g Justification System. Added activation-failure, partial-update-reconciliation, state-divergence-detection, and re-bootstrap-failure contracts to §74. Added CRC injection, version-mismatch recovery, and context-window overage contracts to §62e/§75. Added default staleness windows and T2 authority-authorization recording to §62c SDM. Added tier tie-breaking, eviction floor, and fallback-rejection contract to §62c CBM. Added signal taxonomy, timeout contract, re-establishment authorization, and recoverable/terminal gap classification to §62c WRM. Added surface measure algorithm and value-density floor enforcement to §62c SSE. Added capability-regression contract, re-test trigger, and test-freshness window to §62c TCG. Added structural/semantic boundary taxonomy and classification-disagreement protocol to §62h T5/T7. Added multi-BLOCKING ordering, operator clearance contract, and isolation contract to §62l IGC. Added archive path resolution and re-ingestion idempotency to §62c RIM. Added discovery mechanism, source validation, and deduplication to §62c EMC. Added firing contract, multi-policy interaction, and atomicity guarantee to §62f retention. Added elevation eligibility criteria, evidence threshold, reversibility, and version continuity to §62n CEP. Added step idempotency, sequential execution, transient failure handling, and retry ceiling to §73 CRRP. Added gap density metric, materiality threshold, and remediation contract to §80/§81. Added uniqueness contract, ambiguity resolution, and multi-mechanism execution order to §62l PMM. Added milestone failure modes, state revertibility, and chain integrity validation to §59b. Added downstream blocking semantics, refresh trigger, and override audit trail to §62j stale-manifest. Added effect-type taxonomy, reconciliation-strategy matrix, and unreconcilable-effect handling to §52. New IGC gap kinds: justification-depth-exceeded, justification-cycle-detected, activation-health-failure, rollback-failure, partial-update-recovered, partial-update-unrecoverable, spec-state-divergence, rebootstrap-attempt-failed, rebootstrap-terminal-failure, crc-version-mismatch, crc-context-overflow, unauthorized-threshold-adjustment, wake-registration-stale, wake-registration-expired, archive-not-found, reingestion-duplicate-skipped, metric-source-discovery-unavailable, retention-pass-partial-failure, crrp-step-failure, crrp-retry-exceeded, technique-classification-disagreement, value-density-below-floor, capability-regression, milestone-chain-integrity-failure, effect-unreconcilable, stale-manifest-override. Total IGC gap kinds: 76 |
 | r57 | 2026-10-16 | spec | §62m catalog alignment: Mechanism Catalog +1 (MBV); Schema Catalog +3 (MetricEffect, ChunkingPolicy, Chunk); Protocol Catalog +1 (CEP); Contract Catalog IGC count 20→50; derive contract stale counts removed (now §62n-authoritative); PMM description --opt-in-patterns→--opt-in-constructs; stem vocabulary patterncatl AP0-AP25→AP0-AP37; optinpat --opt-in-constructs added |
