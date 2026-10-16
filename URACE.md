@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r57**
+**Specification version: 2026-10-16-r58**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2179,6 +2179,19 @@ Do not blindly retry.
 Where reconciliation has applied all available investigation means and cannot establish effect status, URACE MUST preserve the `INDETERMINATE` record with the attempted reconciliation methods and attempt count rather than declaring an arbitrary final disposition. An indefinitely unresolvable `INDETERMINATE` effect MUST surface as a named blocking limitation in the inspection output — not as a failure disposition and not as an inferred success — and MUST NOT be silently aged out, assumed resolved, or used as implicit authorization for a subsequent attempt at the same consequential effect. Where the unresolved effect prevents dependent lifecycle work from proceeding, URACE MUST identify the specific dependent Operations and preserve them as explicitly blocked on the unresolved `INDETERMINATE` record. Where an indefinitely unresolvable `INDETERMINATE` effect would block lifecycle advancement, blocking MUST be scoped to the minimum dependent workstream set consistent with §65 Partial Blocking; Executor-independent work and unrelated workstreams MUST NOT be suspended solely because one unresolvable `INDETERMINATE` record exists.
 
 ---
+
+**Effect-type taxonomy.** Effects subject to reconciliation are classified as: (1) `IDEMPOTENT` — safe to re-apply; the operation produces the same result regardless of how many times it has been applied (e.g., file write with fixed content, schema validation). (2) `QUERY` — read-only; produces no side effects; safe to retry unconditionally. (3) `STATEFUL` — mutates external state; re-application may produce different results (e.g., API calls, database writes). (4) `ASYNC` — the effect is submitted but completion is not synchronously confirmed. Each Operation MUST declare its effect type in the `effect_type` field.
+
+**Reconciliation-strategy matrix.**
+
+| Effect Type | Reconciliation Strategy | Timeout | On Timeout |
+|-------------|------------------------|---------|------------|
+| IDEMPOTENT | Re-apply unconditionally | 30s | Mark RECONCILED |
+| QUERY | Re-execute and compare result | 15s | Mark UNCERTAIN |
+| STATEFUL | Query external state; compare before/after snapshot | 60s | Mark UNCERTAIN, surface WARNING |
+| ASYNC | Poll completion endpoint up to 3 times with 10s interval | 30s per poll | Mark UNCERTAIN after 3 failures |
+
+**Unreconcilable effect handling.** An Operation that remains in `UNCERTAIN` state after reconciliation strategy exhaustion MUST be surfaced as a WARNING gap of kind `effect-unreconcilable`. The Operation MUST NOT be retried autonomously. Operator review MUST be required before the Operation can be closed or its effect assumed complete.
 
 # 53. Effect Reconciliation
 
@@ -4669,6 +4682,12 @@ ExternalMetricState.next_collection_at = now() + collection_interval
 
 **Isolation contract.** External metric collection MUST run in a separate Executor call from product Executor calls. A failure in external metric collection MUST NOT roll back or abort an in-progress product Operation.
 
+**Discovery mechanism.** Public source discovery MUST proceed via the following ordered strategy: (1) check `Config.metric_sources.registry` for pre-configured source URLs matching the intent keywords; (2) if no registry match, attempt a search using `Config.metric_sources.search_endpoint` (if configured); (3) if no search endpoint, surface a WARNING gap of kind `metric-source-discovery-unavailable` and skip external collection for this cycle. The runtime MUST NOT attempt open-internet discovery without an explicit `search_endpoint` configured.
+
+**Source validation.** Before using a discovered source, the runtime MUST: (a) verify the URL scheme is `https`; (b) attempt a HEAD request with 10-second timeout; (c) confirm the response Content-Type is JSON or CSV. A source that fails validation MUST be recorded with `status: INVALID` and excluded from the collection cycle.
+
+**Deduplication.** Sources are deduplicated by normalized URL (scheme + host + path, query parameters stripped). If two discovered sources resolve to the same normalized URL, only one MUST be used. The deduplication key MUST be stored in the ExternalMetricSource record.
+
 ## Destination Anchor Integrity Mechanism
 
 **Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP35, OGP]`
@@ -4917,6 +4936,10 @@ RE-INGESTION REQUEST (operator-authorized, wraps Transaction Mechanism)
 
 **CheckpointRecord baseline.** Re-ingestion MUST establish a baseline from the most recent CheckpointRecord (§62b) with `kind=accepted-product-change` in `State.checkpoints`. The baseline digest MUST be verified against `state_after_digest` of the corresponding Change binding. Re-ingestion that cannot establish this baseline MUST NOT proceed.
 
+**Archive path resolution.** `CompactionSummary.archive_path` MUST be stored as a path relative to the URACE system root (`urace/`). On re-ingestion, the runtime MUST resolve it relative to the system root. If the resolved path does not exist, the runtime MUST search `Config.archive_search_paths` (if configured) before failing. If the archive cannot be located after searching all paths, a BLOCKING gap of kind `archive-not-found` MUST be surfaced.
+
+**Re-ingestion idempotency.** Re-ingesting the same `compaction_event_id` twice MUST be idempotent: if the entries from that event are already present in the State Document, the re-ingestion MUST complete without duplication and emit an INFO gap of kind `reingestion-duplicate-skipped`. Idempotency MUST be enforced by checking for existing records with matching `source_compaction_event_id` before insertion.
+
 ## Staleness Detection Mechanism
 
 **Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP13]`
@@ -4972,6 +4995,10 @@ STALENESS SCAN (per assessment cycle, SD=True)
 ```
 
 **Proportionality contract.** Staleness detection is self-determinable (`SD = True`); it MUST NOT consume executor credits. **Non-blocking contract.** All staleness gaps are `WARNING` severity, never `BLOCKING`; they surface for operator attention but MUST NOT halt the lifecycle. **Configuration contract.** Freshness windows (`decision_freshness_window`, `evidence_freshness_window`, `rule_freshness_window`) MUST be declared in Config Document (`staleness_windows`) before the first staleness scan. Per-scope overrides MUST be declared under `staleness_windows.by_scope`; absent scopes fall back to the global `decision_seconds` window. Absent configuration MAY defer the domain scan and MUST NOT produce false positives.
+
+**Default staleness windows.** Unless overridden in `Config.staleness`, the following defaults apply: decisions: 72 hours; evidence: 168 hours (7 days); rules: 720 hours (30 days); metrics: 168 hours (7 days). A Config override MUST specify the window in integer hours and MUST be ≥ 1.
+
+**Authority-authorization recording for T2 adjustments.** When the T2 Bar-Raising Calculus (§62h) raises a threshold, the mechanism MUST record an Evidence entry of kind `threshold-adjustment-authorized` with fields: `adjusted_metric_id`, `old_threshold`, `new_threshold`, `authority_basis` (referencing the governing Authority record), `authorized_at`. This Evidence entry MUST be linked to the MetricDefinition via `last_baseline_audit`. A T2 threshold adjustment without a corresponding Evidence record MUST be surfaced as a WARNING gap of kind `unauthorized-threshold-adjustment`.
 
 ## Metric Baseline Verification
 
@@ -5034,6 +5061,12 @@ CONTEXT BUDGET EVALUATION (before each executor delegation, SD=True)
 
 **Executor-agnostic contract.** `executor_context_cap` MUST be declared per executor class in Config.context_budget; it MUST NOT be hard-coded in the spec or runtime. **Graceful-degradation-first contract.** The mechanism MUST prefer graceful eviction with summary over hard rejection. Hard rejection is the last resort, applied only when graceful degradation cannot fit within `hard_cap_fraction`. **Reversibility contract.** Evicted ContextInput entries MUST still appear in the Evidence log; they are excluded from the delegation payload, not deleted from State. **SD contract.** Token estimation and budget comparison are locally computable; this mechanism is `SD = True` and MUST NOT delegate to an executor to evaluate its own outcome. **Capability-class priority contract.** When evicting ContextInput entries under budget pressure, INTEGRATED-class entries MUST be evicted before COMPOSITIONAL, and COMPOSITIONAL before FOUNDATIONAL. An eviction that removes a FOUNDATIONAL-class entry while INTEGRATED-class entries remain is a priority inversion and MUST surface as an IntegrityGap(kind="context-budget-priority-inversion", severity=WARNING).
 
+**Tier tie-breaking.** Within a single eviction tier, entries MUST be evicted in ascending order of `last_accessed_at` (least recently accessed first). When `last_accessed_at` is equal, entries MUST be evicted in ascending order of estimated token size (smallest last). A tie-breaking sort MUST be applied before any eviction within a tier.
+
+**Eviction floor.** Eviction MUST stop when the remaining context size is ≤ `Config.context_budget.min_floor_fraction` of the hard cap (default: 0.10). The runtime MUST NOT evict below this floor even if the CRC remains over budget. If the floor is reached and the CRC is still over budget, a BLOCKING gap of kind `crc-context-overflow` MUST be surfaced.
+
+**Fallback-rejection contract.** If eviction cannot bring context within budget because all evictable entries have been exhausted above the floor, the runtime MUST reject the pending Executor invocation, surface the `crc-context-overflow` gap, and wait for operator intervention rather than proceeding with an oversized context.
+
 ---
 
 ## Wake Registration Verification Mechanism
@@ -5058,6 +5091,14 @@ WAKE REGISTRATION VERIFICATION (on lifecycle restart)
 ```
 
 **Registration contract.** Every WakeRegistration MUST carry: `id` (Identifier), `kind` (str), `scheduled_at` (timestamp), `condition` (str describing the lifecycle condition it observes). **Verification contract.** On restart, every entry in `wake_registry` MUST be verified. An entry that cannot be verified MUST surface a named `wake-integrity-gap`. URACE MUST NOT represent dormancy as durably wakeable when any entry carries an unresolved wake-integrity-gap. `SD = True` — verification reads only local environment state.
+
+**Signal taxonomy.** Authoritative liveness signals are classified as: (1) `SCHEDULED` — OS-level cron/scheduler entry; (2) `FILESYSTEM` — file-watcher or inotify hook; (3) `NETWORK` — HTTP health endpoint; (4) `MANUAL` — operator-confirmed active. At least one signal of any class MUST be present for a WakeRegistration to be considered active. If no signal is detectable, the registration MUST be surfaced as `status: STALE`.
+
+**Timeout contract.** A liveness confirmation attempt MUST time out after 30 seconds. If the signal does not respond within 30 seconds, the attempt MUST be recorded as failed. After 3 consecutive failed attempts (across separate wake cycles), the registration MUST be set to `status: STALE` and a WARNING gap of kind `wake-registration-stale` MUST be surfaced.
+
+**Re-establishment authorization.** A STALE WakeRegistration MAY be re-established only by an operator-issued command (not by the runtime autonomously). Re-establishment MUST create a new WakeRegistration record with a fresh `established_at` and `signal_class`, referencing the stale registration's `id` in a `replaces` field. The stale record MUST be retained with `status: SUPERSEDED`.
+
+**Recoverable vs. terminal gaps.** A `wake-registration-stale` gap is recoverable via operator re-establishment. A registration that has been STALE for more than `Config.wake.max_stale_hours` (default: 168) without re-establishment MUST be escalated to a BLOCKING gap of kind `wake-registration-expired`, halting all scheduled autonomous Operations.
 
 ## Sweet Spot Evaluation Mechanism
 
@@ -5152,6 +5193,10 @@ SWEET SPOT EVALUATION (per assessment cycle, SD=True)
 
 **Assessment contract.** Every assessment cycle MUST produce exactly one SweetSpotAssessment. A cycle that skips this mechanism MUST record the skip reason. **SD contract.** `SD(SweetSpotEvaluationMechanism, S) = True` — locally computable. **Milestone idempotency.** An ACHIEVED milestone MUST NOT be re-evaluated to ACTIVE; re-evaluation of an ACHIEVED milestone is a no-op unless a capability regression invalidates a gate.
 
+**Surface measure algorithm.** `product_surface_measure` is computed as: count all non-blank, non-comment lines across all files matching `Config.product_files` globs. A line is blank if it contains only whitespace. A line is a comment if its first non-whitespace character sequence matches a language-appropriate comment prefix for that file extension (e.g. `#`, `//`, `--`, `%`). Generated files MUST be excluded: a file is generated if it contains a header comment matching the pattern `auto-generated|do not edit|code generated` (case-insensitive) within its first 5 lines, or if its path matches a glob in `Config.generated_file_globs`. The computed measure MUST be stored in the State Document after each Sweet Spot evaluation.
+
+**Value-density floor enforcement.** If `value_density` falls below `Config.sweet_spot.value_density_floor` (default: 0.30), the mechanism MUST: (1) surface a WARNING gap of kind `value-density-below-floor`; (2) set an Objective recommendation for refactoring or scope reduction; (3) NOT block current Operations but include the recommendation in the next `/vitals` output. The floor is a soft threshold: crossing it triggers a recommendation, not a halt.
+
 ## Capability Envelope Gate Mechanism
 
 **Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP25, AP33]`
@@ -5207,6 +5252,12 @@ TEST COVERAGE GATE (per assessment cycle, SD=True)
 ```
 
 **Coverage contract.** A capability with declared test_criteria that has no passing TestRunRecord is an unverified claim. URACE MUST surface this as a WARNING; it MUST NOT autonomously mark it CAPABLE on the basis of assertion alone. **Non-blocking contract.** This gate emits WARNING severity only; it does not block lifecycle progress. It is informational, driving the operator to add test coverage. **SD contract.** `SD(TestCoverageGate, S) = True` — all inputs are locally computable.
+
+**Capability regression contract.** A capability that was previously CAPABLE MUST be downgraded to PARTIAL if: (a) a previously passing test for that capability now fails; or (b) a code path annotated as implementing that capability is deleted without a replacement. A PARTIAL capability MUST be surfaced in `/check` output with the specific test or annotation that triggered the downgrade. A capability that regresses from CAPABLE to PARTIAL during an autonomous cycle MUST cause the current cycle to emit a WARNING gap of kind `capability-regression`.
+
+**Re-test trigger.** After any Operation that modifies code matching a capability's annotated paths, the Test Coverage Gate MUST re-evaluate that capability in the same cycle before closing. Re-evaluation uses the same test suite but scoped to the affected capability.
+
+**Test freshness window.** A test result is considered fresh for `Config.test_coverage.freshness_hours` hours (default: 24). Test results older than the freshness window MUST NOT be used to assert CAPABLE status; the capability MUST be re-evaluated or downgraded to UNKNOWN until a fresh result is available.
 
 ## Crash-Consistent Acceptance
 
@@ -5758,6 +5809,12 @@ RetentionPolicy {
 
 **Minimum-trigger contract.** At least one of `max_entries` or `max_age_days` MUST be present. A RetentionPolicy with neither field is structurally invalid. **Override contract.** A RetentionPolicy MUST NOT change the mode of a field whose schema defines `compaction_mode: PROHIBITED`. **Establishment contract.** A RetentionPolicy MUST be established through an attributable operator input during bootstrap or via `urace govern`; it MUST NOT be created autonomously. Uses canonical: Identifier (id).
 
+**Firing contract.** Retention policy evaluation MUST fire: (1) at the start of each compaction cycle (before any eviction); (2) on demand when `urace /compact` is issued; (3) automatically when the State Document size exceeds `Config.retention.auto_trigger_bytes` (default: 10MB). The runtime MUST NOT apply retention rules mid-cycle outside these triggers.
+
+**Multi-policy interaction.** When multiple RetentionPolicy records are active, they MUST be applied in ascending order of `priority` field (lower value = applied first). If two policies conflict (e.g., one retains a record, another evicts it), the more conservative policy (retain) MUST win. The runtime MUST record which policy governed each eviction decision in the CompactionSummary.
+
+**Atomicity guarantee.** All evictions from a single retention-policy evaluation pass MUST be committed as a single atomic Transaction (AP16). If any eviction in the pass fails, the entire pass MUST be rolled back and a WARNING gap of kind `retention-pass-partial-failure` MUST be surfaced.
+
 ## CompactionSummary
 
 A structured in-place replacement for a segment of compacted records within a governed list field. Preserves a cryptographic commitment to the original records and a reference to the archive, enabling lossless decompaction when the archive is present.
@@ -5948,6 +6005,12 @@ ProductMilestone {
 ```
 
 **Gate contract.** A ProductMilestone transitions from ACTIVE to ACHIEVED only when ALL of the following are simultaneously true: every capability in capability_gates has status CAPABLE; all quality_gates are satisfied (if declared); product_surface_measure ≤ complexity_ceiling (if declared); value_density ≥ value_density_floor (if declared). Partial satisfaction MUST NOT advance the milestone. **Idempotency contract.** Milestone achievement check is PURE; re-evaluating an ACHIEVED milestone MUST NOT change its status unless a regression invalidates a gate. **Version contract.** Every ProductMilestone MUST declare a version string. On achievement, a ProductVersion record MUST be created carrying this version string. **Chain contract.** When next_milestone_id is non-null, the referenced milestone MUST transition to ACTIVE status upon this milestone's achievement. A chain that contains a cycle (milestone A → B → A) is a configuration error and MUST surface IntegrityGap(kind="milestone-chain-cycle", severity=BLOCKING). Uses canonical: Identifier (id, superseded_by, next_milestone_id), ProductScope (scope in quality_gates), TemporalFields (achieved_at). Used in: Config.capability_envelope.milestones, State (referenced by SweetSpotAssessment).
+
+**Milestone failure modes.** If a milestone gate evaluation fails (required Evidence not present, constraint violated, metric below threshold), the Objective MUST remain at its current milestone. The failure MUST be recorded as an Evidence entry of kind `milestone-gate-failed` with the failing condition. The Objective MUST NOT be advanced past a failed gate autonomously.
+
+**State revertibility.** A milestone advancement is NOT revertible once committed. If incorrect advancement is detected, the operator MUST issue an explicit correction via `urace /amend` to create a compensating Evidence entry. The milestone sequence is append-only.
+
+**Chain integrity validation.** On Objective load, the runtime MUST validate that `next_milestone_id` references form a valid DAG with no cycles and that all referenced milestone IDs exist. A broken chain (dangling reference or cycle) MUST surface a BLOCKING gap of kind `milestone-chain-integrity-failure`.
 
 ## SweetSpotAssessment
 
@@ -6221,6 +6284,12 @@ CognitiveResumeContext {
 Uses canonical: Identifier (id, pending_transaction), DigestValue (state_digest), TemporalFields (generated_at as created_at).
 
 **Generation contract.** The lifecycle controller MUST generate a fresh CognitiveResumeContext at every cycle boundary: assessment start, planning start, execution start, validation complete, dormancy entry. A CRC whose `state_digest` does not match current state MUST NOT be injected; doing so is a `cognitive-resume-stale` WARNING IntegrityGap. **Injection contract.** The lifecycle controller MUST inject the current CRC alongside the state document as structured input whenever an Executor is initialized or reinitialized. The Executor MUST NOT be required to infer current lifecycle phase from the state document alone. **Stateless-resumable contract.** An Executor invocation MUST be resumable from the injected CRC plus current durable state without any in-process memory from a prior invocation. An Executor that requires recapitulation of prior reasoning not present in durable state violates this contract and is not replaceable per §75. **No-duplication contract.** The CRC MUST NOT substitute for a DecisionRecord. Reasoning behind a decision MUST still be written to a DecisionRecord (§62d); the CRC is a reconstitution aid, not an authorization record. **`lifecycle_state` key contract.** The `cycle_phase` field MUST be derived from the canonical `state["lifecycle_state"]` field in durable state. An implementation that reads `lifecycle_status`, `status`, or any other key as the primary source for `cycle_phase` derivation violates this contract; those keys MUST NOT serve as fallbacks when `lifecycle_state` is absent.
+
+**Injection contract (detailed).** At the start of each Executor invocation, the runtime MUST serialize the current CognitiveResumeContext to JSON and prepend it to the Executor's context under the key `__crc__`. The serialized form MUST include `schema_version` matching the spec version string (e.g. `"2026-10-16-r58"`). If the Executor returns a CRC object, the runtime MUST deserialize it and validate `schema_version` before applying any field updates.
+
+**Version-mismatch recovery.** If the returned CRC `schema_version` does not match the active spec version, the runtime MUST: (1) retain the current CRC unchanged; (2) surface a WARNING gap of kind `crc-version-mismatch`; (3) continue the lifecycle using the retained CRC. The runtime MUST NOT silently accept fields from a mismatched CRC.
+
+**Context-window overage.** If the serialized CRC size exceeds `Config.context_budget.hard_cap_fraction` of the estimated context window, the runtime MUST invoke the Context Budget Mechanism (§62c CBM) to evict lower-tier CRC fields before injection. Fields at tier T3 (historical summaries) MUST be evicted first, then T2, then T1. The runtime MUST NOT evict T0 fields (active objectives, active constraints, active authority). If eviction cannot bring the CRC within budget, a BLOCKING gap of kind `crc-context-overflow` MUST be surfaced.
 
 ## CompactionIndex
 
@@ -6580,6 +6649,14 @@ Traverses the reasoning chain rooted at `<decision-id>` to depth `N` (default: u
 
 **No-modification contract.** `urace why` is a read-only command. It MUST NOT write to state, inbox, or manifest regardless of what it finds.
 
+**Invocation contract.** The justification traversal MUST be triggered at the following points: (1) before any Operation that modifies a Primitive or Schema definition; (2) before any change to Authority boundaries; (3) when a BLOCKING IntegrityGap is surfaced and the dependent operation requests clearance. The invoking component MUST pass a `root_claim_id` referencing the JustificationNode that anchors the reasoning chain.
+
+**Traversal rules.** Traversal MUST be depth-first. `max_depth` MUST default to 8 unless overridden in Config. When a node at depth ≥ `max_depth` is reached, traversal MUST stop and surface a WARNING gap of kind `justification-depth-exceeded`. Cycle detection MUST be performed: if a `node_id` already appears in the current traversal path, traversal MUST stop and surface a BLOCKING gap of kind `justification-cycle-detected` before any effect is committed.
+
+**Evidence weighting.** When multiple Evidence nodes support a JustificationNode, the node's confidence is the minimum confidence of all supporting Evidence records. A JustificationNode with no supporting Evidence MUST be treated as `confidence: 0.0`. A chain with any node at `confidence: 0.0` MUST be surfaced as a WARNING.
+
+**Human-readable format.** When a justification chain is emitted to operator output, each node MUST be rendered as: `[depth] claim → basis (confidence: X.X, evidence: N)`. Intermediate nodes MUST be indented two spaces per depth level.
+
 ---
 
 # 62h. Technique Applicability System
@@ -6674,6 +6751,10 @@ See §62b for the canonical schema definition.
 **Worth predicate.** `W(T5, S)` = True when a schema or pipeline stage bundles ≥ 2 independently testable normative claims that can be separated without information loss.
 
 **SD condition.** True for structural decomposition (fields, function arguments, schema properties). False for semantic decomposition of a novel type where the normative boundary between claims is not yet expressed — in that case, executor delegation is required to identify the semantic boundary.
+
+**Structural vs. semantic boundary taxonomy.** A decomposition is STRUCTURAL when: (a) the sub-components have well-defined, independently verifiable interfaces; (b) the sub-components can be implemented and tested without knowledge of sibling components; (c) the decomposition follows an established protocol, schema, or AP already present in the spec. A decomposition is SEMANTIC when: (a) the boundary requires domain judgment about meaning or intent; (b) the sub-components share implicit state not captured in a schema; (c) the domain is novel and no analogous construct exists in the spec. When the classification is ambiguous, the runtime MUST default to SEMANTIC (T5 SD = False) and delegate to the Executor.
+
+**Classification-disagreement protocol.** If two consecutive Executor evaluations produce conflicting T5 SD values for the same decomposition target, the runtime MUST: (1) record both evaluations in the State Document; (2) surface a WARNING gap of kind `technique-classification-disagreement`; (3) default to SD = False for the current cycle; (4) include the disagreement in the next `/rules` output for operator review.
 
 **Composition rule.** A composed unit MUST reference its constituents by their canonical §62b schema names; inlining a sub-schema as an unnamed type is prohibited.
 
@@ -8413,6 +8494,12 @@ stale(ref, candidate_version) ↔ ref.spec_version ≠ candidate_version
 
 The operator resolves staleness by re-running `urace derive --constructs ... --save` after the update completes.
 
+**Downstream blocking semantics.** A stale manifest MUST NOT block the execution of an existing derived construct adoption, but MUST block the adoption of any new construct additions from the current spec version until the manifest is refreshed. The runtime MUST surface the `stale-manifest-detection` WARNING on every `urace derive` invocation until the manifest is refreshed.
+
+**Refresh trigger.** A DerivationManifest MUST be refreshed automatically when: (a) `urace /update` is run; (b) the spec version string changes. Manual refresh MAY be triggered via `urace derive --refresh`. A refresh MUST re-evaluate all existing manifest entries against the current ConstructKindRegistry and update `manifest_version` to the current spec version string.
+
+**Override audit trail.** If an operator proceeds with a new construct adoption despite a stale-manifest WARNING (via explicit `--force` flag), the runtime MUST record an Evidence entry of kind `stale-manifest-override` with `operator: true`, `overridden_at`, and the stale manifest version. This Evidence MUST be surfaced in `/rules` output until the manifest is refreshed.
+
 ## Subsequent-Gap Closure
 
 The following scenarios that could produce gaps are pre-closed by this framework:
@@ -8684,6 +8771,14 @@ A **cognitive reset** occurs when an Executor loses its working context but dura
 
 **Recovery-of-recovery guard.** If recovery is itself interrupted, the subsequent restart MUST treat partial recovery as a new INDETERMINATE boundary, re-establish from the last durable checkpoint, preserve the interrupted recovery's durable record, and surface repair-exhausted after a bounded depth rather than recursing indefinitely.
 
+**Step idempotency.** Each step of the CRRP MUST be independently idempotent: re-executing any step after a partial failure MUST produce the same result as executing it for the first time. Steps MUST use the `source_event_id` of the triggering cognitive-reset event as an idempotency key. A step that detects it has already been completed (by checking for its output record in the State Document) MUST skip and proceed to the next step.
+
+**Sequential execution.** CRRP steps MUST be executed strictly sequentially. Step N+1 MUST NOT begin until step N has written its output record to the State Document. Parallel execution of CRRP steps is PROHIBITED.
+
+**Transient failure handling.** If a step fails with a transient error (network timeout, resource contention), the step MUST be retried up to 3 times with exponential backoff (base: 5 seconds). If the step still fails after 3 retries, a BLOCKING gap of kind `crrp-step-failure` MUST be surfaced with `step_number` and `failure_reason`. The protocol MUST halt at the failed step; earlier completed steps MUST NOT be rolled back.
+
+**Retry ceiling.** The full CRRP protocol MUST NOT be re-initiated more than 2 times for the same `source_event_id`. A third initiation attempt for the same event MUST be rejected and a BLOCKING gap of kind `crrp-retry-exceeded` MUST be surfaced.
+
 **Citizens using CognitiveResetRecoveryProtocol:** CognitiveResumeContext (§62e). Referenced from: §73 Cognitive Reset Recovery.
 
 ---
@@ -8780,6 +8875,14 @@ The ConstructElevationProtocol governs when and how a concept is promoted from a
 - Add cross-reference wires from all implementing sections.
 - Update IntegrityGapCatalog (§62l) if the promotion introduces new gap kinds.
 
+**Elevation eligibility criteria.** An inline concept is eligible for elevation to a named construct only when: (a) it has been referenced by name in at least 3 distinct spec sections; (b) it has a stable, independently useful definition that does not require context from its original section to be understood; (c) it does not duplicate an existing construct in the ConstructKindRegistry (§62n). A concept that does not meet all three criteria MUST NOT be elevated; it SHOULD be documented as a term in the glossary instead.
+
+**Evidence threshold.** Before initiating the CEP 4-gate process, the proposer MUST provide an Evidence record of kind `elevation-proposal` referencing: (a) the 3+ sections where the concept appears; (b) the proposed construct kind and tier; (c) the proposed canonical identifier (e.g., schema prefix, mechanism abbreviation). Elevation MUST NOT proceed without this Evidence record.
+
+**Reversibility.** A promoted construct MAY be deprecated but MUST NOT be removed from the spec within the same major version. Deprecation MUST be recorded in the ConstructKindRegistry with `status: DEPRECATED` and a `deprecated_at` version string. A deprecated construct MUST remain in the §62m catalogs with a `[DEPRECATED]` marker until the next major version boundary.
+
+**Version continuity.** The construct's `introduced_in` field MUST reference the spec version string of the revision in which it was promoted. All `Extends:` declarations referencing the elevated construct MUST be updated in the same revision.
+
 **Citizens using ConstructElevationProtocol:** (none — governs the specification's own structural evolution).
 **Referenced from:** §62n Base Rule directive 7, §80 Spec Structural Audit.
 
@@ -8843,8 +8946,40 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `unresolved-effects-reconciliation-failure` | WARNING | §62c reconciliation | _reconcile_unresolved_effects raised exception; effects may be partially reconciled |
 | `compaction-authorization-stale` | WARNING | §62f Authorization model | Re-request authorization (re-trigger RetentionPolicy or re-queue operator command) |
 | `validation-evidence-missing` | WARNING | §62b Operation schema | Populate validation_evidence_id or validation_skipped_reason before ACCEPTED transition |
+| `justification-depth-exceeded` | WARNING | §62g Justification System | Increase Config max_depth or simplify justification chain |
+| `justification-cycle-detected` | BLOCKING | §62g Justification System | Remove cycle from JustificationNode chain before committing effect |
+| `activation-health-failure` | BLOCKING | §74 Safe Runtime Activation | Operator rollback verification required |
+| `rollback-failure` | BLOCKING | §74 Safe Runtime Activation | Operator intervention required to restore stable runtime |
+| `partial-update-recovered` | INFO | §74 Safe Runtime Activation | Informational; partial update resolved successfully |
+| `partial-update-unrecoverable` | BLOCKING | §74 Safe Runtime Activation | Operator must manually restore runtime state |
+| `spec-state-divergence` | BLOCKING | §74 Safe Runtime Activation | Operator must explicitly clear before evolution proceeds |
+| `rebootstrap-attempt-failed` | INFO | §74 Re-Bootstrap | Informational; attempt count included in gap detail |
+| `rebootstrap-terminal-failure` | BLOCKING | §74 Re-Bootstrap | Operator must clear and reset attempt counter |
+| `crc-version-mismatch` | WARNING | §62e CognitiveResumeContext | Retain current CRC; Executor must be updated to current spec version |
+| `crc-context-overflow` | BLOCKING | §62e/§62c CRC injection | Operator must reduce CRC size or increase context budget |
+| `unauthorized-threshold-adjustment` | WARNING | §62c Staleness Detection | Add threshold-adjustment-authorized Evidence record |
+| `wake-registration-stale` | WARNING | §62c Wake Registration Verification | Operator re-establishment required |
+| `wake-registration-expired` | BLOCKING | §62c Wake Registration Verification | Operator must re-establish registration and clear gap |
+| `archive-not-found` | BLOCKING | §62c Re-Ingestion Mechanism | Locate or restore archive; check Config.archive_search_paths |
+| `reingestion-duplicate-skipped` | INFO | §62c Re-Ingestion Mechanism | Informational; idempotent re-ingestion detected |
+| `metric-source-discovery-unavailable` | WARNING | §62c External Metric Collection | Configure Config.metric_sources.search_endpoint or registry |
+| `retention-pass-partial-failure` | WARNING | §62f Retention Policy | Investigate failed eviction; re-run compaction |
+| `crrp-step-failure` | BLOCKING | §73 CRRP | Operator must clear gap and resume from last completed step |
+| `crrp-retry-exceeded` | BLOCKING | §73 CRRP | Operator must clear gap; source_event_id retry limit reached |
+| `technique-classification-disagreement` | WARNING | §62h T5 | Review classification disagreement in /rules output |
+| `value-density-below-floor` | WARNING | §62c Sweet Spot Evaluation | Consider refactoring or scope reduction objective |
+| `capability-regression` | WARNING | §62c Test Coverage Gate | Investigate regressed test or deleted code path |
+| `milestone-chain-integrity-failure` | BLOCKING | §59b ProductMilestone | Fix dangling reference or cycle in milestone chain |
+| `effect-unreconcilable` | WARNING | §52 Effect Reconciliation | Operator review required before closing Operation |
+| `stale-manifest-override` | WARNING | §62j Stale DerivedManifestRef | Surfaced until manifest is refreshed |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
+
+**Multi-BLOCKING ordering.** When two or more BLOCKING gaps are simultaneously active, the runtime MUST evaluate and surface them in the following priority order: (1) gaps with `kind` matching `*-failure` or `*-terminal-*` (system integrity failures); (2) gaps with `kind` matching `*-divergence` or `*-cycle-*` (state consistency violations); (3) gaps with `kind` matching `*-expired` or `*-overflow` (resource exhaustion); (4) all other BLOCKING gaps in lexicographic order of `kind`. The ordering governs display and audit output; ALL BLOCKING gaps MUST still halt autonomous Operations regardless of order.
+
+**Operator clearance contract.** A BLOCKING gap MUST be clearable only by an operator-issued command (not autonomously). The clearance command MUST record: `cleared_by: operator`, `cleared_at`, `clearance_note` (free-text explanation). The IntegrityGap record MUST be updated to `active: false` with the clearance fields populated. A BLOCKING gap MAY only be auto-cleared by the runtime if the gap kind defines `auto_clearable: true` in the ConstructKindRegistry (§62n).
+
+**Isolation contract.** A BLOCKING gap MUST halt only the Operations in its declared `scope`. If `scope` is not declared, the gap MUST halt ALL autonomous Operations (conservative default). A gap with `scope: [workstream_id]` MUST halt only Operations belonging to that workstream. The runtime MUST NOT propagate a scoped BLOCKING gap to unrelated workstreams.
 
 **Used in:** (universal — all spec sections; any section that detects a normative violation MUST emit via this catalog)
 
@@ -8898,6 +9033,12 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | AP35 | Governance Ledger | §62a Rule Ledger, §62c Authority Resolution | L0/L1/L2 immutability; rule DAG; conflict detection |
 | AP36 | Digest Chain Consistency | §62c Digest Computation, §62e CRC | fixed SHA-256 algorithm; chain-continuity invariant |
 | AP37 | Compliance Posture Tracker | §60, §62b ComplianceRecord/State | per-domain trajectory + accumulator; compliance-record-missing gap |
+
+**Uniqueness contract.** Each AP ID MUST map to at most one primary Mechanism or Protocol. Secondary associations are permitted and MUST be marked with `role: SUPPORTING` in the mapping record. If two entries claim `role: PRIMARY` for the same AP ID, the ConstructKindRegistry (§62n) entry for that AP governs which is primary.
+
+**Ambiguity resolution.** When a gap kind maps to more than one Mechanism, the runtime MUST apply them in the order listed in the PMM table (top-to-bottom). If the first Mechanism resolves the gap (gap transitions to `active: false`), subsequent Mechanisms MUST NOT be applied. If the first does not resolve the gap, the next MUST be attempted in sequence.
+
+**Multi-mechanism execution order.** When a single gap kind maps to both a Mechanism (§62c) and a Protocol (§62l), the Mechanism MUST execute first. If the Mechanism does not resolve the gap, the Protocol MUST be initiated.
 
 # 62m. Extended Construct Catalogs
 
@@ -10088,6 +10229,15 @@ Re-bootstrap is governed by the same self-evolution policy. It MUST NOT bypass `
 Re-bootstrap MUST preserve Authority, governing Intent, accepted Product artifacts and durable lifecycle state. The reconstructed candidate participates in the same isolated preparation, validation, activation, health confirmation and stable rollback protocol as incremental runtime self-evolution.
 
 Re-bootstrap MUST NOT become a way to discard inconvenient history, reset Authority, bypass migration, or reinterpret the authoritative specification.
+
+**Activation failure contract.** If the health confirmation step fails after activation, the runtime MUST immediately execute the rollback path: restore the preserved prior runtime, set `lifecycle_state` back to the pre-activation value, and surface a BLOCKING gap of kind `activation-health-failure`. The rollback itself MUST be treated as a Transaction (AP16) with its own before/after snapshot. If the rollback fails, a second BLOCKING gap of kind `rollback-failure` MUST be surfaced and all autonomous Operations MUST halt until an operator clears both gaps.
+
+**Partial-update reconciliation.** When a self-evolution update is interrupted mid-application (process crash, timeout, resource exhaustion), the runtime MUST on next wake: (1) detect the incomplete Transaction via phase inspection (PREPARED or APPLYING phase → unconditional rollback; APPLIED phase → re-run validation); (2) resolve the Transaction per phase-specific disposition; (3) surface an INFO gap of kind `partial-update-recovered` after successful resolution; (4) surface a BLOCKING gap of kind `partial-update-unrecoverable` if resolution fails.
+
+**State-divergence detection.** Before accepting any self-evolution proposal, the runtime MUST compare the SHA-256 digest of the candidate spec against the digest recorded at the last stable activation. If they differ by more than the proposed delta, a BLOCKING gap of kind `spec-state-divergence` MUST be surfaced. The operator MUST explicitly clear this gap before the evolution proceeds.
+
+**Re-bootstrap failure contract.** Re-bootstrap MUST be attempted at most 3 times before being classified as terminal. Each failed attempt MUST surface an INFO gap of kind `rebootstrap-attempt-failed` with `attempt_number`. After 3 failures a BLOCKING gap of kind `rebootstrap-terminal-failure` MUST be surfaced. All autonomous Operations MUST halt until the operator explicitly clears this gap and resets the re-bootstrap attempt counter to 0.
+
 ---
 
 # 75. Agnosticism
@@ -11117,6 +11267,12 @@ When a section's semantic gap density constitutes a material precision gap, URAC
 
 Spec-improvement Objectives derived from audit findings are ordinary spec-evolution Objectives: they require the same justification, prioritization, execution, validation and checkpoint path as any other Objective. The audit result is Evidence; it does not constitute Authority to modify `URACE.md`.
 
+**Gap density metric.** Semantic gap density for a spec section is computed as: `gap_count / normative_statement_count`, where `normative_statement_count` is the count of sentences containing MUST, SHALL, SHOULD, or MAY (RFC 2119). A gap is a concept referenced in the section that lacks a binding normative statement governing its behavior. Sections with `gap_count / normative_statement_count > 0.40` MUST be flagged in the structural audit output as having material precision gaps.
+
+**Materiality threshold.** A precision gap is material when it leaves operator-observable behavior undefined in at least one reachable execution path. Gaps that affect only informational output (e.g., display formatting) are non-material. The audit authority is the spec maintainer (the entity that issues spec revisions). Materiality is determined by the spec maintainer, not by the runtime.
+
+**Remediation contract.** A material precision gap MUST be resolved by: (a) adding normative text to the spec (preferred); or (b) adding a runtime guard that surfaces a WARNING gap of kind `spec-precision-gap-active` when the undefined path is reached. Option (b) is a temporary measure; the spec text remediation MUST follow in the next revision.
+
 ---
 
 # 81. Final Invariant
@@ -11133,6 +11289,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r58 | 2026-10-16 | spec | 20-gap reliability hardening. Added invocation contract, traversal rules, Evidence weighting, and human-readable format to §62g Justification System. Added activation-failure, partial-update-reconciliation, state-divergence-detection, and re-bootstrap-failure contracts to §74. Added CRC injection, version-mismatch recovery, and context-window overage contracts to §62e/§75. Added default staleness windows and T2 authority-authorization recording to §62c SDM. Added tier tie-breaking, eviction floor, and fallback-rejection contract to §62c CBM. Added signal taxonomy, timeout contract, re-establishment authorization, and recoverable/terminal gap classification to §62c WRM. Added surface measure algorithm and value-density floor enforcement to §62c SSE. Added capability-regression contract, re-test trigger, and test-freshness window to §62c TCG. Added structural/semantic boundary taxonomy and classification-disagreement protocol to §62h T5/T7. Added multi-BLOCKING ordering, operator clearance contract, and isolation contract to §62l IGC. Added archive path resolution and re-ingestion idempotency to §62c RIM. Added discovery mechanism, source validation, and deduplication to §62c EMC. Added firing contract, multi-policy interaction, and atomicity guarantee to §62f retention. Added elevation eligibility criteria, evidence threshold, reversibility, and version continuity to §62n CEP. Added step idempotency, sequential execution, transient failure handling, and retry ceiling to §73 CRRP. Added gap density metric, materiality threshold, and remediation contract to §80/§81. Added uniqueness contract, ambiguity resolution, and multi-mechanism execution order to §62l PMM. Added milestone failure modes, state revertibility, and chain integrity validation to §59b. Added downstream blocking semantics, refresh trigger, and override audit trail to §62j stale-manifest. Added effect-type taxonomy, reconciliation-strategy matrix, and unreconcilable-effect handling to §52. New IGC gap kinds: justification-depth-exceeded, justification-cycle-detected, activation-health-failure, rollback-failure, partial-update-recovered, partial-update-unrecoverable, spec-state-divergence, rebootstrap-attempt-failed, rebootstrap-terminal-failure, crc-version-mismatch, crc-context-overflow, unauthorized-threshold-adjustment, wake-registration-stale, wake-registration-expired, archive-not-found, reingestion-duplicate-skipped, metric-source-discovery-unavailable, retention-pass-partial-failure, crrp-step-failure, crrp-retry-exceeded, technique-classification-disagreement, value-density-below-floor, capability-regression, milestone-chain-integrity-failure, effect-unreconcilable, stale-manifest-override. Total IGC gap kinds: 76 |
 | r57 | 2026-10-16 | spec | §62m catalog alignment: Mechanism Catalog +1 (MBV); Schema Catalog +3 (MetricEffect, ChunkingPolicy, Chunk); Protocol Catalog +1 (CEP); Contract Catalog IGC count 20→50; derive contract stale counts removed (now §62n-authoritative); PMM description --opt-in-patterns→--opt-in-constructs; stem vocabulary patterncatl AP0-AP25→AP0-AP37; optinpat --opt-in-constructs added |
 | r56 | 2026-10-16 | spec+runtime | Full verification pass: NSS §62n compliance check — all violations corrected; no-degradation audit — AP0–AP37, all Protocols, all Mechanisms, all Schemas verified present; IntegrityGapCatalog monotonic growth verified (all gap kinds from r48+ present); all revision log entries r1–r56 verified accurate; section numbering verified (no gaps or duplicates); ConstructKindRegistry updated to include r54/r55 additions (MetricEffect, ChunkingPolicy, Chunk); Metric Baseline Verification registered in Mechanisms table; §62n Base Rule marked universal |
 | r55 | 2026-10-16 | spec+runtime | JOINS pass: universal/scoped construct wiring: §62b: CitizenBase/AuthorizedCitizen/TemporalCitizen marked universal; §62i: AP0 Citizen + AP7 Canonical Reduction marked universal; §62l: IntegrityGapCatalog emission pattern marked universal; §62n: RFC 2119 normative force marked universal; §62f: compaction blocked when lifecycle_state=BLOCKED (anchor-drift guard) + destination-anchor guard subsection; §62f: lifecycle boundary requirement references last CheckpointRecord; §62c: Re-Ingestion baseline from last CheckpointRecord; PARTS→PARTS scope notes: DiscoveryBudgetStatus (Discovery domain §36–§43), WakeRegistration (Dormancy/Wake §64–§67), ChunkingPolicy+Chunk (Compaction §62f), AssessmentRecord (TAS §62h + §37); Runtime: destination_anchor guard in compaction path; CheckpointRecord baseline in staleness detection |
