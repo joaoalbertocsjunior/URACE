@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r54**
+**Specification version: 2026-10-16-r55**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -1679,6 +1679,8 @@ ERROR_INTERRUPTED  — enumeration error halted the cycle; conclusion is partial
 
 **State Document.** `assessment_records` OPTIONAL list of AssessmentRecord.
 
+**Scope:** TAS domain (§62h) and assessment cycle (§37)
+
 ---
 
 # 38. Autonomous Objective Discovery
@@ -3159,13 +3161,19 @@ Every citizen schema in §62b MUST declare `Extends:` one of the following base 
 - `created_at` (ISO-8601, REQUIRED) — creation timestamp; MUST be immutable after creation
 - `updated_at` (ISO-8601, REQUIRED) — last mutation timestamp
 
+**Used in:** (universal — all spec sections and all citizen schemas)
+
 **AuthorizedCitizen** extends CitizenBase
 - `authority_basis` (string, REQUIRED) — authorizing rule id or authority scope
 - `scope` (string, OPTIONAL) — governance scope affected
 
+**Used in:** (universal — all spec sections requiring authority attribution)
+
 **TemporalCitizen** extends CitizenBase
 - Declares exact TemporalFields subset via "Uses TemporalFields: [...]"
 - All declared fields MUST appear in the TemporalFields vocabulary
+
+**Used in:** (universal — all spec sections requiring temporal tracking)
 
 Declaration syntax (in each citizen schema):
 > Extends: CitizenBase | AuthorizedCitizen | TemporalCitizen
@@ -3992,6 +4000,8 @@ DiscoveryBudgetStatus =
 
 **Inspection contract.** `discovery_budget_status` MUST be surfaced in every lifecycle inspection output. `discovery_defer_reason` MUST be included when non-null.
 
+**Scope:** Discovery domain (§36–§43)
+
 ## External Metric State
 
 The External Metric State records the current status of the external metrics subsystem.
@@ -4060,6 +4070,8 @@ WakeRegistration {
 Uses TemporalFields: established_at (as created_at), scheduled_at, satisfied_at.
 
 **Integrity contract.** On lifecycle restart, every WakeRegistration in `wake_registry` MUST be verified as still active in the current environment. A registration that cannot be verified MUST be surfaced as a wake-integrity gap (see §62 and README). A verified registration MUST NOT be discarded.
+
+**Scope:** Dormancy/Wake domain (§64–§67)
 
 ## Unresolved Effect
 
@@ -4902,6 +4914,8 @@ RE-INGESTION REQUEST (operator-authorized, wraps Transaction Mechanism)
 ```
 
 **Atomicity contract.** Re-ingestion MUST be performed as a single lifecycle transaction (§62c Transaction Mechanism). A partial re-ingestion is a recovery condition; resume from the Transaction journal. **Field-order contract.** Restored records MUST occupy the exact position range originally compacted; relative ordering of neighboring live records MUST NOT change. **Policy contract.** Re-ingestion into a field with `compaction_mode: ROLLING_EVICTION` is PROHIBITED; such fields have no archive. **Authorization contract.** Re-ingestion MUST NOT be performed autonomously; it MUST be preceded by an attributable operator input. Uses canonical: ReIngestionRecord (§62b), CompactionSummary (§62b), Transaction Mechanism (§62c).
+
+**CheckpointRecord baseline.** Re-ingestion MUST establish a baseline from the most recent CheckpointRecord (§62b) with `kind=accepted-product-change` in `State.checkpoints`. The baseline digest MUST be verified against `state_after_digest` of the corresponding Change binding. Re-ingestion that cannot establish this baseline MUST NOT proceed.
 
 ## Staleness Detection Mechanism
 
@@ -6420,6 +6434,10 @@ An implementation MUST evaluate eligibility deterministically: entry-count eligi
 
 Compaction MUST occur only at a safe lifecycle boundary: after a cycle's Checkpoint is accepted and before the next cycle begins. Compaction MUST NOT occur during an active Transaction or while `CognitiveResumeContext.pending_transaction` is non-null. Violating this rule is a cycle-integrity violation and MUST be surfaced as a `compaction-manifest-divergence` BLOCKING IntegrityGap.
 
+**Destination anchor guard.** Compaction MUST NOT execute if `state["lifecycle_state"] == "BLOCKED"` due to a `governance-anchor-drift` gap. A blocked lifecycle has an unverified destination anchor; compaction in this state may produce records that cannot be attributed to a verified governance baseline. An attempt to compact while BLOCKED on anchor drift MUST emit `compaction-blocked-on-anchor-drift` WARNING IntegrityGap and MUST NOT proceed.
+
+**CheckpointRecord baseline requirement.** The "last accepted Checkpoint" referenced in this lifecycle boundary requirement is the most recent CheckpointRecord (§62b) with `kind=accepted-product-change` in `State.checkpoints`. A compaction that cannot identify a prior accepted-product-change Checkpoint MUST NOT proceed (bootstrap Checkpoints do not satisfy this requirement for compaction authorization).
+
 ## Authorization model
 
 Compaction is authorized in exactly two ways:
@@ -6522,6 +6540,8 @@ If decision_record.prior_decision_refs crosses chunk boundary, both chunks MUST 
 **Migration:** CompactionEvent.chunk_format: LEGACY_TIMESTAMP | OBJECTIVE_LIFECYCLE. Existing archives use LEGACY_TIMESTAMP; chunking-aware decompaction handles both.
 
 **Used in:** §62f compaction commands, §62g Justification Chain traversal
+
+**Scope:** Compaction domain (§62f)
 
 ---
 
@@ -6765,6 +6785,8 @@ Citizen = {
 
 **Implementation.** All schemas in §62b are citizen schemas. Primary classes: `Objective`, `Evidence`, `Blocker`, `DecisionRecord`, `StatusTransition`, `PendingValidation`, `ScheduledTask`, `CustomizationRecord`.
 
+**Used in:** (universal — all spec sections; every named entity in URACE is a citizen)
+
 ---
 
 ## AP1 — Canonical Scalar
@@ -6984,6 +7006,8 @@ where `canonical_form` satisfies:
 - Semantic equivalence detection (two rules with different phrasing but same normative effect): SD = False — requires executor judgment.
 
 **Implementation.** Spec normative rules → minimal normative claims; citizen schemas → minimal normal form; pipeline descriptions → minimal ordered step sequence; evidence records → canonical evidence kind vocabulary (§62b Evidence kinds table). The §80 Spec Audit Mechanism applies SRLC to produce `normative_rules` count: each normative rule is reduced to a minimal, independently testable claim before counting.
+
+**Used in:** (universal — all spec sections; every construct definition and normative rule applies SRLC)
 
 ---
 
@@ -8822,6 +8846,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
+**Used in:** (universal — all spec sections; any section that detects a normative violation MUST emit via this catalog)
+
 **Extension contract.** A derived system MAY define additional gap kinds by registering them in its own IntegrityGapCatalog extension. Extension kinds MUST use a scoped prefix (e.g., `myapp-`) to avoid collisions. **Severity contract.** BLOCKING gaps MUST halt the dependent operation before any effect is committed. WARNING gaps MUST be surfaced but MUST NOT block unrelated workstreams. INFO gaps MUST be surfaced in output but carry no operational obligation.
 
 ---
@@ -9004,6 +9030,8 @@ Every concept in this specification MUST be expressed in its unique canonical fo
 3. **Mandatory template.** Every construct uses the template prescribed for its kind. Deviation from the template is a structural violation.
 4. **Normative force.** Every binding statement uses RFC 2119 keywords (MUST/SHALL/SHOULD/MAY/MUST NOT/SHALL NOT). Binding statements without these keywords carry no normative force.
 5. **Canonical reduction.** A construct that can be expressed more minimally without losing normative content MUST be reduced. Redundancy is a structural violation.
+
+**Used in:** (universal — all spec sections; RFC 2119 normative force applies to every section of URACE.md)
 
 ## Normative Binding Scope
 
@@ -11089,6 +11117,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r55 | 2026-10-16 | spec+runtime | JOINS pass: universal/scoped construct wiring: §62b: CitizenBase/AuthorizedCitizen/TemporalCitizen marked universal; §62i: AP0 Citizen + AP7 Canonical Reduction marked universal; §62l: IntegrityGapCatalog emission pattern marked universal; §62n: RFC 2119 normative force marked universal; §62f: compaction blocked when lifecycle_state=BLOCKED (anchor-drift guard) + destination-anchor guard subsection; §62f: lifecycle boundary requirement references last CheckpointRecord; §62c: Re-Ingestion baseline from last CheckpointRecord; PARTS→PARTS scope notes: DiscoveryBudgetStatus (Discovery domain §36–§43), WakeRegistration (Dormancy/Wake §64–§67), ChunkingPolicy+Chunk (Compaction §62f), AssessmentRecord (TAS §62h + §37); Runtime: destination_anchor guard in compaction path; CheckpointRecord baseline in staleness detection |
 | r54 | 2026-10-16 | spec+runtime | Gap closure pass (7 items from r53 audit): §62f: compaction authorization staleness contract (86400s window) + compaction-authorization-stale WARNING gap; §62b: MetricEffect citizen schema (IMPROVEMENT/DRIFT/REGRESSION/NEUTRAL); §62b: metric_effects OPTIONAL added to State Document; §62b: Operation validation_evidence_id + validation_skipped_reason fields + validation evidence contract; §62l: validation-evidence-missing + compaction-authorization-stale gap kinds; Runtime: citizen-base-violation load-time conformance check; objective-lifecycle chunking grouping logic (_compact_with_chunking); immutable field mutation detection (id/created_at); authority_basis active-rule binding validation |
 | r53 | 2026-10-16 | spec+runtime | Reliability Hardening Pass: §62b: MetricDefinition authority_level + mutation_requires + last_baseline_audit fields; Base Citizen Clusters (CitizenBase/AuthorizedCitizen/TemporalCitizen) + Extends declarations; GoverningRecord activation — WakeRegistration/ExecutorProvider/RetentionPolicy declared; ExecutorProvider added to State Document; ChunkingPolicy + Chunk schemas added (opt-in chunking); §62c: Metric Baseline Verification mechanism (cycle-start scan all MetricDefs); §62f: Objective-Lifecycle Chunking + Chunk records in governance table; §62h: T2 threshold audit trail requirement; §62a: Executor policy POLICY rule seeding requirement; §62l: 7 new IntegrityGap kinds (metric-baseline-unauthorized-mutation, metric-mutation-policy-missing, threshold-audit-missing, citizen-base-violation, authority-cache-stale, executor-policy-missing, unresolved-effects-reconciliation-failure); §74: self-evolution budget partition invariant ≤20%; Authority cache invalidation contract (3600s TTL); Runtime: mutable metric scan extended to ALL MetricDefinitions; unresolved effects reconciliation audit trail + exception guard; discovery observation key safety (.get chains); authority cache 3600s TTL invalidation; self-evolution 20% budget guard; wake trigger atomic state persist after evaluation; symmetric compliance recording on ACCEPTED |
 | r52 | 2026-10-16 | spec+runtime | NSS Compliance + Critical Bug Fixes: destination anchor drift now enters BLOCKED + emits `governance-anchor-drift` BLOCKING IntegrityGap; executor failures truncation now emits CompactionEvent before truncating; `decisions` key → `decision_records` (§45 compliance); removed `ACCEPTED` as lifecycle_state enum value; unified `pending_validation` → `pending_validations` (plural canonical); added durable state checkpoint between operation record write and ACTIVE transition; governance domain now emits ComplianceRecord on authority denial; §62b: section-level Schema metadata declaration added; compliance_records / compliance_state OPTIONAL → REQUIRED in State Document; MetricDefinition DIRECTIVE seeding contract + DIRECTIVE seeding fields; §62f: integrity_gaps / status_transitions / assessment_records / processed_input_ids added to governance table; §62l: metric-definition-drift (WARNING) + governance-anchor-drift (BLOCKING) added to IntegrityGapCatalog; §62c: metrics domain added to Staleness Detection Mechanism |
