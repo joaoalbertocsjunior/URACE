@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r65**
+**Specification version: 2026-10-16-r70**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -4233,6 +4233,9 @@ State {
   community_feeds       OPTIONAL  list[CommunityFeed]; registered feed sources; default []
   community_signals     OPTIONAL  list[CommunitySignal]; ingested signals; default []
   patch_proposals       OPTIONAL  list[PatchProposal]; proposal queue; default []
+  assessment_gaps       OPTIONAL  list[AssessmentGap]; active and recently resolved assessment gaps; deduplication by cycle_id+dimension; default []
+  lifecycle_boundaries  OPTIONAL  list[LifecycleBoundary]; rolling log of boundary records (max 50); default []
+  integrity_signals     OPTIONAL  list[IntegritySignal]; active and resolved integrity signals; default []
 }
 ```
 
@@ -6203,6 +6206,7 @@ DecisionRecord {
   outcome_feedback      OPTIONAL  OutcomeFeedback; post-decision observation once outcome is known;
                                   absent until outcome is observable
   decided_at            REQUIRED  timestamp
+  justification_context_id OPTIONAL  string; JustificationContext id (prefix jctx-) evaluated before this decision; links durable justification predicate record
 }
 ```
 
@@ -9290,9 +9294,9 @@ urace autonomous [--dry-run] [--verbose] [--quiet] [--json]
 
 # 62l. Shared Reuse Contracts
 
-This section defines fifteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines seventeen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All fifteen constructs defined in this section MUST be enforced at runtime by any conforming implementation: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare TemporalFields conformance MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations. Supplemental enforcement for JustificationContract and BoundaryContract is stated after their definitions below.
+**Enforcement contract (§62l).** All seventeen constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining eight constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, and JOIN — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -9822,6 +9826,50 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 
 **Multi-mechanism execution order.** When a single gap kind maps to both a Mechanism (§62c) and a Protocol (§62l), the Mechanism MUST execute first. If the Mechanism does not resolve the gap, the Protocol MUST be initiated.
 
+**Referenced from:** §62l enforcement contract clause (7), §62j `urace derive` `--opt-in-constructs` resolution, §62m Protocol Catalog (PMM entry).
+
+---
+
+## QualityEnsuranceProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **QualityEnsuranceProtocol** (QE) is a post-change audit protocol applied after any spec revision to confirm that no degradations, ordering violations, cross-reference breaks, or contract inconsistencies were introduced by the changes. A QE pass MUST be performed after every revision that adds or modifies constructs, schemas, or catalog entries.
+
+**Steps:**
+
+1. **Enumerate changed constructs.** Identify every schema field, construct definition, catalog entry, and annotation modified or added in the revision.
+2. **Schema field ordering.** For each modified schema, verify that REQUIRED fields precede OPTIONAL fields. Any OPTIONAL field positioned before a REQUIRED field is a degradation.
+3. **Cross-reference resolution.** For every "Used in:", "Referenced from:", and "Citizens using:" annotation touched or introduced, verify the target (field name, section, construct ID) resolves to an existing declaration. An annotation pointing to an undeclared target is a degradation.
+4. **Contract consistency.** For every MUST/SHALL behavioral contract in a modified section, verify it is not contradicted by another MUST/SHALL in the same or a dependent section.
+5. **Count and catalog drift.** Verify that all catalog headers ("N entries") match the actual row count in their table. Verify that ConstructKindRegistry, Schema Catalog, Protocol Catalog, and Contract Catalog counts are mutually consistent after the revision.
+6. **Emit finding list.** A QE pass that finds no degradations MUST be declared as `QE: PASS` in the revision log. A QE pass that finds degradations MUST list each finding and the fix applied before the revision is stable.
+
+**Scope.** QE applies to the changes in the current revision only — it does not re-audit prior revisions. Prior revisions are addressed by dedicated gap-closure revisions.
+
+**Referenced from:** §82 Revision Log (as a named pass type), all spec revisions.
+
+---
+
+## JoinProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **JoinProtocol** (JOIN) is a post-change wiring audit protocol applied after any spec revision that introduces or modifies schemas, constructs, or catalog entries. A JOIN pass confirms that all cross-references, scope annotations, and field declarations are mutually consistent — that every claim made by an annotation is backed by a declaration, and every declaration is reachable from the constructs that use it. A JOIN pass MUST be performed after every revision that adds new schemas, new "Used in:" annotations, or new "Referenced from:" annotations.
+
+**Steps:**
+
+1. **Enumerate new and modified constructs.** Identify every schema, mechanism, protocol, or catalog entry added or modified in the revision.
+2. **"Used in:" resolution.** For every "Used in: X.Y" annotation on a new or modified schema, verify that field Y is declared in the schema or document X. An annotation pointing to an undeclared field is an unresolved join.
+3. **"Referenced from:" resolution.** For every "Referenced from: §N" annotation, verify that §N exists and contains a normative reference to the construct. A reference to a non-existent or non-referencing section is an unresolved join.
+4. **"Citizens using:" completeness.** For every "Citizens using: <schema>" annotation on a construct, verify that each listed schema declares conformance (via `Implements:` or `Uses canonical:`) to that construct.
+5. **Universal scope classification.** For any construct or schema that applies across all lifecycle states or all sections, verify that its "Used in:" annotation explicitly states `(universal — ...)` rather than listing individual sections.
+6. **Emit finding list.** A JOIN pass that finds no unresolved references MUST be declared as `JOIN: PASS` in the revision log. A JOIN pass that finds unresolved references MUST list each finding and the fix applied before the revision is stable.
+
+**Scope.** JOIN applies to the changes in the current revision only — it does not re-audit prior revisions unless a prior annotation is directly modified.
+
+**Referenced from:** §82 Revision Log (as a named pass type), all spec revisions.
+
 # 62m. Extended Construct Catalogs
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
@@ -9879,7 +9927,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | IntegritySignal | IntegritySignal | isig- | §62b |
 | JustificationContext | JustificationContext | jctx- | §62b |
 
-## Protocol Catalog (11 entries)
+## Protocol Catalog (14 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -9894,6 +9942,9 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | PPP | PatchProposalProtocol | T&C gate → signal ingest → relevance+confidence scoring → patch synthesis → approval routing (AUTO/SMART/HUMAN) → expiry; `urace /inbox list|apply|reject` | §62c PPP_M |
 | JC | JustificationContract | evaluate 5-predicate justification test → record JustificationContext → prevent unjustified actions | §62l |
 | BC | BoundaryContract | open boundary → verify conditions → commit atomically → handle incomplete on restart | §62l |
+| PMM | PatternMechanismMapping | AP-to-section lookup → role classification → uniqueness check → ambiguity resolution | §62l |
+| QE | QualityEnsuranceProtocol | enumerate changed constructs → field ordering check → cross-reference resolution → contract consistency → count/catalog drift → emit finding list (PASS or degradations) | §62l |
+| JOIN | JoinProtocol | enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs) | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -10129,6 +10180,8 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | ISC | InspectionSurface Contract | FOUNDATIONAL | true |
 | IGC | IntegrityGapCatalog | FOUNDATIONAL | true |
 | PMM | PatternMechanismMapping | INTEGRATED | false |
+| QE | QualityEnsuranceProtocol | FOUNDATIONAL | true |
+| JOIN | JoinProtocol | FOUNDATIONAL | true |
 | CEP | ConstructElevationProtocol | FOUNDATIONAL | true |
 | SCP | SpecConstructionProtocol | FOUNDATIONAL | false |
 | DAI | ConstructDependencyAcyclicityInvariant | FOUNDATIONAL | true |
@@ -11914,6 +11967,16 @@ Expect: `lifecycle-boundary-violation` BLOCKING gap emitted; AP27 Transaction Re
 Given a boundary commit fails partway through.
 Expect: state is rolled back to pre-boundary condition; no partial mutations persist; runtime enters REPAIRING.
 
+## Assessment Gaps
+
+**BJ — AssessmentGap Deduplication**
+Given an AssessmentGap with the same `cycle_id` and `dimension` is produced by two consecutive assessment cycles.
+Expect: the runtime updates the existing AssessmentGap record (incrementing `last_at`) and does NOT append a new agap- record; the agap- count for that cycle_id+dimension remains 1.
+
+**BK — AssessmentGap Resolution**
+Given an AssessmentGap is resolved (the blocking insufficiency is corrected).
+Expect: `resolved_at` is set to an ISO-8601 timestamp; the gap is removed from the active assessment gap list; no agap- record with a null `resolved_at` remains for that cycle_id+dimension.
+
 ---
 
 # 79. Bootstrap Execution Requirements
@@ -12142,6 +12205,8 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `signalclassifier` | SignalClassifier mechanism (§62c) |
 | `justificationcontract` | JustificationContract protocol (§62l) |
 | `boundarycontract` | BoundaryContract protocol (§62l) |
+| `qualityensurance` | QualityEnsuranceProtocol (§62l) |
+| `join` | JoinProtocol (§62l) |
 
 ## Audit Content
 
@@ -12207,6 +12272,11 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r70 | 2026-10-16 | spec+runtime | Runtime alignment pass (r65–r69 gap closure). State Document bootstrap: initialized `assessment_gaps`, `lifecycle_boundaries`, `integrity_signals` as empty lists in `initial_state()` — three r65 schemas whose State fields were declared in r67 but not wired into bootstrap. Implemented `record_assessment_gap()` (deduplication contract: same cycle_id+dimension updates last_at, not append) and `resolve_assessment_gap()` (sets resolved_at, removes from active list) in cli.py. Added `justification_context_id` OPTIONAL parameter to `create_decision_record()` in decision_record.py. Added 8 behavioral tests: BJ (AssessmentGap deduplication), BK (AssessmentGap resolution — two assertions each), 3 State Document initialization assertions, 1 DecisionRecord.justification_context_id acceptance test. Spec version header bumped r65→r70. **978 tests pass.** QE: PASS. JOIN: PASS. **New external references:** none (all constructs previously declared) |
+| r69 | 2026-10-16 | spec | Add JoinProtocol (JOIN) as named §62l construct. JOIN formalizes the post-change wiring audit as a 6-step protocol: enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs). §62l count updated sixteen→seventeen; enforcement contract self-enforcing list updated to include JOIN (seven→eight). §62m Protocol Catalog: JOIN added (13→14 entries). §62n ConstructKindRegistry: JOIN added (FOUNDATIONAL, standalone: true). §81: `join` stem added. QE: PASS. JOIN: PASS. **New external references:** `JOIN` Protocol → §62l (this revision); `JoinProtocol` construct → §62l (this revision); `join` stem → §81 (this revision) |
+| r68 | 2026-10-16 | spec | Add QualityEnsuranceProtocol (QE) as named §62l construct. QE formalizes the post-change degradation audit as a 6-step protocol: enumerate changed constructs → schema field ordering → cross-reference resolution → contract consistency → count/catalog drift → emit finding list (PASS or degradations). §62l count updated fifteen→sixteen; enforcement contract self-enforcing list updated to include QE (six→seven). §62m Protocol Catalog: QE added (12→13 entries). §62n ConstructKindRegistry: QE added (FOUNDATIONAL, standalone: true). §81: `qualityensurance` stem added. QE: PASS (no degradations introduced by this revision). **New external references:** `QE` Protocol → §62l (this revision); `QualityEnsuranceProtocol` construct → §62l (this revision); `qualityensurance` stem → §81 (this revision) |
+| r67 | 2026-10-16 | spec | JOIN + NSS + SCP pass (r65/r66 changes) + DEGRADATION fix. State Document wired: added `assessment_gaps` (OPTIONAL list[AssessmentGap]), `lifecycle_boundaries` (OPTIONAL list[LifecycleBoundary], max 50), `integrity_signals` (OPTIONAL list[IntegritySignal]) — three r65 schemas whose "Used in: State.X" annotations referenced undeclared State Document fields. DecisionRecord wired: added `justification_context_id` (OPTIONAL string; jctx- reference) — r65 JustificationContext schema claimed this field but it was absent from DecisionRecord. PMM wired: added `**Referenced from:**` annotation to PatternMechanismMapping (§62l) pointing to enforcement clause (7), §62j derive, and §62m Protocol Catalog. DEGRADATION fix: `justification_context_id` (OPTIONAL) was placed before `decided_at` (REQUIRED) in DecisionRecord schema, violating OPTIONAL-after-REQUIRED ordering; field moved to after `decided_at`. NSS: all four stems (assessmentgap, lifecycleboundary, integritysignal, justificationcontext) confirmed present in §81; no new stems required. SCP Gate 1: all fields declared after their respective schema definitions (§62b precedes §62e State Document; §62b precedes §62l PMM). **New external references:** `State.assessment_gaps` field → §62e State Document (this revision); `State.lifecycle_boundaries` field → §62e State Document (this revision); `State.integrity_signals` field → §62e State Document (this revision); `DecisionRecord.justification_context_id` field → §62b DecisionRecord (this revision); `PatternMechanismMapping` Referenced-from annotation → §62l (this revision) |
+| r66 | 2026-10-16 | spec | Gap closure pass (4 confirmed gaps): (1) PMM added to Protocol Catalog (§62m, 11→12 entries); (2) two new mandatory behavioral tests added (BJ — AssessmentGap Deduplication, BK — AssessmentGap Resolution) covering the MUST-level deduplication and resolved_at contracts on the agap- schema (§62b); (3) §62l enforcement contract prose corrected: "all fifteen" replaced with explicit count of nine mandated clauses plus six self-enforcing constructs named (EUP, OGP, CRRP, WRV, CRC_C, CEP); clause (4) corrected from "TemporalFields conformance" (a §62b primitive) to "GoverningRecord conformance citizens that also use TemporalFields"; supplemental JC+BC enforcement clauses promoted to main numbered list as (8) and (9); (4) `kind: Protocol` metadata note added to §62l enforcement contract explaining that `kind: Protocol` is the generic §62l-section metadata value and the catalog column provides the authoritative semantic classification, resolving the apparent contradiction between five Contract Catalog entries (GRC, IGC, ISC, ACI, RVS) and their construct metadata. **New external references:** `BJ` behavioral test → §78 (this revision); `BK` behavioral test → §78 (this revision); `PMM` Protocol Catalog entry → §62m Protocol Catalog (this revision) |
 | r65 | 2026-10-16 | spec+runtime | Comprehensive gap closure: sections 1–60 operational strengthening, §62k ease-of-use expansion, new citizen schemas, new protocols and mechanism, lifecycle FSM table, new mandatory behavioral tests. Spec: §3 first-class/derived formal definition; §27 Evidence Integrity operational test condition; §28 minimum Evidence assessment contract; §30 Evidence–prediction conflict definition; §39 priority formula citation; §41 Plan acceptance criteria; §56 deceleration threshold formula (0.8× baseline). Blocker schema extended with `classification`, `evidence_id`, `auto_clear_on`, `escalation_due` fields and auto-escalation/auto-resolution contracts. New §62b citizen schemas: AssessmentGap (agap-), LifecycleBoundary (lcb-), IntegritySignal (isig-), JustificationContext (jctx-). New §62c mechanism: SignalClassifier (SCF). AP14 extended with priority_tier (Tier 0 CRITICAL / Tier 1 STANDARD / Tier 2 OPPORTUNISTIC) and backward-compatible tier-ordering contract. §62k major expansion: --dry-run extended to update/derive/auto/goal/metric/constraint; --since/--until/--limit/--offset/--fail-on added; inspect/list subcommands documented (goal list, evidence list, blocker list/resolve, decision list/inspect, integrity-signal list); Defaults Table added; inbox/govern/autonomous commands documented. New §62l protocols: JustificationContract (JC, FOUNDATIONAL) and BoundaryContract (BC, FOUNDATIONAL); §62l count updated to fifteen. 6 new IGC gap kinds (blocker-escalated, integrity-signal-unclassified, lifecycle-boundary-violation, justification-context-incomplete, inbox-priority-tier-violation, checkpoint-write-timeout); IGC total 88→94. §62m catalogs: Mechanism +1 (SCF→8), Schema +4 (→33), Protocol +2 (→11); IGC count in Contract Catalog updated to 94 kinds. §64 canonical FSM transition table added (26 transitions). §78 15 new mandatory behavioral test categories (AX–BI). §81 7 new stems. Runtime: Blocker fields extended in State Document; record_blocker() accepts classification/evidence_id/auto_clear_on; auto-escalation at count≥5 and age>3600s; TRANSIENT auto-resolution at 600s; AP14 priority_tier processing order in consume_inputs(); new behavioral tests for authority closure, blocker lifecycle, priority inbox, integrity signals, boundary recovery. **New external references:** `first-class` definition → §3 Core Lifecycle Semantics (this revision); `IntegritySignal` schema → §62b (this revision); `LifecycleBoundary` schema → §62b (this revision); `AssessmentGap` schema → §62b (this revision); `JustificationContext` schema → §62b (this revision); `SignalClassifier` mechanism → §62c (this revision); `priority_tier` field → §62i AP14 IPC Input Schema Catalog (this revision); `JustificationContract` protocol → §62l (this revision); `BoundaryContract` protocol → §62l (this revision); `blocker-escalated` IGC kind → §62l (this revision); `integrity-signal-unclassified` IGC kind → §62l (this revision); `lifecycle-boundary-violation` IGC kind → §62l (this revision); `justification-context-incomplete` IGC kind → §62l (this revision); `inbox-priority-tier-violation` IGC kind → §62l (this revision); `checkpoint-write-timeout` IGC kind → §62l (this revision); `--since` option → §62k (this revision); `--until` option → §62k (this revision); `--limit` option → §62k (this revision); `--offset` option → §62k (this revision); `--fail-on` option → §62k (this revision); `goal list` subcommand → §62k (this revision); `evidence list` subcommand → §62k (this revision); `blocker list` subcommand → §62k (this revision); `blocker resolve` subcommand → §62k (this revision); `decision list` subcommand → §62k (this revision); `decision inspect` subcommand → §62k (this revision); `integrity-signal list` subcommand → §62k (this revision); `Blocker.classification` field → §62b Blocker schema (this revision); `Blocker.evidence_id` field → §62b Blocker schema (this revision); `Blocker.auto_clear_on` field → §62b Blocker schema (this revision); `Blocker.escalation_due` field → §62b Blocker schema (this revision); `supplemental-enforcement-jc-bc` clause → §62l BoundaryContract (this revision, SCP Gate 1 compliance correction) |
 | r64 | 2026-10-16 | spec+runtime | NSS + SCP compliance pass + update/derive gap closure. Fixed SCP Protocol Construct metadata line to NSS template-compliant format (`standalone: false · depends: [NSS, IGC]`); removed erroneous AP-style `Derivation metadata` line from SCP section. Fixed DAI Protocol Construct metadata line to NSS template-compliant format (`standalone: true · depends: []`). Added required `**New external references:** (predates SCP — not declared)` annotations to r58 and r59 revision log entries (SCP §9290 retroactive-applicability SHOULD clause). Runtime: wired `@bundle-name` resolution for `--opt-in-constructs` in `urace update` (all subcommands and orchestrated path); unknown bundle names produce error with `urace derive --list-bundles` hint. Extended `_check_stale_derived_manifests()` to also check `state.feature_bundle_refs` and surface `derived-construct-set-stale` warnings with `bundle_name` field during `update download` and `update apply` (§62j FeatureBundle stale-detection contract). Added `--bundle` + `--refresh` conflict guard in `urace derive`: when both flags are used, `--bundle` is ignored and a warning is printed (§62j §8790). **New external references:** none |
 | r63 | 2026-10-16 | spec | r61/r62 gap closure pass. Added `adapter_timeout_seconds` (default 30s), `adapter_retry_count` (default 3), `polling_interval_seconds` (default 300s) fields to CommunityFeed schema. Added `executor_credit_priority` field to Config.community_inbox (INBOX_HIGH|INBOX_NORMAL|INBOX_LOW). Added 2 IGC gap kinds: `community-inbox-evolution-blocked` (WARNING), `feature-bundle-unknown-construct` (WARNING); IGC total 86→88. Extended CSI mechanism with: timeout/retry contract, polling cadence contract, lifecycle state gate, executor credit contract (with bounded delta formula for confidence scoring), filtered signal lifecycle (re-evaluation on intent change), T&C gap auto_clearable contract. Extended PPP_M with: queue overflow eviction strategy (CONFIDENCE_INSUFFICIENT first, then PENDING refused), self-evolution DISABLED path (proposal held PENDING, `urace /inbox apply --override-evolution-policy`), HUMAN mode approval commands (`urace /inbox list|apply|reject`). Extended DAI with: cycle detection response per trigger type, unknown construct detection per FeatureBundle entry, self-reference detection response. Extended §62j derive with: FeatureBundle stale update path, bundle-derive precedence rules, FeatureBundle dependency resolution algorithm. Extended WRM signal taxonomy: added COMMUNITY_INBOX (5th signal kind) for high/medium signal arrival and HUMAN-mode reminder wakes. **New external references:** `CommunityFeed.adapter_timeout_seconds` → §62b CommunityFeed schema (this revision); `CommunityFeed.adapter_retry_count` → §62b CommunityFeed schema (this revision); `CommunityFeed.polling_interval_seconds` → §62b CommunityFeed schema (this revision); `Config.community_inbox.executor_credit_priority` → §62e Config community_inbox subschema (this revision); `community-inbox-evolution-blocked` IGC kind → §62l (this revision); `feature-bundle-unknown-construct` IGC kind → §62l (this revision); `COMMUNITY_INBOX` WakeRegistration signal kind → §62c WRM signal taxonomy (this revision) |

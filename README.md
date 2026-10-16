@@ -35,7 +35,7 @@ A **Product** is whatever URACE improves: a project, service, process, research 
 
 ## What Is an Executor?
 
-An **Executor** is an AI agent, orchestrator, program or person that can inspect the Product, change it and run checks. You need one to bootstrap URACE; compatible Executors can then be added, removed, combined or compared. [OpenHands](https://github.com/OpenHands/OpenHands) and [Caveman](https://github.com/JuliusBrussee/caveman) are examples.
+An **Executor** is any capable runtime URACE can delegate to: an LLM, AI agent, API, CLI, script, deterministic tool, or human-operated system — anything that can inspect the Product, produce changes, run checks, and return results. URACE validates independently and decides what is accepted. You need one to bootstrap; compatible Executors can then be added, removed, combined or compared. [OpenHands](https://github.com/OpenHands/OpenHands) and [Caveman](https://github.com/JuliusBrussee/caveman) are examples.
 
 ## Get Running
 
