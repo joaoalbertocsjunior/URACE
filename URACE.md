@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r50**
+**Specification version: 2026-10-14-r51**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -1709,7 +1709,7 @@ Before concluding that no justified authorized action exists and entering `DORMA
 
 When a discovery cycle is interrupted by an unhandled evaluation error during the enumeration of a registered input category — such as a corrupted goal record, a schema-inconsistent trigger state or an evaluation exception not attributable to capability unavailability or resource constraints — URACE MUST treat the interrupted cycle as incomplete, MUST record the specific category and error descriptor at the interruption point, and MUST NOT conclude dormancy from the partially enumerated result. The error-interrupted cycle MUST surface in the inspection output as a named blocking limitation identifying the affected category and requiring recovery or operator intervention. Reassessment MUST be scheduled at the earliest qualifying condition, consistent with the incomplete-cycle requirement above. Error-interrupted discovery cycles MUST be distinguished from capability-skipped cycles: the remediation path for an enumeration error is diagnosis and recovery, not waiting for a capability restoration event.
 
-The discovery context provided to an Executor MUST include the spec structural audit summary when available (§81). The reasoning memory is a bounded configurable store: its maximum entry count MUST be configurable via `efficiency.max_reasoning_memory_entries` and MUST NOT grow unboundedly. When the ceiling is reached, entries MUST be evicted in order of lowest-confidence, shortest-hypothesis-age, and least-recently-observed, preserving active high-confidence patterns.
+The discovery context provided to an Executor MUST include the spec structural audit summary when available (§80). The reasoning memory is a bounded configurable store: its maximum entry count MUST be configurable via `efficiency.max_reasoning_memory_entries` and MUST NOT grow unboundedly. When the ceiling is reached, entries MUST be evicted in order of lowest-confidence, shortest-hypothesis-age, and least-recently-observed, preserving active high-confidence patterns.
 
 Queued authoritative inputs awaiting application implement AP14 — Durable Inbox (§62i), ensuring FIFO ordering and idempotent processing across lifecycle boundaries.
 
@@ -4335,6 +4335,8 @@ Mechanisms are the interlinking processes that move citizens from one state to a
 
 ## Input Queue Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: FOUNDATIONAL` · `standalone: false` · `governed-by: [AP14]`
+
 The Input Queue is the sole safe path for operator instructions to enter the lifecycle (AP14 — Durable Inbox, §62i). It guarantees FIFO ordering, atomicity, and idempotency.
 
 ```
@@ -4357,6 +4359,8 @@ OPERATOR COMMAND
 **Boundary contract.** Inputs MUST NOT be applied mid-cycle. Application MUST occur only at a safe lifecycle boundary where the full state write can be committed atomically.
 
 ## Transaction Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP16, AP27]`
 
 A Transaction wraps the file mutations of a single Operation, providing a rollback capability and a durable record for crash recovery. The before/after snapshot pair and phase-progressive delta journal implement AP16 — State Snapshot + Delta Log (§62i).
 
@@ -4392,6 +4396,8 @@ Each phase MUST be written to the transaction journal on disk before transitioni
 
 ## Authority Resolution Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: FOUNDATIONAL` · `standalone: false` · `governed-by: [AP35]`
+
 This mechanism implements **AP35 — Governance Ledger** (§62i).
 
 Every proposed Operation MUST pass authority resolution before execution. Authority resolution consults the active Rule Ledger to determine whether the proposed scope and action are permitted.
@@ -4415,6 +4421,8 @@ PROPOSED OPERATION (scope, objective)
 **Denial record contract.** Every DENIED Operation MUST produce an Evidence record of kind `authority-resolution-denied` with a human-readable reason. The Operation MUST NOT proceed silently.
 
 ## Digest Computation
+
+**Construct metadata.** `kind: Mechanism` · `tier: FOUNDATIONAL` · `standalone: false` · `governed-by: [AP36]`
 
 The fixed algorithms and chain-continuity invariant implement **AP36 — Digest Chain Consistency** (§62i).
 
@@ -4455,6 +4463,8 @@ Serialisation MUST use no whitespace. Sorting MUST be lexicographic on `id`. Thi
 
 ## Value Trajectory Self-Correction Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP8, AP9]`
+
 The rolling velocity accumulation and deceleration-triggered reassessment implement **AP8 — Fixpoint Calculus** (§62i) and **AP9 — Monotone Accumulator** (§62i).
 
 The Value Trajectory mechanism continuously measures whether the lifecycle is producing value faster, slower, or at a stable rate. When deceleration is detected below a threshold, it MUST trigger an autonomous self-correction injection.
@@ -4479,6 +4489,8 @@ ACCEPTED OPERATION
 **Baseline contract.** Acceleration MUST NOT be computed until at least 2 checkpoints exist. Direction MUST NOT be labelled until at least 4 checkpoints exist. `AccelerationReport.status` MUST reflect this: `no_data` (0–1 checkpoints), `establishing_baseline` (2–3 checkpoints), `computed` (4+ checkpoints).
 
 ## Scope Priority Derivation Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP8]`
 
 The weighted-normalization convergence contract implements **AP8 — Fixpoint Calculus** (§62i).
 
@@ -4508,6 +4520,8 @@ normalized_weight[scope] = raw_weight[scope] / total
 **Staleness factor contract.** `days_since_accepted_change` MUST be computed from the most recent `ACCEPTED` Change record for each scope in the Rule Ledger's `change_bindings`. If no ACCEPTED change exists for a scope, the scope MUST be treated as infinitely stale, clamped to the scope's `max_weight`.
 
 ## External Metric Collection Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP13]`
 
 The structured observation, failure-streak tracking, and isolation contract implement **AP13 — Observer** (§62i).
 
@@ -4551,6 +4565,8 @@ ExternalMetricState.next_collection_at = now() + collection_interval
 
 ## Destination Anchor Integrity Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP35, OGP]`
+
 The digest-based drift detection and operator-acknowledgement gate implement **AP35 — Governance Ledger** (§62i) and **OperatorGateProtocol** (§62l).
 
 The Destination Anchor is verified on every lifecycle cycle start to detect unauthorized drift in governing intent.
@@ -4583,6 +4599,8 @@ ON LIFECYCLE CYCLE START:
 **Immutability contract.** Once established, `destination_anchor` MUST NOT be updated by any autonomous operation other than the explicit acknowledgement path. A runtime that updates `destination_anchor` without an attributable operator command MUST be treated as a governance integrity failure.
 
 ## Self-Evolution Eligibility Gate Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP34]`
 
 This mechanism implements **AP34 — Self-Evolution Eligibility Gate** (§62i).
 
@@ -4631,6 +4649,8 @@ EXECUTOR PROPOSAL (ExecutorProposal)
 **Gate-before-authority contract.** The eligibility gate MUST be evaluated before Authority Resolution (§62c Authority Resolution Mechanism). A proposal that fails the gate MUST NOT reach Authority Resolution; doing so would allow an ineligible proposal to be denied by authority rather than by policy, obscuring the actual blocking reason.
 
 ## Discovery Credit Gate Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP10, AP29]`
 
 Before every discovery cycle that would invoke a metered or credit-accruing Executor, URACE MUST evaluate the Discovery Credit Gate. The gate is deterministic, executor-agnostic, and reads only durable state and configuration. It MUST NOT invoke an Executor to determine its own outcome. `gate_open ↔ calls_today < max_calls_per_day ∧ calls_month < max_calls_per_month` The systematic-failure cooldown (condition 1) implements AP10 — Bounded Retry with Backoff (§62i).
 
@@ -4700,6 +4720,8 @@ DISCOVERY CYCLE REQUEST
 
 ## Quality Streak Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP9, AP20]`
+
 The Quality Streak Mechanism is the positive counterpart to AP20 — Circuit Breaker (§62i): where AP20 tracks failure streaks and gates further execution, this mechanism tracks consecutive quality improvements and gates progressive autonomy expansion. It implements AP9 — Monotone Accumulator (§62i) over QualityDelta records (§62b).
 
 ```
@@ -4762,6 +4784,8 @@ ProducerConsumerContract {
 
 ## Re-Ingestion Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP21]`
+
 Formal contract for re-ingesting archived or compacted lifecycle data back into active state. Complements AP21 — Compaction (§62i) and §62f Compaction and Retention. Produces a ReIngestionRecord citizen (§62b).
 
 ```
@@ -4786,6 +4810,8 @@ RE-INGESTION REQUEST (operator-authorized, wraps Transaction Mechanism)
 **Atomicity contract.** Re-ingestion MUST be performed as a single lifecycle transaction (§62c Transaction Mechanism). A partial re-ingestion is a recovery condition; resume from the Transaction journal. **Field-order contract.** Restored records MUST occupy the exact position range originally compacted; relative ordering of neighboring live records MUST NOT change. **Policy contract.** Re-ingestion into a field with `compaction_mode: ROLLING_EVICTION` is PROHIBITED; such fields have no archive. **Authorization contract.** Re-ingestion MUST NOT be performed autonomously; it MUST be preceded by an attributable operator input. Uses canonical: ReIngestionRecord (§62b), CompactionSummary (§62b), Transaction Mechanism (§62c).
 
 ## Staleness Detection Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP13]`
 
 The three-domain scan and structured observation output implement **AP13 — Observer** (§62i).
 
@@ -4834,6 +4860,8 @@ STALENESS SCAN (per assessment cycle, SD=True)
 
 ## Context Budget Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP24]`
+
 Governs the sweet-spot between context input richness and executor context window capacity. Prevents silent degradation when accumulated context approaches executor caps. Implements the Context Budget Contract for executor delegations.
 
 ```
@@ -4872,6 +4900,8 @@ CONTEXT BUDGET EVALUATION (before each executor delegation, SD=True)
 
 ## Wake Registration Verification Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP29, WRV]`
+
 This mechanism implements **WakeRegistrationVerification** (§62l) and **AP29 — Dormancy/Wakeability Contract** (§62i). Verifies that durable wake registrations recorded in `State.wake_registry` are still active in the current environment on lifecycle restart. Implements §67 restart verification requirement. `SD = True` — no executor credits consumed.
 
 ```
@@ -4892,6 +4922,8 @@ WAKE REGISTRATION VERIFICATION (on lifecycle restart)
 **Registration contract.** Every WakeRegistration MUST carry: `id` (Identifier), `kind` (str), `scheduled_at` (timestamp), `condition` (str describing the lifecycle condition it observes). **Verification contract.** On restart, every entry in `wake_registry` MUST be verified. An entry that cannot be verified MUST surface a named `wake-integrity-gap`. URACE MUST NOT represent dormancy as durably wakeable when any entry carries an unresolved wake-integrity-gap. `SD = True` — verification reads only local environment state.
 
 ## Sweet Spot Evaluation Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP25]`
 
 This mechanism implements **AP25 — Bounded Evolution Band** (§62i).
 
@@ -4984,6 +5016,8 @@ SWEET SPOT EVALUATION (per assessment cycle, SD=True)
 
 ## Capability Envelope Gate Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP25, AP33]`
+
 This mechanism implements **AP25 — Bounded Evolution Band** (§62i) and **AP33 — Policy Enforcement Gate** (§62i).
 
 Gates changes that would increase product surface measure beyond the configured complexity ceiling while the Product is already at CAPABLE or OPTIMIZED maturity. Operates as an additive pre-acceptance gate.
@@ -5012,6 +5046,8 @@ CAPABILITY ENVELOPE GATE (before each accepted-product-change, SD=True)
 
 ## Test Coverage Gate Mechanism
 
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP9]`
+
 The monotone test-count baseline implements **AP9 — Monotone Accumulator** (§62i).
 
 Enforces that every capability marked CAPABLE in State.capability_states is backed by at least one passing TestRunRecord of kind CAPABILITY_GATE or ACCEPTANCE. `SD = True` — reads only local state.
@@ -5036,9 +5072,13 @@ TEST COVERAGE GATE (per assessment cycle, SD=True)
 
 ## Crash-Consistent Acceptance
 
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP27]`
+
 Defined in §53. The four-phase acceptance boundary (PREPARED→APPLYING→APPLIED→VALIDATED→ACCEPTED) implements **AP27 — Transaction Recovery Protocol** (§62i). See §53 for the complete normative definition.
 
 ## Last-Known-Stable Product Recovery
+
+**Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP22]`
 
 Defined in §53. The stable-fallback promotion and restoration contract implements **AP22 — Checkpoint** (§62i). See §53 for the complete normative definition.
 
@@ -6080,7 +6120,7 @@ ArchiveAmendment {
 
 ## SpecAuditState
 
-The persisted audit state record written to `state["spec_audit_state"]` after every §81 structural audit. Enables the lifecycle to determine whether a fresh audit is due on each assessment cycle by comparing `spec_version` to the current spec version. Distinct from the `spec-structural-audit` Evidence record: the Evidence record is an append-only audit-trail entry; this record is the mutable current-state snapshot, replaced on each audit run.
+The persisted audit state record written to `state["spec_audit_state"]` after every §80 structural audit. Enables the lifecycle to determine whether a fresh audit is due on each assessment cycle by comparing `spec_version` to the current spec version. Distinct from the `spec-structural-audit` Evidence record: the Evidence record is an append-only audit-trail entry; this record is the mutable current-state snapshot, replaced on each audit run.
 
 ```
 SpecAuditState {
@@ -6363,7 +6403,7 @@ See §62b for the canonical schema definition.
 
 **SD condition.** Always True. A is a set of normative rules (enumerable from spec); B is a set of implementation evidences (enumerable from state and source). No inference required.
 
-**Apply to:** spec normative rules vs implementation coverage (§81 spec audit); before-metrics vs after-metrics (§54 validation gate); expected schema fields vs present fields (§62b conformance).
+**Apply to:** spec normative rules vs implementation coverage (§80 spec audit); before-metrics vs after-metrics (§54 validation gate); expected schema fields vs present fields (§62b conformance).
 
 ### T2 — Bar-Raising Calculus (`incr`)
 
@@ -6451,7 +6491,7 @@ See §62b for the canonical schema definition.
 
 | Technique | Spec (URACE.md) | Runtime |
 |---|---|---|
-| T1 diff | §81 spec audit rule enumeration | spec audit component gap computation; validation gate before/after metric diff |
+| T1 diff | §80 spec audit rule enumeration | spec audit component gap computation; validation gate before/after metric diff |
 | T2 incr | normative_rules baseline non-decrease | metric baseline tracking; bar-raising on acceptance |
 | T3 gate | TechniqueApplicabilityGate; §62c Discovery Credit Gate | discovery-due evaluator; validation gate |
 | T4 paired | canonical pairs table (this section) | lifecycle_state ↔ status_transitions validation |
@@ -6740,7 +6780,7 @@ where `canonical_form` satisfies:
 - Structural reduction (field deduplication, sort canonicalization, whitespace normalization): SD = True.
 - Semantic equivalence detection (two rules with different phrasing but same normative effect): SD = False — requires executor judgment.
 
-**Implementation.** Spec normative rules → minimal normative claims; citizen schemas → minimal normal form; pipeline descriptions → minimal ordered step sequence; evidence records → canonical evidence kind vocabulary (§62b Evidence kinds table). The §79 Spec Audit Mechanism applies SRLC to produce `normative_rules` count: each normative rule is reduced to a minimal, independently testable claim before counting.
+**Implementation.** Spec normative rules → minimal normative claims; citizen schemas → minimal normal form; pipeline descriptions → minimal ordered step sequence; evidence records → canonical evidence kind vocabulary (§62b Evidence kinds table). The §80 Spec Audit Mechanism applies SRLC to produce `normative_rules` count: each normative rule is reduced to a minimal, independently testable claim before counting.
 
 ---
 
@@ -8279,13 +8319,15 @@ These MUST be treated as command-local until unified. A future revision SHOULD s
 
 # 62l. Shared Reuse Contracts
 
-This section defines twelve named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines thirteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All twelve constructs defined in this section MUST be enforced at runtime by any conforming implementation: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare TemporalFields conformance MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations.
+**Enforcement contract (§62l).** All thirteen constructs defined in this section MUST be enforced at runtime by any conforming implementation: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare TemporalFields conformance MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations.
 
 ---
 
 ## GoverningRecord Canonical Cluster
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
 
 A **GoverningRecord** is any citizen that establishes an authoritative boundary rather than recording an event. GoverningRecords share four required fields that form the governance provenance contract.
 
@@ -8307,6 +8349,8 @@ GoverningRecord {
 
 ## EffectUncertaintyProtocol
 
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [AP3, AP4]`
+
 When an Operation's external effect status cannot be established with confidence, URACE MUST apply the EffectUncertaintyProtocol. This protocol is defined once here; all sections cite it by name.
 
 **Three-step protocol:**
@@ -8324,6 +8368,8 @@ When an Operation's external effect status cannot be established with confidence
 
 ## OperatorGateProtocol
 
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
 An **operator gate** is a lifecycle condition that MUST NOT be cleared by autonomous action. The OperatorGateProtocol is defined once here; all sections that require operator action cite it by name.
 
 **Four-clause protocol:**
@@ -8339,6 +8385,8 @@ An **operator gate** is a lifecycle condition that MUST NOT be cleared by autono
 ---
 
 ## AuthorityClosureInvariant
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
 
 **The Authority boundary is closed under all non-Authority inputs.** No input other than an explicit, attributable Authority record may expand the scope of legitimate autonomous action. This invariant is stated once here; all sections that enforce it cite it by name.
 
@@ -8360,6 +8408,8 @@ An **operator gate** is a lifecycle condition that MUST NOT be cleared by autono
 ---
 
 ## RevalidationScope
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [AP6]`
 
 When a material premise change invalidates an accepted decision, the revalidation scope is determined by the nature of the change. "Proportionate revalidation" is operationalized as a lookup from change class to RevalidationScope value.
 
@@ -8391,6 +8441,8 @@ FULL_LIFECYCLE   — re-examine Authority, Intent, all active Plans and the curr
 
 ## CognitiveResetRecoveryProtocol
 
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: [AP27, AP36]`
+
 A **cognitive reset** occurs when an Executor loses its working context but durable state is intact. The CognitiveResetRecoveryProtocol defines the mandatory recovery sequence. Cognitive reset is distinct from data loss; an Executor incapable of CRC injection is not lifecycle-replaceable.
 
 **Protocol steps (MUST be followed in order):**
@@ -8409,6 +8461,8 @@ A **cognitive reset** occurs when an Executor loses its working context but dura
 
 ## WakeRegistrationVerification
 
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [AP29]`
+
 At every restart, all durable WakeRegistration records MUST be verified active in the current environment. This is the mandatory verification step for AP29 — Dormancy/Wakeability Contract.
 
 **Protocol steps:**
@@ -8424,6 +8478,8 @@ At every restart, all durable WakeRegistration records MUST be verified active i
 ---
 
 ## ComplianceRecordingContract
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [AP28, AP37]`
 
 After every independent validation gate evaluation (AP28), the lifecycle MUST persist compliance outcomes per domain into the append-only trajectory and update the live accumulator. This is the mandatory persistence obligation for AP37 — Compliance Posture Tracker.
 
@@ -8441,6 +8497,8 @@ After every independent validation gate evaluation (AP28), the lifecycle MUST pe
 ---
 
 ## InspectionSurface Contract
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
 
 The **InspectionSurface** is the structured output produced by `urace check` and any lifecycle inspection command. Its schema is defined once here; all sections that require items to be "surfaced in inspection output" specify only the category and kind, not the output structure.
 
@@ -8468,7 +8526,39 @@ InspectionSurface {
 
 ---
 
+## ConstructElevationProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The ConstructElevationProtocol governs when and how a concept is promoted from ad-hoc prose to a named construct at the correct kind in the 5-kind hierarchy. All promotions in this specification MUST follow this protocol.
+
+**Four-gate elevation test:**
+
+1. **AP elevation gate.** Elevate to AP (§62i) if ALL THREE hold: (a) structurally reusable outside URACE-specific context; (b) normatively referenced from ≥3 independent sections; (c) defines a behavioral contract, not merely an algorithm or data structure. If all three hold, assign the lowest tier consistent with the construct's declared dependencies.
+
+2. **Protocol promotion gate.** Elevate to Protocol (§62l) if ALL THREE hold: (a) already named as a contract or invariant in prose; (b) referenced by name from multiple sections; (c) defines a cross-cutting normative contract, not a schema or algorithm. Assign tier based on dependencies.
+
+3. **AP cross-reference wire gate.** Add "governed by AP_N (§62i)" inline if: (a) a Mechanism or Schema implements a structural concern already covered by an existing AP; (b) full elevation is not warranted. This is a reference addition, not a promotion.
+
+4. **Leave-in-place rule.** Leave in current location if: (a) it is a product-domain algorithm, formula, or operational procedure; (b) it has no reuse outside its own section; (c) it is a self-referential mechanism; or (d) it is an implementation detail with no cross-section normative force.
+
+**Tier assignment rule.** A promoted construct's tier is FOUNDATIONAL if it has no external construct dependencies or all its dependencies are themselves FOUNDATIONAL; COMPOSITIONAL if it depends on FOUNDATIONAL constructs; INTEGRATED if it depends on any COMPOSITIONAL or INTEGRATED construct.
+
+**Mandatory post-elevation actions:**
+- Add construct metadata line to the promoted entry.
+- Register in PatternMechanismMapping (§62l) if kind=AP.
+- Register in ConstructKindRegistry (§62n) for all kinds.
+- Add cross-reference wires from all implementing sections.
+- Update IntegrityGapCatalog (§62l) if the promotion introduces new gap kinds.
+
+**Citizens using ConstructElevationProtocol:** (none — governs the specification's own structural evolution).
+**Referenced from:** §62n Base Rule directive 7, §80 Spec Structural Audit.
+
+---
+
 ## IntegrityGapCatalog
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
 
 The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each kind is defined once. An implementation MUST NOT emit a gap kind not in this catalog without registering it here.
 
@@ -8521,6 +8611,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 ---
 
 ## PatternMechanismMapping
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: [AP24]`
 
 The complete mapping from AP patterns (§62i) to the spec sections that implement them, enabling the `urace derive` system and `--opt-in-patterns` to operate on a structured lookup rather than full-text parsing.
 
@@ -8679,6 +8771,199 @@ A lightweight reference to a saved DerivedConstructSet, stored in `state.constru
 **Stale-construct-set detection contract.** When the governing spec is updated, any stored ConstructSetRef whose `spec_version` differs from the new version MUST be surfaced as a `derived-construct-set-stale` warning. The warning MUST include the `construct_set_id`, the stale version, and the candidate version. Stale detection is a warning, not a blocker. **Refresh contract.** `urace derive --kind ... --refresh` re-derives all saved ConstructSetRefs (or the one matching `--manifest-id`) using their stored `adopted_construct_ids` and `intent`, writes updated refs to `state.construct_set_refs`, and appends a DerivationRecord of kind `CONSTRUCT_SET_REFRESH`.
 
 **New-construct suggestion contract (r46).** On `urace update download` and `urace update explain`, for each saved ConstructSetRef the system MUST run IntentSuggestionEngine over the stored `intent`, filter out already-adopted construct IDs, and surface the top-N results as new-construct suggestions. Output MUST include the construct_set_id, intent, and suggestion list. This surfaces newly-added constructs that match the operator's original intent without requiring manual re-querying. **Construct update detection contract (r46).** If a saved ConstructSetRef includes `construct_digests`, the system MUST compare stored digests against current catalog entries for all adopted construct IDs. Any mismatch indicates the construct was updated since derivation and MUST be surfaced as a `construct update available` notice with the affected IDs and a ready-to-run `urace derive --refresh` command. The same detection applies to saved DerivedManifestRefs via `pattern_digests`.
+
+# 62n. Normative Specification Standard
+
+The Normative Specification Standard (NSS) is the self-description of URACE.md's structural rules. It is the base rule that governs how every construct in this specification is expressed, classified, and maintained. Every construct MUST conform to the NSS.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+## Base Rule
+
+Every concept in this specification MUST be expressed in its unique canonical form (AP7 — Canonical Reduction, §62i), at its correct kind in the 5-kind construct hierarchy, using the mandatory template for that kind, with RFC 2119 normative force on every binding statement.
+
+**Base rule components:**
+1. **Single definition.** Every concept is defined once, in its canonical section. No concept MAY be defined in two places.
+2. **Correct kind.** Every concept belongs to exactly one of the five construct kinds. Placement in the wrong section is a structural violation.
+3. **Mandatory template.** Every construct uses the template prescribed for its kind. Deviation from the template is a structural violation.
+4. **Normative force.** Every binding statement uses RFC 2119 keywords (MUST/SHALL/SHOULD/MAY/MUST NOT/SHALL NOT). Binding statements without these keywords carry no normative force.
+5. **Canonical reduction.** A construct that can be expressed more minimally without losing normative content MUST be reduced. Redundancy is a structural violation.
+
+## Normative Binding Scope
+
+URACE.md contains two distinct classes of normative statements:
+
+**Implementation-binding (I):** MUST/SHALL/MUST NOT/SHOULD statements that bind any conforming runtime implementation. The majority of normative statements in URACE.md are implementation-binding.
+
+**Specification-binding (S):** MUST statements that bind the specification itself — governing how constructs are defined, cross-referenced, elevated, and maintained.
+
+**Specification-binding directives:**
+
+1. (S) Every construct MUST be defined once, at its correct kind in the 5-kind hierarchy, in its canonical section.
+2. (S) Every construct MUST carry mandatory metadata for its kind (§62n Mandatory Construct Metadata).
+3. (S) Every construct MUST use the mandatory template for its kind (§62n Templates per Kind).
+4. (S) Every cross-reference MUST be bidirectional and complete.
+5. (S) Every catalog that self-declares as "complete" or "canonical" MUST be exhaustive at the moment of declaration.
+6. (S) No construct MAY be defined outside its canonical section.
+7. (S) All construct promotions between kinds MUST follow the ConstructElevationProtocol (§62l).
+8. (S) The PatternMechanismMapping (§62l) MUST be updated whenever a new AP is added or an existing AP's implementation section changes.
+9. (S) The IntegrityGapCatalog (§62l) MUST be updated whenever a new IntegrityGap kind is emitted anywhere in the spec.
+
+## 5-Kind Construct Hierarchy
+
+Every construct in URACE.md belongs to exactly one of five kinds. The kinds form the classification spine of the specification.
+
+| Kind | Canonical section | Purpose | Template anchor |
+|---|---|---|---|
+| **AP** (Architectural Pattern) | §62i | Structurally reusable behavioral meta-pattern applicable across multiple independent contexts | Derivation metadata · Intent · Roles · Constraints · Implementation |
+| **Protocol** | §62l | Named cross-cutting contract referenced by multiple sections by name | Construct metadata · Purpose · Steps/clauses · Citizens using · Referenced from |
+| **Mechanism** | §62c | Concrete algorithmic implementation of a behavioral contract; governed by ≥1 AP | Construct metadata · AP citation · Pseudocode/formula · Normative contracts |
+| **Schema** | §62b | Named, versioned data structure with identity and traceability | Schema block · Uses canonical · Used in |
+| **Primitive** | §62d | Canonical scalar type with format, validation, and usage contracts | Name · Type · Domain · Validation rule · Null policy |
+
+## Construct Lattice
+
+The reuse model for all constructs is a two-dimensional lattice. Every construct's position in the lattice determines its reuse priority.
+
+```
+ABSTRACTION AXIS (Kind):
+AP ──── Protocol ──── Mechanism ──── Schema ──── Primitive
+(most abstract,                                   most concrete,
+ structurally reusable)                           leaf-reusable)
+
+DEPENDENCY DEPTH AXIS (Tier):
+FOUNDATIONAL ──── COMPOSITIONAL ──── INTEGRATED
+(fewest deps,                        most deps,
+ standalone)                         least standalone)
+```
+
+**Reuse rule.** Prefer the highest kind at the lowest tier that satisfies your requirement. FOUNDATIONAL AP: maximally structurally reusable. FOUNDATIONAL Primitive: maximally leaf-reusable.
+
+**Tier definitions (apply to all kinds):**
+
+| Tier | Definition |
+|---|---|
+| `FOUNDATIONAL` | standalone=true, or all declared dependencies are themselves FOUNDATIONAL |
+| `COMPOSITIONAL` | depends on one or more FOUNDATIONAL constructs; not usable in isolation |
+| `INTEGRATED` | depends on one or more COMPOSITIONAL or INTEGRATED constructs |
+
+## Mandatory Construct Metadata
+
+Every construct MUST carry a metadata line immediately after its `##` heading. Format per kind:
+
+**AP:** `**Derivation metadata.** kind: AP · tier: X · standalone: X · requires: [...] · provides: [...]`
+*(kind: AP is implied by §62i section membership; the metadata line is already established)*
+
+**Protocol:** `**Construct metadata.** kind: Protocol · tier: X · standalone: X · depends: [...]`
+
+**Mechanism:** `**Construct metadata.** kind: Mechanism · tier: X · standalone: false · governed-by: [AP_N, ...]`
+
+**Schema:** `**Construct metadata.** kind: Schema · tier: X · standalone: X` *(add `refines: [ParentSchema]` only when the Schema specializes another Schema)*
+
+**Primitive:** No construct metadata required beyond its definition block.
+
+`refines:` declares a specialization (subtype) relationship — distinct from `depends:` (usage dependency). A Schema that `refines:` another inherits its fields and adds or constrains them.
+
+## Templates per Kind
+
+Templates are defined in their canonical sections. This is the reference index:
+
+| Kind | Template exemplar | Required sections |
+|---|---|---|
+| AP | §62i AP26–AP37 | Derivation metadata · Intent · Roles · Constraints · Implementation |
+| Protocol | §62l CognitiveResetRecoveryProtocol | Construct metadata · purpose sentence · steps/clauses · Citizens using · Referenced from |
+| Mechanism | §62c any well-formed entry | Construct metadata · AP citation · contract paragraphs |
+| Schema | §62b ComplianceRecord | schema block · Uses canonical · Used in |
+| Primitive | §62d Identifier | name · type · domain · validation · null policy |
+
+## Construct Kind Registry
+
+Complete cross-reference of all named constructs by kind and tier. Primitives (§62d) are omitted — they are enumerated in full in §62d.
+
+### APs (§62i)
+
+| AP | Name | Tier |
+|---|---|---|
+| AP0 | Citizen | FOUNDATIONAL |
+| AP1 | Canonical Scalar | FOUNDATIONAL |
+| AP2 | Citizen Schema | FOUNDATIONAL |
+| AP3 | Append-Only Log | FOUNDATIONAL |
+| AP4 | Producer-Consumer Contract | FOUNDATIONAL |
+| AP5 | Idempotency Contract | FOUNDATIONAL |
+| AP6 | Causal Provenance Chain | COMPOSITIONAL |
+| AP7 | Canonical Reduction | FOUNDATIONAL |
+| AP8 | Fixpoint Calculus | COMPOSITIONAL |
+| AP9 | Monotone Accumulator | COMPOSITIONAL |
+| AP10 | Bounded Retry with Backoff | COMPOSITIONAL |
+| AP11 | Bridge | COMPOSITIONAL |
+| AP12 | Orchestrator | COMPOSITIONAL |
+| AP13 | Observer | COMPOSITIONAL |
+| AP14 | Durable Inbox | COMPOSITIONAL |
+| AP15 | Broadcast Log | COMPOSITIONAL |
+| AP16 | State Snapshot + Delta Log | INTEGRATED |
+| AP17 | Lexical→Formula Reduction | COMPOSITIONAL |
+| AP18 | Scheduled Task Contract | INTEGRATED |
+| AP19 | Customization/Personalization Layer | INTEGRATED |
+| AP20 | Circuit Breaker | COMPOSITIONAL |
+| AP21 | Compaction | COMPOSITIONAL |
+| AP22 | Checkpoint | COMPOSITIONAL |
+| AP23 | Justification Chain | COMPOSITIONAL |
+| AP24 | Derivation Framework | INTEGRATED |
+| AP25 | Bounded Evolution Band | INTEGRATED |
+| AP26 | Lifecycle State Machine | FOUNDATIONAL |
+| AP27 | Transaction Recovery Protocol | INTEGRATED |
+| AP28 | Independent Validation Gate | COMPOSITIONAL |
+| AP29 | Dormancy/Wakeability Contract | COMPOSITIONAL |
+| AP30 | Partial Blocking Dependency Graph | COMPOSITIONAL |
+| AP31 | Safe Runtime Activation | INTEGRATED |
+| AP32 | Single-Writer Ownership Lock | COMPOSITIONAL |
+| AP33 | Policy Enforcement Gate | COMPOSITIONAL |
+| AP34 | Self-Evolution Eligibility Gate | INTEGRATED |
+| AP35 | Governance Ledger | FOUNDATIONAL |
+| AP36 | Digest Chain Consistency | INTEGRATED |
+| AP37 | Compliance Posture Tracker | INTEGRATED |
+
+### Protocols (§62l)
+
+| ID | Name | Tier | Standalone |
+|---|---|---|---|
+| GRC | GoverningRecord Canonical Cluster | FOUNDATIONAL | true |
+| EUP | EffectUncertaintyProtocol | COMPOSITIONAL | false |
+| OGP | OperatorGateProtocol | FOUNDATIONAL | true |
+| ACI | AuthorityClosureInvariant | FOUNDATIONAL | true |
+| RVS | RevalidationScope | COMPOSITIONAL | false |
+| CRRP | CognitiveResetRecoveryProtocol | INTEGRATED | false |
+| WRV | WakeRegistrationVerification | COMPOSITIONAL | false |
+| CRC_C | ComplianceRecordingContract | COMPOSITIONAL | false |
+| ISC | InspectionSurface Contract | FOUNDATIONAL | true |
+| IGC | IntegrityGapCatalog | FOUNDATIONAL | true |
+| PMM | PatternMechanismMapping | INTEGRATED | false |
+| CEP | ConstructElevationProtocol | FOUNDATIONAL | true |
+
+### Mechanisms (§62c)
+
+| ID | Name | Tier | Governed by |
+|---|---|---|---|
+| IQM | Input Queue Mechanism | FOUNDATIONAL | AP14 |
+| TXM | Transaction Mechanism | COMPOSITIONAL | AP16, AP27 |
+| ARM | Authority Resolution Mechanism | FOUNDATIONAL | AP35 |
+| DCM | Digest Computation | FOUNDATIONAL | AP36 |
+| VTS | Value Trajectory Self-Correction Mechanism | INTEGRATED | AP8, AP9 |
+| SPD | Scope Priority Derivation Mechanism | COMPOSITIONAL | AP8 |
+| EMC | External Metric Collection Mechanism | COMPOSITIONAL | AP13 |
+| DAI | Destination Anchor Integrity Mechanism | COMPOSITIONAL | AP35, OGP |
+| SEG | Self-Evolution Eligibility Gate Mechanism | INTEGRATED | AP34 |
+| DCG | Discovery Credit Gate Mechanism | COMPOSITIONAL | AP10, AP29 |
+| QSM | Quality Streak Mechanism | COMPOSITIONAL | AP9, AP20 |
+| RIM | Re-Ingestion Mechanism | INTEGRATED | AP21 |
+| SDM | Staleness Detection Mechanism | COMPOSITIONAL | AP13 |
+| CBM | Context Budget Mechanism | COMPOSITIONAL | AP24 |
+| WRM | Wake Registration Verification Mechanism | COMPOSITIONAL | AP29, WRV |
+| SSE | Sweet Spot Evaluation Mechanism | INTEGRATED | AP25 |
+| CEG | Capability Envelope Gate | INTEGRATED | AP25, AP33 |
+| TCG | Test Coverage Gate | COMPOSITIONAL | AP9 |
+| CCA | Crash-Consistent Acceptance | COMPOSITIONAL | AP27 |
+| LKS | Last-Known-Stable Product Recovery | COMPOSITIONAL | AP22 |
 
 # 63. Concurrency
 
@@ -10478,7 +10763,7 @@ Executor(s)
 
 The bootstrap capability MAY remain available after bootstrap, but it becomes a replaceable capability beneath URACE rather than the owner of the Product lifecycle.
 
-# 79. Spec Structural Audit
+# 80. Spec Structural Audit
 
 URACE MUST maintain a deterministic, executor-agnostic structural analysis of `URACE.md` as first-class Evidence for autonomous objective discovery and spec self-evolution decisions (§38, §74).
 
@@ -10572,13 +10857,13 @@ Spec-improvement Objectives derived from audit findings are ordinary spec-evolut
 
 ---
 
-# 80. Final Invariant
+# 81. Final Invariant
 
 > **URACE persistently drives the Product toward the highest applicable non-delegated authoritative Intent. The authoritative source controls whatever destination-setting Authority it retains and may delegate any subordinate destination or navigation decision it chooses; URACE MUST preserve that retained boundary and MUST NOT invent, broaden or reason around delegation. Within valid delegated Authority, however, URACE owns the journey: it independently observes reality, discovers opportunities and problems, assesses Evidence, identifies uncertainty, chooses Objectives, prioritizes, plans, experiments, selects replaceable executors, executes, learns, corrects course, validates, checkpoints, repairs, recovers, becomes dormant and reactivates without requiring the authoritative source to navigate decisions already delegated. Evidence constrains what URACE may defensibly believe about the conditions of the journey and may justify route changes or authorized destination evolution, but Evidence, Product Value, Priority, urgency, market pressure, executor capability, recommendation and convenience MUST NOT independently change a retained destination or create Authority. When a route fails, URACE changes the route; when a delegated destination should change, URACE may change it when sufficiently justified; when a retained destination appears infeasible, URACE preserves reality and the authoritative boundary rather than silently redefining either. Retained, denied or unresolved decisions block only dependent scope where possible, while independent authorized Product evolution continues. Materially stale consequential decisions are proportionately revalidated without converting Authority into an approval loop; attempts, effects, observations, validation and acceptance remain distinct; uncertain effects remain explicitly indeterminate until reconciled; accepted progress is checkpointed; and persistent autonomous ownership remains live through both active operation and efficient dormancy until an explicit authoritative terminal condition ends it. In short: the authoritative source chooses the destination it wishes to retain; URACE drives the boat.**
 
 ---
 
-# 81. Revision Log
+# 82. Revision Log
 
 This log records every specification revision. Revisions tagged `runtime-only` introduced no new normative spec contract; they are logged here to maintain version continuity and to make the scope of each change auditable. Revisions tagged `spec` added or changed normative content in this document. Revisions tagged `spec+runtime` did both.
 
@@ -10586,14 +10871,15 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
-| r50 | 2026-10-14 | spec | Full Structural Normalization: AP0–AP25 retrofitted to canonical Intent/Roles/Constraints/Implementation template; §62l 12 entries canonized with Citizens using/Referenced from footers; IntegrityGapCatalog completed (+19 gap kinds, INFO severity tier declared); tier table updated AP0–AP37, AP27/AP28/AP36 tier corrections; §62b Used in: on 13 citizens; 9 citizens converted to code-block format; Domain-Section Citizen Registry; 8 §62c mechanisms AP-cited; §53 mechanism stubs in §62c; Re-Ingestion Mechanism rename; §62k moved to correct position; §79 Spec Structural Audit renumbered |
+| r51 | 2026-10-14 | spec | Normative Specification Standard: §62n added (Base Rule, 5-kind hierarchy, Construct Lattice, Mandatory Construct Metadata, Templates per Kind, ConstructKindRegistry); ConstructElevationProtocol added to §62l; construct metadata lines on all 12 §62l protocols and 20 §62c mechanisms; duplicate §79 renumbered (Spec Structural Audit → §80, Final Invariant → §81, Revision Log → §82) |
+| r50 | 2026-10-14 | spec | 2026-10-14-r50. Full Structural Normalization: AP0–AP25 retrofitted to canonical Intent/Roles/Constraints/Implementation template; §62l 12 entries canonized with Citizens using/Referenced from footers; IntegrityGapCatalog completed (+19 gap kinds, INFO severity tier declared); tier table updated AP0–AP37, AP27/AP28/AP36 tier corrections; §62b Used in: on 13 citizens; 9 citizens converted to code-block format; Domain-Section Citizen Registry; 8 §62c mechanisms AP-cited; §53 mechanism stubs in §62c; Re-Ingestion Mechanism rename; §62k moved to correct position; §79 Spec Structural Audit renumbered |
 | r49 | 2026-10-14 | spec+runtime | 2026-10-14-r49. Full Patternization Pass: AP26–AP37 (12 new architectural meta-patterns); CognitiveResetRecoveryProtocol, WakeRegistrationVerification, ComplianceRecordingContract added to §62l; cross-reference wires to AP26–AP37 in §52–§54, §60, §62a, §62c, §63–§67, §72–§74; §62b cross-reference note AP0–AP24→AP0–AP37; PatternMechanismMapping extended; 72 building blocks |
 | r48 | 2026-10-14 | spec+runtime | Compliance Canonization: ComplianceRecord + ComplianceState citizens; compliance_records/compliance_state State fields; §54 compliance recording contract; urace /compliance command; Data Interchange canonical note |
 | r47 | 2026-10-14 | runtime-only | Extract shared helpers: `_aggregate_scores`, `_affinity_match`, `_make_catalog_digest_fns`, `_suggest_unadopted_for_refs`, `_refresh_derived_refs`; fix digest update in refresh |
 | r46 | 2026-10-14 | spec+runtime | New-construct suggestion + construct/pattern update detection on `urace update download/explain`; `construct_digests`/`pattern_digests` in saved refs; DeriveUpdateSuggestion + ConstructUpdateDetection contracts |
 | r45 | 2026-10-14 | spec+runtime | `--opt-in-constructs` replaces `--opt-in-patterns` (alias kept); ConstructSetRef citizen + stale-construct-set detection; `--save`/`--refresh` wired for DerivedConstructSet; `construct_set_refs` in initial state |
 | r44 | 2026-10-14 | spec+runtime | `--from-constraints`: HardConstraint-to-construct suggestion; `--from-inspection`: InspectionSurface gap-to-construct suggestion; ConstraintDerivedSuggestion + GapDerivedSuggestion contracts |
-| r43 | 2026-10-14 | spec | Purge all runtime-specific function/variable names from spec body; add Revision Log (§81); all contracts now stated in executor-agnostic terms |
+| r43 | 2026-10-14 | spec | Purge all runtime-specific function/variable names from spec body; add Revision Log (§82); all contracts now stated in executor-agnostic terms |
 | r42 | 2026-10-14 | spec | `--constructs` canonical arg; `--patterns` backward-compat alias; "Building Blocks" canonical user-facing name for 60 derivable constructs |
 | r41 | 2026-10-14 | spec | §62m Extended Construct Catalogs: Mechanism (6), Schema (20), Protocol (2), Contract (6); `--kind` flag; DerivedConstructSet citizen; ConstructCatalog; IntentSuggestionEngine construct mode |
 | r40 | 2026-10-14 | spec | Intent-first `urace derive`: positional `<intent>` arg; `--suggest` dry-run; `--from-goals`; IntentSuggestionEngine contract; GoalDerivedSuggestion |
