@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-14-r51**
+**Specification version: 2026-10-16-r52**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3087,6 +3087,8 @@ The runtime accepts free-form text and direct commands through a single top-leve
 
 # 62b. Citizen Schemas
 
+**Section metadata.** kind: Schema-collection · tier: FOUNDATIONAL · contains: [GoalRecord, IntentRecord, ConstraintRecord, DecisionRecord, EvidenceRecord, OperationRecord, ExecutorRecord, CompactionEvent, ComplianceRecord, AssessmentRecord, MetricDefinition, StateDocument]
+
 **Cross-reference note.** Several schemas in this section carry parenthetical citations of the form `(§62i APxx)`. These are forward cross-references to the Architectural Meta-Patterns defined in §62i. The AP0–AP37 formal definitions reside exclusively in §62i; the citations here are attributions that name the source section, not duplicate definitions. A reader may proceed through §62b without requiring §62i, treating each `(§62i APxx)` note as "see §62i for the full definition of this pattern."
 
 All named citizens produced or consumed by a URACE lifecycle MUST conform to the schemas defined in this section. An implementation that omits a REQUIRED field or misrepresents its type violates this contract and MUST surface the violation as a named integrity gap on load. Fields marked OPTIONAL MAY be omitted when not applicable; an absent OPTIONAL field MUST be treated as its stated default.
@@ -3305,6 +3307,7 @@ Evidence MUST be append-only. An Evidence record MUST NOT be modified or deleted
 | `authority-resolution-escalated` | `reason`: string, `requires_decision`: string |
 | `force-discovery-override` | `force_id`: string, `attribution`: string |
 | `external-metric-unavailable` | `source_id`: string, `streak`: int, `reason`: string |
+| `metric-definition-replaced` | `metric_name`: string, `prior_id`: string, `new_id`: string, `authorized_by`: string |
 
 Uses canonical: Identifier (id), iso_timestamp (at as created_at). Note: Evidence is append-only per AP3; MUST NOT expose updated_at or any mutable timestamp field.
 Used in: State.evidence (append-only log).
@@ -3522,6 +3525,8 @@ Used in: Config.connectors.
 
 ## Metric Definition
 
+**Construct metadata.** kind: Schema · tier: FOUNDATIONAL · standalone: true
+
 A Metric Definition maps a named metric to a path within a Connector Source.
 
 ```
@@ -3533,15 +3538,23 @@ MetricDefinition {
   direction    REQUIRED  nondecreasing | nonincreasing
   created_at   REQUIRED  timestamp; when this definition was registered
   updated_at   REQUIRED  timestamp; updated when definition is replaced or modified
+  authority    OPTIONAL  string; "DIRECTIVE" when seeded as an immutable baseline at bootstrap
+  baseline     OPTIONAL  number or string; immutable baseline value when authority = "DIRECTIVE"
+  unit         OPTIONAL  string; measurement unit
+  seeded_at    OPTIONAL  ISO-8601; bootstrap timestamp when authority = "DIRECTIVE"
   target       OPTIONAL  float; desired threshold value
   deprecated_at OPTIONAL timestamp | null; set when this metric is retired; null = active
 }
 ```
 
 Uses TemporalFields: created_at, updated_at, deprecated_at (as archived_at).
-Used in: Config.metric_definitions.
+Used in: Config.metric_definitions, State.metric_definitions.
 
 **Uniqueness contract.** Metric names MUST be unique within the lifecycle. Registering a metric with a name that already exists MUST replace the prior definition and append a record to the Evidence log.
+
+**DIRECTIVE seeding contract.** A MetricDefinition with `authority: "DIRECTIVE"` is seeded as an immutable baseline in the Rule Ledger at bootstrap. Its `baseline` and `seeded_at` fields MUST be set at creation and MUST NOT be modified after seeding. A replacement or mutation of a DIRECTIVE MetricDefinition without explicit authority authorization MUST emit a `metric-definition-drift` WARNING IntegrityGap (§62l).
+
+**Used in:** §62c staleness detection (metrics domain scan), §62l IntegrityGapCatalog (`metric-definition-drift`)
 
 ## Vital Definition
 
@@ -3723,8 +3736,8 @@ State {
   test_run_records       OPTIONAL  list[TestRunRecord]; test execution results; feeds QualityDelta
   derivation_records     OPTIONAL  list[DerivationRecord]; audit trail of derive invocations (r36)
   derivation_refs        OPTIONAL  list[DerivedManifestRef]; formal saved manifest refs — canonical from r36; coexists with derived_manifest_refs for backward compat
-  compliance_records     OPTIONAL  list[ComplianceRecord]; append-only compliance trajectory; one record per domain per validation evaluation
-  compliance_state       OPTIONAL  dict[domain → ComplianceState]; current posture per validation domain; one entry per domain
+  compliance_records     REQUIRED  list[ComplianceRecord]; append-only compliance trajectory; one record per domain per validation evaluation
+  compliance_state       REQUIRED  dict[domain → ComplianceState]; current posture per validation domain; one entry per domain
 }
 ```
 
@@ -4854,6 +4867,13 @@ STALENESS SCAN (per assessment cycle, SD=True)
       IF rule_age > rule_freshness_window:
         → emit IntegrityGap(kind="unsupported-rule", severity=WARNING,
                             detail="Rule {id} has no supporting Evidence in {age}d")
+
+  DOMAIN: Metrics
+    FOR EACH MetricDefinition WHERE authority == "DIRECTIVE":
+      IF MetricDefinition.updated_at > MetricDefinition.seeded_at
+         AND no attributable authority authorization recorded for mutation:
+        → emit IntegrityGap(kind="metric-definition-drift", severity=WARNING,
+                            detail="MetricDefinition {id} name={name} mutated without authority authorization")
 ```
 
 **Proportionality contract.** Staleness detection is self-determinable (`SD = True`); it MUST NOT consume executor credits. **Non-blocking contract.** All staleness gaps are `WARNING` severity, never `BLOCKING`; they surface for operator attention but MUST NOT halt the lifecycle. **Configuration contract.** Freshness windows (`decision_freshness_window`, `evidence_freshness_window`, `rule_freshness_window`) MUST be declared in Config Document (`staleness_windows`) before the first staleness scan. Per-scope overrides MUST be declared under `staleness_windows.by_scope`; absent scopes fall back to the global `decision_seconds` window. Absent configuration MAY defer the domain scan and MUST NOT produce false positives.
@@ -6245,6 +6265,10 @@ Default governance table:
 | `ChangeHistoryEntry` lists | §62d | — | PROHIBITED |
 | `DecisionRecord` lists | §62d | 2 000 entries | ARCHIVE |
 | `StatusTransition` lists | §62d | 500 per citizen | ARCHIVE |
+| `integrity_gaps` | §62b | 500 entries | ROLLING_EVICTION |
+| `status_transitions` | §62b | 500 entries | ARCHIVE |
+| `assessment_records` | §62b | 1 000 entries | ARCHIVE |
+| `processed_input_ids` | §62b | 1 000 entries | ROLLING_EVICTION |
 
 Implementations MAY configure different ceilings via RetentionPolicy records established through an attributable operator input. A RetentionPolicy MUST NOT change the mode of a PROHIBITED field.
 
@@ -8603,6 +8627,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `decision-reasoning-cycle` | WARNING | §62g Justification System | Remove cycle from DecisionRecord prior_decision_refs chain |
 | `capability-without-test-record` | WARNING | §62b TestRecord | Add TestRecord(kind=CAPABILITY_GATE) for undocumented capability |
 | `context-budget-advisory` | INFO | §62c Context Budget Mechanism | Review context budget configuration; advisory only |
+| `metric-definition-drift` | WARNING | §62b MetricDefinition / §62c Staleness Detection | A MetricDefinition was replaced or mutated without authority authorization |
+| `governance-anchor-drift` | BLOCKING | §62c Destination Anchor / §8 Destination Semantics | Destination anchor hash changed mid-cycle without anchoring ceremony |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -10871,7 +10897,8 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
-| r51 | 2026-10-14 | spec | Normative Specification Standard: §62n added (Base Rule, 5-kind hierarchy, Construct Lattice, Mandatory Construct Metadata, Templates per Kind, ConstructKindRegistry); ConstructElevationProtocol added to §62l; construct metadata lines on all 12 §62l protocols and 20 §62c mechanisms; duplicate §79 renumbered (Spec Structural Audit → §80, Final Invariant → §81, Revision Log → §82) |
+| r52 | 2026-10-16 | spec+runtime | NSS Compliance + Critical Bug Fixes: destination anchor drift now enters BLOCKED + emits `governance-anchor-drift` BLOCKING IntegrityGap; executor failures truncation now emits CompactionEvent before truncating; `decisions` key → `decision_records` (§45 compliance); removed `ACCEPTED` as lifecycle_state enum value; unified `pending_validation` → `pending_validations` (plural canonical); added durable state checkpoint between operation record write and ACTIVE transition; governance domain now emits ComplianceRecord on authority denial; §62b: section-level Schema metadata declaration added; compliance_records / compliance_state OPTIONAL → REQUIRED in State Document; MetricDefinition DIRECTIVE seeding contract + DIRECTIVE seeding fields; §62f: integrity_gaps / status_transitions / assessment_records / processed_input_ids added to governance table; §62l: metric-definition-drift (WARNING) + governance-anchor-drift (BLOCKING) added to IntegrityGapCatalog; §62c: metrics domain added to Staleness Detection Mechanism |
+| r51 | 2026-10-14 | spec | 2026-10-14-r51. Normative Specification Standard: §62n added (Base Rule, 5-kind hierarchy, Construct Lattice, Mandatory Construct Metadata, Templates per Kind, ConstructKindRegistry); ConstructElevationProtocol added to §62l; construct metadata lines on all 12 §62l protocols and 20 §62c mechanisms; duplicate §79 renumbered (Spec Structural Audit → §80, Final Invariant → §81, Revision Log → §82) |
 | r50 | 2026-10-14 | spec | 2026-10-14-r50. Full Structural Normalization: AP0–AP25 retrofitted to canonical Intent/Roles/Constraints/Implementation template; §62l 12 entries canonized with Citizens using/Referenced from footers; IntegrityGapCatalog completed (+19 gap kinds, INFO severity tier declared); tier table updated AP0–AP37, AP27/AP28/AP36 tier corrections; §62b Used in: on 13 citizens; 9 citizens converted to code-block format; Domain-Section Citizen Registry; 8 §62c mechanisms AP-cited; §53 mechanism stubs in §62c; Re-Ingestion Mechanism rename; §62k moved to correct position; §79 Spec Structural Audit renumbered |
 | r49 | 2026-10-14 | spec+runtime | 2026-10-14-r49. Full Patternization Pass: AP26–AP37 (12 new architectural meta-patterns); CognitiveResetRecoveryProtocol, WakeRegistrationVerification, ComplianceRecordingContract added to §62l; cross-reference wires to AP26–AP37 in §52–§54, §60, §62a, §62c, §63–§67, §72–§74; §62b cross-reference note AP0–AP24→AP0–AP37; PatternMechanismMapping extended; 72 building blocks |
 | r48 | 2026-10-14 | spec+runtime | Compliance Canonization: ComplianceRecord + ComplianceState citizens; compliance_records/compliance_state State fields; §54 compliance recording contract; urace /compliance command; Data Interchange canonical note |
