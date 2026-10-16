@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r58**
+**Specification version: 2026-10-16-r59**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3307,11 +3307,25 @@ Operation {
   conflicting_files        OPTIONAL  list; set when status = CONCURRENT_CHANGE
   validation_evidence_id   OPTIONAL  string; id of the Evidence record produced by independent validation; REQUIRED when lifecycle_state transitions to ACCEPTED
   validation_skipped_reason OPTIONAL string; if validation was skipped, MUST contain justification
+  effect_type              REQUIRED  EffectType; IDEMPOTENT | QUERY | STATEFUL | ASYNC;
+                                     governs reconciliation strategy under §52
 }
 ```
 
 Uses TemporalFields: attempted_at (as created_at), updated_at, accepted_at, rejected_at, rolled_back_at. Uses canonical: Identifier (id), ProductScope (scope), ExecutorAttribution (executor post-dispatch), ValidationResult (independent_validation), MetricEffect (observed_metric_effect), MetricSnapshot (before_metrics, after_metrics).
 Used in: State.operations, Plan.operations.
+
+**EffectType enum.**
+
+```
+EffectType enum: IDEMPOTENT | QUERY | STATEFUL | ASYNC
+- IDEMPOTENT — re-applying produces identical state
+- QUERY      — read-only, no side effects
+- STATEFUL   — mutates external state; re-application may differ
+- ASYNC      — submitted but completion not synchronously confirmed
+```
+
+`effect_type` governs the reconciliation strategy applied by the Transaction Recovery Protocol (§52, AP27): IDEMPOTENT operations MAY be replayed without guard; STATEFUL and ASYNC operations MUST be reconciled via UnresolvedEffect before the lifecycle MAY converge.
 
 **Validation evidence contract.** An Operation MUST have either `validation_evidence_id` or `validation_skipped_reason` populated before `lifecycle_state` transitions to ACCEPTED. Absence of both MUST emit `validation-evidence-missing` WARNING IntegrityGap.
 
@@ -3760,8 +3774,66 @@ Config {
                                                           (default "lines")
                                    milestones:            OPTIONAL list[ProductMilestone]
                                  }
+  staleness            OPTIONAL  {
+                                   decisions_hours: integer; default 72; MUST be ≥ 1
+                                   evidence_hours:  integer; default 168; MUST be ≥ 1
+                                   rules_hours:     integer; default 720; MUST be ≥ 1
+                                   metrics_hours:   integer; default 168; MUST be ≥ 1
+                                 }
+  context_budget_r58   OPTIONAL  {
+                                   hard_cap_fraction:  float; fraction of context window treated as hard cap;
+                                                       default 0.80; MUST be in (0.0, 1.0)
+                                   min_floor_fraction: float; minimum fraction below which eviction MUST stop;
+                                                       default 0.10; MUST be < hard_cap_fraction
+                                 }
+  wake                 OPTIONAL  {
+                                   max_stale_hours: integer; hours after which a STALE WakeRegistration becomes
+                                                    BLOCKING; default 168; MUST be ≥ 1
+                                 }
+  test_coverage        OPTIONAL  {
+                                   freshness_hours: integer; hours after which a test result is considered stale;
+                                                    default 24; MUST be ≥ 1
+                                 }
+  sweet_spot           OPTIONAL  {
+                                   value_density_floor: float; minimum acceptable value_density before a WARNING
+                                                        is surfaced; default 0.30; MUST be in [0.0, 1.0]
+                                 }
+  retention            OPTIONAL  {
+                                   auto_trigger_bytes: integer; State Document size in bytes that triggers
+                                                       automatic retention evaluation; default 10485760 (10 MB);
+                                                       MUST be ≥ 1048576 (1 MB)
+                                 }
+  metric_sources       OPTIONAL  {
+                                   registry:        list[URL]; pre-configured metric source URLs; default []
+                                   search_endpoint: URL | null; optional search endpoint for public source
+                                                    discovery; default null
+                                 }
+  archive_search_paths OPTIONAL  list[path]; additional paths to search when a CompactionSummary archive_path
+                                 cannot be resolved; default []; paths MUST be relative to the URACE system root
+  generated_file_globs OPTIONAL  list[glob]; additional glob patterns identifying generated files to exclude from
+                                 surface measure computation; default []
 }
 ```
+
+**r58 Config extensions.** The following subschemas extend the Config record to support r58 mechanisms. All fields are optional with stated defaults.
+
+`staleness` subschema (supersedes `staleness_windows`): `decisions_hours` (default 72), `evidence_hours` (default 168), `rules_hours` (default 720), `metrics_hours` (default 168). All values MUST be ≥ 1. When both `staleness` and `staleness_windows` are present, `staleness` takes precedence.
+
+`context_budget_r58` subschema: `hard_cap_fraction` (fraction of context window treated as hard cap; default 0.80), `min_floor_fraction` (minimum fraction below which eviction MUST stop; default 0.10; MUST be < `hard_cap_fraction`). Note: the `context_budget` field above covers `target_utilization` and `executor_context_cap`; `context_budget_r58` adds the r58-introduced cap/floor pair.
+
+`wake` subschema: `max_stale_hours` (hours after which a STALE WakeRegistration becomes BLOCKING; default 168; MUST be ≥ 1).
+
+`test_coverage` subschema: `freshness_hours` (hours after which a test result is considered stale; default 24; MUST be ≥ 1).
+
+`sweet_spot` subschema: `value_density_floor` (minimum acceptable value_density before a WARNING is surfaced; default 0.30; MUST be in [0.0, 1.0]).
+
+`retention` subschema: `auto_trigger_bytes` (State Document size in bytes that triggers automatic retention evaluation; default 10485760 (10 MB); MUST be ≥ 1048576 (1 MB)).
+
+`metric_sources` subschema: `registry` (pre-configured metric source URLs; default empty list), `search_endpoint` (optional search endpoint for public source discovery; default null).
+
+`archive_search_paths`: additional paths to search when a CompactionSummary archive_path cannot be resolved; default empty list; paths MUST be relative to the URACE system root.
+
+`generated_file_globs`: additional glob patterns identifying generated files to exclude from surface measure computation; default empty list.
 
 **Immutability contract.** The Config Document MUST NOT be modified by autonomous lifecycle operation. Only the `executor` budget subkeys and `evaluation_system.weights` MAY be updated via authorized `budget_control` and `evaluation_control` inputs respectively. All other fields are fixed at bootstrap. `context_budget` is fixed at bootstrap and MUST NOT be modified autonomously.
 
@@ -4077,6 +4149,8 @@ WakeRegistration {
   authority_basis OPTIONAL string; authorizing rule id or authority scope (GoverningRecord)
   scope          OPTIONAL  string; which lifecycle scope this registration serves (GoverningRecord)
   satisfied_at   OPTIONAL  timestamp | null; when the condition was met and registration fired
+  replaces       OPTIONAL  WakeRegistrationId | null; id of the STALE registration this record supersedes;
+                           null for original registrations
 }
 ```
 
@@ -4996,7 +5070,7 @@ STALENESS SCAN (per assessment cycle, SD=True)
 
 **Proportionality contract.** Staleness detection is self-determinable (`SD = True`); it MUST NOT consume executor credits. **Non-blocking contract.** All staleness gaps are `WARNING` severity, never `BLOCKING`; they surface for operator attention but MUST NOT halt the lifecycle. **Configuration contract.** Freshness windows (`decision_freshness_window`, `evidence_freshness_window`, `rule_freshness_window`) MUST be declared in Config Document (`staleness_windows`) before the first staleness scan. Per-scope overrides MUST be declared under `staleness_windows.by_scope`; absent scopes fall back to the global `decision_seconds` window. Absent configuration MAY defer the domain scan and MUST NOT produce false positives.
 
-**Default staleness windows.** Unless overridden in `Config.staleness`, the following defaults apply: decisions: 72 hours; evidence: 168 hours (7 days); rules: 720 hours (30 days); metrics: 168 hours (7 days). A Config override MUST specify the window in integer hours and MUST be ≥ 1.
+**Default staleness windows.** Unless overridden in `Config.staleness` (§62e), the following defaults apply: decisions: 72 hours (`decisions_hours`); evidence: 168 hours (`evidence_hours`); rules: 720 hours (`rules_hours`); metrics: 168 hours (`metrics_hours`). The legacy `staleness_windows` field (values in seconds) is superseded by `Config.staleness` when both are present. A Config override MUST specify the window in integer hours ≥ 1.
 
 **Authority-authorization recording for T2 adjustments.** When the T2 Bar-Raising Calculus (§62h) raises a threshold, the mechanism MUST record an Evidence entry of kind `threshold-adjustment-authorized` with fields: `adjusted_metric_id`, `old_threshold`, `new_threshold`, `authority_basis` (referencing the governing Authority record), `authorized_at`. This Evidence entry MUST be linked to the MetricDefinition via `last_baseline_audit`. A T2 threshold adjustment without a corresponding Evidence record MUST be surfaced as a WARNING gap of kind `unauthorized-threshold-adjustment`.
 
@@ -8993,46 +9067,48 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 
 The complete mapping from AP patterns (§62i) to the spec sections that implement them, enabling the `urace derive` system and `--opt-in-constructs` to operate on a structured lookup rather than full-text parsing.
 
-| AP | Pattern name | Implementing section(s) | Key provides |
-|---|---|---|---|
-| AP0 | Citizen Schema Identity | §62b (all citizens), §62l GoverningRecord | id prefix, uniqueness, lifecycle traceability |
-| AP1 | Canonical Scalar | §62b canonical primitives, §62l | typed leaf values, define-once |
-| AP2 | Citizen Schema | §62b, §62l InspectionSurface, §62l GoverningRecord | named versioned structures, minimality |
-| AP3 | Append-Only Log | §62b evidence/checkpoints/operations, §62f compaction | durable ordered sequence, monotone length |
-| AP4 | Producer-Consumer Contract | §43 executor boundary, §62c mechanisms, §72 policy gate | named bilateral obligations |
-| AP5 | Idempotency Contract | §50, §51, §62b InputQueue | retry safety, idempotency class |
-| AP6 | Causal Provenance Chain | §53 reconciliation, §62e CRC, §62g justification | full cause traceability |
-| AP7 | Canonical Reduction | §62a rule ledger, §62h TAS | semantic deduplication, minimality |
-| AP8 | Fixpoint Calculus | §37 assessment cycle, §38 discovery | stagnation detection, convergence |
-| AP9 | Monotone Accumulator | §59b capability completeness, §62c quality streak | monotone growth invariant |
-| AP10 | Bounded Retry with Backoff | §43 executor selection, §62c discovery credit gate | resilient bounded retry |
-| AP11 | Bridge | §62i Bridge topology, inter-scope operations | authority-boundary translation |
-| AP12 | Orchestrator | §62i Orchestrator topology, multi-step plans | sequenced operations, safe abort |
-| AP13 | Observer | §60 autonomous feedback, §71 live observability | decoupled observation, broadcast |
-| AP14 | Durable Inbox | §38 queued inputs, §62l OperatorGateProtocol | crash-safe FIFO, orderly shutdown |
-| AP15 | Broadcast Log | §60 machine/human channels | decoupled pub/sub, event history |
-| AP16 | State Snapshot + Delta Log | §60 validation, §73 recovery | atomic snapshot+delta, causal reconstruction |
-| AP17 | Lexical→Formula Reduction | §62a rule formalization | spec rule formalization, machine-verifiable |
-| AP18 | Scheduled Task Contract | §42 scheduling, §62c scheduled tasks | durable named scheduled tasks |
-| AP19 | Customization Layer | §62b CustomizationRecord | named scoped overrides, conflict detection |
-| AP20 | Circuit Breaker | §43 systematic failure, §62c quality streak | proactive failure-rate gating |
-| AP21 | Compaction | §62f compaction mechanism | bounded growth, archive + decompact |
-| AP22 | Checkpoint | §61 checkpoint, §62c checkpoint mechanism | accepted-state snapshot, recovery anchor |
-| AP23 | Justification Chain | §62g justification system, `urace why` | reasoning chain traversal |
-| AP24 | Derivation Framework | §62j derivation, `urace derive` | DerivedSystemManifest, zero-conformance |
-| AP25 | Bounded Evolution Band | §59b capable evolution, §62c envelope gate | capability ceiling, sweet-spot band |
-| AP26 | Lifecycle State Machine | §64 Lifecycle States | 12-state machine with guarded transitions and durable recording |
-| AP27 | Transaction Recovery Protocol | §52–§53, §62c Transaction Mechanism | 4-phase journal with crash-consistent rollback/roll-forward |
-| AP28 | Independent Validation Gate | §54, §60, §62b PendingValidation | executor≠validator separation; pending-preservation; capability-restoration trigger |
-| AP29 | Dormancy/Wakeability Contract | §66, §67, §62c Wake Registration | verified wakeability mechanism; cost-bounded liveness path |
-| AP30 | Partial Blocking Dependency Graph | §65, §62b OperationDependency | DAG-based minimum blocked-set computation |
-| AP31 | Safe Runtime Activation | §74 Safe Runtime Activation | blue-green deployment with crash-consistent promotion |
-| AP32 | Single-Writer Ownership Lock | §63, §62b OwnershipMarker | durable liveness-verified ownership attribution |
-| AP33 | Policy Enforcement Gate | §72, §62b PolicyRecord, HardConstraint | pre-commit scope-intersection policy evaluation |
-| AP34 | Self-Evolution Eligibility Gate | §62c Self-Evolution Gate, §74 | 3-mode gate; gate-before-authority; fail-closed |
-| AP35 | Governance Ledger | §62a Rule Ledger, §62c Authority Resolution | L0/L1/L2 immutability; rule DAG; conflict detection |
-| AP36 | Digest Chain Consistency | §62c Digest Computation, §62e CRC | fixed SHA-256 algorithm; chain-continuity invariant |
-| AP37 | Compliance Posture Tracker | §60, §62b ComplianceRecord/State | per-domain trajectory + accumulator; compliance-record-missing gap |
+| AP | Pattern name | Implementing section(s) | Role | Key provides |
+|---|---|---|---|---|
+| AP0 | Citizen Schema Identity | §62b (all citizens), §62l GoverningRecord | PRIMARY | id prefix, uniqueness, lifecycle traceability |
+| AP1 | Canonical Scalar | §62b canonical primitives, §62l | PRIMARY | typed leaf values, define-once |
+| AP2 | Citizen Schema | §62b, §62l InspectionSurface, §62l GoverningRecord | PRIMARY | named versioned structures, minimality |
+| AP3 | Append-Only Log | §62b evidence/checkpoints/operations, §62f compaction | PRIMARY | durable ordered sequence, monotone length |
+| AP4 | Producer-Consumer Contract | §43 executor boundary, §62c mechanisms, §72 policy gate | PRIMARY | named bilateral obligations |
+| AP5 | Idempotency Contract | §50, §51, §62b InputQueue | PRIMARY | retry safety, idempotency class |
+| AP6 | Causal Provenance Chain | §53 reconciliation, §62e CRC, §62g justification | PRIMARY | full cause traceability |
+| AP7 | Canonical Reduction | §62a rule ledger, §62h TAS | PRIMARY | semantic deduplication, minimality |
+| AP8 | Fixpoint Calculus | §37 assessment cycle, §38 discovery | PRIMARY | stagnation detection, convergence |
+| AP9 | Monotone Accumulator | §59b capability completeness, §62c quality streak | PRIMARY | monotone growth invariant |
+| AP10 | Bounded Retry with Backoff | §43 executor selection, §62c discovery credit gate | PRIMARY | resilient bounded retry |
+| AP11 | Bridge | §62i Bridge topology, inter-scope operations | PRIMARY | authority-boundary translation |
+| AP12 | Orchestrator | §62i Orchestrator topology, multi-step plans | PRIMARY | sequenced operations, safe abort |
+| AP13 | Observer | §60 autonomous feedback, §71 live observability | PRIMARY | decoupled observation, broadcast |
+| AP14 | Durable Inbox | §38 queued inputs, §62l OperatorGateProtocol | PRIMARY | crash-safe FIFO, orderly shutdown |
+| AP15 | Broadcast Log | §60 machine/human channels | PRIMARY | decoupled pub/sub, event history |
+| AP16 | State Snapshot + Delta Log | §60 validation, §73 recovery | PRIMARY | atomic snapshot+delta, causal reconstruction |
+| AP17 | Lexical→Formula Reduction | §62a rule formalization | PRIMARY | spec rule formalization, machine-verifiable |
+| AP18 | Scheduled Task Contract | §42 scheduling, §62c scheduled tasks | PRIMARY | durable named scheduled tasks |
+| AP19 | Customization Layer | §62b CustomizationRecord | PRIMARY | named scoped overrides, conflict detection |
+| AP20 | Circuit Breaker | §43 systematic failure, §62c quality streak | PRIMARY | proactive failure-rate gating |
+| AP21 | Compaction | §62f compaction mechanism | PRIMARY | bounded growth, archive + decompact |
+| AP22 | Checkpoint | §61 checkpoint, §62c checkpoint mechanism | PRIMARY | accepted-state snapshot, recovery anchor |
+| AP23 | Justification Chain | §62g justification system, `urace why` | PRIMARY | reasoning chain traversal |
+| AP24 | Derivation Framework | §62j derivation, `urace derive` | PRIMARY | DerivedSystemManifest, zero-conformance |
+| AP25 | Bounded Evolution Band | §59b capable evolution, §62c envelope gate | PRIMARY | capability ceiling, sweet-spot band |
+| AP26 | Lifecycle State Machine | §64 Lifecycle States | PRIMARY | 12-state machine with guarded transitions and durable recording |
+| AP27 | Transaction Recovery Protocol | §52–§53, §62c Transaction Mechanism | PRIMARY | 4-phase journal with crash-consistent rollback/roll-forward |
+| AP28 | Independent Validation Gate | §54, §60, §62b PendingValidation | PRIMARY | executor≠validator separation; pending-preservation; capability-restoration trigger |
+| AP29 | Dormancy/Wakeability Contract | §66, §67, §62c Wake Registration | PRIMARY | verified wakeability mechanism; cost-bounded liveness path |
+| AP30 | Partial Blocking Dependency Graph | §65, §62b OperationDependency | PRIMARY | DAG-based minimum blocked-set computation |
+| AP31 | Safe Runtime Activation | §74 Safe Runtime Activation | PRIMARY | blue-green deployment with crash-consistent promotion |
+| AP32 | Single-Writer Ownership Lock | §63, §62b OwnershipMarker | PRIMARY | durable liveness-verified ownership attribution |
+| AP33 | Policy Enforcement Gate | §72, §62b PolicyRecord, HardConstraint | PRIMARY | pre-commit scope-intersection policy evaluation |
+| AP34 | Self-Evolution Eligibility Gate | §62c Self-Evolution Gate, §74 | PRIMARY | 3-mode gate; gate-before-authority; fail-closed |
+| AP35 | Governance Ledger | §62a Rule Ledger, §62c Authority Resolution | PRIMARY | L0/L1/L2 immutability; rule DAG; conflict detection |
+| AP36 | Digest Chain Consistency | §62c Digest Computation, §62e CRC | PRIMARY | fixed SHA-256 algorithm; chain-continuity invariant |
+| AP37 | Compliance Posture Tracker | §60, §62b ComplianceRecord/State | PRIMARY | per-domain trajectory + accumulator; compliance-record-missing gap |
+
+**Role values:** `PRIMARY` — the principal mechanism for this AP; `SUPPORTING` — supplements the primary mechanism. Each AP MUST have exactly one PRIMARY entry. SUPPORTING entries are optional and MUST NOT be used to satisfy the AP's core intent alone.
 
 **Uniqueness contract.** Each AP ID MUST map to at most one primary Mechanism or Protocol. Secondary associations are permitted and MUST be marked with `role: SUPPORTING` in the mapping record. If two entries claim `role: PRIMARY` for the same AP ID, the ConstructKindRegistry (§62n) entry for that AP governs which is primary.
 
@@ -9269,6 +9345,8 @@ Templates are defined in their canonical sections. This is the reference index:
 ## Construct Kind Registry
 
 Complete cross-reference of all named constructs by kind and tier. Primitives (§62d) are omitted — they are enumerated in full in §62d.
+
+**`auto_clearable` field.** Every gap kind registered in the ConstructKindRegistry carries an implicit `auto_clearable: bool` attribute. When `auto_clearable: true`, the runtime MAY clear a BLOCKING gap of this kind without operator intervention, provided the clearing condition is deterministic and fully captured in the State Document. Default: `false`. MUST be `false` for all gap kinds that require operator judgment. A gap kind's `auto_clearable` value governs the auto-clearance permission referenced in the IntegrityGapCatalog Operator clearance contract (§62l).
 
 ### APs (§62i)
 
@@ -11289,6 +11367,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r59 | 2026-10-16 | spec | r58 gap closure. Added 9 Config subschemas to §62e: `staleness` (hours-based, supersedes legacy `staleness_windows`), `context_budget_r58` (`hard_cap_fraction`, `min_floor_fraction`), `wake` (`max_stale_hours`), `test_coverage` (`freshness_hours`), `sweet_spot` (`value_density_floor`), `retention` (`auto_trigger_bytes`), `metric_sources` (`registry`, `search_endpoint`), `archive_search_paths`, `generated_file_globs`. Added `replaces` field to WakeRegistration schema. Added `effect_type` field and `EffectType` enum to Operation schema. Added `Role` column to PatternMechanismMapping table with PRIMARY/SUPPORTING values. Added `auto_clearable` field description to ConstructKindRegistry. Aligned SDM staleness default prose to reference `Config.staleness` subschema explicitly. |
 | r58 | 2026-10-16 | spec | 20-gap reliability hardening. Added invocation contract, traversal rules, Evidence weighting, and human-readable format to §62g Justification System. Added activation-failure, partial-update-reconciliation, state-divergence-detection, and re-bootstrap-failure contracts to §74. Added CRC injection, version-mismatch recovery, and context-window overage contracts to §62e/§75. Added default staleness windows and T2 authority-authorization recording to §62c SDM. Added tier tie-breaking, eviction floor, and fallback-rejection contract to §62c CBM. Added signal taxonomy, timeout contract, re-establishment authorization, and recoverable/terminal gap classification to §62c WRM. Added surface measure algorithm and value-density floor enforcement to §62c SSE. Added capability-regression contract, re-test trigger, and test-freshness window to §62c TCG. Added structural/semantic boundary taxonomy and classification-disagreement protocol to §62h T5/T7. Added multi-BLOCKING ordering, operator clearance contract, and isolation contract to §62l IGC. Added archive path resolution and re-ingestion idempotency to §62c RIM. Added discovery mechanism, source validation, and deduplication to §62c EMC. Added firing contract, multi-policy interaction, and atomicity guarantee to §62f retention. Added elevation eligibility criteria, evidence threshold, reversibility, and version continuity to §62n CEP. Added step idempotency, sequential execution, transient failure handling, and retry ceiling to §73 CRRP. Added gap density metric, materiality threshold, and remediation contract to §80/§81. Added uniqueness contract, ambiguity resolution, and multi-mechanism execution order to §62l PMM. Added milestone failure modes, state revertibility, and chain integrity validation to §59b. Added downstream blocking semantics, refresh trigger, and override audit trail to §62j stale-manifest. Added effect-type taxonomy, reconciliation-strategy matrix, and unreconcilable-effect handling to §52. New IGC gap kinds: justification-depth-exceeded, justification-cycle-detected, activation-health-failure, rollback-failure, partial-update-recovered, partial-update-unrecoverable, spec-state-divergence, rebootstrap-attempt-failed, rebootstrap-terminal-failure, crc-version-mismatch, crc-context-overflow, unauthorized-threshold-adjustment, wake-registration-stale, wake-registration-expired, archive-not-found, reingestion-duplicate-skipped, metric-source-discovery-unavailable, retention-pass-partial-failure, crrp-step-failure, crrp-retry-exceeded, technique-classification-disagreement, value-density-below-floor, capability-regression, milestone-chain-integrity-failure, effect-unreconcilable, stale-manifest-override. Total IGC gap kinds: 76 |
 | r57 | 2026-10-16 | spec | §62m catalog alignment: Mechanism Catalog +1 (MBV); Schema Catalog +3 (MetricEffect, ChunkingPolicy, Chunk); Protocol Catalog +1 (CEP); Contract Catalog IGC count 20→50; derive contract stale counts removed (now §62n-authoritative); PMM description --opt-in-patterns→--opt-in-constructs; stem vocabulary patterncatl AP0-AP25→AP0-AP37; optinpat --opt-in-constructs added |
 | r56 | 2026-10-16 | spec+runtime | Full verification pass: NSS §62n compliance check — all violations corrected; no-degradation audit — AP0–AP37, all Protocols, all Mechanisms, all Schemas verified present; IntegrityGapCatalog monotonic growth verified (all gap kinds from r48+ present); all revision log entries r1–r56 verified accurate; section numbering verified (no gaps or duplicates); ConstructKindRegistry updated to include r54/r55 additions (MetricEffect, ChunkingPolicy, Chunk); Metric Baseline Verification registered in Mechanisms table; §62n Base Rule marked universal |
