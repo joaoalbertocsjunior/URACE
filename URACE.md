@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r55**
+**Specification version: 2026-10-16-r56**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -9208,6 +9208,17 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | TCG | Test Coverage Gate | COMPOSITIONAL | AP9 |
 | CCA | Crash-Consistent Acceptance | COMPOSITIONAL | AP27 |
 | LKS | Last-Known-Stable Product Recovery | COMPOSITIONAL | AP22 |
+| MBV | Metric Baseline Verification | COMPOSITIONAL | AP13 |
+
+### Schemas (r54–r55 additions)
+
+The following schemas were added in r54/r55 and MUST be registered here per the ConstructElevationProtocol mandatory post-elevation actions.
+
+| Name | Tier | Extends | Added |
+|---|---|---|---|
+| MetricEffect (citizen schema) | COMPOSITIONAL | CitizenBase | r54 |
+| ChunkingPolicy | COMPOSITIONAL | CitizenBase | r53 |
+| Chunk | COMPOSITIONAL | CitizenBase + GoverningRecord | r53 |
 
 # 63. Concurrency
 
@@ -11117,6 +11128,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r56 | 2026-10-16 | spec+runtime | Full verification pass: NSS §62n compliance check — all violations corrected; no-degradation audit — AP0–AP37, all Protocols, all Mechanisms, all Schemas verified present; IntegrityGapCatalog monotonic growth verified (all gap kinds from r48+ present); all revision log entries r1–r56 verified accurate; section numbering verified (no gaps or duplicates); ConstructKindRegistry updated to include r54/r55 additions (MetricEffect, ChunkingPolicy, Chunk); Metric Baseline Verification registered in Mechanisms table; §62n Base Rule marked universal |
 | r55 | 2026-10-16 | spec+runtime | JOINS pass: universal/scoped construct wiring: §62b: CitizenBase/AuthorizedCitizen/TemporalCitizen marked universal; §62i: AP0 Citizen + AP7 Canonical Reduction marked universal; §62l: IntegrityGapCatalog emission pattern marked universal; §62n: RFC 2119 normative force marked universal; §62f: compaction blocked when lifecycle_state=BLOCKED (anchor-drift guard) + destination-anchor guard subsection; §62f: lifecycle boundary requirement references last CheckpointRecord; §62c: Re-Ingestion baseline from last CheckpointRecord; PARTS→PARTS scope notes: DiscoveryBudgetStatus (Discovery domain §36–§43), WakeRegistration (Dormancy/Wake §64–§67), ChunkingPolicy+Chunk (Compaction §62f), AssessmentRecord (TAS §62h + §37); Runtime: destination_anchor guard in compaction path; CheckpointRecord baseline in staleness detection |
 | r54 | 2026-10-16 | spec+runtime | Gap closure pass (7 items from r53 audit): §62f: compaction authorization staleness contract (86400s window) + compaction-authorization-stale WARNING gap; §62b: MetricEffect citizen schema (IMPROVEMENT/DRIFT/REGRESSION/NEUTRAL); §62b: metric_effects OPTIONAL added to State Document; §62b: Operation validation_evidence_id + validation_skipped_reason fields + validation evidence contract; §62l: validation-evidence-missing + compaction-authorization-stale gap kinds; Runtime: citizen-base-violation load-time conformance check; objective-lifecycle chunking grouping logic (_compact_with_chunking); immutable field mutation detection (id/created_at); authority_basis active-rule binding validation |
 | r53 | 2026-10-16 | spec+runtime | Reliability Hardening Pass: §62b: MetricDefinition authority_level + mutation_requires + last_baseline_audit fields; Base Citizen Clusters (CitizenBase/AuthorizedCitizen/TemporalCitizen) + Extends declarations; GoverningRecord activation — WakeRegistration/ExecutorProvider/RetentionPolicy declared; ExecutorProvider added to State Document; ChunkingPolicy + Chunk schemas added (opt-in chunking); §62c: Metric Baseline Verification mechanism (cycle-start scan all MetricDefs); §62f: Objective-Lifecycle Chunking + Chunk records in governance table; §62h: T2 threshold audit trail requirement; §62a: Executor policy POLICY rule seeding requirement; §62l: 7 new IntegrityGap kinds (metric-baseline-unauthorized-mutation, metric-mutation-policy-missing, threshold-audit-missing, citizen-base-violation, authority-cache-stale, executor-policy-missing, unresolved-effects-reconciliation-failure); §74: self-evolution budget partition invariant ≤20%; Authority cache invalidation contract (3600s TTL); Runtime: mutable metric scan extended to ALL MetricDefinitions; unresolved effects reconciliation audit trail + exception guard; discovery observation key safety (.get chains); authority cache 3600s TTL invalidation; self-evolution 20% budget guard; wake trigger atomic state persist after evaluation; symmetric compliance recording on ACCEPTED |
