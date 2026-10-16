@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r60**
+**Specification version: 2026-10-16-r61**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3664,6 +3664,124 @@ Fields:
 
 **Used in:** §62h T2 Bar-Raising Calculus (IMPROVEMENT effects trigger threshold advance), §62c Metric Baseline Verification (DRIFT effects trigger authorization audit)
 
+## CommunityFeed (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: INTEGRATED · standalone: false
+Extends: CitizenBase
+
+A configured community feed source. Each feed specifies its adapter kind, endpoint, and terms acceptance state. URACE MUST NOT ingest signals from a CommunityFeed whose `terms_accepted` is false.
+
+```
+CommunityFeed {
+  id               REQUIRED  Identifier; prefix "cfeed-"
+  created_at       REQUIRED  ISO-8601 timestamp
+  updated_at       REQUIRED  ISO-8601 timestamp
+  kind             REQUIRED  FeedAdapterKind; adapter type (RSS | WEBHOOK | POLLING | PUSH)
+  endpoint         REQUIRED  string; adapter-specific endpoint (URL, topic, channel id, etc.)
+  adapter_config   OPTIONAL  dict[string → string]; adapter-specific key-value configuration
+  terms_accepted   REQUIRED  bool; operator MUST set to true after accepting terms; default false
+  terms_version    OPTIONAL  string; version of the T&C accepted; null if not yet accepted
+  terms_accepted_at OPTIONAL ISO-8601 timestamp; when terms were accepted; null if not yet accepted
+  label            OPTIONAL  string; human-readable name for this feed
+  active           REQUIRED  bool; whether this feed is currently enabled; default true
+}
+```
+
+Uses TemporalFields: created_at, updated_at, terms_accepted_at.
+Used in: Config.community_inbox.feeds, State.community_feeds.
+
+**FeedAdapterKind enum.**
+```
+RSS      — polling-based RSS/Atom feed
+WEBHOOK  — inbound HTTP webhook; URACE exposes a receiver endpoint
+POLLING  — generic HTTP polling (non-RSS); returns JSON or text
+PUSH     — operator-push via urace inbox; manual signal injection
+```
+
+## CommunitySignal (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: INTEGRATED · standalone: false
+Extends: CitizenBase
+
+A raw signal ingested from a CommunityFeed, scored on relevance and confidence before entering the proposal pipeline. A CommunitySignal is immutable after creation; scoring fields MUST be set at creation time.
+
+```
+CommunitySignal {
+  id               REQUIRED  Identifier; prefix "csig-"
+  created_at       REQUIRED  ISO-8601 timestamp
+  updated_at       REQUIRED  ISO-8601 timestamp
+  feed_id          REQUIRED  CommunityFeed.id; source feed
+  content          REQUIRED  string; raw signal text or structured content
+  source_ref       OPTIONAL  string; original URL, message id, or thread ref in source system
+  received_at      REQUIRED  ISO-8601 timestamp; when the signal was ingested
+  relevance_score  REQUIRED  float [0.0, 1.0]; semantic overlap with current URACE scope/Intent
+  confidence_score REQUIRED  float [0.0, 1.0]; evidence of actionable community consensus
+  signal_quality   REQUIRED  SignalQuality; computed from relevance_score and confidence_score
+  filtered         REQUIRED  bool; true if signal was discarded without producing a PatchProposal
+  filter_reason    OPTIONAL  string; human-readable reason for filtering; present only when filtered=true
+}
+```
+
+Uses TemporalFields: created_at, updated_at, received_at.
+Used in: State.community_signals.
+
+**SignalQuality enum.**
+```
+HIGH      — relevance_score ≥ 0.75 AND confidence_score ≥ 0.75
+MEDIUM    — relevance_score ≥ 0.40 AND confidence_score ≥ 0.60 (not HIGH)
+LOW       — relevance_score ≥ 0.40 but confidence_score < 0.60
+FILTERED  — relevance_score < relevance_floor; signal discarded
+```
+
+## PatchProposal (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: INTEGRATED · standalone: false
+Extends: CitizenBase
+
+A bounded patch candidate derived from a filtered CommunitySignal. PatchProposals advance through an approval pipeline governed by `Config.community_inbox.approval_mode`. A PatchProposal MUST NOT be applied to the Product without reaching status APPROVED.
+
+```
+PatchProposal {
+  id               REQUIRED  Identifier; prefix "pprop-"
+  created_at       REQUIRED  ISO-8601 timestamp
+  updated_at       REQUIRED  ISO-8601 timestamp
+  signal_id        REQUIRED  CommunitySignal.id; source signal
+  proposed_diff    REQUIRED  string; patch content in any diff format (plain text, unified diff, etc.)
+  target           REQUIRED  string; what the patch targets — "URACE" or the Product name
+  rationale        REQUIRED  string; Executor-generated rationale for this proposal
+  status           REQUIRED  ProposalStatus; PENDING | AUTO_APPROVED | APPROVED | REJECTED | EXPIRED | CONFIDENCE_INSUFFICIENT
+  approval_mode    REQUIRED  ApprovalMode; mode in effect when this proposal was created
+  confidence_score REQUIRED  float [0.0, 1.0]; confidence_score from the source CommunitySignal
+  resolved_at      OPTIONAL  ISO-8601 timestamp; when status transitioned from PENDING; null if still PENDING
+  resolved_by      OPTIONAL  string; operator input id or "auto" for AUTO mode approvals
+  rejection_reason OPTIONAL  string; human-readable reason for REJECTED status
+}
+```
+
+Uses TemporalFields: created_at, updated_at, resolved_at.
+Used in: State.patch_proposals.
+
+**ProposalStatus enum.**
+```
+PENDING                  — awaiting approval pipeline evaluation
+AUTO_APPROVED            — approved autonomously under AUTO mode (confidence_score ≥ 0.80)
+CONFIDENCE_INSUFFICIENT  — signal passed relevance_floor but confidence_score < confidence_threshold; queued for re-evaluation
+APPROVED                 — operator-confirmed approval
+REJECTED                 — operator-rejected or autonomously rejected under SMART mode
+EXPIRED                  — not resolved within proposal_expiry_hours
+```
+
+**ApprovalMode enum.**
+```
+AUTO   — URACE may approve proposals with confidence_score ≥ 0.80 without operator confirmation;
+         proposals with confidence_score < 0.80 fall through to SMART evaluation
+SMART  — URACE pre-scores and surfaces top candidates with rationale; operator confirmation required
+         only when URACE cannot autonomously determine sufficient confidence; low-quality proposals
+         are autonomously rejected without operator burden (default mode)
+HUMAN  — every proposal requires explicit operator approval regardless of confidence_score;
+         URACE MUST NOT auto-approve in this mode
+```
+
 ## Vital Definition
 
 A Vital is a derived health indicator computed from one or two Metric Definitions.
@@ -3812,6 +3930,18 @@ Config {
                                  cannot be resolved; default []; paths MUST be relative to the URACE system root
   generated_file_globs OPTIONAL  list[glob]; additional glob patterns identifying generated files to exclude from
                                  surface measure computation; default []
+  community_inbox      OPTIONAL  {
+                                   feeds:                list[CommunityFeed]; configured feed sources; default []
+                                   approval_mode:        ApprovalMode; pipeline approval mode; default SMART
+                                   confidence_threshold: float; minimum confidence_score to produce a PatchProposal;
+                                                         default 0.60; MUST be in [0.0, 1.0]
+                                   relevance_floor:      float; minimum relevance_score to pass filtering;
+                                                         default 0.40; MUST be in [0.0, 1.0]
+                                   max_queue_depth:      integer; maximum active PatchProposal records; default 50;
+                                                         MUST be ≥ 1
+                                   proposal_expiry_hours: integer; hours after which an unresolved PatchProposal
+                                                          transitions to EXPIRED; default 168; MUST be ≥ 1
+                                 }
 }
 ```
 
@@ -3834,6 +3964,10 @@ Config {
 `archive_search_paths`: additional paths to search when a CompactionSummary archive_path cannot be resolved; default empty list; paths MUST be relative to the URACE system root.
 
 `generated_file_globs`: additional glob patterns identifying generated files to exclude from surface measure computation; default empty list.
+
+**r61 Config extensions.** The following subschema extends the Config record to support r61 community signal ingestion. The field is optional with stated defaults.
+
+`community_inbox` subschema: `feeds` (configured CommunityFeed sources; default empty list), `approval_mode` (ApprovalMode enum governing proposal advancement; default SMART), `confidence_threshold` (minimum confidence_score to produce a PatchProposal; default 0.60; MUST be in [0.0, 1.0]; MUST be ≥ `relevance_floor`), `relevance_floor` (minimum relevance_score to pass signal filtering; default 0.40; MUST be in [0.0, 1.0]), `max_queue_depth` (maximum concurrent active PatchProposal records; default 50; MUST be ≥ 1), `proposal_expiry_hours` (hours before unresolved PatchProposal expires; default 168; MUST be ≥ 1).
 
 **Immutability contract.** The Config Document MUST NOT be modified by autonomous lifecycle operation. Only the `executor` budget subkeys and `evaluation_system.weights` MAY be updated via authorized `budget_control` and `evaluation_control` inputs respectively. All other fields are fixed at bootstrap. `context_budget` is fixed at bootstrap and MUST NOT be modified autonomously.
 
@@ -3906,6 +4040,9 @@ State {
   compliance_state       REQUIRED  dict[domain → ComplianceState]; current posture per validation domain; one entry per domain
   executor_providers     REQUIRED  list[ExecutorProvider]; active executor provider bindings; initialized from Config.executor.providers at bootstrap
   metric_effects         OPTIONAL  list[MetricEffect]; metric observation history
+  community_feeds       OPTIONAL  list[CommunityFeed]; registered feed sources; default []
+  community_signals     OPTIONAL  list[CommunitySignal]; ingested signals; default []
+  patch_proposals       OPTIONAL  list[PatchProposal]; proposal queue; default []
 }
 ```
 
@@ -5173,6 +5310,47 @@ WAKE REGISTRATION VERIFICATION (on lifecycle restart)
 **Re-establishment authorization.** A STALE WakeRegistration MAY be re-established only by an operator-issued command (not by the runtime autonomously). Re-establishment MUST create a new WakeRegistration record with a fresh `established_at` and `signal_class`, referencing the stale registration's `id` in a `replaces` field. The stale record MUST be retained with `status: SUPERSEDED`.
 
 **Recoverable vs. terminal gaps.** A `wake-registration-stale` gap is recoverable via operator re-establishment. A registration that has been STALE for more than `Config.wake.max_stale_hours` (default: 168) without re-establishment MUST be escalated to a BLOCKING gap of kind `wake-registration-expired`, halting all scheduled autonomous Operations.
+
+## Community Signal Ingestion Mechanism (CSI)
+
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP38, AP14]`
+
+The Community Signal Ingestion Mechanism ingests signals from all active `CommunityFeed` sources, scores them for relevance and confidence, and routes quality-passing signals to the Patch Proposal Pipeline Mechanism. This mechanism implements the feed-adapter abstraction and T&C gate contract from AP38.
+
+**Feed ingestion contract.** For each enabled `CommunityFeed` (active=true) in `Config.community_inbox.feeds`, the CSI MUST poll or receive signals at intervals appropriate to the `FeedAdapterKind`. Before processing any signal from a feed, CSI MUST verify `CommunityFeed.terms_accepted = true`; if false, CSI MUST surface `community-feed-terms-not-accepted` BLOCKING gap and MUST NOT ingest signals from that feed. If the adapter cannot connect to the endpoint, CSI MUST emit `community-feed-adapter-unavailable` WARNING gap and skip that feed for the current cycle.
+
+**Signal creation contract.** Each raw inbound signal MUST be stored as a `CommunitySignal` record immediately on receipt, before scoring. The record MUST set `filtered = false` until scoring determines otherwise. `received_at` MUST be set to the ingestion timestamp, not the signal's original timestamp.
+
+**Relevance scoring contract.** `relevance_score` MUST be computed by the Executor as the semantic overlap between the signal content and the union of: (a) the current active Objectives' descriptions, (b) `Config.intent.purpose`, and (c) the Product name. The score MUST be a float in [0.0, 1.0]. A signal with `relevance_score < Config.community_inbox.relevance_floor` MUST have `filtered = true` set and `filter_reason` populated; CSI MUST emit `community-signal-relevance-below-floor` INFO gap and MUST NOT pass the signal to PPP_M.
+
+**Confidence scoring contract.** `confidence_score` MUST be computed by the Executor based on corroboration evidence: (a) a single uncorroborated signal from one feed MUST receive `confidence_score = 0.5`; (b) each additional independent corroborating signal on the same topic from a different feed or source MUST increase the score by a bounded delta toward 1.0; (c) contradicting signals MUST decrease the score toward 0.0. The scoring MUST use a bounded accumulator: score MUST remain in [0.0, 1.0] regardless of signal count. The Executor MAY use any scoring algorithm consistent with these boundary semantics.
+
+**SD contract.** `SD(CommunitySignalIngestionMechanism, S) = False` — signal ingestion and relevance/confidence scoring require Executor invocation.
+
+Uses canonical: CommunityFeed (§62b), CommunitySignal (§62b), Config.community_inbox (§62e).
+
+## Patch Proposal Pipeline Mechanism (PPP_M)
+
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP38, AP4]`
+
+The Patch Proposal Pipeline Mechanism receives quality-passing CommunitySignals from CSI, synthesizes patch candidates, and routes them through the approval pipeline. PPP_M implements the approval mode contract from AP38.
+
+**Patch synthesis contract.** For each CommunitySignal with `filtered = false` and `confidence_score ≥ Config.community_inbox.confidence_threshold`, PPP_M MUST invoke the Executor to synthesize a `proposed_diff` and `rationale`. The `target` field MUST be set to `"URACE"` when the proposal concerns the URACE spec or system, or to the Product name otherwise. The Executor MUST NOT be invoked for signals with `confidence_score < confidence_threshold`; such signals MUST produce a PatchProposal with `status = CONFIDENCE_INSUFFICIENT` and `patch-proposal-confidence-below-floor` INFO gap surfaced.
+
+**Queue overflow contract.** Before creating a new PatchProposal, PPP_M MUST count active proposals (status ∈ {PENDING, CONFIDENCE_INSUFFICIENT}). If this count equals `Config.community_inbox.max_queue_depth`, PPP_M MUST surface `patch-proposal-queue-overflow` WARNING gap and MUST NOT create additional proposals until the queue drains below max_queue_depth.
+
+**Approval routing contract.**
+- `AUTO` mode: if `confidence_score ≥ 0.80`, PPP_M MAY set `status = AUTO_APPROVED` and `resolved_by = "auto"` without operator input. If `confidence_score < 0.80`, routing falls through to SMART evaluation.
+- `SMART` mode: PPP_M MUST surface the proposal to the operator with `confidence_score`, `signal_quality`, and `rationale`. If `signal_quality = LOW` or `signal_quality = FILTERED`, PPP_M MAY autonomously set `status = REJECTED` with `rejection_reason`. For HIGH and MEDIUM quality proposals, operator confirmation MUST be required; `status = APPROVED` MUST NOT be set without an attributable operator input in SMART mode.
+- `HUMAN` mode: `status = APPROVED` MUST require an attributable operator input for every proposal, regardless of `confidence_score`. `status = AUTO_APPROVED` is PROHIBITED in HUMAN mode.
+
+**Expiry contract.** PPP_M MUST evaluate expiry at each assessment cycle. Any PatchProposal with `status ∈ {PENDING, CONFIDENCE_INSUFFICIENT}` and `created_at` older than `Config.community_inbox.proposal_expiry_hours` MUST transition to `status = EXPIRED` with `resolved_at` set to the evaluation timestamp and `resolved_by = "expiry"`.
+
+**Application contract.** An APPROVED or AUTO_APPROVED PatchProposal targeting `"URACE"` MUST comply with `Config.self_evolution_policy`; if self_evolution_policy.mode = DISABLED, the proposal MUST be surfaced as a WARNING and MUST NOT be applied. A PatchProposal targeting the Product is an ordinary authorized Operation subject to applicable Authority.
+
+**SD contract.** `SD(PatchProposalPipelineMechanism, S) = False` — patch synthesis requires Executor invocation.
+
+Uses canonical: CommunitySignal (§62b), PatchProposal (§62b), ApprovalMode (§62b), Config.community_inbox (§62e).
 
 ## Sweet Spot Evaluation Mechanism
 
@@ -8367,6 +8545,34 @@ BoundedEvolutionBand = {
 
 ---
 
+## AP38 — Community Signal Ingestion
+
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP14, AP4, AP3, AP0]` · `provides: agnostic feed ingestion (any channel), T&C gate, relevance+confidence signal scoring, patch proposal pipeline with configurable approval modes (AUTO/SMART/HUMAN)`
+
+**Intent.** Community discourse from any configured feed or communication channel is continuously ingested, quality-filtered, and surfaced as bounded patch proposals for URACE or the Product. The pipeline is communication-channel-agnostic: every source is configured as a `CommunityFeed` record with a pluggable `FeedAdapterKind`. Operators configure feeds, accept T&C, and choose an approval mode. Proposals advance through a configurable pipeline; URACE MUST NOT apply any proposal without APPROVED status.
+
+**Roles.**
+- `CommunityFeed` — a configured agnostic source (any channel type) with adapter kind, endpoint, T&C state
+- `CommunitySignal` — a raw ingested signal scored on relevance (semantic overlap with current scope) and confidence (evidence of community consensus)
+- `PatchProposal` — a bounded patch candidate derived from a quality-passing signal; held in the approval queue until APPROVED, REJECTED, or EXPIRED
+- `ApprovalMode` — the pipeline mode in effect: AUTO, SMART, or HUMAN
+
+**Constraints.**
+- A `CommunityFeed` MUST NOT be ingested until `terms_accepted = true`; violation emits `community-feed-terms-not-accepted` BLOCKING gap.
+- Every `CommunitySignal` MUST be scored on two orthogonal dimensions before queuing: `relevance_score` (semantic overlap with current Objectives and Intent) and `confidence_score` (evidence of actionable community consensus, not individual noise).
+- A signal with `relevance_score < Config.community_inbox.relevance_floor` MUST be discarded immediately, setting `filtered = true`; emits `community-signal-relevance-below-floor` INFO gap.
+- A signal that passes `relevance_floor` but has `confidence_score < Config.community_inbox.confidence_threshold` MUST NOT produce an APPROVED or AUTO_APPROVED PatchProposal; it MUST be recorded with `status = CONFIDENCE_INSUFFICIENT`; emits `patch-proposal-confidence-below-floor` INFO gap.
+- The active `PatchProposal` count (status = PENDING or CONFIDENCE_INSUFFICIENT) MUST NOT exceed `Config.community_inbox.max_queue_depth`; if the ceiling is reached, new proposals MUST be blocked and `patch-proposal-queue-overflow` WARNING surfaced.
+- A PatchProposal not resolved within `Config.community_inbox.proposal_expiry_hours` MUST transition to EXPIRED.
+- Approval mode governs advancement: `AUTO` — proposals with `confidence_score ≥ 0.80` MAY be auto-approved (status = AUTO_APPROVED) without operator confirmation; below 0.80 falls through to SMART evaluation. `SMART` — URACE pre-scores and surfaces top candidates with rationale; URACE MAY autonomously reject proposals below the quality floor; operator confirmation required for final application. `HUMAN` — URACE MUST NOT set status to APPROVED without an attributable operator input; AUTO_APPROVED is prohibited in HUMAN mode.
+- The sweet-spot composition is `SMART`: it eliminates operator burden for clear low-quality signals while preserving human authority over application.
+- Confidence scoring MUST treat a single uncorroborated mention as `confidence_score = 0.5`; corroborating independent mentions MUST push the score toward 1.0; contradicting mentions MUST push toward 0.0. The scoring algorithm is Executor-supplied but the boundary semantics are normative.
+- All approved PatchProposals applied to URACE MUST comply with `Config.self_evolution_policy`; application to the Product is an ordinary authorized Operation subject to applicable Authority.
+
+**Implementation.** §62c Community Signal Ingestion Mechanism (CSI), §62c Patch Proposal Pipeline Mechanism (PPP_M), AP14 (Durable Inbox for proposal queue), AP4 (feed adapter producer-consumer contract), AP3 (append-only signal log), AP0 (CommunityFeed/CommunitySignal/PatchProposal as citizens).
+
+---
+
 ## Canonical Scalar Catalog
 
 All primitive value types used in citizen schemas. Every field that holds one of these types MUST reference the canonical scalar name.
@@ -8464,7 +8670,7 @@ Every AP0–AP37 carries a **derivation metadata block** declaring its tier, sta
 |------|-----------|-------------|
 | `FOUNDATIONAL` | standalone=true, or all declared dependencies are themselves foundational | AP0, AP1, AP2, AP3, AP4, AP5, AP7, AP26, AP35 |
 | `COMPOSITIONAL` | requires foundational and/or other compositional APs | AP6, AP8, AP9, AP10, AP11, AP12, AP13, AP14, AP15, AP17, AP20, AP21, AP22, AP23, AP28, AP29, AP30, AP32, AP33 |
-| `INTEGRATED` | depends on integrated APs or forms a multi-AP cluster | AP16, AP18, AP19, AP24, AP25, AP27, AP31, AP34, AP36, AP37 |
+| `INTEGRATED` | depends on integrated APs or forms a multi-AP cluster | AP16, AP18, AP19, AP24, AP25, AP27, AP31, AP34, AP36, AP37, AP38 |
 
 A FOUNDATIONAL pattern can always be adopted in isolation. A COMPOSITIONAL or INTEGRATED pattern requires transitive dependency resolution unless deps are explicitly excluded.
 
@@ -9080,6 +9286,11 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `scp-forward-reference` | BLOCKING | §62n SCP Gate 1 | A normative statement references a concept not yet defined in the formal index at point of reference |
 | `scp-incomplete-revision-declaration` | WARNING | §62n SCP Gate 2 | A revision log entry is missing the required New external references field |
 | `scp-atomic-extension-violation` | BLOCKING | §62n SCP Gate 3 | A MUST/SHALL statement references a concept that is not defined in the same revision |
+| `community-feed-terms-not-accepted` | BLOCKING | §62c CSI | Feed terms have not been accepted; ingest MUST NOT proceed until `CommunityFeed.terms_accepted = true` |
+| `community-feed-adapter-unavailable` | WARNING | §62c CSI | Configured CommunityFeed adapter cannot connect to endpoint; check feed config and network |
+| `patch-proposal-confidence-below-floor` | INFO | §62c PPP | Signal passed relevance_floor but confidence_score < confidence_threshold; proposal marked CONFIDENCE_INSUFFICIENT |
+| `patch-proposal-queue-overflow` | WARNING | §62c PPP | Active PatchProposal count reached max_queue_depth; new proposals blocked until queue drains |
+| `community-signal-relevance-below-floor` | INFO | §62c CSI | Signal relevance_score < relevance_floor; signal discarded without producing a PatchProposal |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -9141,6 +9352,7 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | AP35 | Governance Ledger | §62a Rule Ledger, §62c Authority Resolution | PRIMARY | L0/L1/L2 immutability; rule DAG; conflict detection |
 | AP36 | Digest Chain Consistency | §62c Digest Computation, §62e CRC | PRIMARY | fixed SHA-256 algorithm; chain-continuity invariant |
 | AP37 | Compliance Posture Tracker | §60, §62b ComplianceRecord/State | PRIMARY | per-domain trajectory + accumulator; compliance-record-missing gap |
+| AP38 | Community Signal Ingestion | §62c CSI, §62c PPP_M | PRIMARY | agnostic feed ingestion, T&C gate, relevance+confidence scoring, patch proposal pipeline (AUTO/SMART/HUMAN) |
 
 **Role values:** `PRIMARY` — the principal mechanism for this AP; `SUPPORTING` — supplements the primary mechanism. Each AP MUST have exactly one PRIMARY entry. SUPPORTING entries are optional and MUST NOT be used to satisfy the AP's core intent alone.
 
@@ -9166,7 +9378,7 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | PSD | Progress Stagnation Detector | §62c | stagnation detection, REPAIRING lifecycle trigger |
 | MBV | Metric Baseline Verification | §62c | cycle-start metric immutability audit, mutation_requires enforcement |
 
-## Schema Catalog (23 entries)
+## Schema Catalog (26 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -9196,8 +9408,11 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | MetricEffect | MetricEffect | meffect- | §62b |
 | ChunkingPolicy | ChunkingPolicy | — | §62f |
 | Chunk | Chunk | chunk- | §62f |
+| CommunityFeed | CommunityFeed | cfeed- | §62b |
+| CommunitySignal | CommunitySignal | csig- | §62b |
+| PatchProposal | PatchProposal | pprop- | §62b |
 
-## Protocol Catalog (7 entries)
+## Protocol Catalog (8 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -9208,6 +9423,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CRC_C | ComplianceRecordingContract | per-domain compliance persistence | §62l |
 | CEP | ConstructElevationProtocol | 4-gate elevation test for promoting concepts to named constructs | §62l |
 | SCP | SpecConstructionProtocol | 3-gate pre-extension enforcement: definition-first, completeness declaration, single-pass atomicity | §62n |
+| PPP | PatchProposalProtocol | T&C gate → signal ingest → relevance+confidence scoring → patch synthesis → approval routing (AUTO/SMART/HUMAN) → expiry | §62c PPP_M |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -9225,13 +9441,14 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | GVL | Governance Ledger | L0/L1/L2; rule DAG; conflict hold | §62i AP35 |
 | DCC | Digest Chain Consistency | fixed SHA-256; chain invariant | §62i AP36 |
 | CPT | Compliance Posture Tracker | per-domain trajectory + accumulator | §62i AP37 |
+| CSI_AP | Community Signal Ingestion | agnostic feed ingestion; T&C gate; relevance+confidence scoring | §62i AP38 |
 
 ## Contract Catalog (6 entries)
 
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (79 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (84 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -9425,6 +9642,7 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | AP35 | Governance Ledger | FOUNDATIONAL |
 | AP36 | Digest Chain Consistency | INTEGRATED |
 | AP37 | Compliance Posture Tracker | INTEGRATED |
+| AP38 | Community Signal Ingestion | INTEGRATED |
 
 ### Protocols (§62l)
 
@@ -9443,6 +9661,7 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | PMM | PatternMechanismMapping | INTEGRATED | false |
 | CEP | ConstructElevationProtocol | FOUNDATIONAL | true |
 | SCP | SpecConstructionProtocol | FOUNDATIONAL | false |
+| PPP | PatchProposalProtocol | INTEGRATED | false |
 
 ### Mechanisms (§62c)
 
@@ -9469,16 +9688,21 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | CCA | Crash-Consistent Acceptance | COMPOSITIONAL | AP27 |
 | LKS | Last-Known-Stable Product Recovery | COMPOSITIONAL | AP22 |
 | MBV | Metric Baseline Verification | COMPOSITIONAL | AP13 |
+| CSI | Community Signal Ingestion Mechanism | INTEGRATED | AP38, AP14 |
+| PPP_M | Patch Proposal Pipeline Mechanism | INTEGRATED | AP38, AP4 |
 
-### Schemas (r54–r55 additions)
+### Schemas (r54–r55 and r61 additions)
 
-The following schemas were added in r54/r55 and MUST be registered here per the ConstructElevationProtocol mandatory post-elevation actions.
+The following schemas were added in r54/r55 and r61 and MUST be registered here per the ConstructElevationProtocol mandatory post-elevation actions.
 
 | Name | Tier | Extends | Added |
 |---|---|---|---|
 | MetricEffect (citizen schema) | COMPOSITIONAL | CitizenBase | r54 |
 | ChunkingPolicy | COMPOSITIONAL | CitizenBase | r53 |
 | Chunk | COMPOSITIONAL | CitizenBase + GoverningRecord | r53 |
+| CommunityFeed | INTEGRATED | CitizenBase | r61 |
+| CommunitySignal | INTEGRATED | CitizenBase | r61 |
+| PatchProposal | INTEGRATED | CitizenBase | r61 |
 
 # 63. Concurrency
 
@@ -11345,6 +11569,8 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `optinpat` | opt-in patterns, --opt-in-patterns, --opt-in-constructs, opted_in_patterns, opted_in_constructs, per-pattern update selection, per-construct update selection |
 | `stalemfst` | stale manifest, derived-manifest-stale, DerivedManifestRef staleness, stale spec_version |
 | `specconstruct` | Spec Construction Protocol, SCP, definition-first ordering, revision completeness declaration, single-pass atomic extension, pre-extension gate |
+| `communityinbox` | Community Signal Ingestion, CommunityFeed, CommunitySignal, feed adapter, T&C gate, relevance scoring, confidence scoring, community inbox |
+| `patchproposal` | PatchProposal, patch proposal, approval mode, AUTO approval, SMART approval, HUMAN approval, proposal queue, proposal expiry |
 
 ## Audit Content
 
@@ -11410,6 +11636,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r61 | 2026-10-16 | spec | Community Signal Ingestion. Introduced AP38 (Community Signal Ingestion, INTEGRATED) in §62i with feed-adapter agnosticism, T&C gate, two-dimensional signal quality scoring (relevance + confidence), and configurable approval pipeline (AUTO/SMART/HUMAN; default SMART). Added mechanisms CSI (Community Signal Ingestion Mechanism) and PPP_M (Patch Proposal Pipeline Mechanism) to §62c. Added Protocol PPP (PatchProposalProtocol, 7→8) to §62m Protocol Catalog. Added citizen schemas CommunityFeed (prefix cfeed-), CommunitySignal (prefix csig-), PatchProposal (prefix pprop-) plus enums ApprovalMode, FeedAdapterKind, SignalQuality, ProposalStatus to §62b. Added Config.community_inbox subschema to §62e. Added 5 new IGC gap kinds: `community-feed-terms-not-accepted` (BLOCKING), `community-feed-adapter-unavailable` (WARNING), `patch-proposal-confidence-below-floor` (INFO), `patch-proposal-queue-overflow` (WARNING), `community-signal-relevance-below-floor` (INFO); IGC total 79→84. Added AP38 to ConstructKindRegistry, PMM table, and tier table (INTEGRATED). Added CSI and PPP_M to ConstructKindRegistry Mechanisms. Added CommunityFeed, CommunitySignal, PatchProposal to Schema Catalog (23→26). Added stems `communityinbox` and `patchproposal` to §81. **New external references:** `AP38` AP → defined at §62i AP38 (this revision); `CommunityFeed` schema → defined at §62b (this revision); `CommunitySignal` schema → defined at §62b (this revision); `PatchProposal` schema → defined at §62b (this revision); `ApprovalMode` enum → defined at §62b (this revision); `FeedAdapterKind` enum → defined at §62b (this revision); `SignalQuality` enum → defined at §62b (this revision); `ProposalStatus` enum → defined at §62b (this revision); `Config.community_inbox` subschema → defined at §62e (this revision); `community-feed-terms-not-accepted` IGC kind → defined at §62l (this revision); `community-feed-adapter-unavailable` IGC kind → defined at §62l (this revision); `patch-proposal-confidence-below-floor` IGC kind → defined at §62l (this revision); `patch-proposal-queue-overflow` IGC kind → defined at §62l (this revision); `community-signal-relevance-below-floor` IGC kind → defined at §62l (this revision); `CSI` Mechanism → defined at §62c (this revision); `PPP_M` Mechanism → defined at §62c (this revision); `PPP` Protocol → defined at §62m Protocol Catalog (this revision); `communityinbox` stem → defined at §81 (this revision); `patchproposal` stem → defined at §81 (this revision) |
 | r60 | 2026-10-16 | spec | Spec Construction Protocol. Introduced SCP as a FOUNDATIONAL Protocol in §62n: three-gate pre-extension enforcement (Gate 1: definition-first ordering, Gate 2: revision completeness declaration, Gate 3: single-pass atomic extension). Added 3 IGC gap kinds: `scp-forward-reference` (BLOCKING), `scp-incomplete-revision-declaration` (WARNING), `scp-atomic-extension-violation` (BLOCKING). Updated IGC count 76→79. Added SCP to Protocol Catalog (§62m, 6→7 entries), ConstructKindRegistry (§62n), and stem vocabulary `specconstruct` (§81). Added Revision Completeness Declaration schema to §82 Revision Log format. SCP is binding from r60 onward; revisions prior to r60 are exempt. SCP is self-applying: this revision is the first to comply with it. **New external references:** `SCP` Protocol construct → defined at §62n SCP section (this revision); `scp-forward-reference` IGC kind → defined at §62l IGC table (this revision); `scp-incomplete-revision-declaration` IGC kind → defined at §62l IGC table (this revision); `scp-atomic-extension-violation` IGC kind → defined at §62l IGC table (this revision); `specconstruct` stem → defined at §81 stem vocabulary table (this revision) |
 | r59 | 2026-10-16 | spec | r58 gap closure. Added 9 Config subschemas to §62e: `staleness` (hours-based, supersedes legacy `staleness_windows`), `context_budget_r58` (`hard_cap_fraction`, `min_floor_fraction`), `wake` (`max_stale_hours`), `test_coverage` (`freshness_hours`), `sweet_spot` (`value_density_floor`), `retention` (`auto_trigger_bytes`), `metric_sources` (`registry`, `search_endpoint`), `archive_search_paths`, `generated_file_globs`. Added `replaces` field to WakeRegistration schema. Added `effect_type` field and `EffectType` enum to Operation schema. Added `Role` column to PatternMechanismMapping table with PRIMARY/SUPPORTING values. Added `auto_clearable` field description to ConstructKindRegistry. Aligned SDM staleness default prose to reference `Config.staleness` subschema explicitly. |
 | r58 | 2026-10-16 | spec | 20-gap reliability hardening. Added invocation contract, traversal rules, Evidence weighting, and human-readable format to §62g Justification System. Added activation-failure, partial-update-reconciliation, state-divergence-detection, and re-bootstrap-failure contracts to §74. Added CRC injection, version-mismatch recovery, and context-window overage contracts to §62e/§75. Added default staleness windows and T2 authority-authorization recording to §62c SDM. Added tier tie-breaking, eviction floor, and fallback-rejection contract to §62c CBM. Added signal taxonomy, timeout contract, re-establishment authorization, and recoverable/terminal gap classification to §62c WRM. Added surface measure algorithm and value-density floor enforcement to §62c SSE. Added capability-regression contract, re-test trigger, and test-freshness window to §62c TCG. Added structural/semantic boundary taxonomy and classification-disagreement protocol to §62h T5/T7. Added multi-BLOCKING ordering, operator clearance contract, and isolation contract to §62l IGC. Added archive path resolution and re-ingestion idempotency to §62c RIM. Added discovery mechanism, source validation, and deduplication to §62c EMC. Added firing contract, multi-policy interaction, and atomicity guarantee to §62f retention. Added elevation eligibility criteria, evidence threshold, reversibility, and version continuity to §62n CEP. Added step idempotency, sequential execution, transient failure handling, and retry ceiling to §73 CRRP. Added gap density metric, materiality threshold, and remediation contract to §80/§81. Added uniqueness contract, ambiguity resolution, and multi-mechanism execution order to §62l PMM. Added milestone failure modes, state revertibility, and chain integrity validation to §59b. Added downstream blocking semantics, refresh trigger, and override audit trail to §62j stale-manifest. Added effect-type taxonomy, reconciliation-strategy matrix, and unreconcilable-effect handling to §52. New IGC gap kinds: justification-depth-exceeded, justification-cycle-detected, activation-health-failure, rollback-failure, partial-update-recovered, partial-update-unrecoverable, spec-state-divergence, rebootstrap-attempt-failed, rebootstrap-terminal-failure, crc-version-mismatch, crc-context-overflow, unauthorized-threshold-adjustment, wake-registration-stale, wake-registration-expired, archive-not-found, reingestion-duplicate-skipped, metric-source-discovery-unavailable, retention-pass-partial-failure, crrp-step-failure, crrp-retry-exceeded, technique-classification-disagreement, value-density-below-floor, capability-regression, milestone-chain-integrity-failure, effect-unreconcilable, stale-manifest-override. Total IGC gap kinds: 76 |
