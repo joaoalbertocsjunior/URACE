@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r53**
+**Specification version: 2026-10-16-r54**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3284,11 +3284,15 @@ Operation {
   executor_source_summary  OPTIONAL  string ≤ 4000 chars; Executor-provided change description
   explanation              OPTIONAL  string; human-readable explanation of what changed and why
   conflicting_files        OPTIONAL  list; set when status = CONCURRENT_CHANGE
+  validation_evidence_id   OPTIONAL  string; id of the Evidence record produced by independent validation; REQUIRED when lifecycle_state transitions to ACCEPTED
+  validation_skipped_reason OPTIONAL string; if validation was skipped, MUST contain justification
 }
 ```
 
 Uses TemporalFields: attempted_at (as created_at), updated_at, accepted_at, rejected_at, rolled_back_at. Uses canonical: Identifier (id), ProductScope (scope), ExecutorAttribution (executor post-dispatch), ValidationResult (independent_validation), MetricEffect (observed_metric_effect), MetricSnapshot (before_metrics, after_metrics).
 Used in: State.operations, Plan.operations.
+
+**Validation evidence contract.** An Operation MUST have either `validation_evidence_id` or `validation_skipped_reason` populated before `lifecycle_state` transitions to ACCEPTED. Absence of both MUST emit `validation-evidence-missing` WARNING IntegrityGap.
 
 **Status finality contract.** `ACCEPTED`, `REJECTED_ROLLED_BACK`, and `REJECTED_INDEPENDENT_VALIDATION` are terminal. An Operation in a terminal status MUST NOT be retried; a new Operation MUST be created for any retry attempt.
 
@@ -3596,6 +3600,35 @@ Used in: Config.metric_definitions, State.metric_definitions.
 
 **Used in:** §62c staleness detection (metrics domain scan), §62l IntegrityGapCatalog (`metric-definition-drift`, `metric-baseline-unauthorized-mutation`, `metric-mutation-policy-missing`)
 
+## MetricEffect (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+Extends: CitizenBase
+
+Formally distinguishes metric improvement (value trend) from metric drift (definition mutation). Produced by the T2 Bar-Raising Calculus and Staleness Detection for each metric observation.
+
+Fields:
+- `id` (string, REQUIRED) — stable identifier; prefix "meffect-"
+- `created_at` (ISO-8601, REQUIRED) — observation timestamp
+- `updated_at` (ISO-8601, REQUIRED) — last update
+- `metric_id` (string, REQUIRED) — references MetricDefinition.id
+- `kind` (enum, REQUIRED) — IMPROVEMENT | DRIFT | REGRESSION | NEUTRAL
+  - IMPROVEMENT: value moved in favorable direction per MetricDefinition.direction
+  - DRIFT: MetricDefinition was mutated (authorized or unauthorized)
+  - REGRESSION: value moved in unfavorable direction per MetricDefinition.direction
+  - NEUTRAL: no change
+- `before_value` (any, OPTIONAL) — metric value before observation
+- `after_value` (any, OPTIONAL) — metric value after observation
+- `before_baseline` (any, OPTIONAL) — MetricDefinition.baseline before mutation (DRIFT only)
+- `after_baseline` (any, OPTIONAL) — MetricDefinition.baseline after mutation (DRIFT only)
+- `authorized_by` (string, OPTIONAL) — authorization basis for DRIFT; absent = unauthorized
+- `operation_id` (string, OPTIONAL) — Operation that produced this effect
+- `at` (ISO-8601, REQUIRED) — when the effect was observed
+
+**Invariant.** A MetricEffect with kind=DRIFT and authorized_by absent MUST co-occur with a `metric-definition-drift` IntegrityGap.
+
+**Used in:** §62h T2 Bar-Raising Calculus (IMPROVEMENT effects trigger threshold advance), §62c Metric Baseline Verification (DRIFT effects trigger authorization audit)
+
 ## Vital Definition
 
 A Vital is a derived health indicator computed from one or two Metric Definitions.
@@ -3779,6 +3812,7 @@ State {
   compliance_records     REQUIRED  list[ComplianceRecord]; append-only compliance trajectory; one record per domain per validation evaluation
   compliance_state       REQUIRED  dict[domain → ComplianceState]; current posture per validation domain; one entry per domain
   executor_providers     REQUIRED  list[ExecutorProvider]; active executor provider bindings; initialized from Config.executor.providers at bootstrap
+  metric_effects         OPTIONAL  list[MetricEffect]; metric observation history
 }
 ```
 
@@ -6395,6 +6429,8 @@ Compaction is authorized in exactly two ways:
 
 The lifecycle controller MUST NOT self-authorize compaction outside these two paths.
 
+**Compaction authorization staleness.** A CompactionEvent whose `authorized_at` timestamp is more than 86400 seconds (24 hours) before the actual compaction execution MUST be treated as stale. Stale authorization MUST NOT proceed. The implementation MUST re-request authorization (re-trigger RetentionPolicy threshold check or re-queue operator command via inbox). Stale authorization without re-request MUST emit `compaction-authorization-stale` WARNING IntegrityGap.
+
 ## urace compact
 
 ```
@@ -8781,6 +8817,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `authority-cache-stale` | WARNING | §62c Authority Resolution Mechanism | Authority resolution cache older than 3600 seconds used without re-validation |
 | `executor-policy-missing` | WARNING | §62a Bootstrap Seeding | No POLICY rules seeded in Rule Ledger for executor configuration at bootstrap |
 | `unresolved-effects-reconciliation-failure` | WARNING | §62c reconciliation | _reconcile_unresolved_effects raised exception; effects may be partially reconciled |
+| `compaction-authorization-stale` | WARNING | §62f Authorization model | Re-request authorization (re-trigger RetentionPolicy or re-queue operator command) |
+| `validation-evidence-missing` | WARNING | §62b Operation schema | Populate validation_evidence_id or validation_skipped_reason before ACCEPTED transition |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -11051,6 +11089,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r54 | 2026-10-16 | spec+runtime | Gap closure pass (7 items from r53 audit): §62f: compaction authorization staleness contract (86400s window) + compaction-authorization-stale WARNING gap; §62b: MetricEffect citizen schema (IMPROVEMENT/DRIFT/REGRESSION/NEUTRAL); §62b: metric_effects OPTIONAL added to State Document; §62b: Operation validation_evidence_id + validation_skipped_reason fields + validation evidence contract; §62l: validation-evidence-missing + compaction-authorization-stale gap kinds; Runtime: citizen-base-violation load-time conformance check; objective-lifecycle chunking grouping logic (_compact_with_chunking); immutable field mutation detection (id/created_at); authority_basis active-rule binding validation |
 | r53 | 2026-10-16 | spec+runtime | Reliability Hardening Pass: §62b: MetricDefinition authority_level + mutation_requires + last_baseline_audit fields; Base Citizen Clusters (CitizenBase/AuthorizedCitizen/TemporalCitizen) + Extends declarations; GoverningRecord activation — WakeRegistration/ExecutorProvider/RetentionPolicy declared; ExecutorProvider added to State Document; ChunkingPolicy + Chunk schemas added (opt-in chunking); §62c: Metric Baseline Verification mechanism (cycle-start scan all MetricDefs); §62f: Objective-Lifecycle Chunking + Chunk records in governance table; §62h: T2 threshold audit trail requirement; §62a: Executor policy POLICY rule seeding requirement; §62l: 7 new IntegrityGap kinds (metric-baseline-unauthorized-mutation, metric-mutation-policy-missing, threshold-audit-missing, citizen-base-violation, authority-cache-stale, executor-policy-missing, unresolved-effects-reconciliation-failure); §74: self-evolution budget partition invariant ≤20%; Authority cache invalidation contract (3600s TTL); Runtime: mutable metric scan extended to ALL MetricDefinitions; unresolved effects reconciliation audit trail + exception guard; discovery observation key safety (.get chains); authority cache 3600s TTL invalidation; self-evolution 20% budget guard; wake trigger atomic state persist after evaluation; symmetric compliance recording on ACCEPTED |
 | r52 | 2026-10-16 | spec+runtime | NSS Compliance + Critical Bug Fixes: destination anchor drift now enters BLOCKED + emits `governance-anchor-drift` BLOCKING IntegrityGap; executor failures truncation now emits CompactionEvent before truncating; `decisions` key → `decision_records` (§45 compliance); removed `ACCEPTED` as lifecycle_state enum value; unified `pending_validation` → `pending_validations` (plural canonical); added durable state checkpoint between operation record write and ACTIVE transition; governance domain now emits ComplianceRecord on authority denial; §62b: section-level Schema metadata declaration added; compliance_records / compliance_state OPTIONAL → REQUIRED in State Document; MetricDefinition DIRECTIVE seeding contract + DIRECTIVE seeding fields; §62f: integrity_gaps / status_transitions / assessment_records / processed_input_ids added to governance table; §62l: metric-definition-drift (WARNING) + governance-anchor-drift (BLOCKING) added to IntegrityGapCatalog; §62c: metrics domain added to Staleness Detection Mechanism |
 | r51 | 2026-10-14 | spec | 2026-10-14-r51. Normative Specification Standard: §62n added (Base Rule, 5-kind hierarchy, Construct Lattice, Mandatory Construct Metadata, Templates per Kind, ConstructKindRegistry); ConstructElevationProtocol added to §62l; construct metadata lines on all 12 §62l protocols and 20 §62c mechanisms; duplicate §79 renumbered (Spec Structural Audit → §80, Final Invariant → §81, Revision Log → §82) |
