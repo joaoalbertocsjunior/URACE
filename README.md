@@ -65,7 +65,7 @@ Run `urace /auto` in one terminal. From a second terminal, send anything.
 
 ## Update Safely
 
-Run `urace /update` — it guides you through the full update sequence safely. Pass `--opt-in-constructs AP8,AP14` to limit which constructs or patterns the update applies to. Use `urace /help update` for details.
+Run `urace /update` — it guides you through the full update sequence safely. Pass `--opt-in-constructs AP8,AP14` to limit which constructs or patterns the update applies to. Use `@community-inbox` (or any bundle name prefixed with `@`) as a shorthand to scope the update to a named feature bundle. Use `urace /help update` for details.
 
 ## See Progress
 
@@ -94,7 +94,7 @@ urace derive "quality tracking with regression gates" --kind mechanism,schema
 urace derive "authority boundary model" --kind contract
 ```
 
-Add `--suggest` to preview matches before committing. `--kind all` searches across every kind. Use `--constructs` to specify IDs directly. Run `urace derive` with no arguments to browse.
+Add `--suggest` to preview matches before committing. `--kind all` searches across every kind. Use `--constructs` to specify IDs directly. Use `--bundle community-inbox` to apply the full community signal ingestion bundle. Run `urace derive --list-bundles` to see all available bundles. Run `urace derive` with no arguments to browse.
 
 ## Consequential Use
 
