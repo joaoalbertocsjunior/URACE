@@ -55,13 +55,11 @@ urace /help             explore commands and reference
 urace /update           guided update sequence
 ```
 
-Run `urace /auto` in one terminal. From a second terminal, send anything.
-
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
 **Plain text** — the Executor maps your input to goals, intents, constraints, and commands — each confirmed individually. Contradictory inputs surface as alternatives.
 
-`urace /help` lists all commands. `urace /help <command>` gives per-command reference. Options shared across commands (`--json`, `--scope`, `--verbose`, and others) are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
+`urace /help` lists all commands. `urace /help <command>` gives per-command reference. Shared options including `--dry-run`, `--json`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Update Safely
 
@@ -69,7 +67,7 @@ Run `urace /update` — it guides you through the full update sequence safely. P
 
 ## See Progress
 
-URACE reports observed **metrics**, system-health **vitals** and decision **scores**. Inspect them with `urace /check`, `urace /vitals` and `urace /change list`; use `urace /help` for details.
+Inspect metrics, vitals and scores with `urace /check`, `urace /vitals` and `urace /change list`. Use `--since`, `--until` and `--limit` to filter list output.
 
 ## Inspect and Modify Context
 
