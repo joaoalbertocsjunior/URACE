@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r52**
+**Specification version: 2026-10-16-r53**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3019,6 +3019,8 @@ At `init`, URACE MUST seed the Rule Ledger from the bootstrap configuration befo
 
 After seeding, the Ledger MUST be the single source of truth for active governance rules. Bootstrap config fields MUST NOT be re-read per cycle as a substitute for querying the Ledger. A lifecycle that lacks a Rule Ledger in durable state after `init` MUST surface this as a named integrity gap on next load.
 
+**Executor configuration rules:** `Config.executor.providers` capacity limits MUST be seeded as POLICY rules in the Rule Ledger at bootstrap with scope `executor`. Absence of seeded executor POLICY rules at cycle start MUST emit `executor-policy-missing` WARNING IntegrityGap.
+
 ## User Interface
 
 Three commands expose the Rule Ledger:
@@ -3148,7 +3150,29 @@ TemporalFields {
 
 **Declaration syntax.** Each citizen schema that uses fields from this vocabulary adds a note: `Uses TemporalFields: [field, ...]`. Fields listed there MUST follow the semantics defined above.
 
+## Base Citizen Clusters
+
+Every citizen schema in §62b MUST declare `Extends:` one of the following base clusters. Conformance is verified on load; violations emit `citizen-base-violation` WARNING IntegrityGap.
+
+**CitizenBase**
+- `id` (string, REQUIRED) — stable identifier; MUST be immutable after creation (AP0)
+- `created_at` (ISO-8601, REQUIRED) — creation timestamp; MUST be immutable after creation
+- `updated_at` (ISO-8601, REQUIRED) — last mutation timestamp
+
+**AuthorizedCitizen** extends CitizenBase
+- `authority_basis` (string, REQUIRED) — authorizing rule id or authority scope
+- `scope` (string, OPTIONAL) — governance scope affected
+
+**TemporalCitizen** extends CitizenBase
+- Declares exact TemporalFields subset via "Uses TemporalFields: [...]"
+- All declared fields MUST appear in the TemporalFields vocabulary
+
+Declaration syntax (in each citizen schema):
+> Extends: CitizenBase | AuthorizedCitizen | TemporalCitizen
+
 ## Objective
+
+Extends: AuthorizedCitizen
 
 Used in: State.objectives, Plan.objective_id.
 
@@ -3226,6 +3250,8 @@ Used in: State.plans, Operation.plan_id.
 
 ## Operation
 
+Extends: AuthorizedCitizen
+
 An Operation is a single attempt to mutate the Product or runtime under a Plan. It is the atomic unit of change.
 
 ```
@@ -3269,6 +3295,8 @@ Used in: State.operations, Plan.operations.
 **Metrics contract.** `before_metrics` MUST be captured immediately before the Executor call. `after_metrics` MUST be captured immediately after the Transaction is validated. Both MUST use the same metric names and measurement method.
 
 ## Evidence
+
+Extends: CitizenBase
 
 Evidence is the append-only audit log (AP3 — Append-Only Log, §62i) of every significant lifecycle event, serving as the concrete instantiation of the Broadcast Log (AP15 — Broadcast Log, §62i). It is the primary traceability surface.
 
@@ -3371,6 +3399,9 @@ Used in: State.inbox, InputQueue.
 
 ## Executor Provider Record
 
+Extends: AuthorizedCitizen
+Implements: GoverningRecord
+
 An Executor Provider Record describes a registered Executor and its operational limits.
 
 ```
@@ -3399,6 +3430,8 @@ Used in: Config.executor_providers.
 **Budget contract.** The lifecycle MUST NOT dispatch a call to a provider whose rolling 24h or 30d call count has reached its configured ceiling. A provider at ceiling MUST be treated as capacity-exhausted, not detached.
 
 ## Decision
+
+Extends: AuthorizedCitizen
 
 > **Deprecated.** This is a minimal summary schema retained for historical reference. The authoritative canonical schema is `DecisionRecord` (§62d), which includes full attribution, reasoning steps, evidence refs, and AP23 justification chain support. New implementations MUST use `DecisionRecord`.
 
@@ -3527,23 +3560,28 @@ Used in: Config.connectors.
 
 **Construct metadata.** kind: Schema · tier: FOUNDATIONAL · standalone: true
 
+Extends: CitizenBase
+
 A Metric Definition maps a named metric to a path within a Connector Source.
 
 ```
 MetricDefinition {
-  id           REQUIRED  stable identifier (Input id of the registering input)
-  name         REQUIRED  unique metric name within this lifecycle
-  source       REQUIRED  ConnectorSource id
-  path         REQUIRED  JSON path expression resolving to a numeric value
-  direction    REQUIRED  nondecreasing | nonincreasing
-  created_at   REQUIRED  timestamp; when this definition was registered
-  updated_at   REQUIRED  timestamp; updated when definition is replaced or modified
-  authority    OPTIONAL  string; "DIRECTIVE" when seeded as an immutable baseline at bootstrap
-  baseline     OPTIONAL  number or string; immutable baseline value when authority = "DIRECTIVE"
-  unit         OPTIONAL  string; measurement unit
-  seeded_at    OPTIONAL  ISO-8601; bootstrap timestamp when authority = "DIRECTIVE"
-  target       OPTIONAL  float; desired threshold value
-  deprecated_at OPTIONAL timestamp | null; set when this metric is retired; null = active
+  id                  REQUIRED  stable identifier (Input id of the registering input)
+  name                REQUIRED  unique metric name within this lifecycle
+  source              REQUIRED  ConnectorSource id
+  path                REQUIRED  JSON path expression resolving to a numeric value
+  direction           REQUIRED  nondecreasing | nonincreasing
+  created_at          REQUIRED  timestamp; when this definition was registered
+  updated_at          REQUIRED  timestamp; updated when definition is replaced or modified
+  mutation_requires   REQUIRED  enum: IMMUTABLE | PERMISSION | OBJECTIVE; default PERMISSION if authority omitted, IMMUTABLE if authority="DIRECTIVE"
+  authority           OPTIONAL  string; "DIRECTIVE" when seeded as an immutable baseline at bootstrap
+  authority_level     OPTIONAL  enum: L0 | L1 | L2; governance tier; L0=never mutable, L1=DIRECTIVE-immutable, L2=policy-gated mutation
+  baseline            OPTIONAL  number or string; immutable baseline value when authority = "DIRECTIVE"
+  unit                OPTIONAL  string; measurement unit
+  seeded_at           OPTIONAL  ISO-8601; bootstrap timestamp when authority = "DIRECTIVE"
+  target              OPTIONAL  float; desired threshold value
+  deprecated_at       OPTIONAL  timestamp | null; set when this metric is retired; null = active
+  last_baseline_audit OPTIONAL  ISO-8601; timestamp when baseline was last verified against Rule Ledger snapshot
 }
 ```
 
@@ -3554,7 +3592,9 @@ Used in: Config.metric_definitions, State.metric_definitions.
 
 **DIRECTIVE seeding contract.** A MetricDefinition with `authority: "DIRECTIVE"` is seeded as an immutable baseline in the Rule Ledger at bootstrap. Its `baseline` and `seeded_at` fields MUST be set at creation and MUST NOT be modified after seeding. A replacement or mutation of a DIRECTIVE MetricDefinition without explicit authority authorization MUST emit a `metric-definition-drift` WARNING IntegrityGap (§62l).
 
-**Used in:** §62c staleness detection (metrics domain scan), §62l IntegrityGapCatalog (`metric-definition-drift`)
+**Mutation contract.** A MetricDefinition with `mutation_requires: IMMUTABLE` MUST NOT be modified after `seeded_at`. Any modification attempt MUST emit an `metric-baseline-unauthorized-mutation` BLOCKING IntegrityGap and enter BLOCKED state. A MetricDefinition with `mutation_requires: PERMISSION` requires an active PERMISSION rule in the Rule Ledger. Absence of such a rule MUST emit `metric-mutation-policy-missing` WARNING IntegrityGap.
+
+**Used in:** §62c staleness detection (metrics domain scan), §62l IntegrityGapCatalog (`metric-definition-drift`, `metric-baseline-unauthorized-mutation`, `metric-mutation-policy-missing`)
 
 ## Vital Definition
 
@@ -3738,6 +3778,7 @@ State {
   derivation_refs        OPTIONAL  list[DerivedManifestRef]; formal saved manifest refs — canonical from r36; coexists with derived_manifest_refs for backward compat
   compliance_records     REQUIRED  list[ComplianceRecord]; append-only compliance trajectory; one record per domain per validation evaluation
   compliance_state       REQUIRED  dict[domain → ComplianceState]; current posture per validation domain; one entry per domain
+  executor_providers     REQUIRED  list[ExecutorProvider]; active executor provider bindings; initialized from Config.executor.providers at bootstrap
 }
 ```
 
@@ -3964,16 +4005,20 @@ Uses TemporalFields: created_at, updated_at. Uses canonical: Identifier (id), Me
 
 ## Wake Registration
 
+Extends: AuthorizedCitizen
+Implements: GoverningRecord
+
 A Wake Registration records a pending lifecycle wake condition that has been established but not yet satisfied.
 
 ```
 WakeRegistration {
-  id           REQUIRED  stable identifier
-  scheduled_at REQUIRED  timestamp; when this registration is due to trigger
-  condition    REQUIRED  dict; the observable criterion that satisfies this registration
+  id             REQUIRED  stable identifier
+  scheduled_at   REQUIRED  timestamp; when this registration is due to trigger
+  condition      REQUIRED  dict; the observable criterion that satisfies this registration
   kind           REQUIRED  SCHEDULED | TRIGGERED | CONDITIONAL
-  scope          OPTIONAL  string; which lifecycle scope this registration serves
   established_at REQUIRED  timestamp; when this registration was created
+  authority_basis OPTIONAL string; authorizing rule id or authority scope (GoverningRecord)
+  scope          OPTIONAL  string; which lifecycle scope this registration serves (GoverningRecord)
   satisfied_at   OPTIONAL  timestamp | null; when the condition was met and registration fired
 }
 ```
@@ -4433,6 +4478,8 @@ PROPOSED OPERATION (scope, objective)
 
 **Denial record contract.** Every DENIED Operation MUST produce an Evidence record of kind `authority-resolution-denied` with a human-readable reason. The Operation MUST NOT proceed silently.
 
+**Authority resolution cache invalidation.** A cached authority resolution result MUST be invalidated and re-computed if: (a) more than 3600 seconds have elapsed since `resolved_at`; (b) any Rule in the Rule Ledger with scope matching the Objective has been superseded or deleted since `resolved_at`. Stale cache use MUST emit `authority-cache-stale` WARNING IntegrityGap.
+
 ## Digest Computation
 
 **Construct metadata.** `kind: Mechanism` · `tier: FOUNDATIONAL` · `standalone: false` · `governed-by: [AP36]`
@@ -4877,6 +4924,29 @@ STALENESS SCAN (per assessment cycle, SD=True)
 ```
 
 **Proportionality contract.** Staleness detection is self-determinable (`SD = True`); it MUST NOT consume executor credits. **Non-blocking contract.** All staleness gaps are `WARNING` severity, never `BLOCKING`; they surface for operator attention but MUST NOT halt the lifecycle. **Configuration contract.** Freshness windows (`decision_freshness_window`, `evidence_freshness_window`, `rule_freshness_window`) MUST be declared in Config Document (`staleness_windows`) before the first staleness scan. Per-scope overrides MUST be declared under `staleness_windows.by_scope`; absent scopes fall back to the global `decision_seconds` window. Absent configuration MAY defer the domain scan and MUST NOT produce false positives.
+
+## Metric Baseline Verification
+
+**Construct metadata.** kind: Mechanism · tier: COMPOSITIONAL · standalone: false · governed-by: [AP28, AP36]
+
+Verifies that all active MetricDefinitions have not been mutated beyond their declared `mutation_requires` contract. Runs at cycle start, before any execution gate.
+
+```
+METRIC BASELINE VERIFICATION (cycle start, SD=True)
+
+  DOMAIN: All MetricDefinitions
+    FOR EACH MetricDefinition in State.metric_definitions:
+      INVARIANT: If mutation_requires=IMMUTABLE AND updated_at > seeded_at
+        → emit IntegrityGap(kind="metric-baseline-unauthorized-mutation", severity=BLOCKING,
+                            detail="MetricDefinition {id} with mutation_requires=IMMUTABLE was modified after seeded_at")
+      INVARIANT: If mutation_requires=PERMISSION AND no active PERMISSION rule for metric id in Rule Ledger
+        → emit IntegrityGap(kind="metric-mutation-policy-missing", severity=WARNING,
+                            detail="MetricDefinition {id} with mutation_requires=PERMISSION has no active PERMISSION rule")
+      INVARIANT: If last_baseline_audit + 86400 < now()
+        → update last_baseline_audit = now(); emit no gap (routine maintenance)
+```
+
+**Used in:** §62b Bootstrap Seeding (seeded_at initialization), §62f RetentionPolicy (metric records exempt from ROLLING_EVICTION)
 
 ## Context Budget Mechanism
 
@@ -5614,6 +5684,9 @@ OutcomeFeedback {
 
 ## RetentionPolicy
 
+Extends: AuthorizedCitizen
+Implements: GoverningRecord
+
 A configurable policy governing maximum growth and compaction eligibility for an accumulating list field in URACE persistent state. Establishes the authorization for policy-triggered compaction (§62f).
 
 ```
@@ -5627,6 +5700,9 @@ RetentionPolicy {
   compaction_mode  REQUIRED  PROHIBITED | ARCHIVE | ROLLING_EVICTION
   archive_subpath  OPTIONAL  string; relative path under state_path for the archive file;
                              REQUIRED when compaction_mode is ARCHIVE; absent otherwise
+  authority_basis  OPTIONAL  string; authorizing rule id or authority scope (GoverningRecord)
+  scope            OPTIONAL  string; governance scope affected (GoverningRecord)
+  established_at   OPTIONAL  ISO-8601; when policy was established (GoverningRecord)
 }
 ```
 
@@ -6269,6 +6345,7 @@ Default governance table:
 | `status_transitions` | §62b | 500 entries | ARCHIVE |
 | `assessment_records` | §62b | 1 000 entries | ARCHIVE |
 | `processed_input_ids` | §62b | 1 000 entries | ROLLING_EVICTION |
+| `chunks` | §62f | 1 000 entries | ARCHIVE |
 
 Implementations MAY configure different ceilings via RetentionPolicy records established through an attributable operator input. A RetentionPolicy MUST NOT change the mode of a PROHIBITED field.
 
@@ -6345,6 +6422,70 @@ urace amend <compaction-event-id> <record-id> --notice <text>
 ```
 
 Applies an in-place amendment to a single record within an ARCHIVE-mode CompactionEvent's archive file. Appends an ArchiveAmendment to `{archive_path}.amendments.jsonl`. Does NOT modify the CompactionSummary or CompactionManifest (the `original_digest` commitment is preserved). MUST be rejected if: the compaction event is ROLLING_EVICTION; the archive file is missing or unreadable; the record-id is not present in the archive. The amendment is written to the inbox and processed at the next safe lifecycle boundary. Use this command to flag a DecisionRecord as PROVENANCE_REVISED while it remains in archive storage, without a full decompaction round-trip.
+
+## Objective-Lifecycle Chunking (optional)
+
+Chunking is an opt-in compaction strategy that groups records by Objective lifecycle phase rather than age or count. Enabled via `Config.compaction.chunking_enabled: true`.
+
+### ChunkingPolicy
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+
+Extends: CitizenBase
+
+```
+ChunkingPolicy {
+  id          REQUIRED  stable identifier
+  created_at  REQUIRED  ISO-8601; creation timestamp
+  updated_at  REQUIRED  ISO-8601; last mutation timestamp
+  enabled     REQUIRED  boolean; activates chunking; default false
+  chunk_by    REQUIRED  enum: COUNT | AGE | OBJECTIVE_LIFECYCLE; default COUNT
+  max_chunks  OPTIONAL  integer; ceiling on active chunks per field; overflow uses age-based compaction
+}
+```
+
+### Chunk
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+
+Extends: CitizenBase
+Implements: GoverningRecord
+
+```
+Chunk {
+  id                REQUIRED  stable identifier; prefix "chunk-"
+  created_at        REQUIRED  ISO-8601; creation timestamp
+  updated_at        REQUIRED  ISO-8601; last mutation timestamp
+  field_path        REQUIRED  string; state path (e.g., "decision_records")
+  record_ids        REQUIRED  list[string]; record ids in this chunk
+  time_range        REQUIRED  object; {earliest: timestamp, latest: timestamp}
+  record_count      REQUIRED  integer
+  original_digest   REQUIRED  string; SHA-256 of archived records
+  is_decompactable  REQUIRED  boolean; true when objective_status=completed or cancelled
+  authorized_by     REQUIRED  string
+  status            REQUIRED  enum: ACTIVE | ARCHIVED
+  objective_id      OPTIONAL  string; Objective.id (present if chunk_by=OBJECTIVE_LIFECYCLE)
+  objective_status  OPTIONAL  string; planned|active|completed|cancelled
+  archived_at       OPTIONAL  ISO-8601; when moved to archive
+  authority_basis   OPTIONAL  string; authorizing rule id or authority scope (GoverningRecord)
+  scope             OPTIONAL  string; governance scope affected (GoverningRecord)
+  established_at    OPTIONAL  ISO-8601; when chunk was established (GoverningRecord)
+}
+```
+
+**Chunking algorithm (chunk_by=OBJECTIVE_LIFECYCLE):**
+1. Group records by (objective_id, objective_status)
+2. For groups where objective_status ∈ {completed, cancelled}: create Chunk with is_decompactable=true; archive records; insert ChunkSummary placeholder
+3. For groups where objective_status=active: create Chunk with is_decompactable=false; do NOT archive
+4. On Objective status → completed: mark its Chunk is_decompactable=true, set archived_at, archive on next safe boundary
+
+**Decompaction (chunking):**
+`urace decompact <chunk-id>` restores all records for (objective_id, objective_status) as a unit.
+If decision_record.prior_decision_refs crosses chunk boundary, both chunks MUST be restored before traversal.
+
+**Migration:** CompactionEvent.chunk_format: LEGACY_TIMESTAMP | OBJECTIVE_LIFECYCLE. Existing archives use LEGACY_TIMESTAMP; chunking-aware decompaction handles both.
+
+**Used in:** §62f compaction commands, §62g Justification Chain traversal
 
 ---
 
@@ -6438,6 +6579,8 @@ See §62b for the canonical schema definition.
 **SD condition.** Always True. `threshold(t)` and `Δ` are both numeric values in durable state.
 
 **Invariant.** `threshold(t)` is non-decreasing. A runtime MUST NOT lower the threshold as a result of an acceptance. An explicit operator reset with documented authority_basis is the only valid path to threshold reduction.
+
+**Audit trail requirement.** Each T2 application MUST produce an Evidence record with kind `threshold-adjustment` containing fields: `metric_id`, `before_threshold`, `delta`, `after_threshold`, `authorized_by`, `at`. This record MUST be appended to `state["evidence"]` before the new threshold takes effect. An absence of this record for any accepted Operation constitutes a `threshold-audit-missing` WARNING IntegrityGap.
 
 **Apply to:** metric baselines (normative_rules, behavioral_tests); evaluation quality score; iteration bar for Objective acceptance.
 
@@ -8369,6 +8512,8 @@ GoverningRecord {
 **Citizens using GoverningRecord:** PolicyRecord (§72), HardConstraint (§72), DestinationAnchor (§62b), Authority records (§6), CapabilityStatement (§59b).
 **Referenced from:** §6 Authority, §62b DestinationAnchor, §72 Policy Enforcement, §62c Authority Resolution Mechanism.
 
+**Schemas that implement GoverningRecord:** WakeRegistration, ExecutorProvider, RetentionPolicy. These schemas MUST declare `Implements: GoverningRecord` and MUST include all GoverningRecord fields (`id`, `authority_basis`, `scope`, `established_at`).
+
 ---
 
 ## EffectUncertaintyProtocol
@@ -8629,6 +8774,13 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `context-budget-advisory` | INFO | §62c Context Budget Mechanism | Review context budget configuration; advisory only |
 | `metric-definition-drift` | WARNING | §62b MetricDefinition / §62c Staleness Detection | A MetricDefinition was replaced or mutated without authority authorization |
 | `governance-anchor-drift` | BLOCKING | §62c Destination Anchor / §8 Destination Semantics | Destination anchor hash changed mid-cycle without anchoring ceremony |
+| `metric-baseline-unauthorized-mutation` | BLOCKING | §62b MetricDefinition mutation_requires | MetricDefinition with mutation_requires=IMMUTABLE was modified after seeded_at |
+| `metric-mutation-policy-missing` | WARNING | §62b MetricDefinition mutation_requires | MetricDefinition with mutation_requires=PERMISSION has no active PERMISSION rule in Rule Ledger |
+| `threshold-audit-missing` | WARNING | §62h T2 Bar-Raising Calculus | T2 bar-raising occurred without producing threshold-adjustment Evidence record |
+| `citizen-base-violation` | WARNING | §62b Base Citizen Clusters | Citizen schema missing REQUIRED CitizenBase fields (id, created_at, updated_at) |
+| `authority-cache-stale` | WARNING | §62c Authority Resolution Mechanism | Authority resolution cache older than 3600 seconds used without re-validation |
+| `executor-policy-missing` | WARNING | §62a Bootstrap Seeding | No POLICY rules seeded in Rule Ledger for executor configuration at bootstrap |
+| `unresolved-effects-reconciliation-failure` | WARNING | §62c reconciliation | _reconcile_unresolved_effects raised exception; effects may be partially reconciled |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -9716,6 +9868,8 @@ CONTINUOUS
 `NECESSARY_ONLY` SHOULD be exposed as `auto` and used by default. It creates no Authority: self-evolution still requires applicable delegated Authority, demonstrated necessity and absence of a sufficient lower-impact route, and MUST NOT make protected invariants mutable. `CONTINUOUS` MAY be exposed as `always` and `DISABLED` as `never`. The authoritative source MAY change modes through an attributable policy change within its Authority. The selected mode MUST be inspectable in durable lifecycle state and included in recovery.
 
 The policy is an additional eligibility boundary; it MUST NOT create Authority. An action proceeds only when both the selected mode and independently attributable Authority permit it. `DISABLED` MUST prevent autonomous runtime self-evolution and re-bootstrap Objectives without preventing ordinary Product evolution, diagnosis, or reporting of a URACE limitation. `NECESSARY_ONLY` MUST preserve Evidence supporting necessity, materiality, and the absence of a sufficient lower-impact route. `CONTINUOUS` MUST still require justification, prioritization, validation, safe activation, and proportionality.
+
+**Budget partition invariant.** Self-evolution Objectives MUST NOT consume more than 20% of the available `executor_calls` budget in any 24-hour window. If the 20% ceiling would be exceeded, the self-evolution Objective MUST be deferred to the next cycle. This ensures Product Objectives retain priority over runtime improvement.
 
 At recovery, if the self-evolution policy mode cannot be established from durable state due to missing, corrupted or unreadable policy records, the implementation MUST treat the mode as `NECESSARY_ONLY` and MUST surface this as a material blocking limitation pending explicit operator confirmation. It MUST NOT infer a prior `CONTINUOUS` or `DISABLED` mode from Executor suggestion, operational context, or the most recently observed behavior. The recovered mode MUST be attributable and inspectable; autonomous self-evolution or re-bootstrap Objectives MUST NOT proceed under an inferred mode.
 
@@ -10897,6 +11051,7 @@ Revisions prior to r22 are recorded in the git commit history. This log covers r
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r53 | 2026-10-16 | spec+runtime | Reliability Hardening Pass: §62b: MetricDefinition authority_level + mutation_requires + last_baseline_audit fields; Base Citizen Clusters (CitizenBase/AuthorizedCitizen/TemporalCitizen) + Extends declarations; GoverningRecord activation — WakeRegistration/ExecutorProvider/RetentionPolicy declared; ExecutorProvider added to State Document; ChunkingPolicy + Chunk schemas added (opt-in chunking); §62c: Metric Baseline Verification mechanism (cycle-start scan all MetricDefs); §62f: Objective-Lifecycle Chunking + Chunk records in governance table; §62h: T2 threshold audit trail requirement; §62a: Executor policy POLICY rule seeding requirement; §62l: 7 new IntegrityGap kinds (metric-baseline-unauthorized-mutation, metric-mutation-policy-missing, threshold-audit-missing, citizen-base-violation, authority-cache-stale, executor-policy-missing, unresolved-effects-reconciliation-failure); §74: self-evolution budget partition invariant ≤20%; Authority cache invalidation contract (3600s TTL); Runtime: mutable metric scan extended to ALL MetricDefinitions; unresolved effects reconciliation audit trail + exception guard; discovery observation key safety (.get chains); authority cache 3600s TTL invalidation; self-evolution 20% budget guard; wake trigger atomic state persist after evaluation; symmetric compliance recording on ACCEPTED |
 | r52 | 2026-10-16 | spec+runtime | NSS Compliance + Critical Bug Fixes: destination anchor drift now enters BLOCKED + emits `governance-anchor-drift` BLOCKING IntegrityGap; executor failures truncation now emits CompactionEvent before truncating; `decisions` key → `decision_records` (§45 compliance); removed `ACCEPTED` as lifecycle_state enum value; unified `pending_validation` → `pending_validations` (plural canonical); added durable state checkpoint between operation record write and ACTIVE transition; governance domain now emits ComplianceRecord on authority denial; §62b: section-level Schema metadata declaration added; compliance_records / compliance_state OPTIONAL → REQUIRED in State Document; MetricDefinition DIRECTIVE seeding contract + DIRECTIVE seeding fields; §62f: integrity_gaps / status_transitions / assessment_records / processed_input_ids added to governance table; §62l: metric-definition-drift (WARNING) + governance-anchor-drift (BLOCKING) added to IntegrityGapCatalog; §62c: metrics domain added to Staleness Detection Mechanism |
 | r51 | 2026-10-14 | spec | 2026-10-14-r51. Normative Specification Standard: §62n added (Base Rule, 5-kind hierarchy, Construct Lattice, Mandatory Construct Metadata, Templates per Kind, ConstructKindRegistry); ConstructElevationProtocol added to §62l; construct metadata lines on all 12 §62l protocols and 20 §62c mechanisms; duplicate §79 renumbered (Spec Structural Audit → §80, Final Invariant → §81, Revision Log → §82) |
 | r50 | 2026-10-14 | spec | 2026-10-14-r50. Full Structural Normalization: AP0–AP25 retrofitted to canonical Intent/Roles/Constraints/Implementation template; §62l 12 entries canonized with Citizens using/Referenced from footers; IntegrityGapCatalog completed (+19 gap kinds, INFO severity tier declared); tier table updated AP0–AP37, AP27/AP28/AP36 tier corrections; §62b Used in: on 13 citizens; 9 citizens converted to code-block format; Domain-Section Citizen Registry; 8 §62c mechanisms AP-cited; §53 mechanism stubs in §62c; Re-Ingestion Mechanism rename; §62k moved to correct position; §79 Spec Structural Audit renumbered |
