@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r64**
+**Specification version: 2026-10-16-r65**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -340,6 +340,8 @@ Wake mechanism
 ```
 
 Do not create first-class concepts merely for conceptual symmetry.
+
+**First-class vs. derived distinction.** A concept is **first-class** when its durable record is a required citizen schema produced by the lifecycle; first-class concepts require §62b schema definitions and are stored in the State Document. A concept is **derived** when it is computed from first-class records at read time and requires no stored citizen; derived concepts require §62d contract definitions or formula specifications. A concept is **contextual** when its value depends on current evaluation parameters and has no stable storable form. This distinction governs schema promotion decisions throughout the specification.
 
 ---
 
@@ -1254,6 +1256,8 @@ Evidence MUST NOT be discarded solely because it conflicts with a preferred conc
 
 Evidence interpretation remains contextual but non-arbitrary.
 
+**Operational test condition for Evidence Integrity.** Evidence MUST preserve provenance, method, and source identity such that independence can be verified by reconciliation against the originating source. Evidence whose provenance is undeclarable MUST NOT be used in lifecycle navigation decisions. When Evidence integrity is disputed, URACE MUST emit an IntegrityGap of severity BLOCKING and hold any dependent decision until the dispute is resolved. The SignalClassifier (§62c) classifies this condition as an `IntegritySignal` (§62b) of kind `PROVENANCE_UNDECLARABLE`.
+
 ---
 
 # 28. Evidence Quality, Relevance and Value
@@ -1300,6 +1304,8 @@ DERIVED EVIDENCE VALUE
 ```
 
 No universal score is required.
+
+**Minimum assessment contract.** When Evidence is material to a navigation decision, URACE MUST assess at minimum: (a) credibility — provenance and method are declared and traceable; (b) relevance — the observation applies to the specific decision being made; (c) decision usefulness — accepting or rejecting the Evidence materially changes navigation. The remaining dimensions SHOULD be assessed when feasible; their omission MUST be recorded as an explicit uncertainty qualifier on the dependent DecisionRecord.
 
 ---
 
@@ -1395,6 +1401,8 @@ EVIDENCE
 URACE
     navigates accordingly
 ```
+
+**Evidence–prediction conflict definition.** A conflict exists when: (a) external Evidence predicts outcome O with credibility C_ext; (b) the internal lifecycle assessment predicts ¬O with confidence C_int; and (c) C_int < C_ext and the two outcomes are mutually exclusive in the decision scope. When conflict is detected, URACE MUST record both as competing hypotheses in the lifecycle Evidence log and MUST NOT discard the lower-confidence prediction. The conflict MUST be surfaced as an irreducible uncertainty until one hypothesis is either falsified or superseded.
 
 ---
 
@@ -1743,6 +1751,8 @@ AUTONOMOUS ACTION
 
 High Priority cannot create Authority.
 
+**Priority scoring.** The canonical scoring formula for Objective priority is defined in §36 (Open-Ended Discovery). Priority assessment MUST apply that formula when scoring competing Objectives. The three core factors — expected value, risk reduction, and time sensitivity — MUST be weighted as defined in the §36 formula; manual overrides MUST be recorded as a DecisionRecord citing the deviation.
+
 ---
 
 # 40. Objective and Plan
@@ -1795,6 +1805,8 @@ Plan replacement
 ```
 
 Planner capability does not create Authority.
+
+**Plan acceptance criteria.** URACE MUST validate a proposed Plan before accepting it: (a) all declared steps are achievable within applicable Authority; (b) dependencies form an acyclic DAG; (c) the Objective's success measure is operationalizable against at least one tracked metric or observable criterion; (d) resource and time estimates are feasible under current capacity. A Plan that fails any criterion MUST be rejected with a named gap citing the failing criterion. Rejection MUST NOT close the Objective; the Objective remains active pending a revised Plan.
 
 ---
 
@@ -2369,7 +2381,7 @@ Over a rolling window of recent checkpoints, URACE SHOULD compute:
 - **acceleration** — whether current velocity is higher, lower, or stable relative to baseline;
 - **yield rate** — fraction of accepted operations that produced net positive metric movement.
 
-When the system is decelerating — when current velocity has dropped materially relative to its baseline — URACE SHOULD surface this as an alert and MAY autonomously inject a strategic reassessment Objective to recover value production rate. Self-correction authority for injecting such an Objective derives from existing delegated Authority; value deceleration is Evidence, not Authority to act outside delegated scope.
+When the system is decelerating — when current_velocity < (0.8 × baseline_velocity) or trend_slope is negative over three consecutive checkpoints — URACE SHOULD surface this as an alert and MAY autonomously inject a strategic reassessment Objective to recover value production rate. Self-correction authority for injecting such an Objective derives from existing delegated Authority; value deceleration is Evidence, not Authority to act outside delegated scope.
 
 ```text
 ACCEPTED OPERATION
@@ -3516,6 +3528,10 @@ Blocker {
   reason      REQUIRED  string; human-readable description of the blocking condition
   count       REQUIRED  int ≥ 1; number of times this blocker has been recorded
   resolved_at OPTIONAL  timestamp | null; set when blocker is cleared; null = still active
+  classification   OPTIONAL  enum: TRANSIENT | PERSISTENT | ESCALATION | OPERATOR_GATE; default PERSISTENT
+  evidence_id      OPTIONAL  string; id of the Evidence record that triggered this blocker
+  auto_clear_on    OPTIONAL  string; human-readable description of condition that auto-clears this blocker
+  escalation_due   OPTIONAL  string; ISO-8601; when this blocker must escalate to operator attention
 }
 ```
 
@@ -3523,6 +3539,8 @@ Uses TemporalFields: at (as created_at), last_at (as updated_at), resolved_at.
 Used in: State.blocking_gaps.
 
 **Deduplication contract.** A Blocker with the same `scope` MUST be updated (incrementing `count` and `last_at`) rather than appended as a new record. A resolved Blocker MUST be removed from the active blockers list; it MUST NOT accumulate indefinitely.
+
+**Classification contract.** A blocker with `classification: TRANSIENT` that has not recurred within 600 seconds SHOULD be resolved by the runtime without operator action; set `resolved_at` and emit Evidence of kind `blocker-transient-expired`. A blocker with `count ≥ 5` AND `(last_at − at) > 3600` seconds MUST auto-upgrade to `classification: ESCALATION`; emit IntegrityGap(`kind: "blocker-escalated"`, severity=WARNING) with `blocker_id`. A blocker with `classification: OPERATOR_GATE` MUST NOT be auto-resolved; it follows the OperatorGateProtocol (§62l).
 
 ## Value Trajectory
 
@@ -3832,6 +3850,120 @@ FeatureBundleRef {
 
 Uses TemporalFields: created_at, updated_at, saved_at.
 Used in: State.feature_bundle_refs.
+
+## AssessmentGap
+
+**Construct metadata.** kind: Schema · tier: FOUNDATIONAL · standalone: true
+
+Extends: CitizenBase
+
+An AssessmentGap records a specific insufficiency discovered during a lifecycle assessment cycle that prevents confident evaluation of an Authority, Intent, State, or Evidence dimension.
+
+```
+AssessmentGap {
+  id            REQUIRED  Identifier; prefix "agap-"
+  at            REQUIRED  string; ISO-8601; when gap was first recorded
+  last_at       REQUIRED  string; ISO-8601; most recent recurrence
+  cycle_id      REQUIRED  string; AssessmentRecord id this gap belongs to
+  dimension     REQUIRED  enum: AUTHORITY | INTENT | STATE | EVIDENCE | CONSTRAINT | CAPACITY
+  reason        REQUIRED  string; why this dimension is insufficient
+  minimum_met   REQUIRED  string; what would satisfy this gap
+  blocking      REQUIRED  bool; whether this gap prevents lifecycle advancement
+  resolved_at   OPTIONAL  string; ISO-8601 | null; when gap was resolved
+}
+```
+
+Uses TemporalFields: at (as created_at), last_at (as updated_at), resolved_at.
+Used in: State.assessment_gaps (OPTIONAL list).
+
+**Deduplication contract.** An AssessmentGap with the same `cycle_id` and `dimension` MUST be updated (incrementing `last_at`) rather than appended. A resolved gap MUST have `resolved_at` set; it MUST NOT persist in the active gap list after resolution.
+
+---
+
+## LifecycleBoundary
+
+**Construct metadata.** kind: Schema · tier: FOUNDATIONAL · standalone: true
+
+Extends: CitizenBase
+
+A LifecycleBoundary is a durable record of a safe lifecycle transition point at which inputs are consumed, operations are closed, and state is committed atomically.
+
+```
+LifecycleBoundary {
+  id                REQUIRED  Identifier; prefix "lcb-"
+  at                REQUIRED  string; ISO-8601; when boundary was declared open
+  closed_at         OPTIONAL  string; ISO-8601 | null; when boundary was committed; null = in progress
+  boundary_type     REQUIRED  enum: POST_ASSESSMENT | POST_VALIDATION | POST_REPAIR | CYCLE_COMPLETION | OPERATOR_REQUESTED
+  state_before      REQUIRED  string; lifecycle state when boundary was opened
+  state_after       OPTIONAL  string; lifecycle state after boundary committed; null while in progress
+  inputs_applied    REQUIRED  list of string; Input ids consumed at this boundary
+  operations_closed OPTIONAL  list of string; Operation ids closed at this boundary
+}
+```
+
+Uses TemporalFields: at (as created_at), closed_at (as archived_at).
+Used in: State.lifecycle_boundaries (OPTIONAL rolling log, max 50).
+
+**Integrity contract.** A LifecycleBoundary MUST NOT be committed with `state_after = null`. A boundary left open (closed_at = null) at process start MUST be treated as a partial-update recovery case per §74 and the Transaction Recovery Protocol (AP27, §62i). An incomplete boundary MUST emit IntegrityGap(`kind: "lifecycle-boundary-violation"`, severity=BLOCKING) until resolved.
+
+---
+
+## IntegritySignal
+
+**Construct metadata.** kind: Schema · tier: FOUNDATIONAL · standalone: true
+
+Extends: CitizenBase
+
+An IntegritySignal is a durable record of a condition observed by the runtime that violates or threatens the integrity of lifecycle state, Evidence, or operational correctness.
+
+```
+IntegritySignal {
+  id               REQUIRED  Identifier; prefix "isig-"
+  at               REQUIRED  string; ISO-8601; when signal was observed
+  signal_type      REQUIRED  enum: VALIDATION_FAILURE | CONSISTENCY_CHECK | ACTIVATION_HEALTH | STAGNATION | DEPENDENCY_CYCLE | PROVENANCE_UNDECLARABLE | OTHER
+  severity         REQUIRED  enum: BLOCKING | WARNING
+  source_check     REQUIRED  string; identifier of the check or mechanism that produced this signal
+  payload          OPTIONAL  dict; signal-type-specific payload (e.g., failed_criterion, affected_ids)
+  resolved_at      OPTIONAL  string; ISO-8601 | null; when signal was cleared
+}
+```
+
+Uses TemporalFields: at (as created_at), resolved_at.
+Used in: State.integrity_signals (OPTIONAL list).
+Referenced from: §27 Evidence Integrity, §60 Validation and Acceptance, §64 Lifecycle States (REPAIRING entry conditions).
+
+**Signal-to-REPAIRING contract.** An IntegritySignal of severity BLOCKING MUST trigger evaluation for entry to REPAIRING state (§64) at the next assessment cycle boundary. An IntegritySignal of severity WARNING MUST be surfaced in the InspectionSurface (§62l) but MUST NOT alone trigger REPAIRING. A runtime MUST NOT enter REPAIRING without a durable IntegritySignal record — "autonomous inference of integrity failure without an attributable check result MUST NOT constitute valid entry" per §64.
+
+---
+
+## JustificationContext
+
+**Construct metadata.** kind: Schema · tier: FOUNDATIONAL · standalone: true
+
+Extends: CitizenBase
+
+A JustificationContext is a durable evaluation record capturing the five-predicate check that determines whether a proposed lifecycle action is justified and authorized at the time of evaluation.
+
+```
+JustificationContext {
+  id              REQUIRED  Identifier; prefix "jctx-"
+  at              REQUIRED  string; ISO-8601; when evaluation was performed
+  action_scope    REQUIRED  string; scope path of the proposed action
+  has_authority   REQUIRED  bool; AuthorityClosureInvariant check passed
+  aligns_intent   REQUIRED  bool; proposed action aligns with active governing Intent
+  has_evidence    REQUIRED  bool; at least one piece of supporting Evidence exists
+  not_blocked     REQUIRED  bool; no active BLOCKING IntegrityGap in action_scope
+  has_capability  REQUIRED  bool; required Executor capability is AUTHENTICATED/AUTHORIZED
+  is_justified    REQUIRED  bool; computed: has_authority AND aligns_intent AND has_evidence AND not_blocked AND has_capability
+  decision_id     OPTIONAL  string; DecisionRecord id that consumed this context
+}
+```
+
+Uses TemporalFields: at (as created_at).
+Used in: DecisionRecord.justification_context_id (OPTIONAL reference field).
+Referenced from: §11 Autonomous Decision Space, §38 Objective Discovery, §47 Executor Boundary.
+
+**Formal predicate.** An action is a justified authorized action if and only if: `has_authority = true` (AuthorityClosureInvariant, §62l) AND `aligns_intent = true` AND `has_evidence = true` AND `not_blocked = true` AND `has_capability = true`. All five conditions are jointly necessary. An action that satisfies only four of five MUST NOT proceed. **Audit contract.** When a consequential lifecycle action is accepted, the JustificationContext MUST be preserved in durable state and linked via `decision_id`. It MUST NOT be compacted away while the DecisionRecord is active.
 
 ## Vital Definition
 
@@ -5600,6 +5732,30 @@ Defined in §53. The four-phase acceptance boundary (PREPARED→APPLYING→APPLI
 **Construct metadata.** `kind: Mechanism` · `tier: COMPOSITIONAL` · `standalone: false` · `governed-by: [AP22]`
 
 Defined in §53. The stable-fallback promotion and restoration contract implements **AP22 — Checkpoint** (§62i). See §53 for the complete normative definition.
+
+---
+
+## SignalClassifier
+
+**Construct metadata.** `kind: Mechanism` · `tier: FOUNDATIONAL` · `standalone: false` · `governed-by: [AP26]`
+
+The SignalClassifier maps observed lifecycle conditions to IntegritySignal records (§62b). It is the single canonical point at which raw lifecycle events become typed, severity-tagged IntegritySignals.
+
+**Classification table:**
+
+| Observed condition | signal_type | severity |
+|---|---|---|
+| Acceptance validation failure | VALIDATION_FAILURE | BLOCKING |
+| Self-consistency check failure | CONSISTENCY_CHECK | BLOCKING |
+| Failed activation health check | ACTIVATION_HEALTH | BLOCKING |
+| Progress stagnation (cycle count reached stagnation_threshold) | STAGNATION | WARNING |
+| Construct dependency cycle detected | DEPENDENCY_CYCLE | BLOCKING |
+| Evidence provenance undeclarable | PROVENANCE_UNDECLARABLE | WARNING |
+| All other conditions | OTHER | WARNING |
+
+**Classification contract.** When an observed condition matches a row in the table, the runtime MUST create an IntegritySignal record with the mapped `signal_type` and `severity`. A condition that does not match any row MUST emit `signal_type: OTHER` and `severity: WARNING` and emit IntegrityGap(`kind: "integrity-signal-unclassified"`, severity=WARNING) with `condition_description`. The runtime MUST NOT enter REPAIRING state on an unclassified signal without operator clearance.
+
+**Referenced from:** §64 REPAIRING entry conditions, §27 Evidence Integrity.
 
 ---
 
@@ -7744,8 +7900,19 @@ InboxInput {
   kind    REQUIRED  string; one of the 16 kinds below
   payload REQUIRED  dict;   kind-specific payload (see catalog below)
   status  OPTIONAL  string; "QUEUED" by convention
+  priority_tier    OPTIONAL  int; 0 | 1 | 2; default 1; governs processing order within a boundary
 }
 ```
+
+**Priority-tier contract.** The Durable Inbox uses a three-tier priority system within each safe lifecycle boundary. Tiers determine processing order; within a tier, FIFO by `at` (ISO-8601 ascending) is strictly maintained.
+
+| Tier | Name | Applies to | Preemption |
+|---|---|---|---|
+| 0 | CRITICAL | Inputs whose kind is `control` with action `pause` or `stop`; any input with explicit `priority_tier: 0` | MUST be processed before Tier 1 and Tier 2 inputs at the same boundary |
+| 1 | STANDARD | All other inputs (default) | Processed after Tier 0; FIFO within Tier 1 |
+| 2 | OPPORTUNISTIC | Discovery, non-urgent context; inputs with explicit `priority_tier: 2` | Processed after Tier 1 is exhausted |
+
+**Backward compatibility.** Inputs without a `priority_tier` field default to Tier 1. Implementations that do not implement tiering MUST treat all inputs as Tier 1 (pure FIFO by `at`); this is a valid but less capable conformance mode. **Tier assignment contract.** A Tier 0 MUST NOT be self-assigned by content unless the implementation validates the assignment against the hardcoded Tier 0 rule (pause/stop controls). An operator MUST NOT elevate arbitrary inputs to Tier 0 via the `priority_tier` field; the runtime MUST reject Tier 0 self-assignment for any input kind not in the hardcoded list and surface IntegrityGap(`kind: "inbox-priority-tier-violation"`, severity=WARNING).
 
 **Catalog:**
 
@@ -8938,7 +9105,39 @@ Applies to: `add-context` (default: `repository owner`), `add-metric` (REQUIRED 
 
 Report eligible records or planned mutations without committing any state change.
 
-Applies to: `compact`
+Applies to: `compact`, `update` (shows what changes would be applied without committing), `derive` (resolves and validates manifest without writing), `auto` (runs one cycle assessment without executing or persisting state), `goal` (validates against Authority without creating Objective), `metric` (validates source path without registering), `constraint` (validates syntax and shows affected Objectives without adding)
+
+## --since
+
+Filter output to records created or updated at or after this ISO-8601 timestamp.
+
+Applies to: `vitals`, `rules`, `change`, `evidence list`, `decision list`, `blocker list`
+
+## --until
+
+Filter output to records created or updated at or before this ISO-8601 timestamp.
+
+Applies to: `vitals`, `rules`, `change`, `evidence list`, `decision list`
+
+## --limit
+
+Integer. Limit output to the N most-recent records. Default varies by command (see Defaults Table below).
+
+Applies to: `vitals`, `rules`, `change`, `why`, `evidence list`, `decision list`, `blocker list`, `goal list`
+
+## --offset
+
+Integer. Skip the first N records before applying --limit. Enables pagination. Default: 0.
+
+Applies to: same as `--limit`
+
+## --fail-on
+
+Emit a non-zero exit code if any IntegrityGap of this severity or higher is present in the output. Valid values: `BLOCKING` | `WARNING` | `INFO`.
+
+Applies to: `check`, `vitals`
+
+Example: `urace check --fail-on BLOCKING` exits 1 if any BLOCKING gap is active; exits 0 otherwise. Enables CI/CD pipeline integration without parsing JSON output.
 
 ## --verbose
 
@@ -9004,13 +9203,96 @@ Two commands accept an output file path using inconsistent flag names:
 
 These MUST be treated as command-local until unified. A future revision SHOULD standardize on `--out`.
 
+## Inspect and List Subcommands
+
+The following list and inspect subcommands expose durable state for direct operator inspection. All are SD=True (no Executor invocation required) and support `--json` for machine-readable output.
+
+**`urace goal list [--status <s>] [--priority <min>..<max>] [--limit N] [--json]`**
+List active Objectives. `--status` accepts: `active`, `pending`, `blocked`, `resolved`, `cancelled`. Default: `active`. Returns: id, title, status, priority, source_input, created_at.
+
+**`urace evidence list [--kind <kind>] [--since <ISO>] [--until <ISO>] [--limit N] [--json]`**
+Query the append-only Evidence log. `--kind` filters by Evidence kind string. Default --limit: 20. Returns: id, kind, at, source_input, summary.
+
+**`urace blocker list [--resolved] [--scope <scope>] [--json]`**
+List active Blockers. `--resolved` includes already-resolved blockers. Returns: id, scope, reason, count, classification, last_at, escalation_due. Default: active blockers only.
+
+**`urace blocker resolve <blocker-id> [--note <text>] [--json]`**
+Operator-clear a specific Blocker. Emits Evidence of kind `blocker-operator-resolved` with `cleared_by: operator`, `cleared_at`, and optional note. Only valid for blockers without `classification: OPERATOR_GATE` (those require OperatorGateProtocol clearance via `urace govern`).
+
+**`urace decision list [--stale] [--scope <scope>] [--limit N] [--json]`**
+List DecisionRecords. `--stale` filters to decisions flagged as `provenance_revised = true`. Default --limit: 20. Returns: id, outcome, at, scope, stale, revalidation_scope.
+
+**`urace decision inspect <decision-id> [--json]`**
+Show full DecisionRecord including evidence_ids, authority_basis, JustificationContext, and linked revalidation history.
+
+**`urace integrity-signal list [--type <type>] [--severity BLOCKING|WARNING] [--resolved] [--json]`**
+List IntegritySignal records. Supports filtering by signal_type and severity. Default: unresolved signals only.
+
+## Defaults Table
+
+| Command | Option | Default |
+|---|---|---|
+| `derive` | `--kind` | `AP` (all architectural patterns) |
+| `metric add` | `--direction` | `nondecreasing` |
+| `goal add` | `--priority` | 70 |
+| `executor` | `--id` | `codex-primary` |
+| `compact` | `--dry-run` | false |
+| `auto` | `--verbose` | false |
+| `auto` | `--quiet` | false |
+| `/quality` | `--scope` | all |
+| `/compliance` | `--domain` | all |
+| `goal list` | `--status` | `active` |
+| `goal list` | `--limit` | 20 |
+| `evidence list` | `--limit` | 20 |
+| `decision list` | `--limit` | 20 |
+| `blocker list` | `--resolved` | false |
+| `check` | `--fail-on` | none (never exits nonzero due to gaps) |
+
+## Output Path Standardization
+
+`derive` uses `--out <path>` and `report` uses `--output <path>`. Both are valid until unified. A future revision SHOULD standardize on `--out <path>` for all file-writing commands.
+
+## urace inbox
+
+Manage the Durable Inbox queue. SD=True for `list`; `apply` and `reject` require Executor.
+
+```
+urace inbox list [--kind <kind>] [--status QUEUED|REJECTED|PROCESSED] [--limit N] [--json]
+urace inbox status <input-id> [--json]
+urace inbox apply <proposal-id> [--json]
+urace inbox reject <proposal-id> [--reason <text>] [--json]
+```
+
+`inbox list` shows pending and recently processed inputs. `inbox status` returns CONSUMED, REJECTED, PENDING, or NOT_FOUND with artifact chain. `inbox apply` / `inbox reject` are used for HUMAN-mode PatchProposal approval (PPP, §62c). `apply` and `reject` MUST process through the Durable Inbox (AP14) at the next safe boundary; they MUST NOT bypass the inbox.
+
+## urace govern
+
+Operator clearance for OperatorGateProtocol conditions. Authenticated operator input only.
+
+```
+urace govern clear <gap-id> [--note <text>] [--json]
+urace govern list-gates [--json]
+```
+
+`govern clear` clears a named BLOCKING gap that requires operator action (kind matches `operator-gate-open` or `*-unverified*`). Emits durable Evidence record per OGP clause 4. `govern list-gates` lists all open operator gates with their clearance requirements.
+
+## urace autonomous
+
+Run URACE in persistent autonomous mode. Alias for `urace auto` with persistent execution semantics.
+
+```
+urace autonomous [--dry-run] [--verbose] [--quiet] [--json]
+```
+
+`urace autonomous` is functionally identical to `urace auto`. The name is accepted for disambiguation when both `auto` (one-shot assessment) and `autonomous` (continuous) invocations coexist in scripts. `--dry-run` runs one assessment cycle, prints the next planned action, and exits without executing or persisting state.
+
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines thirteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines fifteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All thirteen constructs defined in this section MUST be enforced at runtime by any conforming implementation: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare TemporalFields conformance MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations.
+**Enforcement contract (§62l).** All fifteen constructs defined in this section MUST be enforced at runtime by any conforming implementation: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare TemporalFields conformance MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations. Supplemental enforcement for JustificationContract and BoundaryContract is stated after their definitions below.
 
 ---
 
@@ -9192,6 +9474,53 @@ After every independent validation gate evaluation (AP28), the lifecycle MUST pe
 **Self-determination.** The `urace /compliance` command is SD=True — it reads only durable state (compliance_records, compliance_state) and requires no Executor invocation.
 
 **Citizens using ComplianceRecordingContract:** ComplianceRecord, ComplianceState (§62b). Referenced from: §60 Compliance Recording Contract, §62c validation gate wiring.
+
+---
+
+## JustificationContract
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: false` · `depends: [ACI, AP35]`
+
+The JustificationContract defines the formal predicate that determines whether a proposed lifecycle action is a "justified authorized action." This protocol is defined once here; all sections that use the phrase "justified authorized action" cite this protocol.
+
+**Formal predicate.** An action A is a justified authorized action if and only if ALL FIVE conditions hold:
+1. `has_authority(A)` — A falls within the scope of a valid, un-revoked PERMISSION rule in the Rule Ledger (AP35, §62i); AuthorityClosureInvariant (§62l) MUST pass.
+2. `aligns_intent(A)` — A advances or protects at least one active governing Intent record.
+3. `has_evidence(A)` — At least one piece of Evidence in durable state supports taking A; zero Evidence does not automatically prevent A but MUST be recorded as `has_evidence: false` in the JustificationContext.
+4. `not_blocked(A)` — No BLOCKING IntegrityGap with `scope` containing A's scope is currently active.
+5. `has_capability(A)` — The required Executor capability is in AUTHENTICATED or AUTHORIZED state.
+
+**JustificationContext contract.** Before committing to any consequential lifecycle action, URACE MUST evaluate all five predicates and record the result as a JustificationContext citizen (§62b). A JustificationContext with `is_justified: false` MUST prevent the action. A JustificationContext with `is_justified: false` due only to `has_evidence: false` MAY be overridden by an explicit operator DecisionRecord authorizing the action without Evidence; the override MUST be logged.
+
+**Citizens using JustificationContract:** JustificationContext (§62b).
+**Referenced from:** §11 Autonomous Decision Space, §38 Objective Discovery, §47 Executor Boundary, §66 Autonomous Liveness.
+
+---
+
+## BoundaryContract
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: false` · `depends: [AP14, AP27]`
+
+The BoundaryContract defines the closure rules for safe lifecycle boundaries — the points at which inputs are consumed, operations are closed, and state is committed atomically.
+
+**Boundary types and closure rules:**
+
+| Boundary type | Required conditions to close | Post-close state |
+|---|---|---|
+| POST_ASSESSMENT | JustificationContext evaluated for all candidate actions | ACTIVE or DORMANT |
+| POST_VALIDATION | PendingValidation resolved with PASS or FAIL verdict | ASSESSING (pass) or REPAIRING (fail) |
+| POST_REPAIR | Repair sequence completed or ceiling reached | ASSESSING |
+| CYCLE_COMPLETION | All Tier 0 + Tier 1 inbox inputs consumed; no unresolved effects in boundary scope | varies |
+| OPERATOR_REQUESTED | Explicit authenticated operator command processed | PAUSED |
+
+**Incompleteness contract.** A boundary that has been opened (LifecycleBoundary.at set) but not closed (closed_at = null) at process restart MUST be treated as partial-update per AP27. URACE MUST emit IntegrityGap(`kind: "lifecycle-boundary-violation"`, severity=BLOCKING) and apply the Transaction Recovery Protocol before creating new boundaries.
+
+**Atomicity contract.** All State mutations belonging to a single boundary MUST be committed as one atomic write. A boundary MUST NOT be marked closed until all its mutations are durable. If the commit fails partway, the runtime MUST retry the commit or enter REPAIRING with the incomplete boundary as the triggering IntegritySignal.
+
+**Citizens using BoundaryContract:** LifecycleBoundary (§62b).
+**Referenced from:** §38 queued inputs, §49 Pre-Commit Revalidation, §62 State and Persistence.
+
+**Supplemental enforcement contract (JustificationContract + BoundaryContract).** (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery.
 
 ---
 
@@ -9416,6 +9745,12 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `patch-proposal-confidence-below-floor` | INFO | §62c PPP | Signal passed relevance_floor but confidence_score < confidence_threshold; proposal marked CONFIDENCE_INSUFFICIENT |
 | `patch-proposal-queue-overflow` | WARNING | §62c PPP | Active PatchProposal count reached max_queue_depth; new proposals blocked until queue drains |
 | `community-signal-relevance-below-floor` | INFO | §62c CSI | Signal relevance_score < relevance_floor; signal discarded without producing a PatchProposal |
+| `blocker-escalated` | WARNING | §62b Blocker schema classification contract | Acknowledge escalation; consider operator intervention if pattern persists |
+| `integrity-signal-unclassified` | WARNING | §62c SignalClassifier | Review unclassified condition and register it in the SignalClassifier classification table |
+| `lifecycle-boundary-violation` | BLOCKING | §62b LifecycleBoundary / §62l BoundaryContract | Apply Transaction Recovery Protocol (AP27); resolve incomplete boundary before creating new ones |
+| `justification-context-incomplete` | WARNING | §62b JustificationContext / §62l JustificationContract | Supply missing JustificationContext predicates before committing consequential action |
+| `inbox-priority-tier-violation` | WARNING | §62i AP14 priority-tier contract | Operator assigned Tier 0 to a non-hardcoded input kind; correct input or tier assignment |
+| `checkpoint-write-timeout` | WARNING | §61 Checkpoint / §62b CheckpointRecord | Checkpoint write did not complete within 30 seconds; investigate persistence layer and re-attempt |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -9491,7 +9826,7 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
 
-## Mechanism Catalog (7 entries)
+## Mechanism Catalog (8 entries)
 
 | ID | Name | Spec | Provides |
 |---|---|---|---|
@@ -9502,8 +9837,9 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | DCG | Discovery Credit Gate | §62e | discovery budget enforcement, credit gate |
 | PSD | Progress Stagnation Detector | §62c | stagnation detection, REPAIRING lifecycle trigger |
 | MBV | Metric Baseline Verification | §62c | cycle-start metric immutability audit, mutation_requires enforcement |
+| SCF | SignalClassifier | §62c | runtime signal classification, IntegritySignal emission, REPAIRING entry gate |
 
-## Schema Catalog (29 entries)
+## Schema Catalog (33 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -9538,8 +9874,12 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | PatchProposal | PatchProposal | pprop- | §62b |
 | FeatureBundle | FeatureBundle | fbundle- | §62b |
 | FeatureBundleRef | FeatureBundleRef | fbref- | §62b |
+| AssessmentGap | AssessmentGap | agap- | §62b |
+| LifecycleBoundary | LifecycleBoundary | lcb- | §62b |
+| IntegritySignal | IntegritySignal | isig- | §62b |
+| JustificationContext | JustificationContext | jctx- | §62b |
 
-## Protocol Catalog (9 entries)
+## Protocol Catalog (11 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -9552,6 +9892,8 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | SCP | SpecConstructionProtocol | 3-gate pre-extension enforcement: definition-first, completeness declaration, single-pass atomicity | §62n |
 | DAI | ConstructDependencyAcyclicityInvariant | acyclicity check → self-reference check → FeatureBundle DAG validation → surface BLOCKING gap | §62n |
 | PPP | PatchProposalProtocol | T&C gate → signal ingest → relevance+confidence scoring → patch synthesis → approval routing (AUTO/SMART/HUMAN) → expiry; `urace /inbox list|apply|reject` | §62c PPP_M |
+| JC | JustificationContract | evaluate 5-predicate justification test → record JustificationContext → prevent unjustified actions | §62l |
+| BC | BoundaryContract | open boundary → verify conditions → commit atomically → handle incomplete on restart | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -9576,7 +9918,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (88 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (94 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -9946,6 +10288,38 @@ The `WAITING_FOR_CAPACITY` lifecycle state is entered when an Executor required 
 The `WAITING_FOR_CONDITION` lifecycle state is entered when a required precondition for a reserved Operation is not yet satisfied and the unsatisfied precondition is neither Executor capacity exhaustion nor an authoritative retained decision. Representative entry causes include: a dependency artifact not yet produced by a sibling workstream, an external system state not yet observable as met, and a prerequisite check not yet passing. Entry MUST be attributable to an identifiable precondition; a vague or uncharacterized dependency MUST NOT be grounds for entering this state. The awaited condition MUST be recorded as a durable dependency record at the point of entry; this record MUST identify: the awaited condition and the observable criterion that constitutes its satisfaction, the identity of the dependent Operation whose progress is gated on that condition, and the earliest qualifying resolution path sufficient to exit the state. The inspection surface MUST expose all three of these elements without requiring an Executor call. `WAITING_FOR_CONDITION` MUST NOT persist without an observable resolution path: if the awaited condition is determined to be unresolvable, the lifecycle MUST surface it as a named blocking limitation rather than allowing it to remain silently in this state. `WAITING_FOR_CONDITION` is distinct from `WAITING_FOR_CAPACITY`, which is entered when an Executor is correctly authenticated and capable but cannot accept new work due to a provider-imposed capacity ceiling or usage-window limit; from `WAITING_FOR_SCHEDULE`, which is entered when a time-based trigger has not yet become due; and from `WAITING_FOR_AUTHORITATIVE_DECISION`, which is entered only where a decision was actually retained by the authoritative source and whose resolution depends on that retention being resolved.
 
 The `WAITING_FOR_SCHEDULE` lifecycle state is entered when the next eligible lifecycle boundary for a reserved workstream is determined by a time-based trigger whose due time has not yet arrived. Entry MUST be attributable to an identifiable scheduled condition; a `WAITING_FOR_SCHEDULE` state MUST record the identity of the awaited trigger and its due time at entry. The inspection surface MUST expose without an Executor call: the identity of the awaited scheduled trigger, its due time, and the lifecycle scope or Operation whose eligibility depends on that trigger becoming due. `WAITING_FOR_SCHEDULE` exits automatically when the scheduled trigger becomes due; no operator action or manual restart is required to exit the state. While in `WAITING_FOR_SCHEDULE`, durable task reservations and lifecycle state MUST be preserved intact. `WAITING_FOR_SCHEDULE` is distinct from `WAITING_FOR_CONDITION`, which is entered when a required precondition independent of time is not yet satisfied; from `WAITING_FOR_CAPACITY`, which is entered when an Executor is correctly authenticated and capable but cannot accept new work due to a provider-imposed capacity ceiling; and from `WAITING_FOR_AUTHORITATIVE_DECISION`, which is entered only where a decision was actually retained by the authoritative source. URACE MUST NOT discard a separately registered scheduled trigger merely because the lifecycle is already in `WAITING_FOR_SCHEDULE` awaiting a different trigger; independently registered scheduled triggers MUST each be evaluated at their respective due times.
+
+**Lifecycle State Transition Table.** The following table is the canonical authoritative transition graph for AP26 (§62i). A transition not listed here is PROHIBITED; an implementation that enters an unlisted transition MUST surface IntegrityGap(`kind: "lifecycle-boundary-violation"`, severity=BLOCKING).
+
+| From state | Trigger | To state |
+|---|---|---|
+| DORMANT | Qualifying wake signal / scheduled trigger | ASSESSING |
+| ASSESSING | Justified authorized action identified | ACTIVE |
+| ASSESSING | No justified authorized action exists | DORMANT |
+| ASSESSING | Unreconciled externally committed effect discovered | BLOCKED |
+| ACTIVE | Increment produced; acceptance criterion applicable | VALIDATING |
+| ACTIVE | Operation commits externally; outcome uncertain | BLOCKED |
+| ACTIVE | Operator `/pause` command processed | PAUSED |
+| ACTIVE | Required Executor capacity exhausted | WAITING_FOR_CAPACITY |
+| ACTIVE | Required precondition not yet satisfied | WAITING_FOR_CONDITION |
+| ACTIVE | Time-based trigger not yet due | WAITING_FOR_SCHEDULE |
+| ACTIVE | Retained decision blocks progress | WAITING_FOR_AUTHORITATIVE_DECISION |
+| VALIDATING | Increment passes acceptance validation | ASSESSING |
+| VALIDATING | Increment fails acceptance validation | REPAIRING |
+| VALIDATING | Validation capability temporarily unavailable | VALIDATING (hold) |
+| REPAIRING | Repair successful | ASSESSING |
+| REPAIRING | Repair ceiling reached (all tiers exhausted) | BLOCKED (supervised) or graceful-stop (auto) |
+| BLOCKED | Qualifying reconciliation condition established | RECONCILING |
+| BLOCKED | Operator clearance received | ASSESSING |
+| RECONCILING | Definitive disposition established | ASSESSING |
+| RECONCILING | Attempt ceiling reached without disposition | BLOCKED (new qualifying condition) |
+| WAITING_FOR_CAPACITY | Capacity restored and Executor re-verified | ASSESSING |
+| WAITING_FOR_CONDITION | Precondition satisfied | ASSESSING |
+| WAITING_FOR_SCHEDULE | Scheduled trigger fires | ASSESSING |
+| WAITING_FOR_AUTHORITATIVE_DECISION | Decision resolved | ASSESSING |
+| PAUSED | `urace resume` or `urace autonomous` command | ASSESSING |
+
+**All waiting states** (WAITING_FOR_CAPACITY, WAITING_FOR_CONDITION, WAITING_FOR_SCHEDULE, WAITING_FOR_AUTHORITATIVE_DECISION) MAY also transition to PAUSED on explicit operator `/pause` command. **PAUSED** retains all task reservations; resumption always re-enters ASSESSING for an independent evaluation cycle.
 
 ---
 
@@ -11482,6 +11856,64 @@ Given a capable execution system receives `URACE.md`, attributable Product conte
 
 Expect: it can bootstrap and validate a complete implementation, whose top-level and contextual help enumerate supported Operations, prerequisites, immediate versus durable-input behavior, safe examples and unsupported capabilities without invoking an intelligent Executor.
 
+## Justification
+
+**AX — Authority Closure Under Evidence**
+Given strong Evidence supports an action outside delegated Authority.
+Expect: JustificationContext records `has_authority: false, is_justified: false`; action blocked; AuthorityClosureInvariant cited.
+
+**AY — Authority Closure Under Priority**
+Given an Objective has maximal Priority but scope is outside delegated Authority.
+Expect: Priority does not change `has_authority` evaluation; action blocked.
+
+**AZ — Justification With All Predicates True**
+Given all five JustificationContract predicates are satisfied.
+Expect: `is_justified: true`; action proceeds; JustificationContext persisted.
+
+## Blocker Lifecycle
+
+**BA — Blocker TRANSIENT Auto-Resolution**
+Given a TRANSIENT blocker has not recurred within 600 seconds.
+Expect: `resolved_at` set; Evidence of kind `blocker-transient-expired` emitted; lifecycle advances.
+
+**BB — Blocker Auto-Escalation**
+Given a blocker with count ≥ 5 and (last_at − at) > 3600 seconds.
+Expect: `classification` upgraded to `ESCALATION`; `blocker-escalated` WARNING gap emitted.
+
+**BC — OPERATOR_GATE Blocker Requires OGP**
+Given a blocker with `classification: OPERATOR_GATE`.
+Expect: runtime MUST NOT auto-resolve; OperatorGateProtocol governs clearance; `govern clear` required.
+
+## Priority Inbox
+
+**BD — CRITICAL Tier Preempts STANDARD**
+Given a Tier 0 (CRITICAL) input queued after two Tier 1 inputs at the same boundary.
+Expect: Tier 0 input processed first; Tier 1 inputs remain for subsequent processing in FIFO order.
+
+**BE — Pure FIFO Within Tier**
+Given three Tier 1 inputs queued in order t1 < t2 < t3.
+Expect: consumed in t1, t2, t3 order regardless of payload content.
+
+## Integrity Signals
+
+**BF — REPAIRING Requires IntegritySignal**
+Given an implementation attempts to enter REPAIRING without a durable IntegritySignal.
+Expect: lifecycle MUST NOT enter REPAIRING; surfaces `lifecycle-boundary-violation` BLOCKING gap.
+
+**BG — SignalClassifier Maps Stagnation**
+Given ExecutorState.progress_stagnant_cycles reaches stagnation_threshold.
+Expect: IntegritySignal created with `signal_type: STAGNATION, severity: WARNING`; REPAIRING entry evaluated at next boundary.
+
+## Lifecycle Boundaries
+
+**BH — Incomplete Boundary Recovery**
+Given a LifecycleBoundary with `closed_at = null` is found at process restart.
+Expect: `lifecycle-boundary-violation` BLOCKING gap emitted; AP27 Transaction Recovery Protocol applied before creating new boundaries.
+
+**BI — Boundary Atomicity**
+Given a boundary commit fails partway through.
+Expect: state is rolled back to pre-boundary condition; no partial mutations persist; runtime enters REPAIRING.
+
 ---
 
 # 79. Bootstrap Execution Requirements
@@ -11703,6 +12135,13 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `communityinbox` | Community Signal Ingestion, CommunityFeed, CommunitySignal, feed adapter, T&C gate, relevance scoring, confidence scoring, community inbox |
 | `patchproposal` | PatchProposal, patch proposal, approval mode, AUTO approval, SMART approval, HUMAN approval, proposal queue, proposal expiry |
 | `featurebundle` | FeatureBundle, feature bundle, --bundle, bundle resolution, @bundle-name, built-in bundle, operator bundle |
+| `assessmentgap` | AssessmentGap schema (§62b) |
+| `lifecycleboundary` | LifecycleBoundary schema (§62b) |
+| `integritysignal` | IntegritySignal schema (§62b) |
+| `justificationcontext` | JustificationContext schema (§62b) |
+| `signalclassifier` | SignalClassifier mechanism (§62c) |
+| `justificationcontract` | JustificationContract protocol (§62l) |
+| `boundarycontract` | BoundaryContract protocol (§62l) |
 
 ## Audit Content
 
@@ -11768,6 +12207,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r65 | 2026-10-16 | spec+runtime | Comprehensive gap closure: sections 1–60 operational strengthening, §62k ease-of-use expansion, new citizen schemas, new protocols and mechanism, lifecycle FSM table, new mandatory behavioral tests. Spec: §3 first-class/derived formal definition; §27 Evidence Integrity operational test condition; §28 minimum Evidence assessment contract; §30 Evidence–prediction conflict definition; §39 priority formula citation; §41 Plan acceptance criteria; §56 deceleration threshold formula (0.8× baseline). Blocker schema extended with `classification`, `evidence_id`, `auto_clear_on`, `escalation_due` fields and auto-escalation/auto-resolution contracts. New §62b citizen schemas: AssessmentGap (agap-), LifecycleBoundary (lcb-), IntegritySignal (isig-), JustificationContext (jctx-). New §62c mechanism: SignalClassifier (SCF). AP14 extended with priority_tier (Tier 0 CRITICAL / Tier 1 STANDARD / Tier 2 OPPORTUNISTIC) and backward-compatible tier-ordering contract. §62k major expansion: --dry-run extended to update/derive/auto/goal/metric/constraint; --since/--until/--limit/--offset/--fail-on added; inspect/list subcommands documented (goal list, evidence list, blocker list/resolve, decision list/inspect, integrity-signal list); Defaults Table added; inbox/govern/autonomous commands documented. New §62l protocols: JustificationContract (JC, FOUNDATIONAL) and BoundaryContract (BC, FOUNDATIONAL); §62l count updated to fifteen. 6 new IGC gap kinds (blocker-escalated, integrity-signal-unclassified, lifecycle-boundary-violation, justification-context-incomplete, inbox-priority-tier-violation, checkpoint-write-timeout); IGC total 88→94. §62m catalogs: Mechanism +1 (SCF→8), Schema +4 (→33), Protocol +2 (→11); IGC count in Contract Catalog updated to 94 kinds. §64 canonical FSM transition table added (26 transitions). §78 15 new mandatory behavioral test categories (AX–BI). §81 7 new stems. Runtime: Blocker fields extended in State Document; record_blocker() accepts classification/evidence_id/auto_clear_on; auto-escalation at count≥5 and age>3600s; TRANSIENT auto-resolution at 600s; AP14 priority_tier processing order in consume_inputs(); new behavioral tests for authority closure, blocker lifecycle, priority inbox, integrity signals, boundary recovery. **New external references:** `first-class` definition → §3 Core Lifecycle Semantics (this revision); `IntegritySignal` schema → §62b (this revision); `LifecycleBoundary` schema → §62b (this revision); `AssessmentGap` schema → §62b (this revision); `JustificationContext` schema → §62b (this revision); `SignalClassifier` mechanism → §62c (this revision); `priority_tier` field → §62i AP14 IPC Input Schema Catalog (this revision); `JustificationContract` protocol → §62l (this revision); `BoundaryContract` protocol → §62l (this revision); `blocker-escalated` IGC kind → §62l (this revision); `integrity-signal-unclassified` IGC kind → §62l (this revision); `lifecycle-boundary-violation` IGC kind → §62l (this revision); `justification-context-incomplete` IGC kind → §62l (this revision); `inbox-priority-tier-violation` IGC kind → §62l (this revision); `checkpoint-write-timeout` IGC kind → §62l (this revision); `--since` option → §62k (this revision); `--until` option → §62k (this revision); `--limit` option → §62k (this revision); `--offset` option → §62k (this revision); `--fail-on` option → §62k (this revision); `goal list` subcommand → §62k (this revision); `evidence list` subcommand → §62k (this revision); `blocker list` subcommand → §62k (this revision); `blocker resolve` subcommand → §62k (this revision); `decision list` subcommand → §62k (this revision); `decision inspect` subcommand → §62k (this revision); `integrity-signal list` subcommand → §62k (this revision); `Blocker.classification` field → §62b Blocker schema (this revision); `Blocker.evidence_id` field → §62b Blocker schema (this revision); `Blocker.auto_clear_on` field → §62b Blocker schema (this revision); `Blocker.escalation_due` field → §62b Blocker schema (this revision); `supplemental-enforcement-jc-bc` clause → §62l BoundaryContract (this revision, SCP Gate 1 compliance correction) |
 | r64 | 2026-10-16 | spec+runtime | NSS + SCP compliance pass + update/derive gap closure. Fixed SCP Protocol Construct metadata line to NSS template-compliant format (`standalone: false · depends: [NSS, IGC]`); removed erroneous AP-style `Derivation metadata` line from SCP section. Fixed DAI Protocol Construct metadata line to NSS template-compliant format (`standalone: true · depends: []`). Added required `**New external references:** (predates SCP — not declared)` annotations to r58 and r59 revision log entries (SCP §9290 retroactive-applicability SHOULD clause). Runtime: wired `@bundle-name` resolution for `--opt-in-constructs` in `urace update` (all subcommands and orchestrated path); unknown bundle names produce error with `urace derive --list-bundles` hint. Extended `_check_stale_derived_manifests()` to also check `state.feature_bundle_refs` and surface `derived-construct-set-stale` warnings with `bundle_name` field during `update download` and `update apply` (§62j FeatureBundle stale-detection contract). Added `--bundle` + `--refresh` conflict guard in `urace derive`: when both flags are used, `--bundle` is ignored and a warning is printed (§62j §8790). **New external references:** none |
 | r63 | 2026-10-16 | spec | r61/r62 gap closure pass. Added `adapter_timeout_seconds` (default 30s), `adapter_retry_count` (default 3), `polling_interval_seconds` (default 300s) fields to CommunityFeed schema. Added `executor_credit_priority` field to Config.community_inbox (INBOX_HIGH|INBOX_NORMAL|INBOX_LOW). Added 2 IGC gap kinds: `community-inbox-evolution-blocked` (WARNING), `feature-bundle-unknown-construct` (WARNING); IGC total 86→88. Extended CSI mechanism with: timeout/retry contract, polling cadence contract, lifecycle state gate, executor credit contract (with bounded delta formula for confidence scoring), filtered signal lifecycle (re-evaluation on intent change), T&C gap auto_clearable contract. Extended PPP_M with: queue overflow eviction strategy (CONFIDENCE_INSUFFICIENT first, then PENDING refused), self-evolution DISABLED path (proposal held PENDING, `urace /inbox apply --override-evolution-policy`), HUMAN mode approval commands (`urace /inbox list|apply|reject`). Extended DAI with: cycle detection response per trigger type, unknown construct detection per FeatureBundle entry, self-reference detection response. Extended §62j derive with: FeatureBundle stale update path, bundle-derive precedence rules, FeatureBundle dependency resolution algorithm. Extended WRM signal taxonomy: added COMMUNITY_INBOX (5th signal kind) for high/medium signal arrival and HUMAN-mode reminder wakes. **New external references:** `CommunityFeed.adapter_timeout_seconds` → §62b CommunityFeed schema (this revision); `CommunityFeed.adapter_retry_count` → §62b CommunityFeed schema (this revision); `CommunityFeed.polling_interval_seconds` → §62b CommunityFeed schema (this revision); `Config.community_inbox.executor_credit_priority` → §62e Config community_inbox subschema (this revision); `community-inbox-evolution-blocked` IGC kind → §62l (this revision); `feature-bundle-unknown-construct` IGC kind → §62l (this revision); `COMMUNITY_INBOX` WakeRegistration signal kind → §62c WRM signal taxonomy (this revision) |
 | r62 | 2026-10-16 | spec | Construct cross-referencing, DAG acyclicity invariant, FeatureBundle. Added optional `realizes:` field to AP metadata template in §62n to make AP→implementation links machine-readable; AP38 is first use (`realizes: [CSI, PPP_M, PPP]`). Added Construct Dependency Acyclicity Invariant (DAI) as a FOUNDATIONAL Protocol in §62n: Rule 1 — transitive dependency DAG must be acyclic (`construct-dependency-cycle` BLOCKING); Rule 2 — self-reference prohibited (`construct-self-reference` BLOCKING); Rule 3 — FeatureBundle construct_ids must resolve to DAG. Added 2 IGC gap kinds: `construct-dependency-cycle` (BLOCKING), `construct-self-reference` (BLOCKING); IGC total 84→86. Added FeatureBundle (prefix fbundle-) and FeatureBundleRef (prefix fbref-) citizen schemas to §62b with State.feature_bundle_refs field. Added `--bundle <name>` and `--list-bundles` flags to `urace derive`; added `@bundle-name` syntax to `--opt-in-constructs`. Defined built-in bundle `community-inbox` (AP38 + 8 constructs). Added DAI to Protocol Catalog (8→9), ConstructKindRegistry, FeatureBundle/FeatureBundleRef to Schema Catalog (26→28). Added stem `featurebundle` to §81. **New external references:** `realizes:` AP metadata field → defined at §62n Mandatory Construct Metadata (this revision); `DAI` Protocol → defined at §62n DAI section (this revision); `construct-dependency-cycle` IGC kind → defined at §62l (this revision); `construct-self-reference` IGC kind → defined at §62l (this revision); `FeatureBundle` schema → defined at §62b (this revision); `FeatureBundleRef` schema → defined at §62b (this revision); `State.feature_bundle_refs` field → defined at §62e State Document (this revision); `--bundle` flag → defined at §62j derive contract (this revision); `--list-bundles` flag → defined at §62j derive contract (this revision); `@bundle-name` syntax → defined at §62j update contract (this revision); `community-inbox` built-in bundle → defined at §62j Built-in spec-defined FeatureBundles table (this revision); `featurebundle` stem → defined at §81 (this revision) |
