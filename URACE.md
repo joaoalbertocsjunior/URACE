@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r61**
+**Specification version: 2026-10-16-r62**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -3782,6 +3782,51 @@ HUMAN  — every proposal requires explicit operator approval regardless of conf
          URACE MUST NOT auto-approve in this mode
 ```
 
+## FeatureBundle (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+Extends: CitizenBase
+
+A named, stable, versioned set of construct IDs representing a cohesive multi-construct feature. FeatureBundles are the canonical unit of feature-level granularity for `urace derive` and `urace update --opt-in-constructs`. A FeatureBundle MUST NOT contain a circular construct dependency: the transitive `requires`/`depends`/`governed-by` graph of all listed construct IDs MUST be acyclic. A FeatureBundle MUST NOT list its own ID.
+
+```
+FeatureBundle {
+  id               REQUIRED  Identifier; prefix "fbundle-"
+  created_at       REQUIRED  ISO-8601 timestamp
+  updated_at       REQUIRED  ISO-8601 timestamp
+  name             REQUIRED  string; canonical bundle name (e.g. "community-inbox"); MUST be unique
+  construct_ids    REQUIRED  list[string]; ordered list of construct IDs included in this bundle
+  description      OPTIONAL  string; human-readable summary of what the bundle provides
+  spec_version     REQUIRED  string; spec version at which this bundle was defined
+  source           REQUIRED  string; "spec" for spec-defined bundles; "operator" for user-defined bundles
+}
+```
+
+Uses TemporalFields: created_at, updated_at.
+Used in: State.feature_bundle_refs (via FeatureBundleRef), `urace derive --bundle`, `urace update --opt-in-constructs --bundle`.
+
+## FeatureBundleRef (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+Extends: CitizenBase
+
+A lightweight reference to a saved FeatureBundle stored in durable state. Enables stale-detection and refresh across spec updates.
+
+```
+FeatureBundleRef {
+  id               REQUIRED  Identifier; prefix "fbref-"
+  created_at       REQUIRED  ISO-8601 timestamp
+  updated_at       REQUIRED  ISO-8601 timestamp
+  bundle_name      REQUIRED  string; the FeatureBundle.name this ref points to
+  construct_ids    REQUIRED  list[string]; snapshot of construct IDs at save time
+  spec_version     REQUIRED  string; spec version at save time
+  saved_at         REQUIRED  ISO-8601 timestamp
+}
+```
+
+Uses TemporalFields: created_at, updated_at, saved_at.
+Used in: State.feature_bundle_refs.
+
 ## Vital Definition
 
 A Vital is a derived health indicator computed from one or two Metric Definitions.
@@ -4040,6 +4085,7 @@ State {
   compliance_state       REQUIRED  dict[domain → ComplianceState]; current posture per validation domain; one entry per domain
   executor_providers     REQUIRED  list[ExecutorProvider]; active executor provider bindings; initialized from Config.executor.providers at bootstrap
   metric_effects         OPTIONAL  list[MetricEffect]; metric observation history
+  feature_bundle_refs   OPTIONAL  list[FeatureBundleRef]; saved feature bundle references; default []
   community_feeds       OPTIONAL  list[CommunityFeed]; registered feed sources; default []
   community_signals     OPTIONAL  list[CommunitySignal]; ingested signals; default []
   patch_proposals       OPTIONAL  list[PatchProposal]; proposal queue; default []
@@ -8547,7 +8593,7 @@ BoundedEvolutionBand = {
 
 ## AP38 — Community Signal Ingestion
 
-**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP14, AP4, AP3, AP0]` · `provides: agnostic feed ingestion (any channel), T&C gate, relevance+confidence signal scoring, patch proposal pipeline with configurable approval modes (AUTO/SMART/HUMAN)`
+**Derivation metadata.** `standalone: false` · `tier: INTEGRATED` · `requires: [AP14, AP4, AP3, AP0]` · `provides: agnostic feed ingestion (any channel), T&C gate, relevance+confidence signal scoring, patch proposal pipeline with configurable approval modes (AUTO/SMART/HUMAN)` · `realizes: [CSI, PPP_M, PPP]`
 
 **Intent.** Community discourse from any configured feed or communication channel is continuously ingested, quality-filtered, and surfaced as bounded patch proposals for URACE or the Product. The pipeline is communication-channel-agnostic: every source is configured as a `CommunityFeed` record with a pluggable `FeedAdapterKind`. Operators configure feeds, accept T&C, and choose an approval mode. Proposals advance through a configurable pipeline; URACE MUST NOT apply any proposal without APPROVED status.
 
@@ -8687,14 +8733,27 @@ The canonical schemas for this section — `PatternEntry`, `PatternAdoptionRecor
 ```
 urace derive [<intent>]
              [--kind pattern|mechanism|schema|protocol|contract|all]
-             [--constructs <comma-list>] [--suggest] [--from-goals] [--from-constraints] [--from-inspection]
+             [--constructs <comma-list>] [--bundle <name>] [--suggest] [--from-goals] [--from-constraints] [--from-inspection]
              [--exclude <comma-list>] [--exclude-reason <text>]
              [--out <path>] [--save] [--json]
              [--derive-capabilities] [--apply-capabilities]
              [--refresh [--manifest-id <id>]]
              [--show-delta]
              [--derive-milestone]
+             [--list-bundles]
 ```
+
+**`--bundle <name>` flag.** Resolves a named `FeatureBundle` to its full `construct_ids` list and merges it with any explicit `--constructs` IDs (explicit takes precedence; bundle adds non-overlapping IDs). The bundle name MUST match a registered FeatureBundle (spec-defined or operator-defined). If the name is not found, the command MUST exit with code 1 and a human-readable error listing available bundle names. `--bundle` MAY be combined with `--constructs`; both lists are merged. `--bundle` MAY be used with `--suggest` to preview the resolved construct list without building a manifest. `--save` with `--bundle` creates a FeatureBundleRef in `state.feature_bundle_refs`.
+
+**`--list-bundles` flag.** Lists all registered FeatureBundles (spec-defined and operator-defined) with their name, construct_ids, spec_version, and description. No state access required for spec-defined bundles. Operator-defined bundles are read from `state.feature_bundle_refs`.
+
+**Built-in spec-defined FeatureBundles.**
+
+| Bundle name | construct_ids | Description |
+|---|---|---|
+| `community-inbox` | AP38, CSI, PPP_M, PPP, CommunityFeed, CommunitySignal, PatchProposal, FeatureBundle, FeatureBundleRef | All constructs for community signal ingestion and patch proposal pipeline |
+
+**FeatureBundle stale-detection contract.** When `urace update download` or `urace update apply` runs and `state.feature_bundle_refs` is non-empty, the implementation MUST compare each ref's `spec_version` to the candidate spec version. Any mismatch MUST be surfaced as a `derived-construct-set-stale` warning (reusing existing gap kind). The warning MUST include the `bundle_name`, the stale `spec_version`, and the candidate version. This is a warning, not a blocker.
 
 **r42 — `--constructs` canonical arg.** `--constructs` is the canonical argument for specifying explicit construct or pattern IDs. `--patterns` remains a fully supported backward-compat alias — all existing invocations continue to work unchanged. "Building Blocks" is the canonical user-facing name for the set of derivable constructs (README, section headers). The count is defined by the ConstructKindRegistry (§62n) and ExtendedConstructCatalogs (§62m) at the current spec version.
 
@@ -8752,7 +8811,7 @@ A derived system's compliance obligation is exactly: **every adopted pattern's n
 
 ## `urace update --opt-in-constructs` Contract
 
-The `--opt-in-constructs <comma-list>` flag (also accepted as `--opt-in-patterns` for backward compatibility) is available on all `urace update` subcommands and on the orchestrated `urace update` (no action). Its default is absent — meaning the update applies to all constructs and patterns. Accepted values: AP IDs (e.g. AP8,AP14) and construct IDs (e.g. QSM,GoalRecord) may be mixed freely.
+The `--opt-in-constructs <comma-list>` flag (also accepted as `--opt-in-patterns` for backward compatibility) is available on all `urace update` subcommands and on the orchestrated `urace update` (no action). Its default is absent — meaning the update applies to all constructs and patterns. Accepted values: AP IDs (e.g. AP8,AP14), construct IDs (e.g. QSM,GoalRecord), and bundle names prefixed with `@` (e.g. `@community-inbox`) may be mixed freely. A `@bundle-name` value is resolved to its full `construct_ids` list before processing; unknown bundle names produce an error.
 
 **When `--opt-in-constructs` is set:**
 - `explain`: the diff report is annotated with `opted_in_patterns_affected: [list]` identifying which opted-in APs changed between accepted and candidate; sections outside the opt-in list are still shown but marked `[not in opt-in scope]`
@@ -9199,6 +9258,26 @@ A revision MUST define and reference every concept in a single atomic diff. "Def
 
 ---
 
+## Construct Dependency Acyclicity Invariant (DAI)
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `id: DAI` · `introduced_in: 2026-10-16-r62` · `governed-by: §62n`
+
+**Used in:** (universal — all construct dependency declarations)
+
+**Intent.** The construct dependency graph formed by all `requires:`, `depends:`, and `governed-by:` declarations MUST be a directed acyclic graph (DAG). Circular construct dependencies corrupt the derivation framework, the AP dependency resolution contract (AP24), and the SCP Gate 1 definition-first ordering guarantee.
+
+**Rule 1 — Acyclicity.** The transitive closure of all construct dependency edges (`requires:` on APs, `depends:` on Protocols, `governed-by:` on Mechanisms) MUST form a DAG. Any proposed addition of a dependency edge that would introduce a cycle MUST be rejected; `construct-dependency-cycle` BLOCKING gap MUST be surfaced with fields `construct_id` (the construct whose declaration introduces the cycle), `cycle_path` (the sequence of construct IDs forming the cycle).
+
+**Rule 2 — Self-reference prohibition.** A construct's `requires:`, `depends:`, or `governed-by:` field MUST NOT contain the construct's own ID. A self-referencing declaration MUST surface `construct-self-reference` BLOCKING gap with field `construct_id`.
+
+**Rule 3 — FeatureBundle acyclicity.** A `FeatureBundle.construct_ids` list MUST resolve to a DAG when each listed construct's own transitive dependency edges are included. A FeatureBundle whose construct_ids introduce a cycle among themselves MUST surface `construct-dependency-cycle` with `construct_id = <bundle_name>`.
+
+**Validation timing.** DAI validation MUST be run: (a) at each assessment cycle boundary; (b) whenever a new construct registration is processed; (c) when a FeatureBundle is created or updated.
+
+**Referenced from:** §62n ConstructKindRegistry, §62l IntegrityGapCatalog, §62b FeatureBundle.
+
+---
+
 ## IntegrityGapCatalog
 
 **Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
@@ -9286,6 +9365,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `scp-forward-reference` | BLOCKING | §62n SCP Gate 1 | A normative statement references a concept not yet defined in the formal index at point of reference |
 | `scp-incomplete-revision-declaration` | WARNING | §62n SCP Gate 2 | A revision log entry is missing the required New external references field |
 | `scp-atomic-extension-violation` | BLOCKING | §62n SCP Gate 3 | A MUST/SHALL statement references a concept that is not defined in the same revision |
+| `construct-dependency-cycle` | BLOCKING | §62n DAI | Construct dependency graph contains a cycle; circular dependency MUST be resolved before the construct is used |
+| `construct-self-reference` | BLOCKING | §62n DAI | A construct's `requires`, `depends`, or `governed-by` field references its own ID; self-reference is prohibited |
 | `community-feed-terms-not-accepted` | BLOCKING | §62c CSI | Feed terms have not been accepted; ingest MUST NOT proceed until `CommunityFeed.terms_accepted = true` |
 | `community-feed-adapter-unavailable` | WARNING | §62c CSI | Configured CommunityFeed adapter cannot connect to endpoint; check feed config and network |
 | `patch-proposal-confidence-below-floor` | INFO | §62c PPP | Signal passed relevance_floor but confidence_score < confidence_threshold; proposal marked CONFIDENCE_INSUFFICIENT |
@@ -9378,7 +9459,7 @@ The complete mapping from AP patterns (§62i) to the spec sections that implemen
 | PSD | Progress Stagnation Detector | §62c | stagnation detection, REPAIRING lifecycle trigger |
 | MBV | Metric Baseline Verification | §62c | cycle-start metric immutability audit, mutation_requires enforcement |
 
-## Schema Catalog (26 entries)
+## Schema Catalog (28 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -9411,8 +9492,10 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CommunityFeed | CommunityFeed | cfeed- | §62b |
 | CommunitySignal | CommunitySignal | csig- | §62b |
 | PatchProposal | PatchProposal | pprop- | §62b |
+| FeatureBundle | FeatureBundle | fbundle- | §62b |
+| FeatureBundleRef | FeatureBundleRef | fbref- | §62b |
 
-## Protocol Catalog (8 entries)
+## Protocol Catalog (9 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -9423,6 +9506,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CRC_C | ComplianceRecordingContract | per-domain compliance persistence | §62l |
 | CEP | ConstructElevationProtocol | 4-gate elevation test for promoting concepts to named constructs | §62l |
 | SCP | SpecConstructionProtocol | 3-gate pre-extension enforcement: definition-first, completeness declaration, single-pass atomicity | §62n |
+| DAI | ConstructDependencyAcyclicityInvariant | acyclicity check → self-reference check → FeatureBundle DAG validation → surface BLOCKING gap | §62n |
 | PPP | PatchProposalProtocol | T&C gate → signal ingest → relevance+confidence scoring → patch synthesis → approval routing (AUTO/SMART/HUMAN) → expiry | §62c PPP_M |
 
 ## AP Pattern Abbreviations (r49 additions)
@@ -9448,7 +9532,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (84 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (86 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -9569,8 +9653,8 @@ FOUNDATIONAL ──── COMPOSITIONAL ──── INTEGRATED
 
 Every construct MUST carry a metadata line immediately after its `##` heading. Format per kind:
 
-**AP:** `**Derivation metadata.** kind: AP · tier: X · standalone: X · requires: [...] · provides: [...]`
-*(kind: AP is implied by §62i section membership; the metadata line is already established)*
+**AP:** `**Derivation metadata.** kind: AP · tier: X · standalone: X · requires: [...] · provides: [...] · realizes: [<ConstructID>, ...] (OPTIONAL)`
+*(kind: AP is implied by §62i section membership; the metadata line is already established. `realizes:` is OPTIONAL; when present, it lists the Mechanism and Protocol IDs that directly implement this AP. This makes the AP→implementation link machine-readable without requiring PMM table lookup.)*
 
 **Protocol:** `**Construct metadata.** kind: Protocol · tier: X · standalone: X · depends: [...]`
 
@@ -9661,6 +9745,7 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | PMM | PatternMechanismMapping | INTEGRATED | false |
 | CEP | ConstructElevationProtocol | FOUNDATIONAL | true |
 | SCP | SpecConstructionProtocol | FOUNDATIONAL | false |
+| DAI | ConstructDependencyAcyclicityInvariant | FOUNDATIONAL | true |
 | PPP | PatchProposalProtocol | INTEGRATED | false |
 
 ### Mechanisms (§62c)
@@ -9691,9 +9776,9 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | CSI | Community Signal Ingestion Mechanism | INTEGRATED | AP38, AP14 |
 | PPP_M | Patch Proposal Pipeline Mechanism | INTEGRATED | AP38, AP4 |
 
-### Schemas (r54–r55 and r61 additions)
+### Schemas (r54–r55, r61, and r62 additions)
 
-The following schemas were added in r54/r55 and r61 and MUST be registered here per the ConstructElevationProtocol mandatory post-elevation actions.
+The following schemas were added in r54/r55, r61, and r62 and MUST be registered here per the ConstructElevationProtocol mandatory post-elevation actions.
 
 | Name | Tier | Extends | Added |
 |---|---|---|---|
@@ -9703,6 +9788,8 @@ The following schemas were added in r54/r55 and r61 and MUST be registered here 
 | CommunityFeed | INTEGRATED | CitizenBase | r61 |
 | CommunitySignal | INTEGRATED | CitizenBase | r61 |
 | PatchProposal | INTEGRATED | CitizenBase | r61 |
+| FeatureBundle | COMPOSITIONAL | CitizenBase | r62 |
+| FeatureBundleRef | COMPOSITIONAL | CitizenBase | r62 |
 
 # 63. Concurrency
 
@@ -11571,6 +11658,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `specconstruct` | Spec Construction Protocol, SCP, definition-first ordering, revision completeness declaration, single-pass atomic extension, pre-extension gate |
 | `communityinbox` | Community Signal Ingestion, CommunityFeed, CommunitySignal, feed adapter, T&C gate, relevance scoring, confidence scoring, community inbox |
 | `patchproposal` | PatchProposal, patch proposal, approval mode, AUTO approval, SMART approval, HUMAN approval, proposal queue, proposal expiry |
+| `featurebundle` | FeatureBundle, feature bundle, --bundle, bundle resolution, @bundle-name, built-in bundle, operator bundle |
 
 ## Audit Content
 
@@ -11636,6 +11724,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r62 | 2026-10-16 | spec | Construct cross-referencing, DAG acyclicity invariant, FeatureBundle. Added optional `realizes:` field to AP metadata template in §62n to make AP→implementation links machine-readable; AP38 is first use (`realizes: [CSI, PPP_M, PPP]`). Added Construct Dependency Acyclicity Invariant (DAI) as a FOUNDATIONAL Protocol in §62n: Rule 1 — transitive dependency DAG must be acyclic (`construct-dependency-cycle` BLOCKING); Rule 2 — self-reference prohibited (`construct-self-reference` BLOCKING); Rule 3 — FeatureBundle construct_ids must resolve to DAG. Added 2 IGC gap kinds: `construct-dependency-cycle` (BLOCKING), `construct-self-reference` (BLOCKING); IGC total 84→86. Added FeatureBundle (prefix fbundle-) and FeatureBundleRef (prefix fbref-) citizen schemas to §62b with State.feature_bundle_refs field. Added `--bundle <name>` and `--list-bundles` flags to `urace derive`; added `@bundle-name` syntax to `--opt-in-constructs`. Defined built-in bundle `community-inbox` (AP38 + 8 constructs). Added DAI to Protocol Catalog (8→9), ConstructKindRegistry, FeatureBundle/FeatureBundleRef to Schema Catalog (26→28). Added stem `featurebundle` to §81. **New external references:** `realizes:` AP metadata field → defined at §62n Mandatory Construct Metadata (this revision); `DAI` Protocol → defined at §62n DAI section (this revision); `construct-dependency-cycle` IGC kind → defined at §62l (this revision); `construct-self-reference` IGC kind → defined at §62l (this revision); `FeatureBundle` schema → defined at §62b (this revision); `FeatureBundleRef` schema → defined at §62b (this revision); `State.feature_bundle_refs` field → defined at §62e State Document (this revision); `--bundle` flag → defined at §62j derive contract (this revision); `--list-bundles` flag → defined at §62j derive contract (this revision); `@bundle-name` syntax → defined at §62j update contract (this revision); `community-inbox` built-in bundle → defined at §62j Built-in spec-defined FeatureBundles table (this revision); `featurebundle` stem → defined at §81 (this revision) |
 | r61 | 2026-10-16 | spec | Community Signal Ingestion. Introduced AP38 (Community Signal Ingestion, INTEGRATED) in §62i with feed-adapter agnosticism, T&C gate, two-dimensional signal quality scoring (relevance + confidence), and configurable approval pipeline (AUTO/SMART/HUMAN; default SMART). Added mechanisms CSI (Community Signal Ingestion Mechanism) and PPP_M (Patch Proposal Pipeline Mechanism) to §62c. Added Protocol PPP (PatchProposalProtocol, 7→8) to §62m Protocol Catalog. Added citizen schemas CommunityFeed (prefix cfeed-), CommunitySignal (prefix csig-), PatchProposal (prefix pprop-) plus enums ApprovalMode, FeedAdapterKind, SignalQuality, ProposalStatus to §62b. Added Config.community_inbox subschema to §62e. Added 5 new IGC gap kinds: `community-feed-terms-not-accepted` (BLOCKING), `community-feed-adapter-unavailable` (WARNING), `patch-proposal-confidence-below-floor` (INFO), `patch-proposal-queue-overflow` (WARNING), `community-signal-relevance-below-floor` (INFO); IGC total 79→84. Added AP38 to ConstructKindRegistry, PMM table, and tier table (INTEGRATED). Added CSI and PPP_M to ConstructKindRegistry Mechanisms. Added CommunityFeed, CommunitySignal, PatchProposal to Schema Catalog (23→26). Added stems `communityinbox` and `patchproposal` to §81. **New external references:** `AP38` AP → defined at §62i AP38 (this revision); `CommunityFeed` schema → defined at §62b (this revision); `CommunitySignal` schema → defined at §62b (this revision); `PatchProposal` schema → defined at §62b (this revision); `ApprovalMode` enum → defined at §62b (this revision); `FeedAdapterKind` enum → defined at §62b (this revision); `SignalQuality` enum → defined at §62b (this revision); `ProposalStatus` enum → defined at §62b (this revision); `Config.community_inbox` subschema → defined at §62e (this revision); `community-feed-terms-not-accepted` IGC kind → defined at §62l (this revision); `community-feed-adapter-unavailable` IGC kind → defined at §62l (this revision); `patch-proposal-confidence-below-floor` IGC kind → defined at §62l (this revision); `patch-proposal-queue-overflow` IGC kind → defined at §62l (this revision); `community-signal-relevance-below-floor` IGC kind → defined at §62l (this revision); `CSI` Mechanism → defined at §62c (this revision); `PPP_M` Mechanism → defined at §62c (this revision); `PPP` Protocol → defined at §62m Protocol Catalog (this revision); `communityinbox` stem → defined at §81 (this revision); `patchproposal` stem → defined at §81 (this revision) |
 | r60 | 2026-10-16 | spec | Spec Construction Protocol. Introduced SCP as a FOUNDATIONAL Protocol in §62n: three-gate pre-extension enforcement (Gate 1: definition-first ordering, Gate 2: revision completeness declaration, Gate 3: single-pass atomic extension). Added 3 IGC gap kinds: `scp-forward-reference` (BLOCKING), `scp-incomplete-revision-declaration` (WARNING), `scp-atomic-extension-violation` (BLOCKING). Updated IGC count 76→79. Added SCP to Protocol Catalog (§62m, 6→7 entries), ConstructKindRegistry (§62n), and stem vocabulary `specconstruct` (§81). Added Revision Completeness Declaration schema to §82 Revision Log format. SCP is binding from r60 onward; revisions prior to r60 are exempt. SCP is self-applying: this revision is the first to comply with it. **New external references:** `SCP` Protocol construct → defined at §62n SCP section (this revision); `scp-forward-reference` IGC kind → defined at §62l IGC table (this revision); `scp-incomplete-revision-declaration` IGC kind → defined at §62l IGC table (this revision); `scp-atomic-extension-violation` IGC kind → defined at §62l IGC table (this revision); `specconstruct` stem → defined at §81 stem vocabulary table (this revision) |
 | r59 | 2026-10-16 | spec | r58 gap closure. Added 9 Config subschemas to §62e: `staleness` (hours-based, supersedes legacy `staleness_windows`), `context_budget_r58` (`hard_cap_fraction`, `min_floor_fraction`), `wake` (`max_stale_hours`), `test_coverage` (`freshness_hours`), `sweet_spot` (`value_density_floor`), `retention` (`auto_trigger_bytes`), `metric_sources` (`registry`, `search_endpoint`), `archive_search_paths`, `generated_file_globs`. Added `replaces` field to WakeRegistration schema. Added `effect_type` field and `EffectType` enum to Operation schema. Added `Role` column to PatternMechanismMapping table with PRIMARY/SUPPORTING values. Added `auto_clearable` field description to ConstructKindRegistry. Aligned SDM staleness default prose to reference `Config.staleness` subschema explicitly. |
