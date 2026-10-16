@@ -5137,7 +5137,7 @@ CONTEXT BUDGET EVALUATION (before each executor delegation, SD=True)
 
 **Tier tie-breaking.** Within a single eviction tier, entries MUST be evicted in ascending order of `last_accessed_at` (least recently accessed first). When `last_accessed_at` is equal, entries MUST be evicted in ascending order of estimated token size (smallest last). A tie-breaking sort MUST be applied before any eviction within a tier.
 
-**Eviction floor.** Eviction MUST stop when the remaining context size is ≤ `Config.context_budget.min_floor_fraction` of the hard cap (default: 0.10). The runtime MUST NOT evict below this floor even if the CRC remains over budget. If the floor is reached and the CRC is still over budget, a BLOCKING gap of kind `crc-context-overflow` MUST be surfaced.
+**Eviction floor.** Eviction MUST stop when the remaining context size is ≤ `Config.context_budget_r58.min_floor_fraction` of the hard cap (default: 0.10). The runtime MUST NOT evict below this floor even if the CRC remains over budget. If the floor is reached and the CRC is still over budget, a BLOCKING gap of kind `crc-context-overflow` MUST be surfaced.
 
 **Fallback-rejection contract.** If eviction cannot bring context within budget because all evictable entries have been exhausted above the floor, the runtime MUST reject the pending Executor invocation, surface the `crc-context-overflow` gap, and wait for operator intervention rather than proceeding with an oversized context.
 
