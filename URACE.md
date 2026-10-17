@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r71**
+**Specification version: 2026-10-17-r72**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -4129,6 +4129,10 @@ Config {
                                                              INBOX_HIGH | INBOX_NORMAL | INBOX_LOW; default
                                                              INBOX_NORMAL; INBOX_LOW defers to discovery/evolution
                                  }
+  product_registry     OPTIONAL  list[ProductEntry]; registered products; default []
+  active_product       OPTIONAL  string; name of currently active product; if set, overrides Config.product for
+                                 active product name and routes state_path to the matching ProductEntry.state_path;
+                                 if absent, Config.product is used
 }
 ```
 
@@ -4237,6 +4241,7 @@ State {
   lifecycle_boundaries  OPTIONAL  list[LifecycleBoundary]; rolling log of boundary records (max 50); default []
   integrity_signals     OPTIONAL  list[IntegritySignal]; active and resolved integrity signals; default []
   onboard_records       OPTIONAL  list[OnboardRecord]; completed and superseded onboard records; default []
+  switch_records        OPTIONAL  list[SwitchRecord]; audit trail of product switches; default []
 }
 ```
 
@@ -4872,6 +4877,46 @@ OnboardRecord {
 **Uniqueness contract.** At most one OnboardRecord with `product_name` matching the current Config.product MUST be active in State at any time. A second `urace onboard confirm` for the same product supersedes the prior record; the prior record MUST be retained with `superseded_at` set.
 
 Used in: State.onboard_records.
+
+## ProductEntry
+
+A registered Product in the Product Registry (§62p). Each ProductEntry declares one Product's identity, state path, and files — enabling multi-product management within a single URACE installation.
+
+```
+ProductEntry {
+  id                REQUIRED  Identifier; prefix "prod-"
+  name              REQUIRED  string; human-readable product name
+  state_path        REQUIRED  string; path to this product's State file
+  product_files     REQUIRED  list[string]; file paths constituting this product
+  intent_purpose    OPTIONAL  string; product intent text
+  registered_at     REQUIRED  ISO-8601 timestamp; when this entry was registered
+  last_active_at    OPTIONAL  ISO-8601 timestamp; when this product was last active
+  status            REQUIRED  ACTIVE | INACTIVE | ARCHIVED; default ACTIVE
+}
+```
+
+**Uniqueness contract.** Each ProductEntry.name MUST be unique within Config.product_registry. A duplicate name MUST be rejected with `product-registry-duplicate-name` WARNING.
+
+Used in: Config.product_registry.
+
+## SwitchRecord
+
+An audit record of a completed product switch. Every successful `urace product switch` appends one SwitchRecord to State.switch_records.
+
+```
+SwitchRecord {
+  id              REQUIRED  Identifier; prefix "swrec-"
+  from_product    REQUIRED  string; name of the product being switched away from
+  to_product      REQUIRED  string; name of the product being switched to
+  switched_at     REQUIRED  ISO-8601 timestamp; when the switch was committed
+  switched_by     REQUIRED  string; "operator" or operator-supplied token
+  reason          OPTIONAL  string; operator-supplied switch rationale
+}
+```
+
+**Audit contract.** Every successful `urace product switch` MUST append one SwitchRecord to State.switch_records. SwitchRecords MUST NOT be compacted away for the life of the State.
+
+Used in: State.switch_records.
 
 ---
 
@@ -9391,13 +9436,34 @@ urace onboard confirm [--note <text>] [--json]
 
 **Re-onboard.** If `Config.product` has changed since the last OnboardRecord, `onboard status` reports the mismatch and advises re-confirmation. `onboard confirm` treats this as a new product and creates a fresh OnboardRecord. The previous product's record is retained with `superseded_at` set to allow audit recovery (§62o).
 
+## urace product
+
+Manage the Product Registry. SD=True for `list` and `status`. `switch` and `register` mutate Config. Implements ProductSwitchProtocol (§62l). Uses: ProductEntry (§62b), SwitchRecord (§62b), §62p Product Registry.
+
+```
+urace product list [--json]
+urace product status [--json]
+urace product switch <name> [--reason <text>] [--json]
+urace product register <name> --state-path <path> [--product-files <f>...] [--intent-purpose <text>] [--json]
+```
+
+**`product list`** — shows all ProductEntry records in Config.product_registry. Each entry shows: name, status, registered_at, last_active_at (if any), and whether it has an active OnboardRecord. Marks the currently active product with `*`. `--json` emits array of entries.
+
+**`product status`** — shows the currently active product name, its ProductEntry (if registered), the active OnboardRecord summary (id, confirmed_at, config_digest match), and the current lifecycle_state. Zero-arg shorthand for the most common diagnostic.
+
+**`product switch <name>`** — applies ProductSwitchProtocol: validates name in registry, appends SwitchRecord, updates Config.active_product, persists Config. Returns 1 if target not in registry or not ACTIVE. After switch, `lifecycle_state` will be set to ONBOARDING on next cycle entry; operator must run `urace onboard confirm` for the new product.
+
+**`product register <name>`** — adds a new ProductEntry to Config.product_registry. `--state-path` is required (where this product's state file will live). `--product-files` accepts one or more file paths. `--intent-purpose` sets the product's intent text. Fails if name already exists in registry. Persists Config.
+
+**Exit codes.** All subcommands exit 0 on success, 1 on validation failure, 1 on Config/state write failure.
+
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines seventeen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines eighteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All seventeen constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining eight constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, and JOIN — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All eighteen constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining nine constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, and PSP — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -9856,6 +9922,9 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `onboard-capability-envelope-missing` | WARNING | §62c OnboardGate | Config.capability_envelope is absent; capabilities will be unconstrained — declare envelope or set capability_envelope_waived in OnboardRecord |
 | `onboard-confirmation-pending` | BLOCKING | §62c OnboardGate | All BLOCKING onboard gates passed; awaiting operator confirmation (`urace onboard confirm`) to authorize autonomous cycles |
 | `onboard-record-config-diverged` | WARNING | §62b OnboardRecord staleness contract | Config.product or Config digest has diverged from the active OnboardRecord; run `urace onboard confirm` to refresh |
+| `product-registry-unknown-product` | WARNING | §62c ProductSwitchProtocol | Target product not found in Config.product_registry or has status≠ACTIVE; register or activate it first |
+| `product-switch-pending-onboard` | INFO | §62c ProductSwitchProtocol | Product switch applied; new active product awaits onboard confirmation (`urace onboard confirm`) |
+| `product-registry-duplicate-name` | WARNING | §62b ProductEntry uniqueness contract | Two ProductEntry records share the same name; remove the duplicate before switching |
 | `blocker-escalated` | WARNING | §62b Blocker schema classification contract | Acknowledge escalation; consider operator intervention if pattern persists |
 | `integrity-signal-unclassified` | WARNING | §62c SignalClassifier | Review unclassified condition and register it in the SignalClassifier classification table |
 | `lifecycle-boundary-violation` | BLOCKING | §62b LifecycleBoundary / §62l BoundaryContract | Apply Transaction Recovery Protocol (AP27); resolve incomplete boundary before creating new ones |
@@ -9977,6 +10046,26 @@ The **JoinProtocol** (JOIN) is a post-change wiring audit protocol applied after
 
 **Referenced from:** §82 Revision Log (as a named pass type), all spec revisions.
 
+---
+
+## ProductSwitchProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: true` · `depends: [OnboardGate]`
+
+The ProductSwitchProtocol governs safe transitions between Products in the registry. It is defined once here; `urace product switch` cites it by name.
+
+**Four-step protocol:**
+
+1. **Validate target.** Verify the target product name exists in Config.product_registry with status=ACTIVE. If not, emit `product-registry-unknown-product` WARNING and abort.
+2. **Record switch.** Append SwitchRecord(from_product=current, to_product=target, switched_at=now(), switched_by="operator") to State.switch_records. Save state.
+3. **Update active product.** Set Config.active_product = target. Persist Config. Emit INFO gap `product-switch-pending-onboard`.
+4. **Trigger re-onboard.** Next cycle entry detects no matching OnboardRecord for the new active_product → sets lifecycle_state=ONBOARDING → OnboardGate fires (§62c, §62o).
+
+**Atomicity contract.** Steps 2 and 3 MUST be applied atomically from the operator's perspective. If Config cannot be persisted after step 2, the switch MUST be rolled back (remove the SwitchRecord) and an error returned.
+
+**Referenced from:** §62o Product Onboard Phase (re-onboard trigger), §62k `urace product switch`.
+**Citizens using ProductSwitchProtocol:** SwitchRecord (§62b).
+
 # 62m. Extended Construct Catalogs
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
@@ -9995,7 +10084,7 @@ The **JoinProtocol** (JOIN) is a post-change wiring audit protocol applied after
 | SCF | SignalClassifier | §62c | runtime signal classification, IntegritySignal emission, REPAIRING entry gate |
 | OBG | OnboardGate | §62c §62o | one-time product authorization gate, config integrity snapshot, ONBOARDING lifecycle enforcement |
 
-## Schema Catalog (34 entries)
+## Schema Catalog (36 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -10034,8 +10123,10 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | LifecycleBoundary | LifecycleBoundary | lcb- | §62b |
 | IntegritySignal | IntegritySignal | isig- | §62b |
 | JustificationContext | JustificationContext | jctx- | §62b |
+| ProductEntry | ProductEntry | prod- | §62b |
+| SwitchRecord | SwitchRecord | swrec- | §62b |
 
-## Protocol Catalog (14 entries)
+## Protocol Catalog (15 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -10053,6 +10144,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | PMM | PatternMechanismMapping | AP-to-section lookup → role classification → uniqueness check → ambiguity resolution | §62l |
 | QE | QualityEnsuranceProtocol | enumerate changed constructs → field ordering check → cross-reference resolution → contract consistency → count/catalog drift → emit finding list (PASS or degradations) | §62l |
 | JOIN | JoinProtocol | enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs) | §62l |
+| PSP | ProductSwitchProtocol | validate target → record switch → update active product → trigger re-onboard | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -10338,6 +10430,8 @@ The following schemas were added in r54/r55, r61, and r62 and MUST be registered
 | FeatureBundle | COMPOSITIONAL | CitizenBase | r62 |
 | FeatureBundleRef | COMPOSITIONAL | CitizenBase | r62 |
 | OnboardRecord | FOUNDATIONAL | CitizenBase | r71 |
+| ProductEntry | INTEGRATED | CitizenBase | r72 |
+| SwitchRecord | INTEGRATED | CitizenBase | r72 |
 
 # 62o. Product Onboard Phase
 
@@ -10421,6 +10515,46 @@ A re-onboard MUST NOT reset Objectives, Capabilities, Evidence, or any accumulat
 **Implements:** OnboardGate Mechanism (§62c), OperatorGateProtocol (§62l).
 **Uses:** OnboardRecord (§62b), CheckpointRecord (§62b), Evidence (§62b).
 **Referenced from:** §62b OnboardRecord, §62c OnboardGate Mechanism, §59b maturity progression, §62k `urace onboard`.
+
+---
+
+# 62p. Product Registry
+
+The Product Registry formalizes multi-product management within a single URACE installation. It allows an operator to declare multiple Products, switch between them safely, and maintain isolated State histories per Product — all without a separate URACE installation per Product.
+
+## Purpose
+
+A single URACE installation governs one active Product at a time. The Product Registry extends this with:
+
+1. **Multi-product declaration.** `Config.product_registry` holds a named list of ProductEntry records, each with its own `state_path`, `product_files`, and optional `intent_purpose`.
+2. **Safe switching.** `urace product switch` applies ProductSwitchProtocol (§62l) — a four-step atomic protocol that records the switch, updates Config, and triggers re-onboarding for the new product.
+3. **State isolation.** Each product's State is stored in its own file (per `ProductEntry.state_path`). Switching products loads a different state file. Prior-product State is never overwritten.
+4. **Audit trail.** SwitchRecord (§62b) in State.switch_records provides a durable, non-compactable log of every product switch.
+
+## Active Product Resolution
+
+At runtime, the active product is resolved as follows:
+
+1. If `Config.active_product` is set, it is the active product name.
+2. If a matching ProductEntry exists in `Config.product_registry`, its `state_path` is used for all State I/O.
+3. If no matching entry exists, `Config.state_path` is used (legacy fallback).
+4. If `Config.active_product` is absent, `Config.product` is the active product name, and `Config.state_path` is used.
+
+**Config.active_product and Config.product relationship.** `active_product` takes precedence. When a product switch occurs, `active_product` is updated by `urace product switch`. `Config.product` is left unchanged — it is the installation's default product name, not the currently active product.
+
+## State Isolation Contract
+
+Each ProductEntry MUST declare a unique `state_path`. Two ProductEntry records with the same `state_path` MUST be rejected at register time (`product-registry-duplicate-state-path` WARNING). State I/O for the active product MUST use exactly the resolved `state_path`. A product switch MUST NOT write to the prior product's state file after the switch is committed.
+
+## Registry Lifecycle
+
+- **register:** Adds ProductEntry to Config.product_registry. Does not create the state file (created on `urace init` or first `urace auto` for that product).
+- **switch:** Applies PSP; sets Config.active_product; triggers re-onboard.
+- **archive:** (future) Sets ProductEntry.status = ARCHIVED; prevents switching to archived products.
+
+**Implements:** ProductSwitchProtocol (§62l).
+**Uses:** ProductEntry (§62b), SwitchRecord (§62b), OnboardGate (§62c), OnboardRecord (§62b).
+**Referenced from:** §62l ProductSwitchProtocol, §62k `urace product`.
 
 ---
 
@@ -12402,6 +12536,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `qualityensurance` | QualityEnsuranceProtocol (§62l) |
 | `join` | JoinProtocol (§62l) |
 | `onboard` | OnboardRecord, OnboardGate, Product Onboard Phase, onboard confirm, onboard status, ONBOARDING lifecycle state, product switch, config_digest, onboard-confirmation-pending |
+| `productregistry` | ProductRegistry, ProductEntry, SwitchRecord, product_registry, active_product, product switch, PSP, urace product |
 
 ## Audit Content
 
@@ -12467,6 +12602,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r72 | 2026-10-17 | spec+runtime | Product Registry. New §62p normative section formalizing multi-product management within a single URACE installation: multi-product declaration (Config.product_registry), safe switching (ProductSwitchProtocol), state isolation (per-product state files), audit trail (SwitchRecord). New §62b citizen schemas: ProductEntry (prefix "prod-", fields: id, name, state_path, product_files, intent_purpose OPTIONAL, registered_at, last_active_at OPTIONAL, status ACTIVE|INACTIVE|ARCHIVED; uniqueness contract: duplicate name → `product-registry-duplicate-name` WARNING) and SwitchRecord (prefix "swrec-", fields: id, from_product, to_product, switched_at, switched_by, reason OPTIONAL; audit contract: non-compactable). New §62l construct: ProductSwitchProtocol (PSP, INTEGRATED, depends: [OnboardGate]): 4-step atomic protocol (validate target → record switch → update active_product → trigger re-onboard); atomicity contract (steps 2+3 must be atomic; rollback on Config write failure). Config Document: `product_registry` OPTIONAL (list[ProductEntry], default []) and `active_product` OPTIONAL (string; overrides Config.product for active product name and routes state_path to matching ProductEntry.state_path). State Document: `switch_records` OPTIONAL field added (list[SwitchRecord], default []). Active Product Resolution algorithm added to §62p: (1) active_product present → use it; (2) matching ProductEntry → use its state_path; (3) no match → Config.state_path fallback; (4) active_product absent → Config.product + Config.state_path. New §62k commands: `urace product list` (SD=True, all registry entries with active marker), `urace product status` (SD=True, active product diagnostic), `urace product switch <name>` (PSP application), `urace product register <name>` (add ProductEntry to registry). 3 new IGC gap kinds: `product-registry-unknown-product` (WARNING), `product-switch-pending-onboard` (INFO), `product-registry-duplicate-name` (WARNING); IGC total 100→103. Schema Catalog: ProductEntry + SwitchRecord added (34→36). Protocol Catalog: PSP added (14→15). §62n ConstructKindRegistry: ProductEntry (INTEGRATED), SwitchRecord (INTEGRATED) added. §81: `productregistry` stem added. Runtime (r72): `save_config()` added to _common.py; `state_path()` updated to dispatch on `active_product` + `product_registry`; `initial_state()` adds `switch_records: []`; `product` command added to cli.py (list/status/switch/register subcommands); `product` added to `_KNOWN_TOP_COMMANDS`; 3 new gap kinds added to primitives.py INTEGRITY_GAP_CATALOG; 8 new behavioral tests (R72ProductRegistryTests). **1000 tests pass.** QE: PASS. JOIN: PASS. **New external references:** `ProductEntry` schema → §62b (this revision); `SwitchRecord` schema → §62b (this revision); `ProductSwitchProtocol` (PSP) Protocol → §62l (this revision); `Config.product_registry` field → §62e Config Document (this revision); `Config.active_product` field → §62e Config Document (this revision); `State.switch_records` field → §62e State Document (this revision); `§62p` section → §62p Product Registry (this revision); `urace product list` command → §62k (this revision); `urace product status` command → §62k (this revision); `urace product switch` command → §62k (this revision); `urace product register` command → §62k (this revision); `product-registry-unknown-product` IGC kind → §62l (this revision); `product-switch-pending-onboard` IGC kind → §62l (this revision); `product-registry-duplicate-name` IGC kind → §62l (this revision); `productregistry` stem → §81 (this revision) |
 | r71 | 2026-10-17 | spec+runtime | Product Onboard Phase. New lifecycle state `ONBOARDING` added as the pre-cycle entry gate — precedes BOOTSTRAPPING in the maturity progression. New §62b citizen schema: OnboardRecord (prefix "onb-", fields: id, created_at, product_name, confirmed_by, confirmed_at, config_digest, gates_passed, capability_envelope_waived OPTIONAL, notes OPTIONAL, superseded_at OPTIONAL); staleness contract (config_digest divergence → WARNING, non-blocking); uniqueness contract (at most one active per product_name; supersede on re-confirm). New §62c mechanism: OnboardGate (7-step algorithm: config-completeness, product-files-readable, intent-anchored, capability-envelope-declared, self-evolution-policy-recorded, operator-confirmation, on-confirm record+checkpoint+clear-gaps+set-DORMANT); SD=True; no executor credits consumed. New §62o normative section: Product Onboard Phase — purpose (authorization anchor, config integrity snapshot, product switchability gate), lifecycle position, entry trigger (no OnboardRecord for Config.product), gate step table, Product Switchability contract (product-agnostic; prior state retained with product_name isolation), idempotency and refresh contracts, re-onboard contract. New §62k commands: `urace onboard status` (idempotent gate evaluation) and `urace onboard confirm` (operator confirmation, creates OnboardRecord, writes ONBOARD_COMPLETE Checkpoint, clears onboard-* gaps, sets lifecycle_state=DORMANT). 6 new IGC gap kinds: `onboard-config-incomplete` (BLOCKING), `onboard-no-readable-product-files` (BLOCKING), `onboard-intent-unanchored` (BLOCKING), `onboard-capability-envelope-missing` (WARNING), `onboard-confirmation-pending` (BLOCKING), `onboard-record-config-diverged` (WARNING); IGC total 94→100. State Document: `onboard_records` OPTIONAL field added (list[OnboardRecord], default []). Schema Catalog: OnboardRecord added (33→34). Runtime (r71): 5 autonomous capability gaps closed — (P1a) wake stale→expired escalation with liveness_failures+stale_since tracking; (P1b) discovery proportionality IntegrityGaps for DEFERRED_PROPORTIONALITY and DISCOVERY_YIELD_EXHAUSTED; (P2a) CAPABILITY_DEFINING objective gate at CAPABLE/OPTIMIZED maturity (requires DecisionRecord with AUTHORITY_GRANT kind); (P2b) BOOTSTRAPPING→CAPABLE transition gate (requires passing CAPABILITY_GATE or ACCEPTANCE TestRunRecord); (P3) CSI/PPP_M full wiring (Config.community_inbox.feeds drives CSI; PPP_M with AUTO/SMART/HUMAN routing; `inbox apply`/`inbox reject` CLI commands). State Document: `community_feeds`, `community_signals`, `patch_proposals` added to initial_state(). **992 tests pass** (existing baseline unchanged; onboard runtime tests and gap tests pending runtime implementation). JOIN pass: all new constructs wired (OnboardRecord Used-in, OnboardGate Referenced-from, §62o References, §62k urace-onboard cross-refs complete). QE pass: no schema field order violations; all new IGC kinds in catalog table; count updated; new external references listed. **New external references:** `ONBOARDING` lifecycle state → §62e lifecycle_state enum (this revision); `OnboardRecord` schema → §62b (this revision); `OnboardGate` Mechanism → §62c (this revision); `§62o` section → §62o Product Onboard Phase (this revision); `urace onboard status` command → §62k (this revision); `urace onboard confirm` command → §62k (this revision); `onboard-config-incomplete` IGC kind → §62l (this revision); `onboard-no-readable-product-files` IGC kind → §62l (this revision); `onboard-intent-unanchored` IGC kind → §62l (this revision); `onboard-capability-envelope-missing` IGC kind → §62l (this revision); `onboard-confirmation-pending` IGC kind → §62l (this revision); `onboard-record-config-diverged` IGC kind → §62l (this revision); `State.onboard_records` field → §62e State Document (this revision) |
 | r70 | 2026-10-16 | spec+runtime | Runtime alignment pass (r65–r69 gap closure). State Document bootstrap: initialized `assessment_gaps`, `lifecycle_boundaries`, `integrity_signals` as empty lists in `initial_state()` — three r65 schemas whose State fields were declared in r67 but not wired into bootstrap. Implemented `record_assessment_gap()` (deduplication contract: same cycle_id+dimension updates last_at, not append) and `resolve_assessment_gap()` (sets resolved_at, removes from active list) in cli.py. Added `justification_context_id` OPTIONAL parameter to `create_decision_record()` in decision_record.py. Added 8 behavioral tests: BJ (AssessmentGap deduplication), BK (AssessmentGap resolution — two assertions each), 3 State Document initialization assertions, 1 DecisionRecord.justification_context_id acceptance test. Spec version header bumped r65→r70. **978 tests pass.** QE: PASS. JOIN: PASS. **New external references:** none (all constructs previously declared) |
 | r69 | 2026-10-16 | spec | Add JoinProtocol (JOIN) as named §62l construct. JOIN formalizes the post-change wiring audit as a 6-step protocol: enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs). §62l count updated sixteen→seventeen; enforcement contract self-enforcing list updated to include JOIN (seven→eight). §62m Protocol Catalog: JOIN added (13→14 entries). §62n ConstructKindRegistry: JOIN added (FOUNDATIONAL, standalone: true). §81: `join` stem added. QE: PASS. JOIN: PASS. **New external references:** `JOIN` Protocol → §62l (this revision); `JoinProtocol` construct → §62l (this revision); `join` stem → §81 (this revision) |
