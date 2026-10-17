@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r74**
+**Specification version: 2026-10-17-r75**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -4249,6 +4249,7 @@ State {
   onboard_records       OPTIONAL  list[OnboardRecord]; completed and superseded onboard records; default []
   switch_records        OPTIONAL  list[SwitchRecord]; audit trail of product switches; default []
   fleet_records         OPTIONAL  list[FleetRecord]; fleet lifecycle audit trail; default []
+  trace_records         OPTIONAL  list[TraceRecord]; lifecycle trace log; non-compactable; default []
 }
 ```
 
@@ -4883,6 +4884,8 @@ OnboardRecord {
 
 **Uniqueness contract.** At most one OnboardRecord with `product_name` matching the current Config.product MUST be active in State at any time. A second `urace onboard confirm` for the same product supersedes the prior record; the prior record MUST be retained with `superseded_at` set.
 
+Implements: AuditRecord.
+
 Used in: State.onboard_records.
 
 ## ProductEntry
@@ -4923,6 +4926,8 @@ SwitchRecord {
 
 **Audit contract.** Every successful `urace product switch` MUST append one SwitchRecord to State.switch_records. SwitchRecords MUST NOT be compacted away for the life of the State.
 
+Implements: AuditRecord.
+
 Used in: State.switch_records.
 
 ## FleetMemberStatus enum.
@@ -4952,7 +4957,33 @@ FleetRecord {
 
 **Audit contract.** Every fleet lifecycle event MUST append one FleetRecord to State.fleet_records. FleetRecords MUST NOT be compacted away.
 
+Implements: AuditRecord.
+
 Used in: State.fleet_records.
+
+## TraceRecord
+
+A first-class trace citizen for lifecycle events. TraceRecord is the canonical durable record for all consequential lifecycle mutations enumerated by ObservabilityContract (§62l).
+
+```
+TraceRecord {
+  id            REQUIRED  Identifier; prefix "trace-"
+  at            REQUIRED  ISO-8601 timestamp; when the event occurred
+  kind          REQUIRED  CYCLE | OPERATION | DECISION | TRANSITION | GAP | ONBOARD | SWITCH | FLEET
+  cycle_id      OPTIONAL  string; id of the autonomous cycle this trace is associated with
+  operation_id  OPTIONAL  string; id of the Operation this trace is associated with
+  decision_id   OPTIONAL  string; id of the DecisionRecord this trace is associated with
+  summary       REQUIRED  string; human-readable description of what changed and why
+  detail        OPTIONAL  string; extended context or correction reference
+  recorded_by   REQUIRED  string; who or what produced this record (default "runtime")
+}
+```
+
+Implements: AuditRecord.
+
+**Non-compactability contract.** TraceRecord entries MUST NOT be removed during compaction. State.trace_records MUST be retained in full across all compaction passes.
+
+Used in: State.trace_records.
 
 ---
 
@@ -9516,13 +9547,28 @@ urace fleet broadcast [--json]
 
 **Exit codes.** All subcommands exit 0 on success, 1 on validation failure or missing members config.
 
+## urace trace
+
+Query the lifecycle trace log. SD=True; implements InspectionContract (§62l). Uses: TraceRecord (§62b), §62r Audit and Observability.
+
+```
+urace trace list [--kind CYCLE|OPERATION|DECISION|TRANSITION|GAP|ONBOARD|SWITCH|FLEET]
+                 [--cycle-id <id>] [--since <ISO>] [--until <ISO>]
+                 [--limit N] [--offset M] [--json]
+urace trace inspect <trace-id> [--json]
+```
+
+**`trace list`** — returns TraceRecord entries from `State.trace_records` in reverse-chronological order. `--kind` filters by record kind. `--cycle-id` returns all records for a specific cycle (enables full cycle reconstruction). `--since/--until` filter by `at` timestamp. `--limit` defaults to 50. `--json` emits array.
+
+**`trace inspect <id>`** — returns the full TraceRecord for the given id. Exits 1 if not found.
+
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines nineteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines twenty-two named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All nineteen constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining ten constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, and FOP — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All twenty-two constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining eleven constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, and AuditRecord — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -9547,6 +9593,83 @@ GoverningRecord {
 **Referenced from:** §6 Authority, §62b DestinationAnchor, §72 Policy Enforcement, §62c Authority Resolution Mechanism.
 
 **Schemas that implement GoverningRecord:** WakeRegistration, ExecutorProvider, RetentionPolicy. These schemas MUST declare `Implements: GoverningRecord` and MUST include all GoverningRecord fields (`id`, `authority_basis`, `scope`, `established_at`).
+
+---
+
+## AuditRecord Canonical Cluster
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+An **AuditRecord** is any citizen that serves as a durable, append-only audit trail entry. AuditRecords share four required fields and three binding contracts.
+
+**Required fields:**
+```
+AuditRecord {
+  id          REQUIRED  Identifier; prefix depends on citizen type
+  at          REQUIRED  string; ISO-8601 timestamp; when the event occurred
+  recorded_by REQUIRED  string; who or what produced this record ("runtime", "operator", "fleet-orchestrator", etc.)
+  event_kind  REQUIRED  string; discriminator for the event type (citizen-local enum)
+}
+```
+
+**Three binding contracts:**
+
+1. **Non-compactability.** AuditRecord citizens MUST NOT be removed, truncated, or aggregated during any compaction pass. Their lists in State are exempt from `Config.retention` eviction. A compaction that removes an AuditRecord entry is a `audit-record-compacted` BLOCKING integrity violation.
+2. **Append-only.** Once written, an AuditRecord's `id`, `at`, `recorded_by`, and `event_kind` fields MUST NOT be mutated. Corrections MUST be made by appending a new record with a reference to the corrected record's id in `detail`.
+3. **Emission obligation.** Every consequential lifecycle mutation listed in ObservabilityContract MUST produce at least one durable AuditRecord (TraceRecord, SwitchRecord, FleetRecord, or equivalent). A mutation without a durable record is an ObservabilityContract violation.
+
+**Citizens implementing AuditRecord:** TraceRecord (§62b), SwitchRecord (§62b), FleetRecord (§62b), OnboardRecord (§62b).
+
+**Referenced from:** §62b TraceRecord, SwitchRecord, FleetRecord, OnboardRecord; §62l ObservabilityContract; §62r Audit and Observability.
+
+---
+
+## InspectionContract
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **InspectionContract** governs all SD=True read-only query commands. It is defined once here; all inspection subcommands MUST cite it rather than restating the pattern inline.
+
+**Five-clause contract:**
+
+1. **Read-only.** An inspection command MUST NOT mutate state. It MUST use `load_state_for_read()`. Any failure to load state MUST produce a graceful error message and exit 1, never a partial mutation.
+2. **Filter before output.** Filtering parameters (`--kind`, `--since`, `--until`, `--type`, `--severity`, `--status`, `--scope`, `--stale`, `--resolved`) MUST be applied before pagination. Filtering is always exact-match or prefix-match on the named field unless specified otherwise.
+3. **Paginate.** `--limit N` (default: command-local, typically 20) and `--offset M` (default: 0) MUST be applied after filtering. Records MUST be returned in reverse-chronological order (most recent first) unless the command specifies otherwise.
+4. **Dual output.** Every inspection command MUST support `--json` for machine-readable output (JSON array or object) and human-readable default output (one record per line, key fields only). The JSON schema MUST be stable across patch revisions.
+5. **Zero-failure exit.** An inspection command that returns zero records MUST exit 0 (empty result is not an error). An inspection command MUST exit 1 only on load failure or invalid arguments.
+
+**Citizens using InspectionContract:** (none — governs command behavior, not schema fields).
+**Referenced from:** §62k `evidence list`, `blocker list`, `decision list`, `integrity-signal list`, `govern list-gates`, `product list`, `fleet status`, `goal list`, `urace trace list`; §62r Audit and Observability.
+
+---
+
+## ObservabilityContract
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [AuditRecord]`
+
+The **ObservabilityContract** defines which lifecycle mutations are observable events that MUST produce durable records. It is defined once here; all sections that perform covered mutations cite it by name.
+
+**Covered mutations — each MUST produce a TraceRecord or equivalent AuditRecord citizen:**
+
+| Mutation | Required record | kind |
+|---|---|---|
+| lifecycle_state transition | TraceRecord | TRANSITION |
+| Autonomous cycle entry/exit | TraceRecord | CYCLE |
+| Executor operation start/end | TraceRecord | OPERATION |
+| DecisionRecord creation | TraceRecord | DECISION |
+| IntegrityGap emission (BLOCKING) | TraceRecord | GAP |
+| Product onboard confirm | OnboardRecord (§62b) | ONBOARD |
+| Product switch | SwitchRecord (§62b) | SWITCH |
+| Fleet lifecycle event | FleetRecord (§62b) | FLEET |
+
+**Minimum observable fields.** Every TraceRecord emitted under this contract MUST include: `at`, `kind`, `summary` (human-readable description of what changed and why). Optional fields `cycle_id`, `operation_id`, `decision_id` MUST be populated when the TraceRecord is causally linked to those citizens.
+
+**Inspection surface.** All TraceRecords MUST be queryable via `urace trace list` (§62k). The full trace for any cycle MUST be reconstructable by filtering `trace_records` by `cycle_id`.
+
+**Autonomy gap.** A lifecycle_state transition that has no corresponding TraceRecord in `State.trace_records` MUST be surfaced as `trace-record-missing` WARNING IntegrityGap. This gap is informational and MUST NOT block autonomous operations.
+
+**Citizens using ObservabilityContract:** (none — governs emission behavior, not schema fields).
+**Referenced from:** §62b TraceRecord, §62l AuditRecord; §62r Audit and Observability.
 
 ---
 
@@ -9987,6 +10110,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `fleet-member-crashed` | WARNING | §62l FOP clause 4 | Fleet member process exited unexpectedly; check member logs; orchestrator will attempt restart |
 | `fleet-duplicate-state-path` | BLOCKING | §62l FOP clause 1 | Two fleet members share the same state_path; fix product_registry before starting fleet |
 | `fleet-signal-broadcast-skipped` | INFO | §62l FOP clause 3 | Signal broadcast attempted but member inbox not writable; check file permissions |
+| `audit-record-compacted` | BLOCKING | §62l AuditRecord non-compactability contract | AuditRecord citizen was removed during compaction; restore from backup or re-establish the record |
+| `trace-record-missing` | WARNING | §62l ObservabilityContract autonomy gap | A lifecycle_state transition occurred without a corresponding TraceRecord; informational only |
 | `blocker-escalated` | WARNING | §62b Blocker schema classification contract | Acknowledge escalation; consider operator intervention if pattern persists |
 | `integrity-signal-unclassified` | WARNING | §62c SignalClassifier | Review unclassified condition and register it in the SignalClassifier classification table |
 | `lifecycle-boundary-violation` | BLOCKING | §62b LifecycleBoundary / §62l BoundaryContract | Apply Transaction Recovery Protocol (AP27); resolve incomplete boundary before creating new ones |
@@ -10165,7 +10290,7 @@ The FleetOrchestrationProtocol governs parallel multi-product autonomous evoluti
 | SCF | SignalClassifier | §62c | runtime signal classification, IntegritySignal emission, REPAIRING entry gate |
 | OBG | OnboardGate | §62c §62o | one-time product authorization gate, config integrity snapshot, ONBOARDING lifecycle enforcement |
 
-## Schema Catalog (37 entries)
+## Schema Catalog (38 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -10207,6 +10332,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ProductEntry | ProductEntry | prod- | §62b |
 | SwitchRecord | SwitchRecord | swrec- | §62b |
 | FleetRecord | FleetRecord | flrec- | §62b |
+| TraceRecord | TraceRecord | trace- | §62b |
 
 ## Protocol Catalog (16 entries)
 
@@ -10516,6 +10642,7 @@ The following schemas were added in r54/r55, r61, and r62 and MUST be registered
 | ProductEntry | INTEGRATED | CitizenBase | r72 |
 | SwitchRecord | INTEGRATED | CitizenBase | r72 |
 | FleetRecord | INTEGRATED | CitizenBase | r73 |
+| TraceRecord | FOUNDATIONAL | CitizenBase + AuditRecord | r75 |
 
 # 62o. Product Onboard Phase
 
@@ -10693,6 +10820,46 @@ A product running in a fleet MAY also have its own portfolio optimization active
 **Implements:** FleetOrchestrationProtocol (§62l).
 **Uses:** FleetRecord (§62b), ProductEntry (§62b), OnboardGate (§62c), CSI (§62c).
 **Referenced from:** §62l FOP, §62k `urace fleet`, §62p Product Registry.
+
+---
+
+# 62r. Audit and Observability
+
+URACE guarantees that every consequential lifecycle mutation is observable — recorded in durable state, queryable via CLI, and never silently discarded. This section defines the three canonical constructs that implement this guarantee: AuditRecord (§62l), InspectionContract (§62l), and ObservabilityContract (§62l).
+
+## Audit Trail
+
+All audit-trail citizens implement the AuditRecord cluster (§62l): TraceRecord, SwitchRecord, FleetRecord, and OnboardRecord. They share the append-only, non-compactable contract. The canonical query surface for the full audit trail is `urace trace list`, which exposes all TraceRecord entries. SwitchRecords and FleetRecords are queryable via `urace product list` and `urace fleet status` respectively.
+
+## Inspection Surface
+
+The InspectionContract (§62l) is the single definition of how SD=True read-only commands behave. All inspection commands (`evidence list`, `blocker list`, `decision list`, `integrity-signal list`, `govern list-gates`, `product list`, `fleet status`, `goal list`, `trace list`) implement this contract by declaration — they do not restate its terms inline.
+
+**Canonical inspection commands and their primary records:**
+
+| Command | Primary record | State field |
+|---|---|---|
+| `urace check` | IntegrityGap | integrity_gaps |
+| `urace evidence list` | Evidence | evidence |
+| `urace blocker list` | Blocker | blockers |
+| `urace decision list` | DecisionRecord | decision_records |
+| `urace integrity-signal list` | IntegritySignal | integrity_signals |
+| `urace govern list-gates` | IntegrityGap (BLOCKING) | integrity_gaps |
+| `urace trace list` | TraceRecord | trace_records |
+| `urace product list` | ProductEntry | Config.product_registry |
+| `urace fleet status` | FleetRecord (live) | fleet_records + live process state |
+
+## Observability Contract
+
+The ObservabilityContract (§62l) defines which mutations MUST produce a TraceRecord. Conforming implementations MUST call `_emit_trace()` (or equivalent) at every covered mutation point. The `trace-record-missing` WARNING gap is the runtime's self-audit signal when a transition is detected without a corresponding trace.
+
+## Reuse as Constructor
+
+Any new section, mechanism, or citizen that requires audit trail behavior MUST declare `Implements: AuditRecord` and cite `ObservabilityContract` rather than defining its own non-compactability or append-only contract. Any new SD=True inspection command MUST declare `Implements: InspectionContract` and cite this section rather than restating filter/paginate/json behavior.
+
+**Implements:** AuditRecord (§62l), InspectionContract (§62l), ObservabilityContract (§62l).
+**Uses:** TraceRecord (§62b), SwitchRecord (§62b), FleetRecord (§62b), OnboardRecord (§62b).
+**Referenced from:** §62l AuditRecord, InspectionContract, ObservabilityContract; §62k `urace trace`.
 
 ---
 
@@ -12676,6 +12843,9 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `onboard` | OnboardRecord, OnboardGate, Product Onboard Phase, onboard confirm, onboard status, ONBOARDING lifecycle state, product switch, config_digest, onboard-confirmation-pending |
 | `productregistry` | ProductRegistry, ProductEntry, SwitchRecord, product_registry, active_product, product switch, PSP, urace product |
 | `fleet` | FleetOrchestrationProtocol, FleetRecord, fleet run, fleet status, fleet stop, fleet broadcast, signal broadcast, member isolation, crash recovery |
+| `auditrecord` | AuditRecord canonical cluster, AuditRecord contract, non-compactable, append-only, audit trail citizen |
+| `inspectioncontract` | InspectionContract, SD=True read pattern, filter/paginate/json, inspection command |
+| `observability` | ObservabilityContract, TraceRecord, trace-record-missing, lifecycle observability, urace trace |
 
 ## Audit Content
 
@@ -12741,6 +12911,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r75 | 2026-10-17 | spec+runtime | Audit/Inspect/Trace canonization. New §62b citizen schema: TraceRecord (prefix "trace-", fields: id, at, kind CYCLE\|OPERATION\|DECISION\|TRANSITION\|GAP\|ONBOARD\|SWITCH\|FLEET, cycle_id OPTIONAL, operation_id OPTIONAL, decision_id OPTIONAL, summary, detail OPTIONAL, recorded_by; non-compactability contract; Implements: AuditRecord). Three new §62l constructs: AuditRecord Canonical Cluster (FOUNDATIONAL, depends: []; four required fields: id/at/recorded_by/event_kind; three binding contracts: non-compactability, append-only, emission obligation; implementing citizens: TraceRecord, SwitchRecord, FleetRecord, OnboardRecord); InspectionContract (FOUNDATIONAL, depends: []; five-clause contract: read-only, filter-before-output, paginate, dual-output, zero-failure-exit; governing all SD=True inspection commands); ObservabilityContract (FOUNDATIONAL, depends: [AuditRecord]; covered-mutations table: 8 mutation→record→kind rows; autonomy gap: trace-record-missing WARNING; inspection surface: urace trace list). New §62r normative section: Audit and Observability — audit trail, inspection surface table, observability contract, reuse-as-constructor contract. New §62k command: `urace trace list` (--kind/--cycle-id/--since/--until/--limit/--offset/--json) and `urace trace inspect <id>`. State Document: `trace_records` OPTIONAL list[TraceRecord] added. §62b retrofit: `Implements: AuditRecord` added to SwitchRecord, FleetRecord, OnboardRecord. IGC: 2 new kinds (audit-record-compacted BLOCKING, trace-record-missing WARNING); IGC total 106→108. Schema Catalog: TraceRecord added (37→38). §62l count: nineteen→twenty-two; enforcement contract self-enforcing list updated (ten→eleven, plus InspectionContract+ObservabilityContract). §62n ConstructKindRegistry: TraceRecord (FOUNDATIONAL, CitizenBase+AuditRecord, r75). §81: 3 new stems (auditrecord, inspectioncontract, observability). Runtime: `initial_state()` adds `trace_records: []`; `_emit_trace()` helper function added near `_emit_gap`; `cycle()` emits CYCLE+TRANSITION+ONBOARD TraceRecords at 7 covered mutation points; `trace` command added (list/inspect subcommands); `trace` added to `_KNOWN_TOP_COMMANDS`; `trace list`/`trace inspect` added to `_SD_TRUE_EXACT`; 10 new R75AuditObservabilityTests. **New external references:** `TraceRecord` schema → §62b (this revision); `AuditRecord` Canonical Cluster → §62l (this revision); `InspectionContract` Protocol → §62l (this revision); `ObservabilityContract` Protocol → §62l (this revision); `§62r` section → §62r Audit and Observability (this revision); `urace trace list` command → §62k (this revision); `urace trace inspect` command → §62k (this revision); `State.trace_records` field → §62e State Document (this revision); `audit-record-compacted` IGC kind → §62l (this revision); `trace-record-missing` IGC kind → §62l (this revision); `auditrecord` stem → §81 (this revision); `inspectioncontract` stem → §81 (this revision); `observability` stem → §81 (this revision) |
 | r74 | 2026-10-17 | runtime | CLI alignment pass — 6 missing commands implemented, 14 missing flags added. New top-level commands: `evidence list` (--kind/--since/--until/--limit), `blocker list/resolve` (--resolved/--scope/--note), `decision list/inspect` (--stale/--scope/--limit), `integrity-signal list` (--type/--severity/--resolved), `govern clear/list-gates` (--note), `autonomous` (alias for auto). Missing flags added: `check --fail-on`, `vitals --since/--until/--limit/--fail-on`, `goal list --status/--limit`, `inbox list --kind/--status/--limit`, `rules list --since/--until/--limit/--offset`, `why --limit`. _SD_TRUE_EXACT: 8 new two-word aliases (evidence list, blocker list/resolve, decision list/inspect, integrity-signal list, govern list-gates/clear). _KNOWN_TOP_COMMANDS: 6 entries added. 13 new R73CommandAlignmentTests; **1076 tests pass.** **New external references:** none (all constructs previously declared in §62k). |
 | r73 | 2026-10-17 | spec+runtime | Fleet Orchestration. New §62q normative section: parallel multi-product autonomous evolution via FleetOrchestrationProtocol (FOP). Config.fleet subschema (members, signal_broadcast, max_concurrent, broadcast_min_confidence). State.fleet_records OPTIONAL field added (list[FleetRecord], default []). New §62b citizens: FleetMemberStatus enum (RUNNING\|PAUSED\|STOPPED\|ERROR\|PENDING) and FleetRecord schema (prefix "flrec-", fields: id, event, product_name OPTIONAL, at, detail OPTIONAL; audit contract: non-compactable). New §62l construct: FleetOrchestrationProtocol (FOP, INTEGRATED, depends: [ProductSwitchProtocol, OnboardGate]): 5-clause protocol (member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop); scope isolation invariant (members unaware of fleet config); signal broadcast exclusion set (bootstrap, onboard-complete, onboard-policy-defaulted). New §62k commands: `urace fleet run` (--dry-run/--verbose/--json), `urace fleet status`, `urace fleet stop [<name>]`, `urace fleet broadcast`. 3 new IGC gap kinds: `fleet-member-crashed` (WARNING), `fleet-duplicate-state-path` (BLOCKING), `fleet-signal-broadcast-skipped` (INFO); IGC total 103→106. Schema Catalog: FleetRecord added (36→37). Protocol Catalog: FOP added (15→16). §62n ConstructKindRegistry: FleetRecord (INTEGRATED) added. §62l count updated eighteen→nineteen; self-enforcing list updated to include FOP (nine→ten). §81: `fleet` stem added. Runtime (r73): `initial_state()` adds `fleet_records: []`; `fleet` command added to cli.py (run/status/stop/broadcast subcommands); `fleet` added to `_KNOWN_TOP_COMMANDS`; 3 new gap kinds added to primitives.py; `load_config()` in _common.py reads `URACE_ACTIVE_PRODUCT` env var and sets `active_product` in returned config; 8 new behavioral tests (R73FleetTests). **QE: PASS. JOIN: PASS.** **New external references:** `FleetMemberStatus` enum → §62b (this revision); `FleetRecord` schema → §62b (this revision); `FleetOrchestrationProtocol` (FOP) Protocol → §62l (this revision); `Config.fleet` subschema → §62e Config Document (this revision); `State.fleet_records` field → §62e State Document (this revision); `§62q` section → §62q Fleet Orchestration (this revision); `urace fleet run` command → §62k (this revision); `urace fleet status` command → §62k (this revision); `urace fleet stop` command → §62k (this revision); `urace fleet broadcast` command → §62k (this revision); `fleet-member-crashed` IGC kind → §62l (this revision); `fleet-duplicate-state-path` IGC kind → §62l (this revision); `fleet-signal-broadcast-skipped` IGC kind → §62l (this revision); `fleet` stem → §81 (this revision) |
 | r72 | 2026-10-17 | spec+runtime | Product Registry. New §62p normative section formalizing multi-product management within a single URACE installation: multi-product declaration (Config.product_registry), safe switching (ProductSwitchProtocol), state isolation (per-product state files), audit trail (SwitchRecord). New §62b citizen schemas: ProductEntry (prefix "prod-", fields: id, name, state_path, product_files, intent_purpose OPTIONAL, registered_at, last_active_at OPTIONAL, status ACTIVE|INACTIVE|ARCHIVED; uniqueness contract: duplicate name → `product-registry-duplicate-name` WARNING) and SwitchRecord (prefix "swrec-", fields: id, from_product, to_product, switched_at, switched_by, reason OPTIONAL; audit contract: non-compactable). New §62l construct: ProductSwitchProtocol (PSP, INTEGRATED, depends: [OnboardGate]): 4-step atomic protocol (validate target → record switch → update active_product → trigger re-onboard); atomicity contract (steps 2+3 must be atomic; rollback on Config write failure). Config Document: `product_registry` OPTIONAL (list[ProductEntry], default []) and `active_product` OPTIONAL (string; overrides Config.product for active product name and routes state_path to matching ProductEntry.state_path). State Document: `switch_records` OPTIONAL field added (list[SwitchRecord], default []). Active Product Resolution algorithm added to §62p: (1) active_product present → use it; (2) matching ProductEntry → use its state_path; (3) no match → Config.state_path fallback; (4) active_product absent → Config.product + Config.state_path. New §62k commands: `urace product list` (SD=True, all registry entries with active marker), `urace product status` (SD=True, active product diagnostic), `urace product switch <name>` (PSP application), `urace product register <name>` (add ProductEntry to registry). 3 new IGC gap kinds: `product-registry-unknown-product` (WARNING), `product-switch-pending-onboard` (INFO), `product-registry-duplicate-name` (WARNING); IGC total 100→103. Schema Catalog: ProductEntry + SwitchRecord added (34→36). Protocol Catalog: PSP added (14→15). §62n ConstructKindRegistry: ProductEntry (INTEGRATED), SwitchRecord (INTEGRATED) added. §81: `productregistry` stem added. Runtime (r72): `save_config()` added to _common.py; `state_path()` updated to dispatch on `active_product` + `product_registry`; `initial_state()` adds `switch_records: []`; `product` command added to cli.py (list/status/switch/register subcommands); `product` added to `_KNOWN_TOP_COMMANDS`; 3 new gap kinds added to primitives.py INTEGRITY_GAP_CATALOG; 8 new behavioral tests (R72ProductRegistryTests). **1000 tests pass.** QE: PASS. JOIN: PASS. **New external references:** `ProductEntry` schema → §62b (this revision); `SwitchRecord` schema → §62b (this revision); `ProductSwitchProtocol` (PSP) Protocol → §62l (this revision); `Config.product_registry` field → §62e Config Document (this revision); `Config.active_product` field → §62e Config Document (this revision); `State.switch_records` field → §62e State Document (this revision); `§62p` section → §62p Product Registry (this revision); `urace product list` command → §62k (this revision); `urace product status` command → §62k (this revision); `urace product switch` command → §62k (this revision); `urace product register` command → §62k (this revision); `product-registry-unknown-product` IGC kind → §62l (this revision); `product-switch-pending-onboard` IGC kind → §62l (this revision); `product-registry-duplicate-name` IGC kind → §62l (this revision); `productregistry` stem → §81 (this revision) |
