@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r72**
+**Specification version: 2026-10-17-r73**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -4133,6 +4133,12 @@ Config {
   active_product       OPTIONAL  string; name of currently active product; if set, overrides Config.product for
                                  active product name and routes state_path to the matching ProductEntry.state_path;
                                  if absent, Config.product is used
+  fleet                OPTIONAL  object; Fleet Orchestration config; default absent (fleet disabled)
+    members            REQUIRED  list[string]; product names from product_registry to run in parallel
+    signal_broadcast   OPTIONAL  bool; default false; when true, high-confidence Evidence from each
+                                 member is broadcast as community signals to all other members via CSI inbox
+    max_concurrent     OPTIONAL  int; default 0 (unlimited); max simultaneously RUNNING members
+    broadcast_min_confidence OPTIONAL float; default 0.75; minimum confidence_score for broadcast signals
 }
 ```
 
@@ -4242,6 +4248,7 @@ State {
   integrity_signals     OPTIONAL  list[IntegritySignal]; active and resolved integrity signals; default []
   onboard_records       OPTIONAL  list[OnboardRecord]; completed and superseded onboard records; default []
   switch_records        OPTIONAL  list[SwitchRecord]; audit trail of product switches; default []
+  fleet_records         OPTIONAL  list[FleetRecord]; fleet lifecycle audit trail; default []
 }
 ```
 
@@ -4917,6 +4924,35 @@ SwitchRecord {
 **Audit contract.** Every successful `urace product switch` MUST append one SwitchRecord to State.switch_records. SwitchRecords MUST NOT be compacted away for the life of the State.
 
 Used in: State.switch_records.
+
+## FleetMemberStatus enum.
+
+```
+RUNNING   — member process is active and executing autonomous cycles
+PAUSED    — member process is suspended (lifecycle paused)
+STOPPED   — member process has cleanly exited
+ERROR     — member crashed 3 consecutive times; requires operator clearance
+PENDING   — member is registered but not yet started
+```
+
+## FleetRecord
+
+An audit record of a fleet lifecycle event. Every fleet lifecycle transition MUST append one FleetRecord to State.fleet_records.
+
+```
+FleetRecord {
+  id            REQUIRED  Identifier; prefix "flrec-"
+  event         REQUIRED  string; FLEET_START | FLEET_STOP | MEMBER_STARTED | MEMBER_STOPPED |
+                           MEMBER_CRASHED | SIGNAL_BROADCAST
+  product_name  OPTIONAL  string; the fleet member product name this event concerns
+  at            REQUIRED  string; ISO-8601; when the event occurred
+  detail        OPTIONAL  string; human-readable event detail (e.g. exit code, signal count)
+}
+```
+
+**Audit contract.** Every fleet lifecycle event MUST append one FleetRecord to State.fleet_records. FleetRecords MUST NOT be compacted away.
+
+Used in: State.fleet_records.
 
 ---
 
@@ -9457,13 +9493,36 @@ urace product register <name> --state-path <path> [--product-files <f>...] [--in
 
 **Exit codes.** All subcommands exit 0 on success, 1 on validation failure, 1 on Config/state write failure.
 
+## urace fleet
+
+Run and manage multiple products in parallel. Implements FleetOrchestrationProtocol (§62l). Uses: FleetRecord (§62b), §62q Fleet Orchestration.
+
+```
+urace fleet run [--dry-run] [--verbose] [--json]
+urace fleet status [--json]
+urace fleet stop [<product_name>] [--json]
+urace fleet broadcast [--json]
+```
+
+**`fleet run`** — starts all products listed in `Config.fleet.members` as independent `urace auto --quiet` subprocesses (one per member). Each member uses its own state_path from product_registry. Members not yet onboarded will immediately enter ONBOARDING and wait for `urace onboard confirm`. `--dry-run` shows which members would be started without launching. Blocks until all members exit (Ctrl-C for graceful stop).
+
+**`fleet status`** — reads each member's state file and reports: product_name, lifecycle_state, last_cycle, and whether the member has a valid OnboardRecord. `--json` emits array.
+
+**`fleet stop [<name>]`** — stop one named member or all members. Sends SIGTERM; waits 30s; SIGKILL if needed. Writes FleetRecord(MEMBER_STOPPED) to each member's state.
+
+**`fleet broadcast`** — one-shot manual signal broadcast: reads high-confidence Evidence from all registered members' state files and writes qualifying records to each other member's inbox. Useful for triggering cross-product learning without running full fleet.
+
+**`--verbose`** — show per-member cycle output on stdout.
+
+**Exit codes.** All subcommands exit 0 on success, 1 on validation failure or missing members config.
+
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines eighteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines nineteen named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All eighteen constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining nine constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, and PSP — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All nineteen constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining ten constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, and FOP — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -9925,6 +9984,9 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `product-registry-unknown-product` | WARNING | §62c ProductSwitchProtocol | Target product not found in Config.product_registry or has status≠ACTIVE; register or activate it first |
 | `product-switch-pending-onboard` | INFO | §62c ProductSwitchProtocol | Product switch applied; new active product awaits onboard confirmation (`urace onboard confirm`) |
 | `product-registry-duplicate-name` | WARNING | §62b ProductEntry uniqueness contract | Two ProductEntry records share the same name; remove the duplicate before switching |
+| `fleet-member-crashed` | WARNING | §62l FOP clause 4 | Fleet member process exited unexpectedly; check member logs; orchestrator will attempt restart |
+| `fleet-duplicate-state-path` | BLOCKING | §62l FOP clause 1 | Two fleet members share the same state_path; fix product_registry before starting fleet |
+| `fleet-signal-broadcast-skipped` | INFO | §62l FOP clause 3 | Signal broadcast attempted but member inbox not writable; check file permissions |
 | `blocker-escalated` | WARNING | §62b Blocker schema classification contract | Acknowledge escalation; consider operator intervention if pattern persists |
 | `integrity-signal-unclassified` | WARNING | §62c SignalClassifier | Review unclassified condition and register it in the SignalClassifier classification table |
 | `lifecycle-boundary-violation` | BLOCKING | §62b LifecycleBoundary / §62l BoundaryContract | Apply Transaction Recovery Protocol (AP27); resolve incomplete boundary before creating new ones |
@@ -10066,6 +10128,25 @@ The ProductSwitchProtocol governs safe transitions between Products in the regis
 **Referenced from:** §62o Product Onboard Phase (re-onboard trigger), §62k `urace product switch`.
 **Citizens using ProductSwitchProtocol:** SwitchRecord (§62b).
 
+## FleetOrchestrationProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: true` · `depends: [ProductSwitchProtocol, OnboardGate]`
+
+The FleetOrchestrationProtocol governs parallel multi-product autonomous evolution. Each fleet member runs as an independent process with its own Config+State scope. No member may read or write another member's State directly. Cross-product influence is limited to the signal broadcast channel (CSI, §62c).
+
+**Five-clause protocol:**
+
+1. **Member isolation.** Each fleet member MUST be launched with its own resolved state_path (via product_registry). A member MUST NOT share a state_path with another member. Duplicate state_path MUST emit `fleet-duplicate-state-path` BLOCKING gap and refuse to start.
+2. **Independent lifecycle.** Each member runs its own full OnboardGate + autonomous cycle. A member's BLOCKED or ONBOARDING state MUST NOT affect other members. The fleet orchestrator MUST continue running healthy members when one member is blocked.
+3. **Signal broadcast.** When `Config.fleet.signal_broadcast = true`, after each orchestration cycle the orchestrator MUST read the Evidence records of each RUNNING member and inject any Evidence with `kind` not in the exclusion set and scored relevance ≥ `broadcast_min_confidence` into every other member's inbox directory as authoritative-input JSON files. The injected input MUST carry `source: "fleet-broadcast"` and `from_product: <originating_product>`. Members are responsible for filtering relevance via their own CSI.
+4. **Crash recovery.** If a member process exits with a non-zero exit code, the orchestrator MUST emit `fleet-member-crashed` WARNING gap, append FleetRecord(event=MEMBER_CRASHED), and attempt one restart after a 30-second backoff. After 3 consecutive crashes, the member MUST be marked ERROR and the orchestrator MUST NOT restart it again without operator clearance.
+5. **Graceful stop.** `urace fleet stop` MUST send SIGTERM to all RUNNING members, wait up to 30 seconds for clean exit, then SIGKILL if necessary. Each stopped member MUST produce a FleetRecord(event=MEMBER_STOPPED).
+
+**Scope isolation invariant.** A fleet member MUST NOT read `Config.fleet` from within its own autonomous cycle — fleet config is orchestrator-only. Members are unaware they are running in a fleet.
+
+**Referenced from:** §62q Fleet Orchestration, §62k `urace fleet`.
+**Citizens using FleetOrchestrationProtocol:** FleetRecord (§62b).
+
 # 62m. Extended Construct Catalogs
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
@@ -10084,7 +10165,7 @@ The ProductSwitchProtocol governs safe transitions between Products in the regis
 | SCF | SignalClassifier | §62c | runtime signal classification, IntegritySignal emission, REPAIRING entry gate |
 | OBG | OnboardGate | §62c §62o | one-time product authorization gate, config integrity snapshot, ONBOARDING lifecycle enforcement |
 
-## Schema Catalog (36 entries)
+## Schema Catalog (37 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -10125,8 +10206,9 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | JustificationContext | JustificationContext | jctx- | §62b |
 | ProductEntry | ProductEntry | prod- | §62b |
 | SwitchRecord | SwitchRecord | swrec- | §62b |
+| FleetRecord | FleetRecord | flrec- | §62b |
 
-## Protocol Catalog (15 entries)
+## Protocol Catalog (16 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -10145,6 +10227,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | QE | QualityEnsuranceProtocol | enumerate changed constructs → field ordering check → cross-reference resolution → contract consistency → count/catalog drift → emit finding list (PASS or degradations) | §62l |
 | JOIN | JoinProtocol | enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs) | §62l |
 | PSP | ProductSwitchProtocol | validate target → record switch → update active product → trigger re-onboard | §62l |
+| FOP | FleetOrchestrationProtocol | member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -10432,6 +10515,7 @@ The following schemas were added in r54/r55, r61, and r62 and MUST be registered
 | OnboardRecord | FOUNDATIONAL | CitizenBase | r71 |
 | ProductEntry | INTEGRATED | CitizenBase | r72 |
 | SwitchRecord | INTEGRATED | CitizenBase | r72 |
+| FleetRecord | INTEGRATED | CitizenBase | r73 |
 
 # 62o. Product Onboard Phase
 
@@ -10555,6 +10639,60 @@ Each ProductEntry MUST declare a unique `state_path`. Two ProductEntry records w
 **Implements:** ProductSwitchProtocol (§62l).
 **Uses:** ProductEntry (§62b), SwitchRecord (§62b), OnboardGate (§62c), OnboardRecord (§62b).
 **Referenced from:** §62l ProductSwitchProtocol, §62k `urace product`.
+
+---
+
+# 62q. Fleet Orchestration
+
+Fleet Orchestration enables a single URACE installation to evolve multiple Products in parallel. Each Product in the fleet is an independent autonomous agent: its own Config scope, its own State file, its own OnboardRecord, its own authority chain. The Fleet Orchestrator is a thin process manager — it starts, monitors, and restarts member processes, and optionally bridges high-confidence Evidence between products via the signal broadcast channel.
+
+## Purpose
+
+1. **Parallel evolution.** Multiple Products advance simultaneously rather than sequentially. Each product's maturity progression and discovery cycle are independent.
+2. **Scope isolation.** No member can read or write another member's State. Cross-product influence is strictly one-way and signal-mediated — never a shared authority or shared state mutation.
+3. **Cross-product learning.** When `signal_broadcast = true`, Evidence that crosses the confidence threshold is injected into other members' inboxes as community signals. Each member's CSI filters for relevance. This enables shared learnings without shared authority.
+
+## Member Isolation Contract
+
+Each fleet member MUST:
+- Have a unique `product_name` in Config.product_registry
+- Have a unique `state_path` (no two members share a state file)
+- Run as an independent OS process with its own lifecycle
+- Be unaware of other fleet members (no fleet config visible in member's cycle)
+
+The orchestrator is the only component aware of the fleet topology. Members are vanilla `urace auto` processes.
+
+## Signal Broadcast Channel
+
+The signal broadcast channel re-uses the existing CSI inbox mechanism (§62c). After each orchestration heartbeat, the orchestrator:
+1. Reads each RUNNING member's `State.evidence` (latest N records, default 20)
+2. Filters to records with `confidence_score ≥ broadcast_min_confidence` (default 0.75) and `kind` not in broadcast exclusion set (`{bootstrap, onboard-complete, onboard-policy-defaulted}`)
+3. For each qualifying record, writes a synthetic authoritative-input JSON file to every other member's inbox directory (AP14 inbox, §62c)
+4. Emits FleetRecord(event=SIGNAL_BROADCAST, detail=f"{n} signals broadcast from {source_product}")
+
+The receiving member's next cycle picks up the inbox item through normal AP14 processing. The member is responsible for determining relevance via its own CSI scoring. **No member is forced to act on a broadcast signal.** The signal is advisory, not authoritative.
+
+## Crash Recovery Contract
+
+A member that exits with non-zero status is considered crashed. The orchestrator:
+1. Emits `fleet-member-crashed` WARNING gap in the orchestrator's own state
+2. Appends FleetRecord(event=MEMBER_CRASHED, product_name=name, detail=exit_code)
+3. Waits 30 seconds, then restarts the member
+4. After 3 consecutive crashes without a successful cycle between them, marks the member ERROR and stops restarting
+
+An ERROR member requires operator clearance to restart: the operator must clear the `fleet-member-crashed` gap and run `urace fleet run` again.
+
+## Relationship to urace portfolio
+
+`urace fleet` and `urace portfolio` are orthogonal:
+- `urace portfolio` runs multiple *variants of one product* to find the best implementation path (intra-product optimization)
+- `urace fleet` runs multiple *distinct products* in parallel (inter-product orchestration)
+
+A product running in a fleet MAY also have its own portfolio optimization active. The two systems do not interfere.
+
+**Implements:** FleetOrchestrationProtocol (§62l).
+**Uses:** FleetRecord (§62b), ProductEntry (§62b), OnboardGate (§62c), CSI (§62c).
+**Referenced from:** §62l FOP, §62k `urace fleet`, §62p Product Registry.
 
 ---
 
@@ -12537,6 +12675,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `join` | JoinProtocol (§62l) |
 | `onboard` | OnboardRecord, OnboardGate, Product Onboard Phase, onboard confirm, onboard status, ONBOARDING lifecycle state, product switch, config_digest, onboard-confirmation-pending |
 | `productregistry` | ProductRegistry, ProductEntry, SwitchRecord, product_registry, active_product, product switch, PSP, urace product |
+| `fleet` | FleetOrchestrationProtocol, FleetRecord, fleet run, fleet status, fleet stop, fleet broadcast, signal broadcast, member isolation, crash recovery |
 
 ## Audit Content
 
@@ -12602,6 +12741,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r73 | 2026-10-17 | spec+runtime | Fleet Orchestration. New §62q normative section: parallel multi-product autonomous evolution via FleetOrchestrationProtocol (FOP). Config.fleet subschema (members, signal_broadcast, max_concurrent, broadcast_min_confidence). State.fleet_records OPTIONAL field added (list[FleetRecord], default []). New §62b citizens: FleetMemberStatus enum (RUNNING\|PAUSED\|STOPPED\|ERROR\|PENDING) and FleetRecord schema (prefix "flrec-", fields: id, event, product_name OPTIONAL, at, detail OPTIONAL; audit contract: non-compactable). New §62l construct: FleetOrchestrationProtocol (FOP, INTEGRATED, depends: [ProductSwitchProtocol, OnboardGate]): 5-clause protocol (member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop); scope isolation invariant (members unaware of fleet config); signal broadcast exclusion set (bootstrap, onboard-complete, onboard-policy-defaulted). New §62k commands: `urace fleet run` (--dry-run/--verbose/--json), `urace fleet status`, `urace fleet stop [<name>]`, `urace fleet broadcast`. 3 new IGC gap kinds: `fleet-member-crashed` (WARNING), `fleet-duplicate-state-path` (BLOCKING), `fleet-signal-broadcast-skipped` (INFO); IGC total 103→106. Schema Catalog: FleetRecord added (36→37). Protocol Catalog: FOP added (15→16). §62n ConstructKindRegistry: FleetRecord (INTEGRATED) added. §62l count updated eighteen→nineteen; self-enforcing list updated to include FOP (nine→ten). §81: `fleet` stem added. Runtime (r73): `initial_state()` adds `fleet_records: []`; `fleet` command added to cli.py (run/status/stop/broadcast subcommands); `fleet` added to `_KNOWN_TOP_COMMANDS`; 3 new gap kinds added to primitives.py; `load_config()` in _common.py reads `URACE_ACTIVE_PRODUCT` env var and sets `active_product` in returned config; 8 new behavioral tests (R73FleetTests). **QE: PASS. JOIN: PASS.** **New external references:** `FleetMemberStatus` enum → §62b (this revision); `FleetRecord` schema → §62b (this revision); `FleetOrchestrationProtocol` (FOP) Protocol → §62l (this revision); `Config.fleet` subschema → §62e Config Document (this revision); `State.fleet_records` field → §62e State Document (this revision); `§62q` section → §62q Fleet Orchestration (this revision); `urace fleet run` command → §62k (this revision); `urace fleet status` command → §62k (this revision); `urace fleet stop` command → §62k (this revision); `urace fleet broadcast` command → §62k (this revision); `fleet-member-crashed` IGC kind → §62l (this revision); `fleet-duplicate-state-path` IGC kind → §62l (this revision); `fleet-signal-broadcast-skipped` IGC kind → §62l (this revision); `fleet` stem → §81 (this revision) |
 | r72 | 2026-10-17 | spec+runtime | Product Registry. New §62p normative section formalizing multi-product management within a single URACE installation: multi-product declaration (Config.product_registry), safe switching (ProductSwitchProtocol), state isolation (per-product state files), audit trail (SwitchRecord). New §62b citizen schemas: ProductEntry (prefix "prod-", fields: id, name, state_path, product_files, intent_purpose OPTIONAL, registered_at, last_active_at OPTIONAL, status ACTIVE|INACTIVE|ARCHIVED; uniqueness contract: duplicate name → `product-registry-duplicate-name` WARNING) and SwitchRecord (prefix "swrec-", fields: id, from_product, to_product, switched_at, switched_by, reason OPTIONAL; audit contract: non-compactable). New §62l construct: ProductSwitchProtocol (PSP, INTEGRATED, depends: [OnboardGate]): 4-step atomic protocol (validate target → record switch → update active_product → trigger re-onboard); atomicity contract (steps 2+3 must be atomic; rollback on Config write failure). Config Document: `product_registry` OPTIONAL (list[ProductEntry], default []) and `active_product` OPTIONAL (string; overrides Config.product for active product name and routes state_path to matching ProductEntry.state_path). State Document: `switch_records` OPTIONAL field added (list[SwitchRecord], default []). Active Product Resolution algorithm added to §62p: (1) active_product present → use it; (2) matching ProductEntry → use its state_path; (3) no match → Config.state_path fallback; (4) active_product absent → Config.product + Config.state_path. New §62k commands: `urace product list` (SD=True, all registry entries with active marker), `urace product status` (SD=True, active product diagnostic), `urace product switch <name>` (PSP application), `urace product register <name>` (add ProductEntry to registry). 3 new IGC gap kinds: `product-registry-unknown-product` (WARNING), `product-switch-pending-onboard` (INFO), `product-registry-duplicate-name` (WARNING); IGC total 100→103. Schema Catalog: ProductEntry + SwitchRecord added (34→36). Protocol Catalog: PSP added (14→15). §62n ConstructKindRegistry: ProductEntry (INTEGRATED), SwitchRecord (INTEGRATED) added. §81: `productregistry` stem added. Runtime (r72): `save_config()` added to _common.py; `state_path()` updated to dispatch on `active_product` + `product_registry`; `initial_state()` adds `switch_records: []`; `product` command added to cli.py (list/status/switch/register subcommands); `product` added to `_KNOWN_TOP_COMMANDS`; 3 new gap kinds added to primitives.py INTEGRITY_GAP_CATALOG; 8 new behavioral tests (R72ProductRegistryTests). **1000 tests pass.** QE: PASS. JOIN: PASS. **New external references:** `ProductEntry` schema → §62b (this revision); `SwitchRecord` schema → §62b (this revision); `ProductSwitchProtocol` (PSP) Protocol → §62l (this revision); `Config.product_registry` field → §62e Config Document (this revision); `Config.active_product` field → §62e Config Document (this revision); `State.switch_records` field → §62e State Document (this revision); `§62p` section → §62p Product Registry (this revision); `urace product list` command → §62k (this revision); `urace product status` command → §62k (this revision); `urace product switch` command → §62k (this revision); `urace product register` command → §62k (this revision); `product-registry-unknown-product` IGC kind → §62l (this revision); `product-switch-pending-onboard` IGC kind → §62l (this revision); `product-registry-duplicate-name` IGC kind → §62l (this revision); `productregistry` stem → §81 (this revision) |
 | r71 | 2026-10-17 | spec+runtime | Product Onboard Phase. New lifecycle state `ONBOARDING` added as the pre-cycle entry gate — precedes BOOTSTRAPPING in the maturity progression. New §62b citizen schema: OnboardRecord (prefix "onb-", fields: id, created_at, product_name, confirmed_by, confirmed_at, config_digest, gates_passed, capability_envelope_waived OPTIONAL, notes OPTIONAL, superseded_at OPTIONAL); staleness contract (config_digest divergence → WARNING, non-blocking); uniqueness contract (at most one active per product_name; supersede on re-confirm). New §62c mechanism: OnboardGate (7-step algorithm: config-completeness, product-files-readable, intent-anchored, capability-envelope-declared, self-evolution-policy-recorded, operator-confirmation, on-confirm record+checkpoint+clear-gaps+set-DORMANT); SD=True; no executor credits consumed. New §62o normative section: Product Onboard Phase — purpose (authorization anchor, config integrity snapshot, product switchability gate), lifecycle position, entry trigger (no OnboardRecord for Config.product), gate step table, Product Switchability contract (product-agnostic; prior state retained with product_name isolation), idempotency and refresh contracts, re-onboard contract. New §62k commands: `urace onboard status` (idempotent gate evaluation) and `urace onboard confirm` (operator confirmation, creates OnboardRecord, writes ONBOARD_COMPLETE Checkpoint, clears onboard-* gaps, sets lifecycle_state=DORMANT). 6 new IGC gap kinds: `onboard-config-incomplete` (BLOCKING), `onboard-no-readable-product-files` (BLOCKING), `onboard-intent-unanchored` (BLOCKING), `onboard-capability-envelope-missing` (WARNING), `onboard-confirmation-pending` (BLOCKING), `onboard-record-config-diverged` (WARNING); IGC total 94→100. State Document: `onboard_records` OPTIONAL field added (list[OnboardRecord], default []). Schema Catalog: OnboardRecord added (33→34). Runtime (r71): 5 autonomous capability gaps closed — (P1a) wake stale→expired escalation with liveness_failures+stale_since tracking; (P1b) discovery proportionality IntegrityGaps for DEFERRED_PROPORTIONALITY and DISCOVERY_YIELD_EXHAUSTED; (P2a) CAPABILITY_DEFINING objective gate at CAPABLE/OPTIMIZED maturity (requires DecisionRecord with AUTHORITY_GRANT kind); (P2b) BOOTSTRAPPING→CAPABLE transition gate (requires passing CAPABILITY_GATE or ACCEPTANCE TestRunRecord); (P3) CSI/PPP_M full wiring (Config.community_inbox.feeds drives CSI; PPP_M with AUTO/SMART/HUMAN routing; `inbox apply`/`inbox reject` CLI commands). State Document: `community_feeds`, `community_signals`, `patch_proposals` added to initial_state(). **992 tests pass** (existing baseline unchanged; onboard runtime tests and gap tests pending runtime implementation). JOIN pass: all new constructs wired (OnboardRecord Used-in, OnboardGate Referenced-from, §62o References, §62k urace-onboard cross-refs complete). QE pass: no schema field order violations; all new IGC kinds in catalog table; count updated; new external references listed. **New external references:** `ONBOARDING` lifecycle state → §62e lifecycle_state enum (this revision); `OnboardRecord` schema → §62b (this revision); `OnboardGate` Mechanism → §62c (this revision); `§62o` section → §62o Product Onboard Phase (this revision); `urace onboard status` command → §62k (this revision); `urace onboard confirm` command → §62k (this revision); `onboard-config-incomplete` IGC kind → §62l (this revision); `onboard-no-readable-product-files` IGC kind → §62l (this revision); `onboard-intent-unanchored` IGC kind → §62l (this revision); `onboard-capability-envelope-missing` IGC kind → §62l (this revision); `onboard-confirmation-pending` IGC kind → §62l (this revision); `onboard-record-config-diverged` IGC kind → §62l (this revision); `State.onboard_records` field → §62e State Document (this revision) |
 | r70 | 2026-10-16 | spec+runtime | Runtime alignment pass (r65–r69 gap closure). State Document bootstrap: initialized `assessment_gaps`, `lifecycle_boundaries`, `integrity_signals` as empty lists in `initial_state()` — three r65 schemas whose State fields were declared in r67 but not wired into bootstrap. Implemented `record_assessment_gap()` (deduplication contract: same cycle_id+dimension updates last_at, not append) and `resolve_assessment_gap()` (sets resolved_at, removes from active list) in cli.py. Added `justification_context_id` OPTIONAL parameter to `create_decision_record()` in decision_record.py. Added 8 behavioral tests: BJ (AssessmentGap deduplication), BK (AssessmentGap resolution — two assertions each), 3 State Document initialization assertions, 1 DecisionRecord.justification_context_id acceptance test. Spec version header bumped r65→r70. **978 tests pass.** QE: PASS. JOIN: PASS. **New external references:** none (all constructs previously declared) |
