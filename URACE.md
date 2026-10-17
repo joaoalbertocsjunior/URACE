@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r79**
+**Specification version: 2026-10-17-r80**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -9645,9 +9645,9 @@ urace trace inspect <trace-id> [--json]
 
 # 62l. Shared Reuse Contracts
 
-This section defines twenty-seven named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines thirty-three named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All twenty-seven constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining sixteen constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, and FullReleaseVerificationSuite — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All thirty-three constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-two constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, and CycleWiringProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -9837,25 +9837,135 @@ The **CanonicalStructuralIntegrityAudit (CSIA)** is the five-pass structural int
 
 ## FullReleaseVerificationSuite
 
-**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [CSIA]`
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [CSIA, BFP, TCP, SFCP, CIP, CAP, CWP]`
 
-The **FullReleaseVerificationSuite (FRVS)** is the complete eleven-pass release verification protocol. It extends CSIA (passes 1–5) with six additional runtime-scope passes. FRVS MUST be run before any spec+runtime release is declared production-safe. Any FRVS finding blocks release unless explicitly accepted under a DecisionRecord citing this construct.
+The **FullReleaseVerificationSuite (FRVS)** is the complete eleven-pass release verification protocol. It extends CSIA (passes 1–5) with six additional runtime-scope passes, each defined as an independent §62l construct. FRVS MUST be run before any spec+runtime release is declared production-safe. Any FRVS finding blocks release unless explicitly accepted under a DecisionRecord citing this construct.
 
 **Eleven-pass protocol (CSIA passes 1–5, then):**
 
-6. **Behavioral Fidelity.** Every normative clause containing MUST or SHALL in this release's additions has an identified runtime enforcement point. A MUST/SHALL with no enforcement point is a behavioral gap.
-7. **Test Coverage.** Every new §62b citizen, §62c mechanism, §62l construct, and IGC gap kind added in this release has at least one behavioral test. The new test count in the runtime test suite is ≥ the declared test delta in the changelog.
-8. **Schema Field Completeness.** Every §62b citizen schema's spec-declared fields are present in the runtime's corresponding record structure with matching field names and REQUIRED/OPTIONAL designations. A missing or renamed field is a schema completeness violation.
-9. **Contract Implementation.** Every numbered clause of every §62l contract added or modified in this release has an identified runtime enforcement call-site. A clause with no call-site is a contract gap.
-10. **CLI Alignment.** Every §62k command added or modified in this release has a registered dispatch handler, a known-command declaration, and (where applicable) a direct-dispatch alias in the runtime routing table.
-11. **Cycle Wiring.** Every §62c mechanism declared to run at cycle entry in this release is present in the runtime cycle execution path at the declared position.
+6. **BehavioralFidelityProtocol (§62l BFP).** Every normative MUST/SHALL clause in this release's additions has an identified runtime enforcement point. A MUST/SHALL with no enforcement point is a behavioral gap.
+7. **TestCoverageProtocol (§62l TCP).** Every new §62b citizen, §62c mechanism, §62l construct, and IGC gap kind has at least one behavioral test; declared test delta matches actual increase.
+8. **SchemaFieldCompletenessProtocol (§62l SFCP).** Every §62b citizen schema's spec-declared fields are present in the runtime record construction with matching names and REQUIRED/OPTIONAL designations.
+9. **ContractImplementationProtocol (§62l CIP).** Every numbered clause of every §62l contract added or modified in this release has an identified, reachable runtime enforcement call-site.
+10. **CLIAlignmentProtocol (§62l CAP).** Every §62k command added or modified has a known-command entry, a dispatch handler, and all REQUIRED flags wired in the argument parser.
+11. **CycleWiringProtocol (§62l CWP).** Every §62c mechanism with a cycle-entry obligation is present in cycle() at the declared position; ordering constraints are respected.
 
-**FRVS = CSIA + Behavioral + TestCoverage + SchemaFields + ContractImpl + CLIAlignment + CycleWiring.**
+**FRVS = CSIA + BFP + TCP + SFCP + CIP + CAP + CWP.**
 
 **Scoped to both URACE.md and runtime.** FRVS findings are classified PASS or FINDING. FINDING blocks release unless accepted under DecisionRecord.
 
 **Citizens using FullReleaseVerificationSuite:** (none — governs release process, not schema fields).
 **Referenced from:** §62l CanonicalStructuralIntegrityAudit.
+
+---
+
+## BehavioralFidelityProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **BehavioralFidelityProtocol (BFP)** verifies that every normative obligation (MUST, SHALL) in the spec additions of a given release has an identified runtime enforcement point. BFP is pass 6 of FRVS and MAY be run independently. Any MUST/SHALL clause with no enforcement point is a behavioral gap.
+
+**Five-step protocol:**
+
+1. Enumerate all MUST/SHALL clauses in §62b, §62c, §62l, and §62k additions for this release.
+2. For each clause, identify the runtime enforcement call-site (function, handler, or mechanism invocation).
+3. A clause enforced by a mechanism or protocol already validated in CSIA passes 1–5 is PASS by transitivity.
+4. A clause with no identified call-site is a BFP FINDING.
+5. Emit PASS when all clauses have an enforcement point; emit FINDING list otherwise.
+
+**Citizens using BehavioralFidelityProtocol:** (none).
+**Referenced from:** §62l FullReleaseVerificationSuite.
+
+---
+
+## TestCoverageProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **TestCoverageProtocol (TCP)** verifies that every new §62b citizen, §62c mechanism, §62l construct, and IGC gap kind added in a given release has at least one behavioral test in the runtime test suite, and that the declared test delta in the changelog matches the actual increase. TCP is pass 7 of FRVS and MAY be run independently.
+
+**Four-step protocol:**
+
+1. Enumerate all new §62b citizens, §62c mechanisms, §62l constructs, and IGC gap kinds in this release.
+2. For each item, identify at least one test method whose name or class reference traces to the item's kind or ID.
+3. Verify the declared test delta in the changelog ("+N new tests") is ≤ the actual test count increase.
+4. An item with no corresponding test or a mismatched delta is a TCP FINDING. Emit PASS or FINDING list.
+
+**Citizens using TestCoverageProtocol:** (none).
+**Referenced from:** §62l FullReleaseVerificationSuite.
+
+---
+
+## SchemaFieldCompletenessProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **SchemaFieldCompletenessProtocol (SFCP)** verifies that every field declared in a §62b citizen schema (REQUIRED and OPTIONAL) is present in the runtime's corresponding record construction with a matching field name and REQUIRED/OPTIONAL designation. SFCP is pass 8 of FRVS and MAY be run independently.
+
+**Five-step protocol:**
+
+1. Enumerate all §62b citizens added or modified in this release.
+2. For each citizen, collect spec-declared fields and their REQUIRED/OPTIONAL designation.
+3. Inspect runtime record construction (initial_state(), citizen-creation call-sites) for matching fields.
+4. A spec-declared REQUIRED field absent from the runtime is a FINDING. A spec-declared OPTIONAL field absent from the runtime without a declared default is a FINDING.
+5. Emit PASS when all fields match; emit FINDING list otherwise.
+
+**Citizens using SchemaFieldCompletenessProtocol:** (none).
+**Referenced from:** §62l FullReleaseVerificationSuite.
+
+---
+
+## ContractImplementationProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **ContractImplementationProtocol (CIP)** verifies that every numbered clause of every §62l construct added or modified in a given release has an identified runtime enforcement call-site. CIP is pass 9 of FRVS and MAY be run independently. A clause with no call-site is a contract gap.
+
+**Four-step protocol:**
+
+1. Enumerate all §62l constructs added or modified in this release and collect their numbered clauses.
+2. For each clause, identify the runtime function, handler, or guard that enforces it.
+3. A clause with no identified enforcement call-site is a CIP FINDING. A clause whose call-site is unreachable (dead code) is also a CIP FINDING.
+4. Emit PASS when all clauses have reachable enforcement; emit FINDING list otherwise.
+
+**Citizens using ContractImplementationProtocol:** (none).
+**Referenced from:** §62l FullReleaseVerificationSuite.
+
+---
+
+## CLIAlignmentProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **CLIAlignmentProtocol (CAP)** verifies that every §62k command declaration has a registered known-command entry, a dispatch handler, and all REQUIRED flags wired in the handler's argument parser. CAP is pass 10 of FRVS and MAY be run independently.
+
+**Four-step protocol:**
+
+1. Enumerate all §62k commands declared in this release (top-level and subcommands).
+2. For each command, verify: (a) a known-command entry exists in the runtime command registry; (b) a dispatch handler is present and reachable; (c) all REQUIRED flags and arguments declared in §62k are wired in the argument parser.
+3. A command with no known-command entry, no handler, or a missing REQUIRED flag is a CAP FINDING.
+4. Emit PASS when all commands are fully aligned; emit FINDING list otherwise.
+
+**Citizens using CLIAlignmentProtocol:** (none).
+**Referenced from:** §62l FullReleaseVerificationSuite.
+
+---
+
+## CycleWiringProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **CycleWiringProtocol (CWP)** verifies that every §62c mechanism declared to run at cycle entry is present in the runtime cycle execution path at the declared position, and that all ordering constraints between mechanisms are respected. CWP is pass 11 of FRVS and MAY be run independently.
+
+**Four-step protocol:**
+
+1. Enumerate all §62c mechanisms with a declared cycle-entry obligation or cycle-time evaluation contract.
+2. For each mechanism, verify its invocation is present in the runtime cycle() function.
+3. Verify that ordering constraints (mechanism A before mechanism B) are respected in the cycle() call sequence.
+4. A mechanism with a cycle-entry obligation but no cycle() call-site, or an ordering constraint violation, is a CWP FINDING. Emit PASS or FINDING list.
+
+**Citizens using CycleWiringProtocol:** (none).
+**Referenced from:** §62l FullReleaseVerificationSuite.
 
 ---
 
@@ -10529,7 +10639,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | OutputSchema | OutputSchema | oscm- | §62b |
 | OutcomeFeedbackRecord | OutcomeFeedbackRecord | ofbk- | §62b |
 
-## Protocol Catalog (23 entries)
+## Protocol Catalog (29 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -10555,7 +10665,13 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | OutputSchemaRegistry | OutputSchemaRegistry | catalog all --json output schemas; schema_version contract; output-schema-unregistered gap | §62l |
 | OutcomeFeedbackContract | OutcomeFeedbackContract | feedback collection → AuditRecord → accumulator → feedback-overdue window → closed loop | §62l |
 | CSIA | CanonicalStructuralIntegrityAudit | DEGRADATION(QE) → JOIN → NSS-check → SCP-check → IGC-check; both URACE.md and runtime scopes | §62l |
-| FRVS | FullReleaseVerificationSuite | CSIA → Behavioral → TestCoverage → SchemaFields → ContractImpl → CLIAlignment → CycleWiring; 11-pass full release verification | §62l |
+| FRVS | FullReleaseVerificationSuite | CSIA → BFP → TCP → SFCP → CIP → CAP → CWP; 11-pass full release verification | §62l |
+| BFP | BehavioralFidelityProtocol | enumerate MUST/SHALL clauses → identify enforcement call-sites → flag unenforceable clauses | §62l |
+| TCP | TestCoverageProtocol | enumerate new citizens/mechanisms/constructs/gaps → verify test coverage → verify declared delta | §62l |
+| SFCP | SchemaFieldCompletenessProtocol | enumerate §62b citizens → verify REQUIRED/OPTIONAL fields in runtime construction | §62l |
+| CIP | ContractImplementationProtocol | enumerate §62l clauses → identify enforcement call-sites → flag unimplemented/unreachable clauses | §62l |
+| CAP | CLIAlignmentProtocol | enumerate §62k commands → verify known-command entry + handler + required flags | §62l |
+| CWP | CycleWiringProtocol | enumerate cycle-entry mechanisms → verify cycle() call-sites → verify ordering constraints | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -10808,6 +10924,12 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | OutcomeFeedbackContract | OutcomeFeedbackContract | FOUNDATIONAL | true |
 | CSIA | CanonicalStructuralIntegrityAudit | FOUNDATIONAL | true |
 | FRVS | FullReleaseVerificationSuite | FOUNDATIONAL | true |
+| BFP | BehavioralFidelityProtocol | FOUNDATIONAL | true |
+| TCP | TestCoverageProtocol | FOUNDATIONAL | true |
+| SFCP | SchemaFieldCompletenessProtocol | FOUNDATIONAL | true |
+| CIP | ContractImplementationProtocol | FOUNDATIONAL | true |
+| CAP | CLIAlignmentProtocol | FOUNDATIONAL | true |
+| CWP | CycleWiringProtocol | FOUNDATIONAL | true |
 
 ### Mechanisms (§62c)
 
@@ -13156,7 +13278,13 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `outputschema` | OutputSchema §62b citizen (oscm-), OutputSchemaRegistry §62l construct, schema_version field, urace schema list/inspect, §62t Output Schema Registry |
 | `outcomefeedback` | OutcomeFeedbackRecord §62b citizen (ofbk-), OutcomeFeedbackContract §62l construct, FeedbackAccumulator §62c mechanism, feedback-overdue, urace feedback submit/list, §62u Closed-Loop Outcome Feedback |
 | `csia` | CanonicalStructuralIntegrityAudit §62l construct, 5-pass structural integrity protocol (DEGRADATION+JOIN+NSS+SCP+IGC), pre-release blocker |
-| `frvs` | FullReleaseVerificationSuite §62l construct, 11-pass complete release verification (CSIA + Behavioral + TestCoverage + SchemaFields + ContractImpl + CLIAlignment + CycleWiring) |
+| `frvs` | FullReleaseVerificationSuite §62l construct, 11-pass complete release verification (CSIA + BFP + TCP + SFCP + CIP + CAP + CWP) |
+| `behavioralfidelity` | BehavioralFidelityProtocol §62l construct (BFP), FRVS pass 6, MUST/SHALL clause enforcement-point verification |
+| `testcoverage` | TestCoverageProtocol §62l construct (TCP), FRVS pass 7, test suite coverage verification per citizen/mechanism/construct/gap |
+| `schemafieldcompleteness` | SchemaFieldCompletenessProtocol §62l construct (SFCP), FRVS pass 8, §62b citizen field completeness verification |
+| `contractimplementation` | ContractImplementationProtocol §62l construct (CIP), FRVS pass 9, §62l clause call-site verification |
+| `clialignment` | CLIAlignmentProtocol §62l construct (CAP), FRVS pass 10, §62k command known-command+handler+flag verification |
+| `cyclewiring` | CycleWiringProtocol §62l construct (CWP), FRVS pass 11, §62c mechanism cycle() call-site and ordering verification |
 
 ## Audit Content
 
@@ -13222,6 +13350,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r80 | 2026-10-17 | spec | FRVS sub-pass canonization. Six new §62l FOUNDATIONAL constructs, each a standalone citable protocol corresponding to FRVS passes 6–11. BehavioralFidelityProtocol (BFP, standalone: true, depends: []): five-step protocol — enumerate MUST/SHALL clauses → identify runtime enforcement call-sites → transitivity credit for CSIA-validated clauses → flag unenforceable clauses → emit PASS or FINDING list. TestCoverageProtocol (TCP, standalone: true, depends: []): four-step — enumerate new citizens/mechanisms/constructs/gaps → verify test coverage → verify declared delta → emit PASS or FINDING list. SchemaFieldCompletenessProtocol (SFCP, standalone: true, depends: []): five-step — enumerate modified §62b citizens → collect spec-declared fields → inspect runtime construction → flag missing REQUIRED or defaultless OPTIONAL fields → emit PASS or FINDING list. ContractImplementationProtocol (CIP, standalone: true, depends: []): four-step — enumerate §62l clauses → identify enforcement call-sites → flag unimplemented or unreachable clauses → emit PASS or FINDING list. CLIAlignmentProtocol (CAP, standalone: true, depends: []): four-step — enumerate §62k commands → verify known-command entry + dispatch handler + REQUIRED flags → flag gaps → emit PASS or FINDING list. CycleWiringProtocol (CWP, standalone: true, depends: []): four-step — enumerate cycle-entry mechanisms → verify cycle() call-sites → verify ordering constraints → emit PASS or FINDING list. FRVS updated: `depends:` expanded to [CSIA, BFP, TCP, SFCP, CIP, CAP, CWP]; pass descriptions cite constructs by §62l name; formula updated to FRVS = CSIA + BFP + TCP + SFCP + CIP + CAP + CWP. Catalog updates: Protocol Catalog 23 → 29 entries. §62l count thirty-three; self-enforcing list 16 → 22 constructs. ConstructKindRegistry Protocols lattice 27 → 33 rows. §80 stems: +behavioralfidelity, +testcoverage, +schemafieldcompleteness, +contractimplementation, +clialignment, +cyclewiring. No new IGC kinds (FRVS sub-passes emit structured PASS/FINDING reports, not runtime integrity gaps, consistent with QE/JOIN precedent). No runtime changes. **New external references:** `BehavioralFidelityProtocol` construct → §62l (this revision); `BFP` construct ID → §62l BehavioralFidelityProtocol (this revision); `TestCoverageProtocol` construct → §62l (this revision); `TCP` construct ID → §62l TestCoverageProtocol (this revision); `SchemaFieldCompletenessProtocol` construct → §62l (this revision); `SFCP` construct ID → §62l SchemaFieldCompletenessProtocol (this revision); `ContractImplementationProtocol` construct → §62l (this revision); `CIP` construct ID → §62l ContractImplementationProtocol (this revision); `CLIAlignmentProtocol` construct → §62l (this revision); `CAP` construct ID → §62l CLIAlignmentProtocol (this revision); `CycleWiringProtocol` construct → §62l (this revision); `CWP` construct ID → §62l CycleWiringProtocol (this revision); `behavioralfidelity` stem → §80 (this revision); `testcoverage` stem → §80 (this revision); `schemafieldcompleteness` stem → §80 (this revision); `contractimplementation` stem → §80 (this revision); `clialignment` stem → §80 (this revision); `cyclewiring` stem → §80 (this revision) |
 | r79 | 2026-10-17 | spec | CSIA + FRVS canonization. Two new §62l FOUNDATIONAL constructs formalize the spec and release verification protocols as named, citeable constructs. CanonicalStructuralIntegrityAudit (CSIA, FOUNDATIONAL, standalone: true, depends: [QE, JOIN]): five-pass structural integrity protocol — (1) DEGRADATION pass via QE; (2) JOIN pass; (3) NSS-check (§80 stem entries for all constructs in this release); (4) SCP-check (Gate 1/2/3 verification); (5) IGC-check (runtime INTEGRITY_GAP_CATALOG count vs Contract Catalog declared total). CSIA MUST be run before any release is declared production-safe; any non-PASS finding is a release blocker. FullReleaseVerificationSuite (FRVS, FOUNDATIONAL, standalone: true, depends: [CSIA]): eleven-pass complete release verification protocol — CSIA passes 1–5 then: (6) Behavioral Fidelity; (7) Test Coverage; (8) Schema Field Completeness; (9) Contract Implementation; (10) CLI Alignment; (11) Cycle Wiring. FRVS = CSIA + Behavioral + TestCoverage + SchemaFields + ContractImpl + CLIAlignment + CycleWiring. Both scoped to URACE.md and runtime. Catalog updates: Protocol Catalog 21 → 23 entries (CSIA + FRVS rows added). §62l count twenty-five → twenty-seven; enforcement contract self-enforcing list updated to sixteen constructs (added CSIA and FRVS). §62n ConstructKindRegistry Protocols (§62l) lattice: 25 → 27 rows (CSIA + FRVS added). §80 Canonical Concept Vocabulary: 2 stems added (`csia`, `frvs`). Spec version header bumped r77 → r79 (r78 did not bump version). No runtime changes. **New external references:** `CSIA` Protocol construct → §62l CanonicalStructuralIntegrityAudit (this revision); `FullReleaseVerificationSuite` Protocol construct → §62l (this revision); `FRVS` Protocol construct → §62l FullReleaseVerificationSuite (this revision); `CanonicalStructuralIntegrityAudit` construct → §62l (this revision); `csia` stem → §80 (this revision); `frvs` stem → §80 (this revision) |
 | r78 | 2026-10-17 | spec+runtime | FRVS pass — 7 findings closed. Spec fixes (3): (1) Contract Catalog IGC row "108 kinds" corrected to "113 kinds" (r77 added 5 kinds, count was never updated); (2) SCP Gate 1 §62n reference "stem vocabulary (§81)" corrected to "stem vocabulary (§80)" (stems live in §80 Spec Structural Audit > Canonical Concept Vocabulary, not §81 Final Invariant — wrong since r60); (3) r77 changelog entry "12 new R77ClosedLoopTests" corrected to "16 new R77ClosedLoopTests". Runtime fixes (4): OutcomeFeedbackRecord schema corrected — missing AuditRecord base fields added (`id`, `at`, `recorded_by: "operator"`, `event_kind: "OUTCOME_FEEDBACK"`); `note` field renamed to `detail`; `submitted_at` field renamed to `at` per AuditRecord contract. `feedback submit` command: added target_id prefix validation (exits 1 if not obj-/dec-) per OutcomeFeedbackContract §62l clause 1. `feedback list` command: added `--target`/`--signal`/`--limit`/`--offset` filters per OutcomeFeedbackContract §62l clause 5. Argparse: `--note` renamed to `--detail`; `--evidence` added; `--target`/`--limit`/`--offset` added; `filelock` import removed (not installed). 4 new tests added (R77ClosedLoopTests extended): `test_feedback_submit_invalid_prefix_returns_1`, `test_feedback_list_signal_filter`, `test_feedback_list_target_filter`, `test_feedback_submit_audit_record_fields`. 1106 tests pass. **New external references:** none (all constructs previously declared) |
 | r77 | 2026-10-17 | spec+runtime | Closed-Loop Autonomy. Three interconnected capability areas: (1) Layer Architecture. New §62s normative section. New §62l construct: LayerModel (FOUNDATIONAL, standalone: true): 5-layer model (L0 Authority-Intent, L1 Planning-Discovery, L2 Execution, L3 Observation, L4 Governance-Audit) with cross-layer coupling rules (downward flow authorized, skip-layer prohibited, L4 read-only); `layer-boundary-violation` BLOCKING gap. (2) Output Schema Registry. New §62t normative section. New §62b citizen: OutputSchema (prefix "oscm-", fields: id, command, schema_version, stable_since, fields[]). New §62l construct: OutputSchemaRegistry (FOUNDATIONAL, standalone: true): catalogs all --json output schemas; `schema_version` field MUST appear in all --json responses; `output-schema-unregistered` WARNING; 6 baseline schemas registered (check, vitals, trace list, feedback list, schema list, schema inspect). New §62k commands: `urace schema list` (SD=True), `urace schema inspect <command>` (SD=True). (3) Closed-Loop Outcome Feedback. New §62u normative section. New §62b citizen: OutcomeFeedbackRecord (prefix "ofbk-"; fields: id, at, recorded_by, event_kind="OUTCOME_FEEDBACK", target_id, target_kind OBJECTIVE\|DECISION, signal POSITIVE\|NEGATIVE\|NEUTRAL, evidence_id OPTIONAL, detail OPTIONAL, processed OPTIONAL bool; Implements: AuditRecord; non-compactable). New §62c mechanism: FeedbackAccumulator (FAC, INTEGRATED, governed-by: [AP8, AP9]): processes unprocessed OutcomeFeedbackRecords at cycle entry (ACTIVE/ASSESSING only); NEGATIVE→OBJECTIVE emits `feedback-negative-objective` INFO; NEGATIVE→DECISION emits `feedback-negative-decision` INFO; `feedback-overdue` INFO when accepted Objective has no feedback after feedback_window_hours (default 168h); idempotent (skips processed=True). New §62l construct: OutcomeFeedbackContract (FOUNDATIONAL, standalone: true, depends: [AuditRecord]): 5-clause contract governing collection/storage/processing/window/inspection. New §62k commands: `urace feedback submit <target_id> --signal <type>` (mutates state), `urace feedback list` (SD=True). State Document: `outcome_feedback_records` OPTIONAL list[OutcomeFeedbackRecord] added. AuditRecord §62l: OutcomeFeedbackRecord added to implementing citizens. ObservabilityContract: OutcomeFeedbackRecord submission added to covered mutations table. IGC: 5 new kinds (layer-boundary-violation BLOCKING, output-schema-unregistered WARNING, feedback-overdue INFO, feedback-negative-objective INFO, feedback-negative-decision INFO); IGC total 108→113. Schema Catalog: OutputSchema + OutcomeFeedbackRecord added (38→40). Protocol Catalog: LayerModel + OutputSchemaRegistry + OutcomeFeedbackContract added (18→21). Mechanism Catalog: FAC added (9→10). §62l count: twenty-two→twenty-five; enforcement contract self-enforcing list updated to fourteen. §62l constructs lattice: 3 rows added (22→25). §62n ConstructKindRegistry: OutputSchema (COMPOSITIONAL, CitizenBase, r77) + OutcomeFeedbackRecord (FOUNDATIONAL, CitizenBase+AuditRecord, r77) added. §81: 3 new stems (layermodel, outputschema, outcomefeedback). Runtime: `initial_state()` adds `outcome_feedback_records: []`; `_run_feedback_accumulator()` added and wired into cycle(); `OUTPUT_SCHEMA_REGISTRY` added to primitives.py; `schema` and `feedback` commands added to cli.py; `schema`/`feedback` added to `_KNOWN_TOP_COMMANDS`; `schema list`/`schema inspect`/`feedback list` added to `_SD_TRUE_EXACT`; 5 new IGC kinds added to INTEGRITY_GAP_CATALOG; 16 new R77ClosedLoopTests. **New external references:** `LayerModel` construct → §62l (this revision); `OutputSchema` schema → §62b (this revision); `OutputSchemaRegistry` construct → §62l (this revision); `OutcomeFeedbackRecord` schema → §62b (this revision); `OutcomeFeedbackContract` construct → §62l (this revision); `FeedbackAccumulator` mechanism → §62c (this revision); `§62s` section → §62s Layer Architecture (this revision); `§62t` section → §62t Output Schema Registry (this revision); `§62u` section → §62u Closed-Loop Outcome Feedback (this revision); `layer-boundary-violation` IGC kind → §62l (this revision); `output-schema-unregistered` IGC kind → §62l (this revision); `feedback-overdue` IGC kind → §62l (this revision); `feedback-negative-objective` IGC kind → §62l (this revision); `feedback-negative-decision` IGC kind → §62l (this revision); `layermodel` stem → §81 (this revision); `outputschema` stem → §81 (this revision); `outcomefeedback` stem → §81 (this revision); `State.outcome_feedback_records` field → §62e State Document (this revision); `urace schema list` command → §62k (this revision); `urace schema inspect` command → §62k (this revision); `urace feedback submit` command → §62k (this revision); `urace feedback list` command → §62k (this revision) |
