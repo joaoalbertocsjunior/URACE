@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r75**
+**Specification version: 2026-10-17-r76**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -10329,12 +10329,13 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | LifecycleBoundary | LifecycleBoundary | lcb- | §62b |
 | IntegritySignal | IntegritySignal | isig- | §62b |
 | JustificationContext | JustificationContext | jctx- | §62b |
+| OnboardRecord | OnboardRecord | onb- | §62b |
 | ProductEntry | ProductEntry | prod- | §62b |
 | SwitchRecord | SwitchRecord | swrec- | §62b |
 | FleetRecord | FleetRecord | flrec- | §62b |
 | TraceRecord | TraceRecord | trace- | §62b |
 
-## Protocol Catalog (16 entries)
+## Protocol Catalog (18 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -10354,6 +10355,8 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | JOIN | JoinProtocol | enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs) | §62l |
 | PSP | ProductSwitchProtocol | validate target → record switch → update active product → trigger re-onboard | §62l |
 | FOP | FleetOrchestrationProtocol | member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop | §62l |
+| InspectionContract | InspectionContract | read-only → filter → paginate → dual-output → zero-failure-exit; governs all SD=True inspection commands | §62l |
+| ObservabilityContract | ObservabilityContract | covered mutations → required record → kind mapping; autonomy gap trace-record-missing; inspection surface urace trace list | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -10373,15 +10376,16 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CPT | Compliance Posture Tracker | per-domain trajectory + accumulator | §62i AP37 |
 | CSI_AP | Community Signal Ingestion | agnostic feed ingestion; T&C gate; relevance+confidence scoring | §62i AP38 |
 
-## Contract Catalog (6 entries)
+## Contract Catalog (7 entries)
 
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (100 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (108 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
+| AuditRecord | AuditRecord Canonical Cluster | append-only audit trail, non-compactability, emission obligation; implementing citizens: TraceRecord, SwitchRecord, FleetRecord, OnboardRecord | §62l |
 | ABM | AuthorityBoundaryModel | delegated/reserved categories, scope-to-authority mapping | §14-16 |
 
 ## DerivedConstructSet Citizen
@@ -10589,12 +10593,17 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | ISC | InspectionSurface Contract | FOUNDATIONAL | true |
 | IGC | IntegrityGapCatalog | FOUNDATIONAL | true |
 | PMM | PatternMechanismMapping | INTEGRATED | false |
+| JC | JustificationContract | FOUNDATIONAL | false |
+| BC | BoundaryContract | FOUNDATIONAL | false |
 | QE | QualityEnsuranceProtocol | FOUNDATIONAL | true |
 | JOIN | JoinProtocol | FOUNDATIONAL | true |
 | CEP | ConstructElevationProtocol | FOUNDATIONAL | true |
-| SCP | SpecConstructionProtocol | FOUNDATIONAL | false |
-| DAI | ConstructDependencyAcyclicityInvariant | FOUNDATIONAL | true |
 | PPP | PatchProposalProtocol | INTEGRATED | false |
+| PSP | ProductSwitchProtocol | INTEGRATED | false |
+| FOP | FleetOrchestrationProtocol | INTEGRATED | false |
+| AuditRecord | AuditRecord Canonical Cluster | FOUNDATIONAL | true |
+| InspectionContract | InspectionContract | FOUNDATIONAL | true |
+| ObservabilityContract | ObservabilityContract | FOUNDATIONAL | true |
 
 ### Mechanisms (§62c)
 
@@ -12911,6 +12920,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r76 | 2026-10-17 | spec | JOIN+NSS+SCP+DEGRADATION full audit pass. Four catalog drift findings closed: (1) Schema Catalog: OnboardRecord row missing — added `\| OnboardRecord \| OnboardRecord \| onb- \| §62b \|` (37→38 rows, matching declared 38-entry header); (2) Contract Catalog: IGC entry incorrect "100 kinds" corrected to "108 kinds"; AuditRecord Canonical Cluster missing — added as 7th entry (Contract Catalog 6→7 entries); (3) Protocol Catalog: InspectionContract and ObservabilityContract missing — both added (Protocol Catalog 16→18 entries); (4) §62n ConstructKindRegistry §62l Protocols lattice: 17 rows representing stale state (SCP and DAI incorrectly included as §62l constructs — they are §62n-native; JC, BC, PSP, FOP, AuditRecord, InspectionContract, ObservabilityContract missing); corrected to 22 rows (removed SCP+DAI, added JC+BC+PSP+FOP+AuditRecord+InspectionContract+ObservabilityContract, net 17→22 matching the "twenty-two" count declared in §62l enforcement contract). NSS: all r71–r75 stems present in §81 (onboard, productregistry, fleet, auditrecord, inspectioncontract, observability). JOIN: all r71–r75 constructs have complete "Used in:", "Referenced from:", "Citizens using:" annotations. IGC: 108 rows confirmed. Version: r75→r76. No runtime changes. **New external references:** none (all constructs previously declared). | 
 | r75 | 2026-10-17 | spec+runtime | Audit/Inspect/Trace canonization. New §62b citizen schema: TraceRecord (prefix "trace-", fields: id, at, kind CYCLE\|OPERATION\|DECISION\|TRANSITION\|GAP\|ONBOARD\|SWITCH\|FLEET, cycle_id OPTIONAL, operation_id OPTIONAL, decision_id OPTIONAL, summary, detail OPTIONAL, recorded_by; non-compactability contract; Implements: AuditRecord). Three new §62l constructs: AuditRecord Canonical Cluster (FOUNDATIONAL, depends: []; four required fields: id/at/recorded_by/event_kind; three binding contracts: non-compactability, append-only, emission obligation; implementing citizens: TraceRecord, SwitchRecord, FleetRecord, OnboardRecord); InspectionContract (FOUNDATIONAL, depends: []; five-clause contract: read-only, filter-before-output, paginate, dual-output, zero-failure-exit; governing all SD=True inspection commands); ObservabilityContract (FOUNDATIONAL, depends: [AuditRecord]; covered-mutations table: 8 mutation→record→kind rows; autonomy gap: trace-record-missing WARNING; inspection surface: urace trace list). New §62r normative section: Audit and Observability — audit trail, inspection surface table, observability contract, reuse-as-constructor contract. New §62k command: `urace trace list` (--kind/--cycle-id/--since/--until/--limit/--offset/--json) and `urace trace inspect <id>`. State Document: `trace_records` OPTIONAL list[TraceRecord] added. §62b retrofit: `Implements: AuditRecord` added to SwitchRecord, FleetRecord, OnboardRecord. IGC: 2 new kinds (audit-record-compacted BLOCKING, trace-record-missing WARNING); IGC total 106→108. Schema Catalog: TraceRecord added (37→38). §62l count: nineteen→twenty-two; enforcement contract self-enforcing list updated (ten→eleven, plus InspectionContract+ObservabilityContract). §62n ConstructKindRegistry: TraceRecord (FOUNDATIONAL, CitizenBase+AuditRecord, r75). §81: 3 new stems (auditrecord, inspectioncontract, observability). Runtime: `initial_state()` adds `trace_records: []`; `_emit_trace()` helper function added near `_emit_gap`; `cycle()` emits CYCLE+TRANSITION+ONBOARD TraceRecords at 7 covered mutation points; `trace` command added (list/inspect subcommands); `trace` added to `_KNOWN_TOP_COMMANDS`; `trace list`/`trace inspect` added to `_SD_TRUE_EXACT`; 10 new R75AuditObservabilityTests. **New external references:** `TraceRecord` schema → §62b (this revision); `AuditRecord` Canonical Cluster → §62l (this revision); `InspectionContract` Protocol → §62l (this revision); `ObservabilityContract` Protocol → §62l (this revision); `§62r` section → §62r Audit and Observability (this revision); `urace trace list` command → §62k (this revision); `urace trace inspect` command → §62k (this revision); `State.trace_records` field → §62e State Document (this revision); `audit-record-compacted` IGC kind → §62l (this revision); `trace-record-missing` IGC kind → §62l (this revision); `auditrecord` stem → §81 (this revision); `inspectioncontract` stem → §81 (this revision); `observability` stem → §81 (this revision) |
 | r74 | 2026-10-17 | runtime | CLI alignment pass — 6 missing commands implemented, 14 missing flags added. New top-level commands: `evidence list` (--kind/--since/--until/--limit), `blocker list/resolve` (--resolved/--scope/--note), `decision list/inspect` (--stale/--scope/--limit), `integrity-signal list` (--type/--severity/--resolved), `govern clear/list-gates` (--note), `autonomous` (alias for auto). Missing flags added: `check --fail-on`, `vitals --since/--until/--limit/--fail-on`, `goal list --status/--limit`, `inbox list --kind/--status/--limit`, `rules list --since/--until/--limit/--offset`, `why --limit`. _SD_TRUE_EXACT: 8 new two-word aliases (evidence list, blocker list/resolve, decision list/inspect, integrity-signal list, govern list-gates/clear). _KNOWN_TOP_COMMANDS: 6 entries added. 13 new R73CommandAlignmentTests; **1076 tests pass.** **New external references:** none (all constructs previously declared in §62k). |
 | r73 | 2026-10-17 | spec+runtime | Fleet Orchestration. New §62q normative section: parallel multi-product autonomous evolution via FleetOrchestrationProtocol (FOP). Config.fleet subschema (members, signal_broadcast, max_concurrent, broadcast_min_confidence). State.fleet_records OPTIONAL field added (list[FleetRecord], default []). New §62b citizens: FleetMemberStatus enum (RUNNING\|PAUSED\|STOPPED\|ERROR\|PENDING) and FleetRecord schema (prefix "flrec-", fields: id, event, product_name OPTIONAL, at, detail OPTIONAL; audit contract: non-compactable). New §62l construct: FleetOrchestrationProtocol (FOP, INTEGRATED, depends: [ProductSwitchProtocol, OnboardGate]): 5-clause protocol (member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop); scope isolation invariant (members unaware of fleet config); signal broadcast exclusion set (bootstrap, onboard-complete, onboard-policy-defaulted). New §62k commands: `urace fleet run` (--dry-run/--verbose/--json), `urace fleet status`, `urace fleet stop [<name>]`, `urace fleet broadcast`. 3 new IGC gap kinds: `fleet-member-crashed` (WARNING), `fleet-duplicate-state-path` (BLOCKING), `fleet-signal-broadcast-skipped` (INFO); IGC total 103→106. Schema Catalog: FleetRecord added (36→37). Protocol Catalog: FOP added (15→16). §62n ConstructKindRegistry: FleetRecord (INTEGRATED) added. §62l count updated eighteen→nineteen; self-enforcing list updated to include FOP (nine→ten). §81: `fleet` stem added. Runtime (r73): `initial_state()` adds `fleet_records: []`; `fleet` command added to cli.py (run/status/stop/broadcast subcommands); `fleet` added to `_KNOWN_TOP_COMMANDS`; 3 new gap kinds added to primitives.py; `load_config()` in _common.py reads `URACE_ACTIVE_PRODUCT` env var and sets `active_product` in returned config; 8 new behavioral tests (R73FleetTests). **QE: PASS. JOIN: PASS.** **New external references:** `FleetMemberStatus` enum → §62b (this revision); `FleetRecord` schema → §62b (this revision); `FleetOrchestrationProtocol` (FOP) Protocol → §62l (this revision); `Config.fleet` subschema → §62e Config Document (this revision); `State.fleet_records` field → §62e State Document (this revision); `§62q` section → §62q Fleet Orchestration (this revision); `urace fleet run` command → §62k (this revision); `urace fleet status` command → §62k (this revision); `urace fleet stop` command → §62k (this revision); `urace fleet broadcast` command → §62k (this revision); `fleet-member-crashed` IGC kind → §62l (this revision); `fleet-duplicate-state-path` IGC kind → §62l (this revision); `fleet-signal-broadcast-skipped` IGC kind → §62l (this revision); `fleet` stem → §81 (this revision) |
