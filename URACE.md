@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r76**
+**Specification version: 2026-10-17-r77**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -4249,7 +4249,8 @@ State {
   onboard_records       OPTIONAL  list[OnboardRecord]; completed and superseded onboard records; default []
   switch_records        OPTIONAL  list[SwitchRecord]; audit trail of product switches; default []
   fleet_records         OPTIONAL  list[FleetRecord]; fleet lifecycle audit trail; default []
-  trace_records         OPTIONAL  list[TraceRecord]; lifecycle trace log; non-compactable; default []
+  trace_records             OPTIONAL  list[TraceRecord]; lifecycle trace log; non-compactable; default []
+  outcome_feedback_records  OPTIONAL  list[OutcomeFeedbackRecord]; operator outcome feedback; non-compactable; default []
 }
 ```
 
@@ -4984,6 +4985,51 @@ Implements: AuditRecord.
 **Non-compactability contract.** TraceRecord entries MUST NOT be removed during compaction. State.trace_records MUST be retained in full across all compaction passes.
 
 Used in: State.trace_records.
+
+---
+
+## OutputSchema
+
+A static declaration of the stable fields and schema version for a `--json` CLI command output. Registered in the OutputSchemaRegistry (§62l).
+
+```
+OutputSchema {
+  id              REQUIRED  Identifier; prefix "oscm-"
+  command         REQUIRED  string; CLI command path (e.g. "check", "trace list")
+  schema_version  REQUIRED  string; semver string (e.g. "1.0")
+  stable_since    REQUIRED  string; spec revision when schema was declared (e.g. "r77")
+  fields          REQUIRED  list[string]; declared stable top-level field names in the --json response
+}
+```
+
+Used in: OutputSchemaRegistry (§62l).
+Referenced from: §62t Output Schema Registry, §62k --json contract.
+
+---
+
+## OutcomeFeedbackRecord
+
+A post-deployment quality signal that links an accepted Objective or a committed DecisionRecord to an operator-provided outcome evaluation. Non-compactable. Implements: AuditRecord.
+
+```
+OutcomeFeedbackRecord {
+  id           REQUIRED  Identifier; prefix "ofbk-"
+  at           REQUIRED  string; ISO-8601 timestamp
+  recorded_by  REQUIRED  string; "operator" or "runtime"
+  event_kind   REQUIRED  string; always "OUTCOME_FEEDBACK"
+  target_id    REQUIRED  string; the obj- or dec- id being evaluated
+  target_kind  REQUIRED  string; "OBJECTIVE" | "DECISION"
+  signal       REQUIRED  string; "POSITIVE" | "NEGATIVE" | "NEUTRAL"
+  evidence_id  OPTIONAL  string; ev- id corroborating the feedback signal
+  detail       OPTIONAL  string; operator-provided explanation
+  processed    OPTIONAL  bool; default false; set true by FeedbackAccumulator (§62c) after applying
+}
+```
+
+**Non-compactability contract.** OutcomeFeedbackRecord entries MUST NOT be removed during compaction. State.outcome_feedback_records MUST be retained in full across all compaction passes.
+
+Used in: State.outcome_feedback_records.
+Referenced from: §62u Closed-Loop Outcome Feedback, §62c FeedbackAccumulator, §62k `urace feedback`.
 
 ---
 
@@ -5955,6 +6001,31 @@ The SignalClassifier maps observed lifecycle conditions to IntegritySignal recor
 **Classification contract.** When an observed condition matches a row in the table, the runtime MUST create an IntegritySignal record with the mapped `signal_type` and `severity`. A condition that does not match any row MUST emit `signal_type: OTHER` and `severity: WARNING` and emit IntegrityGap(`kind: "integrity-signal-unclassified"`, severity=WARNING) with `condition_description`. The runtime MUST NOT enter REPAIRING state on an unclassified signal without operator clearance.
 
 **Referenced from:** §64 REPAIRING entry conditions, §27 Evidence Integrity.
+
+---
+
+## FeedbackAccumulator
+
+**Construct metadata.** `kind: Mechanism` · `tier: INTEGRATED` · `standalone: false` · `governed-by: [AP8, AP9]`
+
+The FeedbackAccumulator processes unprocessed OutcomeFeedbackRecords (§62b) at cycle entry, emits appropriate IntegrityGaps, and marks records as processed. It closes the autonomous learning loop by surfacing negative outcome signals and missing feedback.
+
+```
+FEEDBACK ACCUMULATION (runs at cycle entry in ACTIVE and ASSESSING states only)
+
+1. Lifecycle gate — skip if lifecycle_state not in {ACTIVE, ASSESSING}
+2. For each OutcomeFeedbackRecord in state.outcome_feedback_records with processed=False:
+   a. If signal=NEGATIVE and target_kind=OBJECTIVE → emit feedback-negative-objective (INFO)
+   b. If signal=NEGATIVE and target_kind=DECISION  → emit feedback-negative-decision (INFO)
+   c. Set processed = True
+3. Feedback-overdue check — for each ACCEPTED Objective with no OutcomeFeedbackRecord
+   and accepted_at older than config.feedback.window_hours (default 168h):
+   emit feedback-overdue (INFO) once per objective (idempotent)
+4. Idempotency — already-processed records (processed=True) MUST be skipped
+```
+
+**Used in:** cycle() (§62e lifecycle, called at cycle entry after CSI and PPP_M).
+**Referenced from:** §62u Closed-Loop Outcome Feedback, §62l OutcomeFeedbackContract.
 
 ---
 
@@ -9562,13 +9633,21 @@ urace trace inspect <trace-id> [--json]
 
 **`trace inspect <id>`** — returns the full TraceRecord for the given id. Exits 1 if not found.
 
+**`schema list`** — lists all registered OutputSchema entries from the OutputSchemaRegistry (§62l). Returns command name, schema_version, stable_since. SD=True. Implements InspectionContract (§62l). `--json` emits `{schema_version, schemas: [...]}`.
+
+**`schema inspect <command>`** — returns the full OutputSchema for the named command including all declared stable fields. Exits 1 if command not found. SD=True. Implements InspectionContract (§62l). `--json` emits schema object.
+
+**`feedback submit <target_id>`** — submits an OutcomeFeedbackRecord (§62b) for the given Objective (obj-) or DecisionRecord (dec-). Required: `--signal <POSITIVE|NEGATIVE|NEUTRAL>`. Optional: `--evidence <ev-id>`, `--detail <text>`. Validates target_id prefix. Exits 1 if target_id does not start with obj- or dec-. `--json` emits the created OutcomeFeedbackRecord. Uses OutcomeFeedbackContract (§62l).
+
+**`feedback list`** — returns OutcomeFeedbackRecords in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--target <id>` filters by target_id. `--signal POSITIVE|NEGATIVE|NEUTRAL` filters by signal. `--limit N` (default 20). `--offset M` (default 0). `--json` emits `{schema_version, records, total}`.
+
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines twenty-two named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines twenty-five named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All twenty-two constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining eleven constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, and AuditRecord — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All twenty-five constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining fourteen constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, and OutcomeFeedbackContract — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -9618,7 +9697,7 @@ AuditRecord {
 2. **Append-only.** Once written, an AuditRecord's `id`, `at`, `recorded_by`, and `event_kind` fields MUST NOT be mutated. Corrections MUST be made by appending a new record with a reference to the corrected record's id in `detail`.
 3. **Emission obligation.** Every consequential lifecycle mutation listed in ObservabilityContract MUST produce at least one durable AuditRecord (TraceRecord, SwitchRecord, FleetRecord, or equivalent). A mutation without a durable record is an ObservabilityContract violation.
 
-**Citizens implementing AuditRecord:** TraceRecord (§62b), SwitchRecord (§62b), FleetRecord (§62b), OnboardRecord (§62b).
+**Citizens implementing AuditRecord:** TraceRecord (§62b), SwitchRecord (§62b), FleetRecord (§62b), OnboardRecord (§62b), OutcomeFeedbackRecord (§62b).
 
 **Referenced from:** §62b TraceRecord, SwitchRecord, FleetRecord, OnboardRecord; §62l ObservabilityContract; §62r Audit and Observability.
 
@@ -9661,6 +9740,7 @@ The **ObservabilityContract** defines which lifecycle mutations are observable e
 | Product onboard confirm | OnboardRecord (§62b) | ONBOARD |
 | Product switch | SwitchRecord (§62b) | SWITCH |
 | Fleet lifecycle event | FleetRecord (§62b) | FLEET |
+| OutcomeFeedbackRecord submission | OutcomeFeedbackRecord (§62b) | OUTCOME_FEEDBACK |
 
 **Minimum observable fields.** Every TraceRecord emitted under this contract MUST include: `at`, `kind`, `summary` (human-readable description of what changed and why). Optional fields `cycle_id`, `operation_id`, `decision_id` MUST be populated when the TraceRecord is causally linked to those citizens.
 
@@ -9670,6 +9750,67 @@ The **ObservabilityContract** defines which lifecycle mutations are observable e
 
 **Citizens using ObservabilityContract:** (none — governs emission behavior, not schema fields).
 **Referenced from:** §62b TraceRecord, §62l AuditRecord; §62r Audit and Observability.
+
+---
+
+## LayerModel
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **LayerModel** defines the five formal layers of a URACE installation and the allowed coupling directions between them. All sections that introduce new citizens, mechanisms, or constructs MUST classify them into the appropriate layer.
+
+**Five layers:**
+
+| Layer | ID | Citizens and constructs |
+|---|---|---|
+| Authority-Intent | L0 | GoalRecord, ObjectiveRecord, DecisionRecord, PolicyRecord, HardConstraint, Intent, Authority |
+| Planning-Discovery | L1 | PlanRecord, DiscoveryRecord, ScheduledTask, FitHypothesis, CapabilityStatement |
+| Execution | L2 | OperationRecord, EffectUncertaintyProtocol, BridgeRecord, OrchestratorRecord, executor |
+| Observation | L3 | EvidenceRecord, AssessmentRecord, MarketSignal, QualityDelta, MetricEffect, OutcomeFeedbackRecord |
+| Governance-Audit | L4 | AuditRecord, TraceRecord, SwitchRecord, FleetRecord, OnboardRecord, IntegrityGap, CheckpointRecord |
+
+**Cross-layer coupling rules:**
+
+1. **Downward flow (authorized).** L0 MAY write to L1. L1 MAY write to L2. L2 MAY write to L3. L3 MAY write to L0 — this is the canonical feedback path (Observation informs Intent). Any layer MAY append to L4 (audit). No layer MAY modify existing L4 records.
+2. **Skip-layer prohibition.** L0 MUST NOT write directly to L2 (bypasses planning). L1 MUST NOT write directly to L3 (bypasses execution). L2 MUST NOT write directly to L0 (execution cannot create authority). A detected skip-layer write MUST emit `layer-boundary-violation` BLOCKING IntegrityGap.
+3. **L4 read-only.** L4 citizens are written once and thereafter immutable per the AuditRecord non-compactability contract. The Governance-Audit layer MUST NOT modify any L0–L3 citizen state.
+
+**Citizens using LayerModel:** all citizens listed in the five-layer table above.
+**Referenced from:** §62s Layer Architecture, §62l AuditRecord.
+
+---
+
+## OutputSchemaRegistry
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+The **OutputSchemaRegistry** is the canonical catalog of all `--json` output schemas exposed by the URACE CLI. Every command that supports `--json` MUST have a registered OutputSchema (§62b) entry. An unregistered `--json` command MUST emit `output-schema-unregistered` WARNING IntegrityGap on first invocation.
+
+**Schema versioning contract.** Every `--json` response body MUST include a top-level `schema_version` field equal to the registered OutputSchema.schema_version for that command. When a field is removed or its type changes, schema_version MUST be incremented. Adding new OPTIONAL fields does not require a version increment. Breaking schema changes MUST be declared in the revision log.
+
+**Inspection surface.** `urace schema list` returns all registered OutputSchema entries (SD=True). `urace schema inspect <command>` returns the full OutputSchema for the named command (exits 1 if not found; SD=True). Both commands implement InspectionContract (§62l).
+
+**Citizens using OutputSchemaRegistry:** OutputSchema (§62b).
+**Referenced from:** §62t Output Schema Registry, §62k `urace schema`.
+
+---
+
+## OutcomeFeedbackContract
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [AuditRecord]`
+
+The **OutcomeFeedbackContract** governs how post-deployment quality signals are collected, stored, and processed to close the autonomous learning loop. All sections that accept or process operator feedback on outcomes MUST cite this contract rather than defining their own feedback schema.
+
+**Five-clause contract:**
+
+1. **Collection.** Outcome feedback MUST be submitted via `urace feedback submit <target_id> --signal <POSITIVE|NEGATIVE|NEUTRAL>`. The target MUST be an accepted Objective (obj-) or a committed DecisionRecord (dec-). Feedback MUST be stored as an OutcomeFeedbackRecord (§62b) in State.outcome_feedback_records.
+2. **Implements AuditRecord.** OutcomeFeedbackRecord MUST declare `Implements: AuditRecord`. It is non-compactable, append-only, and subject to the AuditRecord emission obligation.
+3. **Processing window.** An accepted Objective without a corresponding OutcomeFeedbackRecord after `config.feedback.window_hours` (default 168h) MUST surface as a `feedback-overdue` INFO IntegrityGap. This gap is informational and MUST NOT block autonomous operation.
+4. **Accumulation.** The FeedbackAccumulator (§62c) MUST process each unprocessed OutcomeFeedbackRecord at cycle entry, set `processed=True`, and emit appropriate IntegrityGaps per its algorithm. Processing is idempotent.
+5. **Inspection surface.** All OutcomeFeedbackRecords MUST be queryable via `urace feedback list`. `--target <id>` filters by target_id. `--signal <type>` filters by signal. `--limit N` (default 20). `--offset M` (default 0). `--json` emits array. Implements InspectionContract (§62l).
+
+**Citizens using OutcomeFeedbackContract:** OutcomeFeedbackRecord (§62b).
+**Referenced from:** §62b OutcomeFeedbackRecord, §62c FeedbackAccumulator, §62u Closed-Loop Outcome Feedback.
 
 ---
 
@@ -10118,6 +10259,11 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `justification-context-incomplete` | WARNING | §62b JustificationContext / §62l JustificationContract | Supply missing JustificationContext predicates before committing consequential action |
 | `inbox-priority-tier-violation` | WARNING | §62i AP14 priority-tier contract | Operator assigned Tier 0 to a non-hardcoded input kind; correct input or tier assignment |
 | `checkpoint-write-timeout` | WARNING | §61 Checkpoint / §62b CheckpointRecord | Checkpoint write did not complete within 30 seconds; investigate persistence layer and re-attempt |
+| `layer-boundary-violation` | BLOCKING | §62l LayerModel clause 2 | Skip-layer write detected; restructure the mutation to pass through the correct intermediate layer |
+| `output-schema-unregistered` | WARNING | §62l OutputSchemaRegistry | --json command has no registered OutputSchema; register the schema in OutputSchemaRegistry |
+| `feedback-overdue` | INFO | §62u Closed-Loop Outcome Feedback / §62c FeedbackAccumulator | Accepted Objective has no OutcomeFeedbackRecord after feedback_window_hours; submit `urace feedback submit <id>` |
+| `feedback-negative-objective` | INFO | §62c FeedbackAccumulator | NEGATIVE OutcomeFeedbackRecord recorded for an Objective; review objective quality and evidence basis |
+| `feedback-negative-decision` | INFO | §62c FeedbackAccumulator | NEGATIVE OutcomeFeedbackRecord recorded for a DecisionRecord; review decision and update authority if needed |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -10276,7 +10422,7 @@ The FleetOrchestrationProtocol governs parallel multi-product autonomous evoluti
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
 
-## Mechanism Catalog (9 entries)
+## Mechanism Catalog (10 entries)
 
 | ID | Name | Spec | Provides |
 |---|---|---|---|
@@ -10289,8 +10435,9 @@ The FleetOrchestrationProtocol governs parallel multi-product autonomous evoluti
 | MBV | Metric Baseline Verification | §62c | cycle-start metric immutability audit, mutation_requires enforcement |
 | SCF | SignalClassifier | §62c | runtime signal classification, IntegritySignal emission, REPAIRING entry gate |
 | OBG | OnboardGate | §62c §62o | one-time product authorization gate, config integrity snapshot, ONBOARDING lifecycle enforcement |
+| FAC | FeedbackAccumulator | §62c §62u | outcome feedback processing, confidence weight adjustment, feedback-overdue detection |
 
-## Schema Catalog (38 entries)
+## Schema Catalog (40 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -10334,8 +10481,10 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | SwitchRecord | SwitchRecord | swrec- | §62b |
 | FleetRecord | FleetRecord | flrec- | §62b |
 | TraceRecord | TraceRecord | trace- | §62b |
+| OutputSchema | OutputSchema | oscm- | §62b |
+| OutcomeFeedbackRecord | OutcomeFeedbackRecord | ofbk- | §62b |
 
-## Protocol Catalog (18 entries)
+## Protocol Catalog (21 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -10357,6 +10506,9 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | FOP | FleetOrchestrationProtocol | member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop | §62l |
 | InspectionContract | InspectionContract | read-only → filter → paginate → dual-output → zero-failure-exit; governs all SD=True inspection commands | §62l |
 | ObservabilityContract | ObservabilityContract | covered mutations → required record → kind mapping; autonomy gap trace-record-missing; inspection surface urace trace list | §62l |
+| LayerModel | LayerModel | define 5-layer architecture (L0–L4) + cross-layer coupling rules; skip-layer prohibition; L4 read-only | §62l |
+| OutputSchemaRegistry | OutputSchemaRegistry | catalog all --json output schemas; schema_version contract; output-schema-unregistered gap | §62l |
+| OutcomeFeedbackContract | OutcomeFeedbackContract | feedback collection → AuditRecord → accumulator → feedback-overdue window → closed loop | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -10604,6 +10756,9 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | AuditRecord | AuditRecord Canonical Cluster | FOUNDATIONAL | true |
 | InspectionContract | InspectionContract | FOUNDATIONAL | true |
 | ObservabilityContract | ObservabilityContract | FOUNDATIONAL | true |
+| LayerModel | LayerModel | FOUNDATIONAL | true |
+| OutputSchemaRegistry | OutputSchemaRegistry | FOUNDATIONAL | true |
+| OutcomeFeedbackContract | OutcomeFeedbackContract | FOUNDATIONAL | true |
 
 ### Mechanisms (§62c)
 
@@ -10652,6 +10807,8 @@ The following schemas were added in r54/r55, r61, and r62 and MUST be registered
 | SwitchRecord | INTEGRATED | CitizenBase | r72 |
 | FleetRecord | INTEGRATED | CitizenBase | r73 |
 | TraceRecord | FOUNDATIONAL | CitizenBase + AuditRecord | r75 |
+| OutputSchema | COMPOSITIONAL | CitizenBase | r77 |
+| OutcomeFeedbackRecord | FOUNDATIONAL | CitizenBase + AuditRecord | r77 |
 
 # 62o. Product Onboard Phase
 
@@ -10869,6 +11026,97 @@ Any new section, mechanism, or citizen that requires audit trail behavior MUST d
 **Implements:** AuditRecord (§62l), InspectionContract (§62l), ObservabilityContract (§62l).
 **Uses:** TraceRecord (§62b), SwitchRecord (§62b), FleetRecord (§62b), OnboardRecord (§62b).
 **Referenced from:** §62l AuditRecord, InspectionContract, ObservabilityContract; §62k `urace trace`.
+
+---
+
+# 62s. Layer Architecture
+
+URACE's state-bearing citizens, mechanisms, and runtime logic are organized into five formal layers. This section documents those layers and the LayerModel construct (§62l) that governs allowed coupling directions.
+
+## Layer Table
+
+| Layer | ID | Purpose |
+|---|---|---|
+| Authority-Intent | L0 | Governs what URACE is authorized to pursue |
+| Planning-Discovery | L1 | Determines what work to do and when |
+| Execution | L2 | Performs bounded work and records effects |
+| Observation | L3 | Measures outcomes and feeds signals back into intent |
+| Governance-Audit | L4 | Immutable record of everything that happened |
+
+## Canonical Feedback Path
+
+The canonical L3→L0 feedback path is: Observation (EvidenceRecord, AssessmentRecord, OutcomeFeedbackRecord) informs Intent (GoalRecord, ObjectiveRecord priority). This is the ONLY authorized upward write across layers. All other inter-layer writes are strictly downward (L0→L1→L2→L3) or append-to-L4.
+
+## Layer Enforcement
+
+The runtime MUST emit `layer-boundary-violation` (BLOCKING) when a skip-layer write is detected — for example, an executor directly mutating a GoalRecord without a DecisionRecord boundary crossing L0. L4 enforcement is already provided by the AuditRecord non-compactability contract (§62l).
+
+**Implements:** LayerModel (§62l).
+**Uses:** LayerModel (§62l), AuditRecord (§62l), OutcomeFeedbackContract (§62l).
+**Referenced from:** §62l LayerModel, §62l AuditRecord.
+
+---
+
+# 62t. Output Schema Registry
+
+Every `--json` output in URACE is governed by a registered OutputSchema (§62b). This section defines the registry surface and the schema_version contract.
+
+## Schema_version Contract
+
+Every `--json` response body includes a top-level `schema_version` field. Consumers MUST use this field to detect schema changes. The initial version for all r77-registered schemas is `"1.0"`. A schema_version increment is required when a stable field is removed or its type changes; adding OPTIONAL fields does not require a version increment.
+
+## Registered Schemas (r77 baseline)
+
+| Command | schema_version | Key stable fields |
+|---|---|---|
+| check | 1.0 | schema_version, lifecycle_state, gaps, score, categories |
+| vitals | 1.0 | schema_version, lifecycle_state, maturity, metrics, blockers |
+| trace list | 1.0 | schema_version, records, total |
+| feedback list | 1.0 | schema_version, records, total |
+| schema list | 1.0 | schema_version, schemas |
+| schema inspect | 1.0 | schema_version, command, output_schema_version, stable_since, fields |
+
+## Inspection Surface
+
+**`schema list`** — returns all registered OutputSchema entries. SD=True. Implements InspectionContract (§62l). `--json` emits array under key `schemas`.
+
+**`schema inspect <command>`** — returns the full OutputSchema for the named command. Exits 1 if command not found. SD=True. Implements InspectionContract (§62l). `--json` emits full schema object.
+
+**Implements:** OutputSchemaRegistry (§62l), InspectionContract (§62l).
+**Uses:** OutputSchema (§62b), OutputSchemaRegistry (§62l).
+**Referenced from:** §62l OutputSchemaRegistry, §62k `urace schema`.
+
+---
+
+# 62u. Closed-Loop Outcome Feedback
+
+Autonomous cycles produce Objectives and Decisions. This section formalizes how operators signal whether those outcomes were correct, and how those signals close the autonomous learning loop via the FeedbackAccumulator (§62c).
+
+## Purpose
+
+The feedback loop: Evidence → Objective → Execution → Outcome → **OutcomeFeedbackRecord** → FeedbackAccumulator → adjusted confidence signals → better future Objectives. Without the final step, URACE cannot distinguish outcomes that succeeded from outcomes that failed without further evidence.
+
+## Feedback Submission
+
+Operators submit feedback via `urace feedback submit <target_id> --signal <POSITIVE|NEGATIVE|NEUTRAL> [--evidence <ev-id>] [--detail <text>]`. The target MUST be an accepted Objective (obj-) or a committed DecisionRecord (dec-). The runtime validates the target prefix and creates an OutcomeFeedbackRecord, appending it to State.outcome_feedback_records.
+
+## Processing
+
+The FeedbackAccumulator (§62c) runs at each ACTIVE/ASSESSING cycle entry. NEGATIVE signals on Objectives surface `feedback-negative-objective` (INFO) gaps; NEGATIVE signals on Decisions surface `feedback-negative-decision` (INFO) gaps. POSITIVE and NEUTRAL signals are recorded and marked processed without emitting gaps.
+
+## Feedback Window
+
+If an accepted Objective has no OutcomeFeedbackRecord after `config.feedback.window_hours` (default 168h), the runtime surfaces `feedback-overdue` (INFO). This is advisory and MUST NOT block autonomous cycles.
+
+## Inspection Surface
+
+**`feedback list`** — returns OutcomeFeedbackRecords in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--target <id>` filters by target_id. `--signal POSITIVE|NEGATIVE|NEUTRAL` filters by signal. `--limit N` (default 20). `--offset M` (default 0). `--json` emits `{schema_version, records, total}`.
+
+**`feedback submit <target_id>`** — mutates state. Required: `--signal <type>`. Optional: `--evidence <ev-id>`, `--detail <text>`. Exits 1 if target_id is not obj- or dec-. `--json` emits the created OutcomeFeedbackRecord.
+
+**Implements:** OutcomeFeedbackContract (§62l), InspectionContract (§62l), AuditRecord (§62l).
+**Uses:** OutcomeFeedbackRecord (§62b), FeedbackAccumulator (§62c), OutcomeFeedbackContract (§62l).
+**Referenced from:** §62l OutcomeFeedbackContract, §62b OutcomeFeedbackRecord, §62c FeedbackAccumulator.
 
 ---
 
@@ -12855,6 +13103,9 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `auditrecord` | AuditRecord canonical cluster, AuditRecord contract, non-compactable, append-only, audit trail citizen |
 | `inspectioncontract` | InspectionContract, SD=True read pattern, filter/paginate/json, inspection command |
 | `observability` | ObservabilityContract, TraceRecord, trace-record-missing, lifecycle observability, urace trace |
+| `layermodel` | LayerModel §62l construct, 5-layer architecture (L0–L4), cross-layer coupling rules, layer-boundary-violation, §62s Layer Architecture |
+| `outputschema` | OutputSchema §62b citizen (oscm-), OutputSchemaRegistry §62l construct, schema_version field, urace schema list/inspect, §62t Output Schema Registry |
+| `outcomefeedback` | OutcomeFeedbackRecord §62b citizen (ofbk-), OutcomeFeedbackContract §62l construct, FeedbackAccumulator §62c mechanism, feedback-overdue, urace feedback submit/list, §62u Closed-Loop Outcome Feedback |
 
 ## Audit Content
 
@@ -12920,6 +13171,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r77 | 2026-10-17 | spec+runtime | Closed-Loop Autonomy. Three interconnected capability areas: (1) Layer Architecture. New §62s normative section. New §62l construct: LayerModel (FOUNDATIONAL, standalone: true): 5-layer model (L0 Authority-Intent, L1 Planning-Discovery, L2 Execution, L3 Observation, L4 Governance-Audit) with cross-layer coupling rules (downward flow authorized, skip-layer prohibited, L4 read-only); `layer-boundary-violation` BLOCKING gap. (2) Output Schema Registry. New §62t normative section. New §62b citizen: OutputSchema (prefix "oscm-", fields: id, command, schema_version, stable_since, fields[]). New §62l construct: OutputSchemaRegistry (FOUNDATIONAL, standalone: true): catalogs all --json output schemas; `schema_version` field MUST appear in all --json responses; `output-schema-unregistered` WARNING; 6 baseline schemas registered (check, vitals, trace list, feedback list, schema list, schema inspect). New §62k commands: `urace schema list` (SD=True), `urace schema inspect <command>` (SD=True). (3) Closed-Loop Outcome Feedback. New §62u normative section. New §62b citizen: OutcomeFeedbackRecord (prefix "ofbk-"; fields: id, at, recorded_by, event_kind="OUTCOME_FEEDBACK", target_id, target_kind OBJECTIVE\|DECISION, signal POSITIVE\|NEGATIVE\|NEUTRAL, evidence_id OPTIONAL, detail OPTIONAL, processed OPTIONAL bool; Implements: AuditRecord; non-compactable). New §62c mechanism: FeedbackAccumulator (FAC, INTEGRATED, governed-by: [AP8, AP9]): processes unprocessed OutcomeFeedbackRecords at cycle entry (ACTIVE/ASSESSING only); NEGATIVE→OBJECTIVE emits `feedback-negative-objective` INFO; NEGATIVE→DECISION emits `feedback-negative-decision` INFO; `feedback-overdue` INFO when accepted Objective has no feedback after feedback_window_hours (default 168h); idempotent (skips processed=True). New §62l construct: OutcomeFeedbackContract (FOUNDATIONAL, standalone: true, depends: [AuditRecord]): 5-clause contract governing collection/storage/processing/window/inspection. New §62k commands: `urace feedback submit <target_id> --signal <type>` (mutates state), `urace feedback list` (SD=True). State Document: `outcome_feedback_records` OPTIONAL list[OutcomeFeedbackRecord] added. AuditRecord §62l: OutcomeFeedbackRecord added to implementing citizens. ObservabilityContract: OutcomeFeedbackRecord submission added to covered mutations table. IGC: 5 new kinds (layer-boundary-violation BLOCKING, output-schema-unregistered WARNING, feedback-overdue INFO, feedback-negative-objective INFO, feedback-negative-decision INFO); IGC total 108→113. Schema Catalog: OutputSchema + OutcomeFeedbackRecord added (38→40). Protocol Catalog: LayerModel + OutputSchemaRegistry + OutcomeFeedbackContract added (18→21). Mechanism Catalog: FAC added (9→10). §62l count: twenty-two→twenty-five; enforcement contract self-enforcing list updated to fourteen. §62l constructs lattice: 3 rows added (22→25). §62n ConstructKindRegistry: OutputSchema (COMPOSITIONAL, CitizenBase, r77) + OutcomeFeedbackRecord (FOUNDATIONAL, CitizenBase+AuditRecord, r77) added. §81: 3 new stems (layermodel, outputschema, outcomefeedback). Runtime: `initial_state()` adds `outcome_feedback_records: []`; `_run_feedback_accumulator()` added and wired into cycle(); `OUTPUT_SCHEMA_REGISTRY` added to primitives.py; `schema` and `feedback` commands added to cli.py; `schema`/`feedback` added to `_KNOWN_TOP_COMMANDS`; `schema list`/`schema inspect`/`feedback list` added to `_SD_TRUE_EXACT`; 5 new IGC kinds added to INTEGRITY_GAP_CATALOG; 12 new R77ClosedLoopTests. **New external references:** `LayerModel` construct → §62l (this revision); `OutputSchema` schema → §62b (this revision); `OutputSchemaRegistry` construct → §62l (this revision); `OutcomeFeedbackRecord` schema → §62b (this revision); `OutcomeFeedbackContract` construct → §62l (this revision); `FeedbackAccumulator` mechanism → §62c (this revision); `§62s` section → §62s Layer Architecture (this revision); `§62t` section → §62t Output Schema Registry (this revision); `§62u` section → §62u Closed-Loop Outcome Feedback (this revision); `layer-boundary-violation` IGC kind → §62l (this revision); `output-schema-unregistered` IGC kind → §62l (this revision); `feedback-overdue` IGC kind → §62l (this revision); `feedback-negative-objective` IGC kind → §62l (this revision); `feedback-negative-decision` IGC kind → §62l (this revision); `layermodel` stem → §81 (this revision); `outputschema` stem → §81 (this revision); `outcomefeedback` stem → §81 (this revision); `State.outcome_feedback_records` field → §62e State Document (this revision); `urace schema list` command → §62k (this revision); `urace schema inspect` command → §62k (this revision); `urace feedback submit` command → §62k (this revision); `urace feedback list` command → §62k (this revision) |
 | r76 | 2026-10-17 | spec | JOIN+NSS+SCP+DEGRADATION full audit pass. Four catalog drift findings closed: (1) Schema Catalog: OnboardRecord row missing — added `\| OnboardRecord \| OnboardRecord \| onb- \| §62b \|` (37→38 rows, matching declared 38-entry header); (2) Contract Catalog: IGC entry incorrect "100 kinds" corrected to "108 kinds"; AuditRecord Canonical Cluster missing — added as 7th entry (Contract Catalog 6→7 entries); (3) Protocol Catalog: InspectionContract and ObservabilityContract missing — both added (Protocol Catalog 16→18 entries); (4) §62n ConstructKindRegistry §62l Protocols lattice: 17 rows representing stale state (SCP and DAI incorrectly included as §62l constructs — they are §62n-native; JC, BC, PSP, FOP, AuditRecord, InspectionContract, ObservabilityContract missing); corrected to 22 rows (removed SCP+DAI, added JC+BC+PSP+FOP+AuditRecord+InspectionContract+ObservabilityContract, net 17→22 matching the "twenty-two" count declared in §62l enforcement contract). NSS: all r71–r75 stems present in §81 (onboard, productregistry, fleet, auditrecord, inspectioncontract, observability). JOIN: all r71–r75 constructs have complete "Used in:", "Referenced from:", "Citizens using:" annotations. IGC: 108 rows confirmed. Version: r75→r76. No runtime changes. **New external references:** none (all constructs previously declared). | 
 | r75 | 2026-10-17 | spec+runtime | Audit/Inspect/Trace canonization. New §62b citizen schema: TraceRecord (prefix "trace-", fields: id, at, kind CYCLE\|OPERATION\|DECISION\|TRANSITION\|GAP\|ONBOARD\|SWITCH\|FLEET, cycle_id OPTIONAL, operation_id OPTIONAL, decision_id OPTIONAL, summary, detail OPTIONAL, recorded_by; non-compactability contract; Implements: AuditRecord). Three new §62l constructs: AuditRecord Canonical Cluster (FOUNDATIONAL, depends: []; four required fields: id/at/recorded_by/event_kind; three binding contracts: non-compactability, append-only, emission obligation; implementing citizens: TraceRecord, SwitchRecord, FleetRecord, OnboardRecord); InspectionContract (FOUNDATIONAL, depends: []; five-clause contract: read-only, filter-before-output, paginate, dual-output, zero-failure-exit; governing all SD=True inspection commands); ObservabilityContract (FOUNDATIONAL, depends: [AuditRecord]; covered-mutations table: 8 mutation→record→kind rows; autonomy gap: trace-record-missing WARNING; inspection surface: urace trace list). New §62r normative section: Audit and Observability — audit trail, inspection surface table, observability contract, reuse-as-constructor contract. New §62k command: `urace trace list` (--kind/--cycle-id/--since/--until/--limit/--offset/--json) and `urace trace inspect <id>`. State Document: `trace_records` OPTIONAL list[TraceRecord] added. §62b retrofit: `Implements: AuditRecord` added to SwitchRecord, FleetRecord, OnboardRecord. IGC: 2 new kinds (audit-record-compacted BLOCKING, trace-record-missing WARNING); IGC total 106→108. Schema Catalog: TraceRecord added (37→38). §62l count: nineteen→twenty-two; enforcement contract self-enforcing list updated (ten→eleven, plus InspectionContract+ObservabilityContract). §62n ConstructKindRegistry: TraceRecord (FOUNDATIONAL, CitizenBase+AuditRecord, r75). §81: 3 new stems (auditrecord, inspectioncontract, observability). Runtime: `initial_state()` adds `trace_records: []`; `_emit_trace()` helper function added near `_emit_gap`; `cycle()` emits CYCLE+TRANSITION+ONBOARD TraceRecords at 7 covered mutation points; `trace` command added (list/inspect subcommands); `trace` added to `_KNOWN_TOP_COMMANDS`; `trace list`/`trace inspect` added to `_SD_TRUE_EXACT`; 10 new R75AuditObservabilityTests. **New external references:** `TraceRecord` schema → §62b (this revision); `AuditRecord` Canonical Cluster → §62l (this revision); `InspectionContract` Protocol → §62l (this revision); `ObservabilityContract` Protocol → §62l (this revision); `§62r` section → §62r Audit and Observability (this revision); `urace trace list` command → §62k (this revision); `urace trace inspect` command → §62k (this revision); `State.trace_records` field → §62e State Document (this revision); `audit-record-compacted` IGC kind → §62l (this revision); `trace-record-missing` IGC kind → §62l (this revision); `auditrecord` stem → §81 (this revision); `inspectioncontract` stem → §81 (this revision); `observability` stem → §81 (this revision) |
 | r74 | 2026-10-17 | runtime | CLI alignment pass — 6 missing commands implemented, 14 missing flags added. New top-level commands: `evidence list` (--kind/--since/--until/--limit), `blocker list/resolve` (--resolved/--scope/--note), `decision list/inspect` (--stale/--scope/--limit), `integrity-signal list` (--type/--severity/--resolved), `govern clear/list-gates` (--note), `autonomous` (alias for auto). Missing flags added: `check --fail-on`, `vitals --since/--until/--limit/--fail-on`, `goal list --status/--limit`, `inbox list --kind/--status/--limit`, `rules list --since/--until/--limit/--offset`, `why --limit`. _SD_TRUE_EXACT: 8 new two-word aliases (evidence list, blocker list/resolve, decision list/inspect, integrity-signal list, govern list-gates/clear). _KNOWN_TOP_COMMANDS: 6 entries added. 13 new R73CommandAlignmentTests; **1076 tests pass.** **New external references:** none (all constructs previously declared in §62k). |
