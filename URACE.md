@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-16-r70**
+**Specification version: 2026-10-17-r71**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2551,9 +2551,9 @@ Not all progress is improvement. A Product reaches its **capable sweet spot** wh
 
 **Capable ≠ Maximal.** The goal of Product evolution is not to maximize scope, feature count, or quality scores in isolation. It is to reach and sustain the smallest, most cohesive Product surface that fully satisfies governing Intent.
 
-**Three evolution phases:**
+**Four evolution phases** (preceded by the one-time onboard gate — §62o):
 ```text
-BOOTSTRAPPING → FORMING → CAPABLE → OPTIMIZED → OVER_ENGINEERED
+ONBOARDING (gate) → BOOTSTRAPPING → FORMING → CAPABLE → OPTIMIZED → OVER_ENGINEERED
 ```
 - `BOOTSTRAPPING`: core capabilities not yet defined or partially absent
 - `FORMING`: capabilities being built out; completeness below target
@@ -4170,7 +4170,7 @@ State {
   state_version         REQUIRED  int; incremented on every durable write
   created_at            REQUIRED  timestamp; set once at init
   updated_at            REQUIRED  timestamp; updated on every durable write
-  lifecycle_state       REQUIRED  DORMANT | ACTIVE | ASSESSING | VALIDATING | REPAIRING
+  lifecycle_state       REQUIRED  ONBOARDING | DORMANT | ACTIVE | ASSESSING | VALIDATING | REPAIRING
                                   | BLOCKED | RECONCILING | WAITING_FOR_CAPACITY
                                   | WAITING_FOR_CONDITION | WAITING_FOR_SCHEDULE
                                   | WAITING_FOR_AUTHORITATIVE_DECISION | PAUSED
@@ -4236,6 +4236,7 @@ State {
   assessment_gaps       OPTIONAL  list[AssessmentGap]; active and recently resolved assessment gaps; deduplication by cycle_id+dimension; default []
   lifecycle_boundaries  OPTIONAL  list[LifecycleBoundary]; rolling log of boundary records (max 50); default []
   integrity_signals     OPTIONAL  list[IntegritySignal]; active and resolved integrity signals; default []
+  onboard_records       OPTIONAL  list[OnboardRecord]; completed and superseded onboard records; default []
 }
 ```
 
@@ -4848,6 +4849,30 @@ The following citizens are defined with full normative notation in their origina
 **MarketSignal** — externally observed market-fit signal. Full definition: §59. Used in: State.market_signals.
 **FitHypothesis** — a product-market fit hypothesis under evaluation. Full definition: §59. Used in: State.fit_hypotheses.
 
+## OnboardRecord
+
+A durable record that the Product Onboard Phase completed successfully and autonomous cycles are authorized to begin. Absence of an OnboardRecord in State at cycle boundary MUST trigger `lifecycle_state = ONBOARDING` and halt autonomous execution until all onboard gates pass and the operator confirms.
+
+```
+OnboardRecord {
+  id                    REQUIRED  Identifier; prefix "onb-"
+  created_at            REQUIRED  ISO-8601 timestamp; when onboarding completed
+  product_name          REQUIRED  string; value of Config.product at onboard time
+  confirmed_by          REQUIRED  string; operator-supplied confirmation token or "auto" if all gates passed silently
+  confirmed_at          REQUIRED  ISO-8601 timestamp; when operator issued `urace onboard confirm`
+  config_digest         REQUIRED  DigestValue; SHA-256 of Config at onboard time (detects config replacement)
+  gates_passed          REQUIRED  list[string]; names of all gates that passed (see §62o OnboardGate)
+  capability_envelope_waived  OPTIONAL  bool; true if operator explicitly waived capability_envelope requirement; default false
+  notes                 OPTIONAL  string; operator-supplied free-text notes recorded at confirmation
+}
+```
+
+**Staleness contract.** If `config_digest` diverges from the current Config digest at cycle boundary, URACE MUST emit IntegrityGap(`kind: "onboard-record-config-diverged"`, severity=WARNING) and surface it in `urace check`. The divergence MUST NOT trigger re-onboarding automatically; it is informational. Operator may re-run `urace onboard confirm` to refresh the record.
+
+**Uniqueness contract.** At most one OnboardRecord with `product_name` matching the current Config.product MUST be active in State at any time. A second `urace onboard confirm` for the same product supersedes the prior record; the prior record MUST be retained with `superseded_at` set.
+
+Used in: State.onboard_records.
+
 ---
 
 # 62c. Mechanism Contracts
@@ -5176,6 +5201,65 @@ EXECUTOR PROPOSAL (ExecutorProposal)
 **Recovery contract.** If `state["self_evolution_policy"]` is absent, corrupted, or structurally unreadable, the gate MUST apply `NECESSARY_ONLY` as the fail-closed default and MUST surface a named `self-evolution-policy-unreadable` IntegrityGap (WARNING). It MUST NOT proceed with `CONTINUOUS` mode under any form of inference.
 
 **Gate-before-authority contract.** The eligibility gate MUST be evaluated before Authority Resolution (§62c Authority Resolution Mechanism). A proposal that fails the gate MUST NOT reach Authority Resolution; doing so would allow an ineligible proposal to be denied by authority rather than by policy, obscuring the actual blocking reason.
+
+## OnboardGate Mechanism
+
+**Construct metadata.** `kind: Mechanism` · `tier: FOUNDATIONAL` · `standalone: true` · `governed-by: [AP0, AP4, AP14]`
+
+The OnboardGate is the one-time entry gate that every new Product MUST pass before URACE begins autonomous cycles. It fires once: when the current cycle finds no `OnboardRecord` for the active `Config.product`. Until all gates pass and the operator confirms, `lifecycle_state` is locked to `ONBOARDING` and no autonomous Operations, discovery calls, or executor dispatches are permitted. SD=True — no executor credits consumed.
+
+```
+ONBOARD GATE EVALUATION (fires at cycle entry when no OnboardRecord exists, SD=True)
+
+  1. GATE: config-completeness
+     Verify all REQUIRED Config top-level fields are present and non-empty:
+       product, product_files (≥ 1 entry), state_path, intent.purpose,
+       authority.delegated (≥ 1 entry), constraints, self_evolution_policy.mode
+     PASS → continue  FAIL → emit onboard-config-incomplete(BLOCKING); surface missing fields
+
+  2. GATE: product-files-readable
+     For each path in Config.product_files: verify the file exists and is readable.
+     PASS → continue  FAIL → emit onboard-no-readable-product-files(BLOCKING); list unreadable paths
+
+  3. GATE: intent-anchored
+     Verify State.destination_anchor is established (not null, not defaulted from empty intent).
+     PASS → continue  FAIL → emit onboard-intent-unanchored(BLOCKING); instruct operator to set intent
+
+  4. GATE: capability-envelope-declared
+     Verify Config.capability_envelope is present (at least one declared capability), OR
+     verify State.onboard_records[-1].capability_envelope_waived = true (explicit operator waiver).
+     PASS → continue  FAIL → emit onboard-capability-envelope-missing(WARNING); non-blocking advisory
+
+  5. GATE: self-evolution-policy-recorded
+     Verify State.self_evolution_policy is present and mode is one of
+     NECESSARY_ONLY | CONTINUOUS | DISABLED.
+     PASS → continue  FAIL → default to NECESSARY_ONLY; emit Evidence(kind: "onboard-policy-defaulted")
+
+  6. OPERATOR CONFIRMATION REQUIRED
+     If gates 1–3 all pass: emit onboard-confirmation-pending(BLOCKING) gap and surface:
+       "urace onboard status  — see gate results"
+       "urace onboard confirm — confirm and begin autonomous cycles"
+     Lifecycle remains ONBOARDING until operator issues `urace onboard confirm`.
+
+  7. ON CONFIRM:
+     Create OnboardRecord with all gate results, config_digest, confirmed_by, confirmed_at.
+     Write first Checkpoint of kind ONBOARD_COMPLETE.
+     Clear all onboard-* gaps.
+     Set lifecycle_state = DORMANT.
+     Emit Evidence(kind: "onboard-complete", product: Config.product).
+```
+
+**Idempotency contract.** If `urace onboard status` is called when an OnboardRecord already exists, it MUST report the existing record and gates without re-evaluating or mutating state.
+
+**No-executor contract.** The OnboardGate MUST NOT invoke the Executor at any step. All gate checks are deterministic reads of Config and State. `SD=True` — locally computable.
+
+**Product-agnostic contract.** The OnboardGate applies identically regardless of product type, language, domain, or file structure. It validates URACE configuration completeness, not product correctness. A product that has no files yet (empty `product_files`) MUST fail gate 2 and surface the gap; it is operator responsibility to configure the product before URACE begins cycling.
+
+**Re-onboard contract.** Replacing `Config.product` with a different product name invalidates the prior OnboardRecord. URACE MUST detect the name mismatch at cycle entry, set `lifecycle_state = ONBOARDING`, and re-run the OnboardGate. This is the formal mechanism for Product switching (§r72).
+
+**Referenced from:** §62o Product Onboard Phase (normative anchor), §59b maturity progression.
+
+---
 
 ## Discovery Credit Gate Mechanism
 
@@ -9290,6 +9374,23 @@ urace autonomous [--dry-run] [--verbose] [--quiet] [--json]
 
 `urace autonomous` is functionally identical to `urace auto`. The name is accepted for disambiguation when both `auto` (one-shot assessment) and `autonomous` (continuous) invocations coexist in scripts. `--dry-run` runs one assessment cycle, prints the next planned action, and exits without executing or persisting state.
 
+## urace onboard
+
+Inspect and confirm the Product Onboard Phase. SD=True for `status`; `confirm` mutates State. Implements OnboardGate (§62c). Uses: OnboardRecord (§62b), §62o Product Onboard Phase.
+
+```
+urace onboard status [--json]
+urace onboard confirm [--note <text>] [--json]
+```
+
+**`onboard status`** — evaluates all OnboardGate steps against current Config and State without mutating state. Idempotent. Output includes: gate-by-gate PASS/FAIL table, active onboard gap kinds, current `lifecycle_state`, and whether an OnboardRecord already exists for `Config.product`. If an OnboardRecord already exists, the command reports the existing record (id, confirmed_at, product_name, config_digest match/diverge) without re-evaluating gates. `--json` emits machine-readable payload with `gates: [{name, status, detail}]`.
+
+**`onboard confirm`** — operator confirmation that all gates have been reviewed and autonomous cycles are authorized to begin. MUST be issued after `onboard status` reports all BLOCKING gates as PASS. Execution: (1) re-evaluates OnboardGate; (2) if any BLOCKING gate fails, exits 1 with gate errors and takes no action; (3) if all BLOCKING gates pass, creates an OnboardRecord (id prefix "onb-"), writes ONBOARD_COMPLETE Checkpoint, clears all active `onboard-*` gaps, sets `lifecycle_state = DORMANT`. Optional `--note` text is stored in `OnboardRecord.notes`. Supersedes prior OnboardRecord for the same product (retains prior with `superseded_at`).
+
+**Exit codes.** `onboard status` exits 0 if an OnboardRecord exists and config matches, exits 2 if BLOCKING gates are unresolved, exits 0 with divergence warning if `onboard-record-config-diverged` is active. `onboard confirm` exits 0 on success, exits 1 if BLOCKING gates fail, exits 1 if state write fails.
+
+**Re-onboard.** If `Config.product` has changed since the last OnboardRecord, `onboard status` reports the mismatch and advises re-confirmation. `onboard confirm` treats this as a new product and creates a fresh OnboardRecord. The previous product's record is retained with `superseded_at` set to allow audit recovery (§62o).
+
 ---
 
 # 62l. Shared Reuse Contracts
@@ -9749,6 +9850,12 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `patch-proposal-confidence-below-floor` | INFO | §62c PPP | Signal passed relevance_floor but confidence_score < confidence_threshold; proposal marked CONFIDENCE_INSUFFICIENT |
 | `patch-proposal-queue-overflow` | WARNING | §62c PPP | Active PatchProposal count reached max_queue_depth; new proposals blocked until queue drains |
 | `community-signal-relevance-below-floor` | INFO | §62c CSI | Signal relevance_score < relevance_floor; signal discarded without producing a PatchProposal |
+| `onboard-config-incomplete` | BLOCKING | §62c OnboardGate | Config is missing required fields (product, intent.purpose, capability_envelope); complete Config before autonomous cycles can begin |
+| `onboard-no-readable-product-files` | BLOCKING | §62c OnboardGate | One or more Config.product_files paths are not readable; fix file paths and permissions before onboarding |
+| `onboard-intent-unanchored` | BLOCKING | §62c OnboardGate | Config.intent.purpose is absent or empty; set a non-empty intent purpose to anchor autonomous evolution |
+| `onboard-capability-envelope-missing` | WARNING | §62c OnboardGate | Config.capability_envelope is absent; capabilities will be unconstrained — declare envelope or set capability_envelope_waived in OnboardRecord |
+| `onboard-confirmation-pending` | BLOCKING | §62c OnboardGate | All BLOCKING onboard gates passed; awaiting operator confirmation (`urace onboard confirm`) to authorize autonomous cycles |
+| `onboard-record-config-diverged` | WARNING | §62b OnboardRecord staleness contract | Config.product or Config digest has diverged from the active OnboardRecord; run `urace onboard confirm` to refresh |
 | `blocker-escalated` | WARNING | §62b Blocker schema classification contract | Acknowledge escalation; consider operator intervention if pattern persists |
 | `integrity-signal-unclassified` | WARNING | §62c SignalClassifier | Review unclassified condition and register it in the SignalClassifier classification table |
 | `lifecycle-boundary-violation` | BLOCKING | §62b LifecycleBoundary / §62l BoundaryContract | Apply Transaction Recovery Protocol (AP27); resolve incomplete boundary before creating new ones |
@@ -9874,7 +9981,7 @@ The **JoinProtocol** (JOIN) is a post-change wiring audit protocol applied after
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
 
-## Mechanism Catalog (8 entries)
+## Mechanism Catalog (9 entries)
 
 | ID | Name | Spec | Provides |
 |---|---|---|---|
@@ -9886,8 +9993,9 @@ The **JoinProtocol** (JOIN) is a post-change wiring audit protocol applied after
 | PSD | Progress Stagnation Detector | §62c | stagnation detection, REPAIRING lifecycle trigger |
 | MBV | Metric Baseline Verification | §62c | cycle-start metric immutability audit, mutation_requires enforcement |
 | SCF | SignalClassifier | §62c | runtime signal classification, IntegritySignal emission, REPAIRING entry gate |
+| OBG | OnboardGate | §62c §62o | one-time product authorization gate, config integrity snapshot, ONBOARDING lifecycle enforcement |
 
-## Schema Catalog (33 entries)
+## Schema Catalog (34 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -9969,7 +10077,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (94 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (100 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -10229,6 +10337,92 @@ The following schemas were added in r54/r55, r61, and r62 and MUST be registered
 | PatchProposal | INTEGRATED | CitizenBase | r61 |
 | FeatureBundle | COMPOSITIONAL | CitizenBase | r62 |
 | FeatureBundleRef | COMPOSITIONAL | CitizenBase | r62 |
+| OnboardRecord | FOUNDATIONAL | CitizenBase | r71 |
+
+# 62o. Product Onboard Phase
+
+The Product Onboard Phase is the one-time entry ceremony that every new Product MUST complete before URACE begins autonomous cycles. It is the formal boundary between "URACE has been configured for a Product" and "URACE is authorized to operate autonomously on a Product." The phase is enforced by the OnboardGate Mechanism (§62c) and recorded by the OnboardRecord citizen schema (§62b).
+
+## Purpose
+
+The Onboard Phase serves three functions:
+
+1. **Authorization anchor.** It establishes an operator-confirmed record that URACE is authorized to begin autonomous evolution for a specific named Product. Without this record, autonomous Operations MUST NOT proceed.
+2. **Config integrity snapshot.** The OnboardRecord captures a digest of Config at onboard time, enabling future drift detection. If Config is replaced or mutated without re-onboarding, URACE surfaces the divergence immediately.
+3. **Product switchability gate.** By tying the authorization to `Config.product` by name, URACE formally supports Product switching: changing `Config.product` invalidates the prior authorization and requires a new Onboard Phase for the new Product. This is the canonical mechanism for Product replaceability.
+
+## Lifecycle Position
+
+The Onboard Phase occupies the `ONBOARDING` lifecycle state, which precedes all maturity progression:
+
+```
+ONBOARDING (gate) → BOOTSTRAPPING → FORMING → CAPABLE → OPTIMIZED → OVER_ENGINEERED
+```
+
+`ONBOARDING` is the only lifecycle state in which autonomous Operations, discovery calls, and executor dispatches are prohibited (`SD=True`). No Executor credits are consumed during onboarding. The runtime remains in `ONBOARDING` until the operator issues `urace onboard confirm` and the OnboardGate clears all BLOCKING conditions.
+
+## Entry Trigger
+
+The OnboardGate fires at cycle entry when the current cycle finds no `OnboardRecord` in `State.onboard_records` whose `product_name` matches `Config.product`. Two conditions trigger entry:
+
+1. **Fresh start.** No OnboardRecord exists at all — URACE has never been onboarded for any Product.
+2. **Product switch.** An OnboardRecord exists but for a different `product_name` — the operator has replaced `Config.product` with a new Product name.
+
+## Gate Steps
+
+See §62c OnboardGate Mechanism for the full 7-step algorithm. Summary:
+
+| Step | Gate | Severity | Clearance |
+|---|---|---|---|
+| 1 | Config completeness | BLOCKING | Fix Config fields |
+| 2 | product_files readable | BLOCKING | Fix file paths/permissions |
+| 3 | intent.purpose anchored | BLOCKING | Set non-empty intent purpose |
+| 4 | capability_envelope declared | WARNING | Declare envelope or set waiver |
+| 5 | self_evolution_policy recorded | INFO | Set policy or accept NECESSARY_ONLY default |
+| 6 | Operator confirmation | BLOCKING | `urace onboard confirm` |
+| 7 | (On confirm) Record, Checkpoint, clear gaps, set DORMANT | — | — |
+
+Steps 1–3 MUST all pass before step 6 (`onboard-confirmation-pending`) is surfaced. A BLOCKING failure at step 1, 2, or 3 suppresses the confirmation prompt until the failure is resolved.
+
+## Product Switchability
+
+URACE is fully product-agnostic. The only product-specific contract is: `Config.product` (a name string) and `Config.product_files` (a list of readable file paths). URACE does not prescribe any particular file layout, database, or folder structure for the Product under evolution. Switching Products is a two-step operator action:
+
+1. Replace `Config.product` and `Config.product_files` with the new Product's values.
+2. Run `urace onboard status` and `urace onboard confirm` to establish a new OnboardRecord.
+
+The prior Product's OnboardRecord is retained in `State.onboard_records` with `superseded_at` set. The prior Product's full State history (Objectives, Capabilities, Evidence, DecisionRecords) is also retained. URACE MUST NOT purge prior-Product state on switch; prior-Product state is frozen and excluded from active cycle evaluation by `product_name` mismatch.
+
+**Product isolation contract.** At any given time, only the OnboardRecord whose `product_name` matches `Config.product` is active. All autonomous cycle operations (discovery, objective selection, capability gate, CSI, PPP_M) apply only to the active Product. Prior-Product records are read-only historical artifacts.
+
+## Idempotency and Refresh
+
+- `urace onboard status` is always safe to run — it never mutates State.
+- `urace onboard confirm` on an already-onboarded Product (same name, same Config digest) is a no-op: the command MUST detect the existing record matches and emit a confirmation that the product is already onboarded. No new OnboardRecord is created.
+- `urace onboard confirm` on a name-matched Product with a diverged Config digest creates a refreshed OnboardRecord and supersedes the prior one. This is the canonical refresh path when Config has been updated.
+
+## Re-onboard Contract
+
+A re-onboard (same `product_name`, new Config digest) MUST:
+1. Re-evaluate all OnboardGate steps against the updated Config.
+2. If all BLOCKING gates pass and the operator confirms, create a new OnboardRecord with the updated `config_digest`.
+3. Retain the prior record with `superseded_at = now()`.
+4. Emit Evidence of kind `onboard-refreshed` with prior and new record IDs.
+
+A re-onboard MUST NOT reset Objectives, Capabilities, Evidence, or any accumulated State. It only refreshes the Config integrity snapshot and the authorization record.
+
+## Behavioral Contracts
+
+- Absence of a matching OnboardRecord at cycle entry MUST set `lifecycle_state = ONBOARDING` and halt autonomous execution. This is non-negotiable.
+- The `onboard-confirmation-pending` BLOCKING gap MUST be clearable only by `urace onboard confirm` (OperatorGateProtocol, §62l). Autonomous clearance is prohibited.
+- The ONBOARD_COMPLETE Checkpoint MUST be the first Checkpoint written for a new Product. Checkpoints written before ONBOARD_COMPLETE exist only if the onboard was interrupted and resumed — they are diagnostic artifacts, not authorization anchors.
+- The `onboard-record-config-diverged` WARNING MUST NOT block autonomous cycles. It is informational. The operator may choose to tolerate Config drift (e.g., minor tuning changes) without re-onboarding.
+
+**Implements:** OnboardGate Mechanism (§62c), OperatorGateProtocol (§62l).
+**Uses:** OnboardRecord (§62b), CheckpointRecord (§62b), Evidence (§62b).
+**Referenced from:** §62b OnboardRecord, §62c OnboardGate Mechanism, §59b maturity progression, §62k `urace onboard`.
+
+---
 
 # 63. Concurrency
 
@@ -12207,6 +12401,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `boundarycontract` | BoundaryContract protocol (§62l) |
 | `qualityensurance` | QualityEnsuranceProtocol (§62l) |
 | `join` | JoinProtocol (§62l) |
+| `onboard` | OnboardRecord, OnboardGate, Product Onboard Phase, onboard confirm, onboard status, ONBOARDING lifecycle state, product switch, config_digest, onboard-confirmation-pending |
 
 ## Audit Content
 
@@ -12272,6 +12467,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r71 | 2026-10-17 | spec+runtime | Product Onboard Phase. New lifecycle state `ONBOARDING` added as the pre-cycle entry gate — precedes BOOTSTRAPPING in the maturity progression. New §62b citizen schema: OnboardRecord (prefix "onb-", fields: id, created_at, product_name, confirmed_by, confirmed_at, config_digest, gates_passed, capability_envelope_waived OPTIONAL, notes OPTIONAL, superseded_at OPTIONAL); staleness contract (config_digest divergence → WARNING, non-blocking); uniqueness contract (at most one active per product_name; supersede on re-confirm). New §62c mechanism: OnboardGate (7-step algorithm: config-completeness, product-files-readable, intent-anchored, capability-envelope-declared, self-evolution-policy-recorded, operator-confirmation, on-confirm record+checkpoint+clear-gaps+set-DORMANT); SD=True; no executor credits consumed. New §62o normative section: Product Onboard Phase — purpose (authorization anchor, config integrity snapshot, product switchability gate), lifecycle position, entry trigger (no OnboardRecord for Config.product), gate step table, Product Switchability contract (product-agnostic; prior state retained with product_name isolation), idempotency and refresh contracts, re-onboard contract. New §62k commands: `urace onboard status` (idempotent gate evaluation) and `urace onboard confirm` (operator confirmation, creates OnboardRecord, writes ONBOARD_COMPLETE Checkpoint, clears onboard-* gaps, sets lifecycle_state=DORMANT). 6 new IGC gap kinds: `onboard-config-incomplete` (BLOCKING), `onboard-no-readable-product-files` (BLOCKING), `onboard-intent-unanchored` (BLOCKING), `onboard-capability-envelope-missing` (WARNING), `onboard-confirmation-pending` (BLOCKING), `onboard-record-config-diverged` (WARNING); IGC total 94→100. State Document: `onboard_records` OPTIONAL field added (list[OnboardRecord], default []). Schema Catalog: OnboardRecord added (33→34). Runtime (r71): 5 autonomous capability gaps closed — (P1a) wake stale→expired escalation with liveness_failures+stale_since tracking; (P1b) discovery proportionality IntegrityGaps for DEFERRED_PROPORTIONALITY and DISCOVERY_YIELD_EXHAUSTED; (P2a) CAPABILITY_DEFINING objective gate at CAPABLE/OPTIMIZED maturity (requires DecisionRecord with AUTHORITY_GRANT kind); (P2b) BOOTSTRAPPING→CAPABLE transition gate (requires passing CAPABILITY_GATE or ACCEPTANCE TestRunRecord); (P3) CSI/PPP_M full wiring (Config.community_inbox.feeds drives CSI; PPP_M with AUTO/SMART/HUMAN routing; `inbox apply`/`inbox reject` CLI commands). State Document: `community_feeds`, `community_signals`, `patch_proposals` added to initial_state(). **992 tests pass** (existing baseline unchanged; onboard runtime tests and gap tests pending runtime implementation). JOIN pass: all new constructs wired (OnboardRecord Used-in, OnboardGate Referenced-from, §62o References, §62k urace-onboard cross-refs complete). QE pass: no schema field order violations; all new IGC kinds in catalog table; count updated; new external references listed. **New external references:** `ONBOARDING` lifecycle state → §62e lifecycle_state enum (this revision); `OnboardRecord` schema → §62b (this revision); `OnboardGate` Mechanism → §62c (this revision); `§62o` section → §62o Product Onboard Phase (this revision); `urace onboard status` command → §62k (this revision); `urace onboard confirm` command → §62k (this revision); `onboard-config-incomplete` IGC kind → §62l (this revision); `onboard-no-readable-product-files` IGC kind → §62l (this revision); `onboard-intent-unanchored` IGC kind → §62l (this revision); `onboard-capability-envelope-missing` IGC kind → §62l (this revision); `onboard-confirmation-pending` IGC kind → §62l (this revision); `onboard-record-config-diverged` IGC kind → §62l (this revision); `State.onboard_records` field → §62e State Document (this revision) |
 | r70 | 2026-10-16 | spec+runtime | Runtime alignment pass (r65–r69 gap closure). State Document bootstrap: initialized `assessment_gaps`, `lifecycle_boundaries`, `integrity_signals` as empty lists in `initial_state()` — three r65 schemas whose State fields were declared in r67 but not wired into bootstrap. Implemented `record_assessment_gap()` (deduplication contract: same cycle_id+dimension updates last_at, not append) and `resolve_assessment_gap()` (sets resolved_at, removes from active list) in cli.py. Added `justification_context_id` OPTIONAL parameter to `create_decision_record()` in decision_record.py. Added 8 behavioral tests: BJ (AssessmentGap deduplication), BK (AssessmentGap resolution — two assertions each), 3 State Document initialization assertions, 1 DecisionRecord.justification_context_id acceptance test. Spec version header bumped r65→r70. **978 tests pass.** QE: PASS. JOIN: PASS. **New external references:** none (all constructs previously declared) |
 | r69 | 2026-10-16 | spec | Add JoinProtocol (JOIN) as named §62l construct. JOIN formalizes the post-change wiring audit as a 6-step protocol: enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs). §62l count updated sixteen→seventeen; enforcement contract self-enforcing list updated to include JOIN (seven→eight). §62m Protocol Catalog: JOIN added (13→14 entries). §62n ConstructKindRegistry: JOIN added (FOUNDATIONAL, standalone: true). §81: `join` stem added. QE: PASS. JOIN: PASS. **New external references:** `JOIN` Protocol → §62l (this revision); `JoinProtocol` construct → §62l (this revision); `join` stem → §81 (this revision) |
 | r68 | 2026-10-16 | spec | Add QualityEnsuranceProtocol (QE) as named §62l construct. QE formalizes the post-change degradation audit as a 6-step protocol: enumerate changed constructs → schema field ordering → cross-reference resolution → contract consistency → count/catalog drift → emit finding list (PASS or degradations). §62l count updated fifteen→sixteen; enforcement contract self-enforcing list updated to include QE (six→seven). §62m Protocol Catalog: QE added (12→13 entries). §62n ConstructKindRegistry: QE added (FOUNDATIONAL, standalone: true). §81: `qualityensurance` stem added. QE: PASS (no degradations introduced by this revision). **New external references:** `QE` Protocol → §62l (this revision); `QualityEnsuranceProtocol` construct → §62l (this revision); `qualityensurance` stem → §81 (this revision) |
