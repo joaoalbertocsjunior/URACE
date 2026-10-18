@@ -7398,6 +7398,8 @@ urace compact <field-path> [--dry-run] [--mode ARCHIVE|ROLLING_EVICTION]
 
 Initiates compaction of an accumulating list field. MUST be rejected if the field's RetentionPolicy has `compaction_mode: PROHIBITED` or if the field is not in the default governance table above. `--dry-run` reports eligible records and would-be CompactionSummary without committing. The command is written to the inbox and processed at the next safe lifecycle boundary; it MUST NOT execute synchronously within the same cycle that receives it.
 
+`--product <id>` — operate on the named registered product's state without switching the active product. `--products <id,...>|all` — operate on multiple products in dependency order (MultiProductCompactionProtocol §62l). `--no-verify` — skip automatic hash verification on `update apply` and `derive` operations.
+
 ## urace decompact
 
 ```
@@ -7435,9 +7437,12 @@ ChunkingPolicy {
   updated_at  REQUIRED  ISO-8601; last mutation timestamp
   enabled     REQUIRED  boolean; activates chunking; default false
   chunk_by    REQUIRED  enum: COUNT | AGE | OBJECTIVE_LIFECYCLE; default COUNT
-  max_chunks  OPTIONAL  integer; ceiling on active chunks per field; overflow uses age-based compaction
+  max_chunks     OPTIONAL  integer; ceiling on active chunks per field; overflow uses age-based compaction
+  product_scope  OPTIONAL  list[Identifier]; product IDs whose state this chunk belongs to; used by MultiProductCompactionProtocol for cross-product deduplication; absent means single-product (active product)
 }
 ```
+
+**Used in:** State.compaction_policies (via CompactionEvent), MultiProductCompactionProtocol (§62l) for cross-product chunk scoping.
 
 ### Chunk
 
@@ -10003,9 +10008,9 @@ urace executor retry-policy [--max-retries N] [--backoff-base F] [--json]
 
 # 62l. Shared Reuse Contracts
 
-This section defines forty-three named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines forty-four named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All forty-three constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining thirty-one constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, ResourceBudgetProtocol, ExternalInterfaceProtocol, DesignQualityProtocol, ResilienceRecoveryProtocol, CompatibilityContinuityProtocol, ObservabilityVerificationProtocol, ProductionReleaseVerificationSuite, ReleaseGovernanceGate, and LifecycleChangeGate — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All forty-four constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining thirty-two constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, ResourceBudgetProtocol, ExternalInterfaceProtocol, DesignQualityProtocol, ResilienceRecoveryProtocol, CompatibilityContinuityProtocol, ObservabilityVerificationProtocol, ProductionReleaseVerificationSuite, ReleaseGovernanceGate, LifecycleChangeGate, and MultiProductCompactionProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -10809,6 +10814,7 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `product-budget-period-reset` | INFO | §62v Resource Budget Protocol | New budget period started; period counters reset |
 | `spec-update-hash-mismatch` | BLOCKING | §62k `--hash` / §62k `urace update` | SHA-256 digest of downloaded spec candidate does not match `--hash` value; discard download and re-fetch |
 | `manifest-hash-mismatch` | WARNING | §62k `--verify` / §62k `urace derive` | SHA-256 digest of derived manifest diverged from stored `content_hash`; re-run `urace derive --save` to refresh |
+| `multi-product-compact-cycle` | BLOCKING | false | cycle detected in product depends_on graph during multi-product compact/decompact |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -10961,7 +10967,7 @@ The FleetOrchestrationProtocol governs parallel multi-product autonomous evoluti
 **Scope isolation invariant.** A fleet member MUST NOT read `Config.fleet` from within its own autonomous cycle — fleet config is orchestrator-only. Members are unaware they are running in a fleet.
 
 **Referenced from:** §62q Fleet Orchestration, §62k `urace fleet`.
-**Citizens using FleetOrchestrationProtocol:** FleetRecord (§62b).
+**Citizens using FleetOrchestrationProtocol:** FleetRecord (§62b), MultiProductCompactionProtocol (§62l — depends on FOP for fleet-scoped compaction ordering).
 
 ## ExternalInterfaceProtocol
 
@@ -11074,6 +11080,25 @@ The **LifecycleChangeGate (LCG)** is the highest-order gate in the URACE constru
 
 **Referenced from:** (universal — applies to all spec revisions and runtime upgrades)
 
+## MultiProductCompactionProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [FOP]` · `semantic_kind: Protocol`
+
+The **MultiProductCompactionProtocol (MCP)** defines the ordered compact/decompact/crc contract when an operation targets more than one registered product.
+
+**MCP steps:**
+1. **Target resolution.** Resolve `--products <id,...>|all` to the registered product set. For `--product <id>`: resolve to a single product without switching the active product.
+2. **Dependency ordering.** Topological-sort the target set by `ProductEntry.depends_on`. Detect cycles: if the depends_on graph contains a cycle among the target set, emit `IntegrityGap(kind="multi-product-compact-cycle", severity=BLOCKING)` and halt.
+3. **Compact pass.** For compact: process dependencies before dependents (a dependency's chunks must be finalized before a dependent compresses context that references them).
+4. **Decompact pass.** For decompact: also process dependencies first (a dependency's context must be accessible before a dependent's context is restored).
+5. **CRC pass.** For crc show `--products`: load and display CRC for each product in dependency order; report missing CRCs as informational, not errors.
+6. **Isolation contract.** Each product's compact/decompact operation writes only to that product's own state file and inbox. Cross-product chunk deduplication (shared chunks tagged with `product_scope`) is a MAY; base implementation MAY process each product independently.
+7. **Graceful skip.** A product with no `state_path` in the registry MUST be skipped with a WARNING, not a fatal error.
+
+**Citizens using:** ChunkingPolicy (product_scope field), ProductEntry (depends_on field), FOP.
+
+**Referenced from:** §62f Compaction, §62k `urace compact`, `urace decompact`, `urace crc show`.
+
 # 62m. Extended Construct Catalogs
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
@@ -11144,7 +11169,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ResourceEntry | ResourceEntry | resc- | §62b |
 | ROISnapshot | ROISnapshot | rsnp- | §62b |
 
-## Protocol Catalog (38 entries)
+## Protocol Catalog (39 entries)
 
 | ID | Name | Category | Steps | Spec |
 |---|---|---|---|---|
@@ -11186,6 +11211,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | PRVS | ProductionReleaseVerificationSuite | VERIFICATION | FRVS → DQP → RRP → CCP → OVP; five-component ordered production release gate | §62l |
 | RGG | ReleaseGovernanceGate | GOVERNANCE | PRVS → DecisionRecord authorization → version increment; governance checkpoint for stable releases | §62l |
 | LCG | LifecycleChangeGate | GOVERNANCE | RGG → AuthorityClosureInvariant → state coherence; highest-order gate for all lifecycle changes | §62l |
+| MCP | MultiProductCompactionProtocol | STRUCTURAL | target resolution → dependency ordering → compact/decompact/crc in topo order → cycle detection → per-product isolation | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -11453,6 +11479,7 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | PRVS | ProductionReleaseVerificationSuite | COMPOSITIONAL | false |
 | RGG | ReleaseGovernanceGate | COMPOSITIONAL | false |
 | LCG | LifecycleChangeGate | COMPOSITIONAL | false |
+| MCP | MultiProductCompactionProtocol | COMPOSITIONAL | false |
 
 ### Mechanisms (§62c)
 
@@ -13923,6 +13950,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `prvs` | ProductionReleaseVerificationSuite | §62l |
 | `rgg` | ReleaseGovernanceGate | §62l |
 | `lcg` | LifecycleChangeGate | §62l |
+| `mcp` | MultiProductCompactionProtocol | §62l |
 
 ## Audit Content
 

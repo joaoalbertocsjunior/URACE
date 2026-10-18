@@ -55,6 +55,8 @@ urace /pause or /resume suspend or resume the lifecycle
 urace "<freeform-text>" describe any task, goal, intent, or constraint in plain language
 urace /help             explore commands and reference
 urace /update           guided update sequence
+urace fleet sync        propagate a product's broadcast to its dependents
+urace add evidence --kind test-pass --summary "CI green"
 ```
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
