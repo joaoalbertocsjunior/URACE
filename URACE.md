@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r84**
+**Specification version: 2026-10-17-r85**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -4133,6 +4133,7 @@ Config {
   active_product       OPTIONAL  string; name of currently active product; if set, overrides Config.product for
                                  active product name and routes state_path to the matching ProductEntry.state_path;
                                  if absent, Config.product is used
+  product_budget       OPTIONAL  ProductBudget; per-product resource allocation and ROI configuration (§62v)
   fleet                OPTIONAL  object; Fleet Orchestration config; default absent (fleet disabled)
     members            REQUIRED  list[string]; product names from product_registry to run in parallel
     signal_broadcast   OPTIONAL  bool; default false; when true, high-confidence Evidence from each
@@ -4251,6 +4252,8 @@ State {
   fleet_records         OPTIONAL  list[FleetRecord]; fleet lifecycle audit trail; default []
   trace_records             OPTIONAL  list[TraceRecord]; lifecycle trace log; non-compactable; default []
   outcome_feedback_records  OPTIONAL  list[OutcomeFeedbackRecord]; operator outcome feedback; non-compactable; default []
+  resource_ledger         OPTIONAL  list[ResourceEntry]; resource cost and value observations; non-compactable; default []
+  roi_snapshots           OPTIONAL  list[ROISnapshot]; end-of-period ROI snapshots; non-compactable; default []
 }
 ```
 
@@ -5030,6 +5033,76 @@ OutcomeFeedbackRecord {
 
 Used in: State.outcome_feedback_records.
 Referenced from: §62u Closed-Loop Outcome Feedback, §62c FeedbackAccumulator, §62k `urace feedback`.
+
+## ProductBudget
+
+Per-product resource allocation and ROI configuration. Stored in Config as `product_budget` (OPTIONAL).
+
+```
+ProductBudget {
+  id                       REQUIRED  Identifier; prefix "pbdg-"
+  currency                 OPTIONAL  string; ISO-4217 code; default "USD"
+  period                   OPTIONAL  string; DAILY | WEEKLY | MONTHLY | ROLLING; default "MONTHLY"
+  period_hours             OPTIONAL  number; hours per period when period=ROLLING; default 720
+  max_cost                 OPTIONAL  number; maximum total cost (currency units) per period; if absent, unlimited
+  max_time_hours           OPTIONAL  number; maximum operator/execution time hours per period; if absent, unlimited
+  max_executor_calls       OPTIONAL  integer; maximum Executor calls per period; if absent, unlimited
+  roi_floor                OPTIONAL  UnitFloat; minimum acceptable ROI ratio; default 0.0 (no minimum)
+  cost_per_executor_call   OPTIONAL  number; estimated currency cost per Executor call; default 0.01
+  hourly_rate              OPTIONAL  number; currency cost per operator-hour; default 0.0
+  quality_weight           OPTIONAL  UnitFloat; α weight for Δquality in value computation; default 0.4
+  capability_weight        OPTIONAL  UnitFloat; β weight for Δcapability in value computation; default 0.4
+  metrics_weight           OPTIONAL  UnitFloat; γ weight for Δmetrics in value computation; default 0.2
+}
+```
+
+Weights MUST sum to 1.0. If weights are omitted, defaults (0.4, 0.4, 0.2) apply.
+
+**Referenced from:** §62v Resource Budget Protocol, §62c ResourceAllocationMechanism.
+
+## ResourceEntry
+
+A single period cost-value observation. Appended to State.resource_ledger at each cycle (ACTIVE/ASSESSING only).
+
+```
+ResourceEntry {
+  id                REQUIRED  Identifier; prefix "resc-"
+  recorded_at       REQUIRED  string; ISO-8601 timestamp
+  period_start      REQUIRED  string; ISO-8601 timestamp; start of the current budget period
+  executor_calls    REQUIRED  integer; cumulative Executor calls this period
+  time_hours        REQUIRED  number; cumulative time hours this period
+  total_cost        REQUIRED  number; executor_calls × cost_per_executor_call + time_hours × hourly_rate
+  delta_quality     REQUIRED  number; Δ in quality score since period_start; may be negative
+  delta_capability  REQUIRED  number; Δ in capability score since period_start; may be negative
+  delta_metrics     REQUIRED  number; Δ in metrics score since period_start; may be negative
+  roi               OPTIONAL  number; computed ROI ratio for this entry; absent when cost=0
+}
+```
+
+**Referenced from:** §62v Resource Budget Protocol, §62c ResourceAllocationMechanism.
+
+## ROISnapshot
+
+End-of-period ROI summary. Appended to State.roi_snapshots at period boundary.
+
+```
+ROISnapshot {
+  id               REQUIRED  Identifier; prefix "rsnp-"
+  at               REQUIRED  string; ISO-8601 timestamp; snapshot time
+  period_start     REQUIRED  string; ISO-8601 timestamp
+  period_end       REQUIRED  string; ISO-8601 timestamp
+  executor_calls   REQUIRED  integer
+  time_hours       REQUIRED  number
+  total_cost       REQUIRED  number
+  computed_roi     OPTIONAL  number; V/C; absent when C=0
+  quality_value    REQUIRED  number; α × delta_quality
+  capability_value REQUIRED  number; β × delta_capability
+  metrics_value    REQUIRED  number; γ × delta_metrics
+  below_floor      REQUIRED  bool; true when computed_roi < roi_floor and C > 0
+}
+```
+
+**Referenced from:** §62v Resource Budget Protocol, §62c ResourceAllocationMechanism.
 
 ---
 
@@ -6028,6 +6101,45 @@ FEEDBACK ACCUMULATION (runs at cycle entry in ACTIVE and ASSESSING states only)
 
 **Used in:** cycle() (§62e lifecycle, called at cycle entry after CSI and PPP_M).
 **Referenced from:** §62u Closed-Loop Outcome Feedback, §62l OutcomeFeedbackContract.
+
+## ResourceAllocationMechanism
+
+**ID:** RAM | **Kind:** Mechanism | **Class:** INTEGRATED | **Governed-by:** [AP8, AP37]
+
+The ResourceAllocationMechanism tracks per-product resource expenditure and computes ROI using the canonical formula. It runs at each ACTIVE/ASSESSING cycle after the FeedbackAccumulator.
+
+**Activation gate:** RAM runs only when `Config.product_budget` is present. An absent `product_budget` is a zero-cost no-op.
+
+**Cost model:**
+```
+C = executor_calls × cost_per_executor_call + time_hours × hourly_rate
+```
+
+**Value model:**
+```
+V = α × Δquality + β × Δcapability + γ × Δmetrics
+```
+
+Default weights: α=0.4, β=0.4, γ=0.2. Weights MUST sum to 1.0.
+
+**ROI formula:**
+```
+ROI = V / C    (when C > 0)
+ROI = undefined (when C = 0; no gap emitted)
+```
+
+**Period tracking:** RAM reads `Config.product_budget.period` and `period_hours` to determine the current period window. When a new period begins, it appends an ROISnapshot and resets accumulated counters.
+
+**Gap emissions:**
+1. `product-budget-exceeded` (BLOCKING) — when any active limit (`max_cost`, `max_time_hours`, `max_executor_calls`) is exceeded. Blocks new cycles until operator resets or limit is raised.
+2. `product-roi-below-floor` (WARNING) — when computed ROI < `roi_floor` for 2 or more consecutive ROISnapshots.
+3. `product-efficiency-degraded` (WARNING) — when cost trend is non-decreasing over the last 3 ResourceEntries while value trend is flat or decreasing.
+4. `product-budget-period-reset` (INFO) — when a new budget period starts.
+
+All gap emissions are idempotent: RAM checks whether the gap kind already exists before emitting.
+
+**Used in:** cycle (§62e lifecycle, called after FeedbackAccumulator).
+**Referenced from:** §62v Resource Budget Protocol.
 
 ---
 
@@ -9538,6 +9650,8 @@ urace inbox reject <proposal-id> [--reason <text>] [--json]
 
 `inbox list` shows pending and recently processed inputs. `inbox status` returns CONSUMED, REJECTED, PENDING, or NOT_FOUND with artifact chain. `inbox apply` / `inbox reject` are used for HUMAN-mode PatchProposal approval (PPP, §62c). `apply` and `reject` MUST process through the Durable Inbox (AP14) at the next safe boundary; they MUST NOT bypass the inbox.
 
+**`inbox help`** — prints a guide for community signal ingestion, patch proposals, apply/reject workflow. SD=True. `--json` emits `{schema_version, guide}`.
+
 ## urace govern
 
 Operator clearance for OperatorGateProtocol conditions. Authenticated operator input only.
@@ -9600,6 +9714,8 @@ urace product register <name> --state-path <path> [--product-files <f>...] [--in
 
 **`product register <name>`** — adds a new ProductEntry to Config.product_registry. `--state-path` is required (where this product's state file will live). `--product-files` accepts one or more file paths. `--intent-purpose` sets the product's intent text. Fails if name already exists in registry. Persists Config.
 
+**`product help`** — prints a guide for product registration, switching, and multi-product management. SD=True. `--json` emits `{schema_version, guide}`.
+
 **Exit codes.** All subcommands exit 0 on success, 1 on validation failure, 1 on Config/state write failure.
 
 ## urace fleet
@@ -9623,6 +9739,8 @@ urace fleet broadcast [--json]
 
 **`--verbose`** — show per-member cycle output on stdout.
 
+**`fleet help`** — prints a guide for fleet orchestration and parallel product runs. SD=True. `--json` emits `{schema_version, guide}`.
+
 **Exit codes.** All subcommands exit 0 on success, 1 on validation failure or missing members config.
 
 ## urace trace
@@ -9640,6 +9758,8 @@ urace trace inspect <trace-id> [--json]
 
 **`trace inspect <id>`** — returns the full TraceRecord for the given id. Exits 1 if not found.
 
+**`trace help`** — prints a guide for trace log inspection and filtering. SD=True. `--json` emits `{schema_version, guide}`.
+
 **`schema list`** — lists all registered OutputSchema entries from the OutputSchemaRegistry (§62l). Returns command name, schema_version, stable_since. SD=True. Implements InspectionContract (§62l). `--json` emits `{schema_version, schemas: [...]}`.
 
 **`schema inspect <command>`** — returns the full OutputSchema for the named command including all declared stable fields. Exits 1 if command not found. SD=True. Implements InspectionContract (§62l). `--json` emits schema object.
@@ -9648,13 +9768,21 @@ urace trace inspect <trace-id> [--json]
 
 **`feedback list`** — returns OutcomeFeedbackRecords in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--target <id>` filters by target_id. `--signal POSITIVE|NEGATIVE|NEUTRAL` filters by signal. `--limit N` (default 20). `--offset M` (default 0). `--json` emits `{schema_version, records, total}`.
 
+**`feedback help`** — prints a guide for outcome feedback submission and closed-loop interpretation. SD=True. `--json` emits `{schema_version, guide}`.
+
+**`resource status`** — returns current period budget utilization. SD=True. `--json` emits `{schema_version, period_start, executor_calls, time_hours, total_cost, roi, gaps}`. Implements ResourceBudgetProtocol (§62l).
+
+**`resource report`** — returns ROISnapshots in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--since <ISO>`, `--until <ISO>`, `--limit N` (default 20), `--offset M` (default 0), `--json` emits `{schema_version, snapshots, total}`.
+
+**`resource help`** — prints step-by-step guide for resource budget configuration and ROI interpretation. SD=True. `--json` emits `{schema_version, guide}`.
+
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines thirty-three named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines thirty-four named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All thirty-three constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-two constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, and CycleWiringProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All thirty-four constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-two constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, and ResourceBudgetProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -9818,6 +9946,25 @@ The **OutcomeFeedbackContract** governs how post-deployment quality signals are 
 
 **Citizens using OutcomeFeedbackContract:** OutcomeFeedbackRecord (§62b).
 **Referenced from:** §62b OutcomeFeedbackRecord, §62c FeedbackAccumulator, §62u Closed-Loop Outcome Feedback.
+
+---
+
+## ResourceBudgetProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: [AuditRecord]`
+
+The **ResourceBudgetProtocol (RBP)** governs per-product resource cost tracking, ROI computation, and budget/efficiency gate enforcement. All sections that track cost or compute ROI MUST cite this protocol rather than defining their own cost model.
+
+**Five-clause contract:**
+1. The ResourceAllocationMechanism (§62c RAM) MUST run at every ACTIVE/ASSESSING cycle when `Config.product_budget` is present.
+2. ROI MUST be computed using the V/C formula with the declared weights from `Config.product_budget` (defaults: α=0.4, β=0.4, γ=0.2).
+3. Budget limits (`max_cost`, `max_time_hours`, `max_executor_calls`) violations MUST emit `product-budget-exceeded` BLOCKING gap.
+4. ROI-below-floor MUST be checked across consecutive ROISnapshots (minimum 2 consecutive periods below `roi_floor`).
+5. All gap emissions MUST be idempotent: the mechanism MUST check whether the gap kind already exists before emitting.
+
+**Used in:** ResourceAllocationMechanism (§62c), §62v Resource Budget Protocol.
+**Referenced from:** §62v Resource Budget Protocol, §62c ResourceAllocationMechanism.
+**Citizens using ResourceBudgetProtocol:** ProductBudget, ResourceEntry, ROISnapshot (§62b).
 
 ---
 
@@ -10428,6 +10575,10 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `feedback-overdue` | INFO | §62u Closed-Loop Outcome Feedback / §62c FeedbackAccumulator | Accepted Objective has no OutcomeFeedbackRecord after feedback_window_hours; submit `urace feedback submit <id>` |
 | `feedback-negative-objective` | INFO | §62c FeedbackAccumulator | NEGATIVE OutcomeFeedbackRecord recorded for an Objective; review objective quality and evidence basis |
 | `feedback-negative-decision` | INFO | §62c FeedbackAccumulator | NEGATIVE OutcomeFeedbackRecord recorded for a DecisionRecord; review decision and update authority if needed |
+| `product-budget-exceeded` | BLOCKING | §62v Resource Budget Protocol | Any active budget limit exceeded; raise limit or clear via `urace blocker resolve` |
+| `product-roi-below-floor` | WARNING | §62v Resource Budget Protocol | ROI below configured roi_floor for 2+ consecutive periods; review strategy |
+| `product-efficiency-degraded` | WARNING | §62v Resource Budget Protocol | Cost trend rising with flat/declining value trend over 3 observations |
+| `product-budget-period-reset` | INFO | §62v Resource Budget Protocol | New budget period started; period counters reset |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -10586,7 +10737,7 @@ The FleetOrchestrationProtocol governs parallel multi-product autonomous evoluti
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
 
-## Mechanism Catalog (10 entries)
+## Mechanism Catalog (11 entries)
 
 | ID | Name | Spec | Provides |
 |---|---|---|---|
@@ -10600,8 +10751,9 @@ The FleetOrchestrationProtocol governs parallel multi-product autonomous evoluti
 | SCF | SignalClassifier | §62c | runtime signal classification, IntegritySignal emission, REPAIRING entry gate |
 | OBG | OnboardGate | §62c §62o | one-time product authorization gate, config integrity snapshot, ONBOARDING lifecycle enforcement |
 | FAC | FeedbackAccumulator | §62c §62u | outcome feedback processing, confidence weight adjustment, feedback-overdue detection |
+| RAM | ResourceAllocationMechanism | §62c §62v | resource cost tracking, ROI computation, budget gate, efficiency gate |
 
-## Schema Catalog (40 entries)
+## Schema Catalog (43 entries)
 
 Portable, schema-bearing citizen data structures. Each carries a declared `id_prefix`, `required_fields` list, and `spec_section`. Any system can adopt individual schemas without the full URACE lifecycle.
 
@@ -10647,8 +10799,11 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | TraceRecord | TraceRecord | trace- | §62b |
 | OutputSchema | OutputSchema | oscm- | §62b |
 | OutcomeFeedbackRecord | OutcomeFeedbackRecord | ofbk- | §62b |
+| ProductBudget | ProductBudget | pbdg- | §62b |
+| ResourceEntry | ResourceEntry | resc- | §62b |
+| ROISnapshot | ROISnapshot | rsnp- | §62b |
 
-## Protocol Catalog (29 entries)
+## Protocol Catalog (30 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -10681,6 +10836,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CIP | ContractImplementationProtocol | enumerate §62l clauses → identify enforcement call-sites → flag unimplemented/unreachable clauses | §62l |
 | CAP | CLIAlignmentProtocol | enumerate §62k commands → verify known-command entry + handler + required flags | §62l |
 | CWP | CycleWiringProtocol | enumerate cycle-entry mechanisms → verify cycle() call-sites → verify ordering constraints | §62l |
+| RBP | ResourceBudgetProtocol | RAM activation → cost tracking → ROI computation → budget gate → efficiency gate → period snapshot | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -10705,7 +10861,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (114 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (119 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -10939,6 +11095,7 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | CIP | ContractImplementationProtocol | FOUNDATIONAL | true |
 | CAP | CLIAlignmentProtocol | FOUNDATIONAL | true |
 | CWP | CycleWiringProtocol | FOUNDATIONAL | true |
+| RBP | ResourceBudgetProtocol | INTEGRATED | false |
 
 ### Mechanisms (§62c)
 
@@ -11297,6 +11454,60 @@ If an accepted Objective has no OutcomeFeedbackRecord after `config.feedback.win
 **Implements:** OutcomeFeedbackContract (§62l), InspectionContract (§62l), AuditRecord (§62l).
 **Uses:** OutcomeFeedbackRecord (§62b), FeedbackAccumulator (§62c), OutcomeFeedbackContract (§62l).
 **Referenced from:** §62l OutcomeFeedbackContract, §62b OutcomeFeedbackRecord, §62c FeedbackAccumulator.
+
+---
+
+# 62v. Resource Budget Protocol
+
+Resource cost and ROI are first-class lifecycle signals. This section formalizes how URACE tracks time, money, and measurable outcomes per product, computes ROI, and enforces budget and efficiency gates during autonomous long-runs.
+
+## Purpose
+
+Long autonomous runs accumulate real costs: Executor calls, operator time, and infrastructure spend. Without instrumentation, a product can consume budget with diminishing returns and no visibility. The Resource Budget Protocol (RBP) closes this gap by instrumenting every cycle with cost and value observations and surfacing degradation before it becomes critical.
+
+## ROI Formula
+
+The canonical ROI formula used by URACE:
+
+```
+V = α × Δquality + β × Δcapability + γ × Δmetrics
+C = executor_calls × cost_per_executor_call + time_hours × hourly_rate
+ROI = V / C    (when C > 0; undefined when C = 0)
+```
+
+Where:
+- **V** — value delivered this period (weighted composite of quality, capability, and metric improvements)
+- **C** — total cost this period (Executor call cost + operator time cost)
+- **α, β, γ** — value weights from `Config.product_budget` (default 0.4, 0.4, 0.2; MUST sum to 1.0)
+- **Δquality** — change in quality score since period start (from State quality tracking)
+- **Δcapability** — change in capability score since period start (CAPABLE capabilities / total declared)
+- **Δmetrics** — change in external metrics score since period start (normalized 0–1)
+
+## Resource Tracking
+
+The ResourceAllocationMechanism (§62c RAM) records a ResourceEntry at each ACTIVE/ASSESSING cycle and appends an ROISnapshot at each period boundary. State.resource_ledger retains the full observation history; State.roi_snapshots retains all period snapshots — both are non-compactable.
+
+## Budget Gate
+
+When any configured limit (`max_cost`, `max_time_hours`, `max_executor_calls`) is exceeded, RAM emits `product-budget-exceeded` (BLOCKING). The lifecycle transitions to BLOCKED. The operator MUST either raise the limit via config update or clear the gap via `urace blocker resolve`.
+
+## Efficiency Gate
+
+RAM detects two efficiency-degradation patterns:
+1. **ROI below floor** — ROI < `roi_floor` for 2+ consecutive periods → `product-roi-below-floor` (WARNING). Advisory; MUST NOT block cycles.
+2. **Cost trend without value trend** — cost is non-decreasing and value is flat or decreasing over 3 consecutive observations → `product-efficiency-degraded` (WARNING). Advisory.
+
+## Inspection Surface
+
+**`resource status`** — returns current period budget utilization: calls, time_hours, total_cost, ROI (if computable), and gap summary. SD=True. `--json` emits `{schema_version, period_start, executor_calls, time_hours, total_cost, roi, gaps}`.
+
+**`resource report`** — returns all ROISnapshots in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--since <ISO>`, `--until <ISO>`, `--limit N`, `--offset M`. `--json` emits `{schema_version, snapshots, total}`.
+
+**`resource help`** — step-by-step guide for configuring and interpreting resource budgets. SD=True. `--json` emits `{schema_version, guide}`.
+
+**Implements:** ResourceBudgetProtocol (§62l), InspectionContract (§62l).
+**Uses:** ProductBudget (§62b), ResourceEntry (§62b), ROISnapshot (§62b), ResourceAllocationMechanism (§62c).
+**Referenced from:** §62l ResourceBudgetProtocol, §62b ProductBudget, §62b ResourceEntry, §62b ROISnapshot, §62c ResourceAllocationMechanism.
 
 ---
 
@@ -13286,6 +13497,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `layermodel` | LayerModel §62l construct, 5-layer architecture (L0–L4), cross-layer coupling rules, layer-boundary-violation, §62s Layer Architecture |
 | `outputschema` | OutputSchema §62b citizen (oscm-), OutputSchemaRegistry §62l construct, schema_version field, urace schema list/inspect, §62t Output Schema Registry |
 | `outcomefeedback` | OutcomeFeedbackRecord §62b citizen (ofbk-), OutcomeFeedbackContract §62l construct, FeedbackAccumulator §62c mechanism, feedback-overdue, urace feedback submit/list, §62u Closed-Loop Outcome Feedback |
+| `resourcebudget` | ProductBudget/ResourceEntry/ROISnapshot §62b citizens, ResourceAllocationMechanism §62c mechanism, ResourceBudgetProtocol §62l construct, ROI formula V/C, budget gate, efficiency gate, §62v Resource Budget Protocol |
 | `csia` | CanonicalStructuralIntegrityAudit §62l construct, 5-pass structural integrity protocol (DEGRADATION+JOIN+NSS+SCP+IGC), pre-release blocker |
 | `frvs` | FullReleaseVerificationSuite §62l construct, 11-pass complete release verification (CSIA + BFP + TCP + SFCP + CIP + CAP + CWP) |
 | `behavioralfidelity` | BehavioralFidelityProtocol §62l construct (BFP), FRVS pass 6, MUST/SHALL clause enforcement-point verification |
@@ -13359,6 +13571,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r85 | 2026-10-17 | spec+runtime | Resource Budget Protocol + help subcommands. (1) §62v: new normative section — ResourceBudgetProtocol (RBP). ROI formula V/C where V=α×Δquality+β×Δcapability+γ×Δmetrics and C=executor_calls×cost_per_executor_call+time_hours×hourly_rate. Per-product budget gate (max_cost, max_time_hours, max_executor_calls → BLOCKING), efficiency gate (roi_floor consecutive check → WARNING, cost-without-value trend → WARNING), period-reset INFO. (2) §62b: 3 new citizens: ProductBudget (pbdg-), ResourceEntry (resc-), ROISnapshot (rsnp-). (3) §62c: ResourceAllocationMechanism (RAM, INTEGRATED) added; wired into cycle() after FeedbackAccumulator. (4) Config.product_budget OPTIONAL field added. State.resource_ledger + State.roi_snapshots OPTIONAL non-compactable fields added. (5) §62l: ResourceBudgetProtocol (RBP, INTEGRATED) construct added; Protocol Catalog 29→30. Mechanism Catalog 10→11. Schema Catalog 40→43. §62l count 33→34. (6) IGC: 4 new kinds (product-budget-exceeded BLOCKING, product-roi-below-floor WARNING, product-efficiency-degraded WARNING, product-budget-period-reset INFO); Contract Catalog IGC count 115→119. (7) §62k: `urace resource status/report/help` commands added; `help` action added to product/fleet/inbox/trace/feedback commands. (8) §80: `resourcebudget` stem added. Runtime: `resource` command added to cli.py; help actions added to product/fleet/inbox/trace/feedback; `_run_ram()` implemented and wired into cycle(); 4 IGC kinds added to primitives.py; `resource_ledger` + `roi_snapshots` in initial_state(). Tests: 10 new R85ResourceBudgetTests. **New external references:** `ResourceBudgetProtocol` construct → §62l (this revision); `ProductBudget` schema → §62b (this revision); `ResourceEntry` schema → §62b (this revision); `ROISnapshot` schema → §62b (this revision); `ResourceAllocationMechanism` mechanism → §62c (this revision); `§62v` section → §62v Resource Budget Protocol (this revision); `product-budget-exceeded` IGC kind → §62l (this revision); `product-roi-below-floor` IGC kind → §62l (this revision); `product-efficiency-degraded` IGC kind → §62l (this revision); `product-budget-period-reset` IGC kind → §62l (this revision); `resourcebudget` stem → §80 (this revision); `urace resource status` command → §62k (this revision); `urace resource report` command → §62k (this revision); `urace resource help` command → §62k (this revision) |
 | r84 | 2026-10-17 | spec+runtime+readme | Onboard help + path-agnosticism + heuristic product scan. (1) §62o: Path-agnosticism contract added — `Config.product_files` entries MAY be relative (from bootstrap root) or absolute; URACE MUST NOT assume any folder hierarchy; bootstrap root and Product root need not be the same directory. (2) New `urace onboard help` subcommand (SD=True): prints step-by-step guide covering single-product bootstrap, multi-product registration, path-agnostic product_files, and lifecycle activation; `--json` emits `{guide: string}`. (3) New `urace onboard status --scan` flag: heuristically scans sibling and subdirectory paths for unregistered Products (detects code files and project markers); surfaces each as `onboard-unregistered-product-hint` (INFO) with suggested `urace product register` command; read-only, SD=True. (4) IGC: `onboard-unregistered-product-hint` (INFO, §62o OnboardGate --scan) added; Contract Catalog IGC count 114→115. (5) §62k `urace onboard` section: command fence updated; `onboard help` and `onboard status --scan` descriptions added. (6) README: path-agnosticism note + `urace /onboard help` tip added to Get Running; diagram fixed (PRODUCTS plural, orphaned ▲ removed, two blank │ lines removed). Runtime: argparse `onboard` choices extended to `[status, confirm, help]`; `--scan` flag added; handlers implemented. 5 new R84OnboardHelpScanTests (onboard help exits 0, guide text, JSON output, scan no-hints, scan detects sibling product dir). 1118 tests pass. **New external references:** `urace onboard help` command → §62k (this revision); `onboard-unregistered-product-hint` IGC kind → §62l (this revision). |
 | r83 | 2026-10-17 | spec+runtime | FRVS pass — 3 findings closed. (1) IGC catalog sync (BLOCKING): 35 gap kinds declared in spec §62l but absent from runtime catalog — all 35 added to INTEGRITY_GAP_CATALOG in primitives.py; 1 kind present in runtime (`compaction-blocked-on-anchor-drift`) absent from spec — row added to §62l IGC table; Contract Catalog IGC count corrected 113 → 114. (2) Agnosticism violations (2): §62k Tier-2 routing section heading "Argparse recovery" → "Argument processor recovery"; `argparse` appears twice in that paragraph prose → "argument processor" / "command arguments"; §62l IGC table `unresolved-effects-reconciliation-failure` resolution column contained `_reconcile_unresolved_effects` (Python private fn notation) → "Reconciliation handler". (3) TCP gaps (BLOCKING): r82 introduced CSI lifecycle gate fix and 4 TraceRecord emissions with no tests; added `R82ObservabilityTests` class (7 new tests): CSI DORMANT/BOOTSTRAPPING gate (2 tests), CSI ACTIVE inclusion (1 test), TraceRecord emission for blocker resolve / inbox apply / inbox reject / feedback submit (4 tests). 1113 tests pass. **New external references:** none. |
 | r82 | 2026-10-17 | runtime | CSI lifecycle gate fix + ObservabilityContract compliance. Two runtime-only fixes. (1) CSI lifecycle gate (§5525): `_run_csi` used exclusion gate (`lifecycle_state ∈ {BLOCKED, PAUSED, RECONCILING}`) instead of inclusion gate; corrected to `lifecycle_state ∈ {ACTIVE, ASSESSING}` (matches §5525 contract and FAC's own inclusion gate) — prevents CSI from running during DORMANT/BOOTSTRAPPING/ONBOARDING when feeds are configured. (2) ObservabilityContract (§62l) compliance: four mutation handlers were missing TraceRecord emissions; `_emit_trace` added to `blocker resolve` (OPERATION), `inbox apply` (DECISION), `inbox reject` (DECISION), `feedback submit` (OPERATION); all four now satisfy the ObservabilityContract covered-mutations table. Runtime DRY: `_mutate_command(config, args, *, mutate, trace_kind, fmt)` helper inserted as canonical shared mutation pipeline (load → mutate+validate → trace → save → output) for use by future mutation handlers. No spec text changes, no new IGC kinds, no new constructs. 1106 tests pass. **New external references:** none. |
