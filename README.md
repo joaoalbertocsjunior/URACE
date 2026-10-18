@@ -91,10 +91,9 @@ Take any of URACE's building blocks — patterns, mechanisms, schemas, protocols
 ```
 urace derive "resilient event log with compaction"
 urace derive "quality tracking with regression gates" --kind mechanism,schema
-urace derive "authority boundary model" --kind contract
 ```
 
-Add `--suggest` to preview matches before committing. `--kind all` searches across every kind. Use `--constructs` to specify IDs directly. Use `--bundle community-inbox` to apply the full community signal ingestion bundle. Run `urace derive --list-bundles` to see all available bundles. Run `urace derive` with no arguments to browse.
+Run `urace derive` with no arguments to browse, or `urace /help derive` for filtering and bundle options.
 
 ## Consequential Use
 
