@@ -65,7 +65,7 @@ urace /update           guided update sequence
 
 ## Update Safely
 
-Run `urace /update` for the guided update sequence. Use `urace /help update` for options including `--opt-in-constructs` and `@bundle-name` scoping.
+Run `urace /update` for the guided update sequence. Use `urace /help update` for options including `--opt-in-constructs` and `@bundle-name` scoping. Pass `--hash <sha256>` to verify the downloaded spec before applying.
 
 ## See Progress
 
@@ -84,6 +84,19 @@ urace /crc show     inspect the current full-context Cognitive Resume
 
 Use `urace /help compact` for details.
 
+## Machine Interface
+
+URACE exposes a machine-readable interface for automation and external tools. Every command supports `--json` output. Structured commands can be issued via `urace api`:
+
+```text
+urace api call --command <command> [--params <json>]
+urace api batch --input-json <path|->
+urace api watch [--follow]
+urace api version
+```
+
+Feedback and lifecycle events can be submitted in machine-readable form via `urace feedback submit --input-json`. The full I/O contract is defined in [External Interface Protocol](URACE.md#62w-external-interface-protocol).
+
 ## Reuse URACE Building Blocks The Way You Want
 
 Take any of URACE's building blocks — patterns, mechanisms, schemas, protocols, and contracts — for your own project, no lifecycle required. Describe what you're building and URACE picks matching blocks automatically:
@@ -93,7 +106,7 @@ urace derive "resilient event log with compaction"
 urace derive "quality tracking with regression gates" --kind mechanism,schema
 ```
 
-Run `urace derive` with no arguments to browse, or `urace /help derive` for filtering and bundle options.
+Run `urace derive` with no arguments to browse, or `urace /help derive` for filtering and bundle options. Use `--verify` to check a saved manifest's integrity hash.
 
 ## Consequential Use
 

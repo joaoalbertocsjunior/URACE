@@ -8811,6 +8811,7 @@ DerivedSystemManifest {
   adopted_patterns  REQUIRED  list[PatternAdoptionRecord]
   excluded_deps     OPTIONAL  list[PatternExclusionRecord]
   resolution_log    OPTIONAL  list[string]; human-readable dep resolution trace
+  content_hash      OPTIONAL  string; SHA-256 hex digest of the serialized manifest bytes; set on --save; used by --verify
 }
 ```
 
@@ -9411,17 +9412,19 @@ urace update [download|explain|apply|resolve]
 
 **`update` (no action)** — orchestrated update sequence: runs `download` then `explain`, prompts for operator confirmation, then runs `apply`. Use for guided interactive upgrades. Passes `--opt-in-constructs` through to both phases.
 
-**`update download [<reference>]`** — downloads a candidate spec update from `<reference>` (URL, local path, or hash prefix). Stores the candidate locally. Surfaces new-construct suggestions and construct update detection for any saved manifest or bundle refs (§62j). `--json` emits download receipt with `candidate_path`, `spec_version`, suggestions, and stale-manifest warnings.
+**`update download [<reference>]`** — downloads a candidate spec update from `<reference>` (URL, local path, or hash prefix). Stores the candidate locally. Surfaces new-construct suggestions and construct update detection for any saved manifest or bundle refs (§62j). `--hash <sha256>` verifies the download (§62k `--hash`). `--json` emits download receipt with `candidate_path`, `spec_version`, suggestions, and stale-manifest warnings.
 
 **`update explain [<reference>]`** — compares the accepted spec against the candidate. Emits an annotated diff report: sections outside `--opt-in-constructs` scope are marked `[not in opt-in scope]`; opted-in APs are listed as `opted_in_patterns_affected`. `--json` emits structured diff with `opted_in_patterns_affected`, `sections_changed`, and a `safe_to_apply` assessment.
 
-**`update apply [<reference>]`** — applies the candidate update. Sections outside `--opt-in-constructs` scope are preserved verbatim. After apply, `state.derived_manifest_refs` and `state.feature_bundle_refs` are checked for staleness (§62j); stale refs surface `derived-manifest-stale` / `derived-construct-set-stale` warnings. Exit 0 on success; exit 1 on conflict requiring `--decision`. `--json` emits apply receipt with `applied_version`, `sections_modified`, and any stale warnings.
+**`update apply [<reference>]`** — applies the candidate update. Sections outside `--opt-in-constructs` scope are preserved verbatim. After apply, `state.derived_manifest_refs` and `state.feature_bundle_refs` are checked for staleness (§62j); stale refs surface `derived-manifest-stale` / `derived-construct-set-stale` warnings. `--hash <sha256>` verifies the candidate before applying; `--verify` re-verifies a previously hashed candidate (§62k `--verify`). Exit 0 on success; exit 1 on conflict requiring `--decision`. `--json` emits apply receipt with `applied_version`, `sections_modified`, and any stale warnings.
 
 **`update resolve`** — resolves a checkpointed update conflict. `--decision <text>` is required; the decision is recorded as a DecisionRecord before re-attempting apply.
 
 **Key flags:**
 - `--opt-in-constructs <comma-list>` — limit scope to specific AP IDs, construct IDs, or `@bundle-name` shortcuts. Default: all. See `urace update --opt-in-constructs` Contract below.
 - `--decision <text>` — required for `resolve`; attributable operator decision stored as DecisionRecord.
+- `--hash <sha256>` — expected SHA-256 hex digest; verified before writing/applying (§62k `--hash`).
+- `--verify` — re-verify a previously hashed candidate or manifest before applying (§62k `--verify`).
 - `--json` — machine-readable output for all subcommands.
 
 **`update help`** — SD=True; prints a guide for the update workflow.
@@ -9483,68 +9486,69 @@ Options defined here apply across all commands that accept them. Per-command spe
 
 ## Command Reference
 
-All available `urace` commands. SD=True means no Executor invocation required; the command is always available. Commands marked with `*` are suppressed in `urace /help` but are valid.
+All available `urace` commands, in priority order. SD=True means no Executor invocation required; the command is always available. `<freeform-text>` is any plain-language input (not a CLI command). Commands marked with `*` are suppressed in `urace /help` but are valid.
 
 | Command | Purpose | SD |
 |---|---|---|
-| `add` | classify free text as goal, intent, or constraint via Executor | No |
-| `add-context` | durably queue authoritative context for the next cycle | No |
-| `add-goal` | durably queue a Product or URACE goal | No |
-| `add-metric` | queue a metric mapping onto a connector | No |
-| `add-source` | queue an external metric or Evidence connector | No |
-| `add-vital` | queue a direct or ratio vital | No |
-| `amend` | in-place amendment to an archived record without full decompaction | Yes |
-| `api` | machine interface for external tools (EIP §62w) | Partial |
+| `<freeform-text>` | classify and queue free text as goal, intent, or constraint — Executor confirms each item | No |
 | `auto` | run persistent autonomous evolution lifecycle | No |
-| `autonomous` | inspect autonomous operation status | Yes |
-| `blocker` | list and resolve BLOCKING IntegrityGaps | Yes |
-| `budget` | inspect or set Executor call budgets | Yes |
-| `change` | list accepted changes or explain one by change ID | Yes |
+| `pause` | suspend autonomous operation | Yes |
+| `resume` | resume a PAUSED lifecycle | Yes |
 | `check` | evaluate lifecycle health (IntegrityGaps, gates) | Yes |
-| `commands` | list all commands with brief descriptions | Yes |
-| `compact` | queue compaction of an accumulating list field | Yes |
-| `compliance` | inspect compliance posture and trajectory | Yes |
-| `configuration` | inspect or change user-facing configuration | Yes |
+| `vitals` | show progress, credit usage, and lifecycle health | Yes |
+| `add` | classify free text as goal, intent, or constraint via Executor | No |
+| `add-context` | durably queue authoritative context for the next cycle | Yes |
+| `add-goal` | durably queue a Product or URACE goal | Yes |
+| `add-source` | queue an external metric or Evidence connector | Yes |
+| `add-metric` | queue a metric mapping onto a connector | Yes |
+| `add-vital` | queue a direct or ratio vital | Yes |
 | `constraint` | add or manage PROHIBITION/PERMISSION rules | No |
+| `intent` | add or manage DIRECTIVE rules | No |
+| `goal` | inspect, forecast, or manage goals | Yes |
 | `context` | inspect queued authoritative context | Yes |
-| `crc` | inspect the Cognitive Resume (CRC) | Yes |
-| `decision` | list or inspect DecisionRecords | Yes |
-| `decompact` | restore original records from a CompactionEvent | Yes |
-| `derive` | extract and reuse URACE building blocks | Yes |
-| `evaluation` | inspect or configure evaluation weights | Yes |
+| `change` | list accepted changes or explain one by change ID | Yes |
 | `evidence` | list or inspect EvidenceRecords | Yes |
+| `decision` | list or inspect DecisionRecords | Yes |
+| `blocker` | list and resolve BLOCKING IntegrityGaps | Yes |
+| `integrity-signal` | list or inspect IntegritySignals | Yes |
+| `rules` | inspect the Rule Ledger | Yes |
+| `plan` | inspect the current cycle plan | Yes |
+| `quality` | inspect quality streak and delta trajectory | Yes |
+| `compliance` | inspect compliance posture and trajectory | Yes |
+| `why` | explain the reasoning behind a decision or change | Yes |
+| `report` | generate a lifecycle progress report | Yes |
+| `onboard` | manage the Product Onboard Phase | Partial |
+| `product` | manage the Product Registry | Partial |
+| `fleet` | run and manage multiple products in parallel | Partial |
+| `compact` | queue compaction of an accumulating list field | Yes |
+| `decompact` | restore original records from a CompactionEvent | Yes |
+| `amend` | in-place amendment to an archived record without full decompaction | Yes |
+| `crc` | inspect the Cognitive Resume (CRC) | Yes |
+| `configuration` | inspect or change user-facing configuration | Yes |
+| `policy` | inspect or set lifecycle policies | Yes |
+| `budget` | inspect or set Executor call budgets | Yes |
+| `resource` | inspect per-product resource usage and ROI | Yes |
+| `evaluation` | inspect or configure evaluation weights | Yes |
+| `self-evolution` | inspect or configure self-evolution policy | Yes |
 | `executor` | inspect, attach, or detach the configured Executor | Yes |
 | `executor-capacity` * | defer or clear Executor capacity | No |
+| `api` | machine interface: call/batch/watch/version for external tools (EIP §62w) | Partial |
 | `feedback` | submit or list outcome feedback | Partial |
-| `fleet` | run and manage multiple products in parallel | Partial |
-| `goal` | inspect, forecast, or manage goals | Yes |
-| `govern` | inspect governance gates | Yes |
-| `help` | show operation catalog or contextual help | Yes |
-| `inbox` | manage the operator inbox (community signals, patch proposals) | Partial |
-| `integrity-signal` | list or inspect IntegritySignals | Yes |
-| `intent` | add or manage DIRECTIVE rules | No |
-| `metric` | list or queue removal of metric definitions | Yes |
-| `milestone` | inspect or mark Product milestones and versions | Yes |
-| `onboard` | manage the Product Onboard Phase | Partial |
-| `pause` | suspend autonomous operation | Yes |
-| `plan` | inspect the current cycle plan | Yes |
-| `policy` | inspect or set lifecycle policies | Yes |
-| `portfolio` * | run the optional isolated-worktree portfolio helper | No |
-| `product` | manage the Product Registry | Partial |
-| `quality` | inspect quality streak and delta trajectory | Yes |
-| `repair-controller` * | repair controller fault recovery | No |
-| `report` | generate a lifecycle progress report | Yes |
-| `resource` | inspect per-product resource usage and ROI | Yes |
-| `resume` | resume a PAUSED lifecycle | Yes |
-| `rules` | inspect the Rule Ledger | Yes |
 | `schema` | inspect output schema registry | Yes |
-| `self-evolution` | inspect or configure self-evolution policy | Yes |
-| `source` | list or control connector sources | Yes |
 | `trace` | query the lifecycle trace log | Yes |
 | `update` | guided update sequence for spec revisions | Partial |
+| `derive` | extract and reuse URACE building blocks | Yes |
+| `govern` | inspect governance gates | Yes |
+| `inbox` | manage the operator inbox (community signals, patch proposals) | Partial |
+| `source` | list or control connector sources | Yes |
+| `metric` | list or queue removal of metric definitions | Yes |
 | `vital` | list or queue removal of vital definitions | Yes |
-| `vitals` | show progress, credit usage, and lifecycle health | Yes |
-| `why` | explain the reasoning behind a decision or change | Yes |
+| `milestone` | inspect or mark Product milestones and versions | Yes |
+| `commands` | list all commands with brief descriptions | Yes |
+| `help` | show operation catalog or contextual help | Yes |
+| `autonomous` | run persistent autonomous mode (alias for `auto`); `--dry-run` is SD=True | Partial |
+| `portfolio` * | run the optional isolated-worktree portfolio helper | No |
+| `repair-controller` * | repair controller fault recovery | No |
 
 ## --json
 
@@ -9645,6 +9649,18 @@ Store the generated manifest reference in `state.derived_manifest_refs` for stal
 Applies to: `derive`
 
 **`derive` command and AP24.** The `derive` command is the runtime instantiation of AP24 — Derivation Framework (§62i). It resolves pattern dependencies per the AP24 dependency resolution contract, builds a `DerivedSystemManifest` citizen, and bounds the derived system's obligations to exactly the patterns it adopted. Full command contract in §62j.
+
+## --hash
+
+Provide the expected SHA-256 hex digest of the downloaded artifact. When supplied, the implementation MUST compute the SHA-256 of the downloaded bytes before writing to disk and compare against the provided value. On mismatch: emit IntegrityGap(kind="spec-update-hash-mismatch", severity=BLOCKING, detail=`hash mismatch: expected <expected> got <actual>`), discard the download, and exit 1. On match: proceed normally.
+
+Applies to: `update download`, `update apply`
+
+## --verify
+
+Re-verify the content hash of a previously saved derived manifest. When supplied on `derive`, the implementation reads the stored `content_hash` field from the manifest and compares it against the SHA-256 of the re-resolved manifest bytes. On mismatch: emit IntegrityGap(kind="manifest-hash-mismatch", severity=WARNING, detail=`manifest <id> hash diverged since save`). On match: exit 0 with verification confirmation. When supplied on `update apply`, re-verifies the candidate spec file before applying.
+
+Applies to: `derive`, `update apply`
 
 ## urace /quality
 
@@ -9906,6 +9922,8 @@ Machine interface for external tools and automation systems. Implements External
 ```
 urace api call --command <command> [--params <json-string>] [--json]
 urace api batch --input-json <path|-> [--continue-on-error] [--json]
+urace api watch [--kinds <comma-list>] [--since <ISO>] [--follow] [--json]
+urace api version [--json]
 urace api help [--json]
 ```
 
@@ -9913,9 +9931,115 @@ urace api help [--json]
 
 **`api batch`** — reads a JSON array of `{"command": <str>, "params": <object>}` entries from `--input-json` (path or `-` for stdin). Executes entries in order; returns `{"results": [{"command": <str>, "exit_code": <int>, "output": <any>}]}`. Stops on first failure unless `--continue-on-error`. SD=False.
 
+**`api watch`** — streams TraceRecord events as JSON Lines on stdout. `--kinds` is a comma-separated list of TraceRecord event kinds to include (default: all). `--since <ISO>` begins the stream from the given timestamp. `--follow` tails the trace log, emitting new records as they appear (poll interval: 2s). SD=True (reads state; no Executor call). Without `--follow`, emits matching historical records and exits 0.
+
+**`api version`** — returns the current URACE spec version and API contract version. SD=True. `--json` emits `{"spec_version": <str>, "api_version": <str>, "schema_version": "1"}`.
+
 **`api help`** — prints the external interface guide. SD=True. `--json` emits `{schema_version, guide}`.
 
-**Exit codes.** `api call` and `api batch`: 0 on full success, 1 on any entry failure (without `--continue-on-error`). `api help`: always 0.
+**Exit codes.** `api call` and `api batch`: 0 on full success, 1 on any entry failure (without `--continue-on-error`). `api watch`, `api version`, `api help`: always 0.
+
+## urace add
+
+Classify free text as a goal, intent, or constraint via the Executor. SD=False; requires a reachable Executor.
+
+```
+urace add <text> [--json]
+```
+
+Routes `<text>` to the Executor for classification. The Executor returns a ClassificationResult (§62b) specifying whether the input maps to a goal, intent, or constraint, together with structured parameters. Each classified item is presented to the operator for individual confirmation before being queued. Contradictory inputs are surfaced as alternatives. Semantically identical to entering `<freeform-text>` but scoped to a single explicit add invocation. Uses: ClassificationBatch (§62b), ClassificationResult (§62b).
+
+`--json` emits `{"status": "classified", "text": <str>, "queued": [<kind> <id>, ...]}`.
+
+## urace add-context
+
+Durably queue authoritative context text for the next cycle. SD=True; no Executor required.
+
+```
+urace add-context <text> [--source <label>] [--json]
+```
+
+Writes directly to the Durable Inbox (AP14) via `queue_input`. Context is applied at the next cycle boundary or lifecycle restart. `<text>` MUST be 20,000 characters or fewer. `--source` labels the origin of the context (default: `repository owner`). No Executor invocation. Uses: Durable Inbox (§62c), AP14.
+
+`--json` emits `{"status": "queued", "id": <str>, "text": <str>, "source": <str>}`.
+
+## urace add-goal
+
+Durably queue a structured Product or URACE goal. SD=True; no Executor required.
+
+```
+urace add-goal <title> --success-measure <text> --reason <text> [--target <text>]
+               [--priority N] [--expected-value F] [--estimated-cost F] [--risk F] [--urgency F]
+               [--necessity-evidence <text>] [--lower-impact-insufficient]
+               [--depends-on <id>...] [--deadline <ISO>] [--not-before <ISO>]
+               [--estimate-min-hours N] [--estimate-max-hours N] [--estimate-confidence low|medium|high]
+               [--priority-floor N] [--priority-ceiling N] [--pin]
+               [--json]
+```
+
+Writes a structured goal payload directly to the Durable Inbox (AP14) via `queue_input`. No Executor invocation. Float parameters (`--expected-value`, `--estimated-cost`, `--risk`, `--urgency`) MUST be in [0.0, 1.0]. `--estimate-min-hours` MUST be ≤ `--estimate-max-hours`. `--deadline` and `--not-before` MUST be valid ISO-8601 date/time strings. Uses: Durable Inbox (§62c), AP14.
+
+`--json` emits `{"status": "queued", "id": <str>, "kind": "goal", "title": <str>}`.
+
+## urace add-source
+
+Queue an external metric or Evidence connector source. SD=True; no Executor required.
+
+```
+urace add-source <id> --kind <source-kind> --location <path-or-url> [--visibility private|public]
+                 [--credential-env <env-var>] [--json]
+```
+
+Writes a source connector payload directly to the Durable Inbox (AP14) via `queue_input`. `--kind` discriminates the connector type (e.g., `github_repository`). `--location` is a path or URL; for `github_repository`, the `--location` value is stored under the `repository` key. `--credential-env` specifies an environment variable name holding the credential (no secrets stored in State). Uses: Durable Inbox (§62c), AP14.
+
+`--json` emits `{"status": "queued", "id": <str>, "id_arg": <str>, "kind": <str>}`.
+
+## urace add-metric
+
+Queue a metric definition mapped onto a connector source. SD=True; no Executor required.
+
+```
+urace add-metric <name> --source <source-id> --path <json-path>
+                 [--direction nondecreasing|nonincreasing] [--target F] [--json]
+```
+
+Writes a metric definition payload directly to the Durable Inbox (AP14) via `queue_input`. `--source` MUST reference a registered source connector. `--path` is the JSON path expression extracting the metric value from the source response. `--direction` defaults to `nondecreasing`. Uses: Durable Inbox (§62c), AP14.
+
+`--json` emits `{"status": "queued", "id": <str>, "name": <str>, "source": <str>}`.
+
+## urace add-vital
+
+Queue a direct or ratio vital definition. SD=True; no Executor required.
+
+```
+urace add-vital <name> --numerator <metric-id> [--denominator <metric-id>]
+                [--window <duration>] [--description <text>] [--json]
+```
+
+Writes a vital definition payload directly to the Durable Inbox (AP14) via `queue_input`. A vital without `--denominator` is a direct vital (raw value). A vital with `--denominator` is a ratio vital (numerator ÷ denominator). `--window` is a duration string (e.g., `7d`, `1h`). Uses: Durable Inbox (§62c), AP14.
+
+`--json` emits `{"status": "queued", "id": <str>, "name": <str>}`.
+
+## urace executor
+
+Inspect, attach, or detach the configured Executor. SD=True for `status`; `attach`, `detach`, and `retry-policy` mutate Config.
+
+```
+urace executor [status] [--id <executor-id>] [--json]
+urace executor attach [--id <executor-id>] [--json]
+urace executor detach [--id <executor-id>] [--json]
+urace executor retry-policy [--max-retries N] [--backoff-base F] [--json]
+```
+
+**`executor status`** — returns the current configured Executor's identity, state, last-invoked-at, and any active executor-related IntegrityGaps. SD=True. `--id` defaults to `codex-primary`.
+
+**`executor attach`** — marks the Executor as attached in Config; clears any `executor-detached` gap. Does not invoke the Executor. SD=True.
+
+**`executor detach`** — marks the Executor as detached; lifecycle will pause if Executor is required. Does not invoke the Executor. SD=True.
+
+**`executor retry-policy`** — sets the retry parameters for Executor call failures. `--max-retries` defaults to 3. `--backoff-base` (seconds) defaults to 2.0. SD=True.
+
+**Exit codes.** All subcommands exit 0 on success, 1 on invalid arguments or Config write failure.
 
 ---
 
@@ -10723,6 +10847,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `product-roi-below-floor` | WARNING | §62v Resource Budget Protocol | ROI below configured roi_floor for 2+ consecutive periods; review strategy |
 | `product-efficiency-degraded` | WARNING | §62v Resource Budget Protocol | Cost trend rising with flat/declining value trend over 3 observations |
 | `product-budget-period-reset` | INFO | §62v Resource Budget Protocol | New budget period started; period counters reset |
+| `spec-update-hash-mismatch` | BLOCKING | §62k `--hash` / §62k `urace update` | SHA-256 digest of downloaded spec candidate does not match `--hash` value; discard download and re-fetch |
+| `manifest-hash-mismatch` | WARNING | §62k `--verify` / §62k `urace derive` | SHA-256 digest of derived manifest diverged from stored `content_hash`; re-run `urace derive --save` to refresh |
 
 **Severity tiers.** BLOCKING — MUST halt the dependent operation before any effect is committed. WARNING — MUST be surfaced but MUST NOT block unrelated workstreams. INFO — MUST be surfaced in output but carries no operational obligation; informational only.
 
@@ -10877,6 +11003,16 @@ The FleetOrchestrationProtocol governs parallel multi-product autonomous evoluti
 **Referenced from:** §62q Fleet Orchestration, §62k `urace fleet`.
 **Citizens using FleetOrchestrationProtocol:** FleetRecord (§62b).
 
+## ExternalInterfaceProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [OutputSchemaRegistry, InspectionContract, OutcomeFeedbackContract]`
+
+The **ExternalInterfaceProtocol (EIP)** defines the full I/O contract for external tools, automation systems, and machine agents that need to issue commands to or receive structured responses from a running URACE installation. Full definition: §62w External Interface Protocol.
+
+**Summary.** Output surface (`--json`) → input surface (`api call/batch/watch/version`) → machine feedback (`--input-json`) → compliance contract.
+
+**Referenced from:** §62k `urace api`, §62w External Interface Protocol.
+
 # 62m. Extended Construct Catalogs
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
@@ -11006,7 +11142,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (122 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (124 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -11677,12 +11813,18 @@ External tools issue commands via `urace api`:
 ```
 urace api call --command <command> [--params <json-string>] [--json]
 urace api batch --input-json <path|-> [--continue-on-error] [--json]
+urace api watch [--kinds <comma-list>] [--since <ISO>] [--follow] [--json]
+urace api version [--json]
 urace api help [--json]
 ```
 
 **`api call`** — executes a single URACE command. `--command` is the command name as it would appear on the CLI (e.g., `product switch`, `feedback submit`). `--params` is a JSON object whose keys map to the target command's named parameters. Returns the command's normal `--json` output. Exits 1 on unknown command or invalid params. Slash-prefix variants are accepted (e.g., `--command /check`). SD=False.
 
 **`api batch`** — reads an array of `{"command": <str>, "params": <object>}` entries from `--input-json` (file path or `-` for stdin). Executes each entry in order. Returns `{"results": [{"command": <str>, "exit_code": <int>, "output": <any>}]}`. Default: stops on first non-zero exit code. `--continue-on-error` processes all entries regardless of individual failures. SD=False.
+
+**`api watch`** — streams TraceRecord events as JSON Lines on stdout. `--kinds` filters by event kind. `--since <ISO>` starts from a timestamp. `--follow` tails live; poll interval 2s. SD=True.
+
+**`api version`** — returns `{"spec_version": <str>, "api_version": <str>, "schema_version": "1"}`. SD=True.
 
 **`api help`** — prints a guide for the external interface. SD=True. `--json` emits `{schema_version, guide}`.
 
