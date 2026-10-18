@@ -13,11 +13,14 @@ You set the destination and boundaries. URACE delegates execution to replaceable
 ```text
 BEFORE BOOTSTRAP                         AFTER BOOTSTRAP
 
-YOU + URACE.md + PRODUCT                 YOU — choose the Product and outcome
+        URACE.md                         YOU — Select Product(s) + Outcomes
            │                              │ RETAINS INTENT + AUTHORITY
            ▼                              ▼
        EXECUTOR ── builds ───────► URACE SYSTEM ◄── RESULTS + EVIDENCE ◄── PRODUCT
-                                      │                                      ▲
+                                      │    │  ProductRegistry                │
+                                      │    └─ Fleet: run all products        │                                ▲
+                                      │                                      │
+                                      │                                      │
                                       │ assigns bounded work                 │ accepted changes
                                       ▼                                      │
                                   EXECUTORS ── execute and return ──► URACE VALIDATES
@@ -27,11 +30,11 @@ YOU + URACE.md + PRODUCT                 YOU — choose the Product and outcome
 
 URACE automates replaceable Executors to improve the Product continuously, measurably and recoverably. It adapts its plans without changing what you control.
 
-Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time — via `urace /rules`.
+Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time — via `urace /rules list`.
 
 ## What Is a Product?
 
-A **Product** is whatever URACE improves: a project, service, process, research effort or other goal. It need not be software.
+A **Product** is whatever URACE improves: a project, service, process, research effort or other goal. It need not be software. URACE can manage multiple Products through a Product Registry — register each with its own state path, switch the active one with `urace product switch`, or run all in parallel with `urace fleet run`.
 
 ## What Is an Executor?
 
@@ -53,6 +56,10 @@ urace /pause or /resume suspend or resume the lifecycle
 urace <freeform-text>   describe goals, intents, and constraints in plain language
 urace /help             explore commands and reference
 urace /update           guided update sequence
+urace /product list     list registered Products; /product switch <name> to change active
+urace /fleet run        run all registered Products in parallel
+urace /inbox list       inspect and act on community patch proposals
+urace /onboard status   inspect or confirm the Product Onboard Phase
 ```
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
@@ -67,7 +74,7 @@ Run `urace /update` — it guides you through the full update sequence safely. P
 
 ## See Progress
 
-Inspect metrics, vitals and scores with `urace /check`, `urace /vitals` and `urace /change list`. Use `--since`, `--until` and `--limit` to filter list output.
+Inspect metrics, vitals and scores with `urace /check`, `urace /vitals` and `urace /change list`. Drill into state with `urace /evidence list`, `urace /blocker list`, `urace /decision list`, `urace /trace list`, and `urace /feedback list`. All list commands support `--since`, `--until`, `--limit`, `--offset`, and `--json`.
 
 ## Inspect and Modify Context
 
