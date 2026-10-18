@@ -61,7 +61,7 @@ urace /update           guided update sequence
 
 **Plain text** — the Executor maps your input to any task, goal, intent, constraint, or command — each confirmed individually. Contradictory inputs surface as alternatives.
 
-`urace /help` lists all commands. `urace /help <command>` gives per-command reference. Shared options including `--dry-run`, `--json`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
+`urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Update Safely
 

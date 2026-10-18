@@ -9481,6 +9481,71 @@ The following scenarios that could produce gaps are pre-closed by this framework
 
 Options defined here apply across all commands that accept them. Per-command specs need not redefine semantics — they MUST conform to this contract.
 
+## Command Reference
+
+All available `urace` commands. SD=True means no Executor invocation required; the command is always available. Commands marked with `*` are suppressed in `urace /help` but are valid.
+
+| Command | Purpose | SD |
+|---|---|---|
+| `add` | classify free text as goal, intent, or constraint via Executor | No |
+| `add-context` | durably queue authoritative context for the next cycle | No |
+| `add-goal` | durably queue a Product or URACE goal | No |
+| `add-metric` | queue a metric mapping onto a connector | No |
+| `add-source` | queue an external metric or Evidence connector | No |
+| `add-vital` | queue a direct or ratio vital | No |
+| `amend` | in-place amendment to an archived record without full decompaction | Yes |
+| `api` | machine interface for external tools (EIP §62w) | Partial |
+| `auto` | run persistent autonomous evolution lifecycle | No |
+| `autonomous` | inspect autonomous operation status | Yes |
+| `blocker` | list and resolve BLOCKING IntegrityGaps | Yes |
+| `budget` | inspect or set Executor call budgets | Yes |
+| `change` | list accepted changes or explain one by change ID | Yes |
+| `check` | evaluate lifecycle health (IntegrityGaps, gates) | Yes |
+| `commands` | list all commands with brief descriptions | Yes |
+| `compact` | queue compaction of an accumulating list field | Yes |
+| `compliance` | inspect compliance posture and trajectory | Yes |
+| `configuration` | inspect or change user-facing configuration | Yes |
+| `constraint` | add or manage PROHIBITION/PERMISSION rules | No |
+| `context` | inspect queued authoritative context | Yes |
+| `crc` | inspect the Cognitive Resume (CRC) | Yes |
+| `decision` | list or inspect DecisionRecords | Yes |
+| `decompact` | restore original records from a CompactionEvent | Yes |
+| `derive` | extract and reuse URACE building blocks | Yes |
+| `evaluation` | inspect or configure evaluation weights | Yes |
+| `evidence` | list or inspect EvidenceRecords | Yes |
+| `executor` | inspect, attach, or detach the configured Executor | Yes |
+| `executor-capacity` * | defer or clear Executor capacity | No |
+| `feedback` | submit or list outcome feedback | Partial |
+| `fleet` | run and manage multiple products in parallel | Partial |
+| `goal` | inspect, forecast, or manage goals | Yes |
+| `govern` | inspect governance gates | Yes |
+| `help` | show operation catalog or contextual help | Yes |
+| `inbox` | manage the operator inbox (community signals, patch proposals) | Partial |
+| `integrity-signal` | list or inspect IntegritySignals | Yes |
+| `intent` | add or manage DIRECTIVE rules | No |
+| `metric` | list or queue removal of metric definitions | Yes |
+| `milestone` | inspect or mark Product milestones and versions | Yes |
+| `onboard` | manage the Product Onboard Phase | Partial |
+| `pause` | suspend autonomous operation | Yes |
+| `plan` | inspect the current cycle plan | Yes |
+| `policy` | inspect or set lifecycle policies | Yes |
+| `portfolio` * | run the optional isolated-worktree portfolio helper | No |
+| `product` | manage the Product Registry | Partial |
+| `quality` | inspect quality streak and delta trajectory | Yes |
+| `repair-controller` * | repair controller fault recovery | No |
+| `report` | generate a lifecycle progress report | Yes |
+| `resource` | inspect per-product resource usage and ROI | Yes |
+| `resume` | resume a PAUSED lifecycle | Yes |
+| `rules` | inspect the Rule Ledger | Yes |
+| `schema` | inspect output schema registry | Yes |
+| `self-evolution` | inspect or configure self-evolution policy | Yes |
+| `source` | list or control connector sources | Yes |
+| `trace` | query the lifecycle trace log | Yes |
+| `update` | guided update sequence for spec revisions | Partial |
+| `vital` | list or queue removal of vital definitions | Yes |
+| `vitals` | show progress, credit usage, and lifecycle health | Yes |
+| `why` | explain the reasoning behind a decision or change | Yes |
+
 ## --json
 
 Emit output as a machine-readable JSON document (or JSON Lines for streaming commands such as `auto`). Human-readable output is suppressed. Exit codes are unaffected.
@@ -9566,6 +9631,12 @@ Applies to: `auto`
 Suppress human-readable per-cycle feedback. When combined with `--json`, JSON Lines output on stdout is retained.
 
 Applies to: `auto`
+
+## --input-json
+
+Read command parameters from a JSON object at the given file path, or from stdin when the value is `-`. Keys in the JSON object map to the target command's named parameters (flag names without leading `--`, hyphens converted to underscores). Replaces individual per-parameter flags for automated pipeline use. The JSON object is validated against the target command's required parameters before execution; missing required fields return exit code 1 with a structured error.
+
+Applies to: `feedback submit`, `api call`, `api batch`
 
 ## --save
 
@@ -9810,7 +9881,7 @@ urace trace inspect <trace-id> [--json]
 
 ## urace feedback
 
-**`feedback submit <target_id>`** — submits an OutcomeFeedbackRecord (§62b) for the given Objective (obj-) or DecisionRecord (dec-). Required: `--signal <POSITIVE|NEGATIVE|NEUTRAL>`. Optional: `--evidence <ev-id>`, `--detail <text>`. Validates target_id prefix. Exits 1 if target_id does not start with obj- or dec-. `--json` emits the created OutcomeFeedbackRecord. Uses OutcomeFeedbackContract (§62l).
+**`feedback submit <target_id>`** — submits an OutcomeFeedbackRecord (§62b) for the given Objective (obj-) or DecisionRecord (dec-). Required: `--signal <POSITIVE|NEGATIVE|NEUTRAL>`. Optional: `--evidence <ev-id>`, `--detail <text>`, `--input-json <path|->` (read all fields from JSON; replaces individual flags). Validates target_id prefix. Exits 1 if target_id does not start with obj- or dec-. `--json` emits the created OutcomeFeedbackRecord. Uses OutcomeFeedbackContract (§62l). See §62w for machine feedback pipeline usage.
 
 **`feedback list`** — returns OutcomeFeedbackRecords in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--target <id>` filters by target_id. `--signal POSITIVE|NEGATIVE|NEUTRAL` filters by signal. `--limit N` (default 20). `--offset M` (default 0). `--json` emits `{schema_version, records, total}`.
 
@@ -9828,13 +9899,31 @@ urace trace inspect <trace-id> [--json]
 
 **Implements:** ResourceBudgetProtocol (§62l), InspectionContract (§62l). Uses: ProductBudget (§62b), ResourceEntry (§62b), ROISnapshot (§62b). See §62v Resource Budget Protocol.
 
+## urace api
+
+Machine interface for external tools and automation systems. Implements ExternalInterfaceProtocol (§62w). All subcommands support `--json`.
+
+```
+urace api call --command <command> [--params <json-string>] [--json]
+urace api batch --input-json <path|-> [--continue-on-error] [--json]
+urace api help [--json]
+```
+
+**`api call`** — executes a single URACE command via structured input. `--command` accepts any CLI command name (e.g., `product switch`, `feedback submit`) or slash-prefix form (e.g., `/check`). `--params` is a JSON object mapping parameter names to values. Returns the command's `--json` output. Exits 1 on unknown command or invalid params. SD=False.
+
+**`api batch`** — reads a JSON array of `{"command": <str>, "params": <object>}` entries from `--input-json` (path or `-` for stdin). Executes entries in order; returns `{"results": [{"command": <str>, "exit_code": <int>, "output": <any>}]}`. Stops on first failure unless `--continue-on-error`. SD=False.
+
+**`api help`** — prints the external interface guide. SD=True. `--json` emits `{schema_version, guide}`.
+
+**Exit codes.** `api call` and `api batch`: 0 on full success, 1 on any entry failure (without `--continue-on-error`). `api help`: always 0.
+
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines thirty-five named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines thirty-six named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All thirty-five constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-three constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, and ResourceBudgetProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All thirty-six constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-four constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, ResourceBudgetProtocol, and ExternalInterfaceProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -10858,7 +10947,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ResourceEntry | ResourceEntry | resc- | §62b |
 | ROISnapshot | ROISnapshot | rsnp- | §62b |
 
-## Protocol Catalog (30 entries)
+## Protocol Catalog (31 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -10892,6 +10981,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CAP | CLIAlignmentProtocol | enumerate §62k commands → verify known-command entry + handler + required flags | §62l |
 | CWP | CycleWiringProtocol | enumerate cycle-entry mechanisms → verify cycle() call-sites → verify ordering constraints | §62l |
 | RBP | ResourceBudgetProtocol | RAM activation → cost tracking → ROI computation → budget gate → efficiency gate → period snapshot | §62l |
+| EIP | ExternalInterfaceProtocol | output surface (--json) → input surface (api call/batch) → machine feedback (--input-json) → compliance contract | §62w |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -11151,6 +11241,7 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | CAP | CLIAlignmentProtocol | FOUNDATIONAL | true |
 | CWP | CycleWiringProtocol | FOUNDATIONAL | true |
 | RBP | ResourceBudgetProtocol | INTEGRATED | false |
+| EIP | ExternalInterfaceProtocol | COMPOSITIONAL | false |
 
 ### Mechanisms (§62c)
 
@@ -11566,6 +11657,49 @@ RAM detects two efficiency-degradation patterns:
 **Implements:** ResourceBudgetProtocol (§62l), InspectionContract (§62l).
 **Uses:** ProductBudget (§62b), ResourceEntry (§62b), ROISnapshot (§62b), ResourceAllocationMechanism (§62c).
 **Referenced from:** §62l ResourceBudgetProtocol, §62b ProductBudget, §62b ResourceEntry, §62b ROISnapshot, §62c ResourceAllocationMechanism.
+
+---
+
+# 62w. External Interface Protocol
+
+The **ExternalInterfaceProtocol** (EIP) defines the full I/O contract for external tools, automation systems, and machine agents that need to issue commands to or receive structured responses from a running URACE installation.
+
+**Construct metadata.** kind: Protocol · tier: COMPOSITIONAL · standalone: false · depends: [OutputSchemaRegistry, InspectionContract, OutcomeFeedbackContract]
+
+## Output Surface
+
+Every URACE command supports `--json` (§62k) for machine-readable output. This is the canonical read surface. All list and catalog responses MUST carry `schema_version` as documented in the OutputSchemaRegistry (§62l).
+
+## Input Surface
+
+External tools issue commands via `urace api`:
+
+```
+urace api call --command <command> [--params <json-string>] [--json]
+urace api batch --input-json <path|-> [--continue-on-error] [--json]
+urace api help [--json]
+```
+
+**`api call`** — executes a single URACE command. `--command` is the command name as it would appear on the CLI (e.g., `product switch`, `feedback submit`). `--params` is a JSON object whose keys map to the target command's named parameters. Returns the command's normal `--json` output. Exits 1 on unknown command or invalid params. Slash-prefix variants are accepted (e.g., `--command /check`). SD=False.
+
+**`api batch`** — reads an array of `{"command": <str>, "params": <object>}` entries from `--input-json` (file path or `-` for stdin). Executes each entry in order. Returns `{"results": [{"command": <str>, "exit_code": <int>, "output": <any>}]}`. Default: stops on first non-zero exit code. `--continue-on-error` processes all entries regardless of individual failures. SD=False.
+
+**`api help`** — prints a guide for the external interface. SD=True. `--json` emits `{schema_version, guide}`.
+
+## Machine Feedback Input
+
+`urace feedback submit` supports `--input-json <path|->`: reads OutcomeFeedbackRecord fields from a JSON object at the given path (or `-` for stdin). Replaces individual `--signal`, `--evidence`, and `--detail` flags for automated pipelines. The JSON MUST include `signal` (POSITIVE|NEGATIVE|NEUTRAL); `evidence` and `detail` are OPTIONAL.
+
+## Compliance Contract
+
+1. All `--json` outputs registered in the OutputSchemaRegistry MUST be stable across patch versions.
+2. `api batch` entries execute atomically per entry; a failure does not roll back previously completed entries.
+3. `api call` MUST resolve slash-prefix variants (e.g., `/check` → `check`) to their canonical handler.
+4. `feedback submit --input-json` MUST validate that the JSON contains a valid `signal` field before appending the OutcomeFeedbackRecord.
+
+**Implements:** ExternalInterfaceProtocol (§62l).
+**Uses:** OutputSchemaRegistry (§62l), InspectionContract (§62l), OutcomeFeedbackContract (§62l).
+**Referenced from:** §62k `urace api`, §62k `--input-json`, §62k `urace feedback`.
 
 ---
 
@@ -13564,6 +13698,7 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `contractimplementation` | ContractImplementationProtocol §62l construct (CIP), FRVS pass 9, §62l clause call-site verification |
 | `clialignment` | CLIAlignmentProtocol §62l construct (CAP), FRVS pass 10, §62k command known-command+handler+flag verification |
 | `cyclewiring` | CycleWiringProtocol §62l construct (CWP), FRVS pass 11, §62c mechanism cycle() call-site and ordering verification |
+| `externalinterface` | ExternalInterfaceProtocol §62l construct (EIP), machine I/O contract, urace api command, --input-json, §62w External Interface Protocol |
 
 ## Audit Content
 
