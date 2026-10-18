@@ -16,13 +16,11 @@ BEFORE BOOTSTRAP                         AFTER BOOTSTRAP
     URACE.md                         YOU — Select Product(s) + Outcomes
         │                              │ RETAINS INTENT + AUTHORITY
         ▼                              ▼
-    EXECUTOR ── builds ───────► URACE SYSTEM ◄── RESULTS + EVIDENCE ◄── PRODUCT
-                                    │    │  ProductRegistry                │
-                                    │    └─ Fleet: run all products        │                                ▲
-                                    │                                      │
-                                    │                                      │
-                                    │ assigns bounded work                 │ accepted changes
-                                    ▼                                      │
+    EXECUTOR ── builds ───────► URACE SYSTEM ◄── RESULTS + EVIDENCE ◄── PRODUCTS
+                                    │    │  ProductRegistry                  ▲
+                                    │    └─ Fleet: run all products          │ accepted changes
+                                    │ assigns bounded work                   │
+                                    ▼                                        │
                                 EXECUTORS ── execute and return ──► URACE VALIDATES
 ```
 
@@ -42,11 +40,11 @@ An **Executor** is any capable runtime URACE can delegate to: an LLM, AI agent, 
 
 ## Get Running
 
-1. Give [`URACE.md`](URACE.md) to a capable Executor with access to your Product.
+1. Give [`URACE.md`](URACE.md) to a capable Executor — with access to an existing Product, or into an empty folder if the Product is being built from scratch.
 2. Say **"Bootstrap."**
 3. Follow the setup to define the outcome, delegation and protected boundaries.
 
-`URACE.md` is the only required bootstrap document. Setup validates the result, keeps system files under `urace/`, and activates a `urace` command in the Product folder through an environment-appropriate launcher. If bootstrap was interrupted, run `urace /check` before issuing any commands.
+`URACE.md` is the only required bootstrap document. Setup validates the result, keeps system files under `urace/`, and activates a `urace` command in the Product folder through an environment-appropriate launcher. Product files can be at any path — subdirectory, sibling folder, absolute path — URACE is agnostic to folder structure. Run `urace /onboard help` at any time for a step-by-step guide. If bootstrapping into an empty folder, place or build the Product first, then run `urace /onboard confirm` to complete the onboard phase and activate the lifecycle. If bootstrap was interrupted, run `urace /check` before issuing any commands.
 
 ## Use It
 
