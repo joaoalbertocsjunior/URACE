@@ -4901,6 +4901,7 @@ ProductEntry {
   id                REQUIRED  Identifier; prefix "prod-"
   name              REQUIRED  string; human-readable product name
   state_path        REQUIRED  string; path to this product's State file
+  depends_on        OPTIONAL  list[Identifier]; product IDs this product depends on; used by FOP for signal broadcast ordering
   product_files     REQUIRED  list[string]; file paths constituting this product
   intent_purpose    OPTIONAL  string; product intent text
   registered_at     REQUIRED  ISO-8601 timestamp; when this entry was registered
@@ -9865,6 +9866,8 @@ urace fleet broadcast [--json]
 
 **`fleet broadcast`** — one-shot manual signal broadcast: reads high-confidence Evidence from all registered members' state files and writes qualifying records to each other member's inbox. Useful for triggering cross-product learning without running full fleet.
 
+`urace fleet sync <product> [--from <source>]` — propagate a named product's current signal broadcast to all products that declare it in `depends_on`. If `--from <source>` is omitted, the active product's last broadcast is used. Emits `fleet-sync-stale` (WARNING) if the target product's state is more than one broadcast cycle behind.
+
 **`--verbose`** — show per-member cycle output on stdout.
 
 **`fleet help`** — prints a guide for fleet orchestration and parallel product runs. SD=True. `--json` emits `{schema_version, guide}`.
@@ -10000,9 +10003,9 @@ urace executor retry-policy [--max-retries N] [--backoff-base F] [--json]
 
 # 62l. Shared Reuse Contracts
 
-This section defines thirty-six named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines forty-three named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All thirty-six constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-four constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, ResourceBudgetProtocol, and ExternalInterfaceProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All forty-three constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining thirty-one constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, ResourceBudgetProtocol, ExternalInterfaceProtocol, DesignQualityProtocol, ResilienceRecoveryProtocol, CompatibilityContinuityProtocol, ObservabilityVerificationProtocol, ProductionReleaseVerificationSuite, ReleaseGovernanceGate, and LifecycleChangeGate — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -10785,6 +10788,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `fleet-member-crashed` | WARNING | §62l FOP clause 4 | Fleet member process exited unexpectedly; check member logs; orchestrator will attempt restart |
 | `fleet-duplicate-state-path` | BLOCKING | §62l FOP clause 1 | Two fleet members share the same state_path; fix product_registry before starting fleet |
 | `fleet-signal-broadcast-skipped` | INFO | §62l FOP clause 3 | Signal broadcast attempted but member inbox not writable; check file permissions |
+| `fleet-dependency-cycle` | BLOCKING | false | cycle detected in product depends_on graph |
+| `fleet-sync-stale` | WARNING | true | dependent product has not received latest broadcast |
 | `audit-record-compacted` | BLOCKING | §62l AuditRecord non-compactability contract | AuditRecord citizen was removed during compaction; restore from backup or re-establish the record |
 | `trace-record-missing` | WARNING | §62l ObservabilityContract autonomy gap | A lifecycle_state transition occurred without a corresponding TraceRecord; informational only |
 | `blocker-escalated` | WARNING | §62b Blocker schema classification contract | Acknowledge escalation; consider operator intervention if pattern persists |
@@ -10968,6 +10973,107 @@ The **ExternalInterfaceProtocol (EIP)** defines the full I/O contract for extern
 
 **Referenced from:** §62k `urace api`, §62w External Interface Protocol.
 
+## DesignQualityProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: []`
+
+The **DesignQualityProtocol (DQP)** defines the three-sub-pass design quality verification applied to every §62l construct and runtime module: (1) **DRY sub-pass** — enumerate all repeated logic blocks; for each: verify a single canonical implementation exists and all call-sites delegate to it; flag any copy-paste duplication above one occurrence; (2) **KISS sub-pass** — enumerate all constructs and functions; for each: verify no unnecessary abstraction layers; flag any abstraction that has exactly one call-site and no expected growth; (3) **YAGNI sub-pass** — enumerate all constructs, fields, and flags declared in the spec or runtime; for each: verify at least one confirmed use-case or test exercises the feature; flag anything added speculatively without a concrete verified requirement.
+
+**DQP gate.** A DQP pass is complete when all three sub-passes emit no findings, or all findings are recorded as accepted trade-offs in a DecisionRecord. A DQP finding does not block release; it surfaces as a WARNING IntegrityGap.
+
+**Citizens using:** All §62l constructs, all runtime modules.
+
+**Referenced from:** §62l PRVS.
+
+## ResilienceRecoveryProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: []`
+
+The **ResilienceRecoveryProtocol (RRP)** defines the two-sub-pass resilience and recovery verification: (1) **DEGRADATION sub-pass** — enumerate all cycle entry points, external I/O calls, and state mutations; for each: verify a documented degradation path exists (graceful continue, fallback, or emit gap); flag any path that exits non-zero without an IntegrityGap emission; (2) **IDEM sub-pass** — enumerate all state-mutating handlers; for each: verify idempotent re-application produces no duplicate citizens or side-effects; verify all inbox handlers pass AP5 Idempotency Contract.
+
+**RRP gate.** A RRP pass is complete when both sub-passes emit no findings, or all findings are covered by a DecisionRecord. RRP findings surface as WARNING IntegrityGaps.
+
+**Citizens using:** All inbox handlers, all cycle entry points.
+
+**Referenced from:** §62l PRVS.
+
+## CompatibilityContinuityProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: []`
+
+The **CompatibilityContinuityProtocol (CCP)** defines the two-sub-pass compatibility and continuity verification: (1) **BCP sub-pass** (Backwards Compatibility) — enumerate all public CLI commands, `--json` output fields, and state document keys; for each: verify no field has been removed or renamed without a deprecation alias or migration path; flag any breaking change without operator notice; (2) **AGN sub-pass** (Agnosticism) — enumerate all path references, environment assumptions, and executor-specific logic; for each: verify the runtime is agnostic to host OS, Executor identity, and deployment topology; flag any hardcoded paths, executor names, or platform-specific assumptions.
+
+**CCP gate.** A CCP pass is complete when both sub-passes emit no findings, or all findings are covered by a DecisionRecord. CCP findings surface as WARNING IntegrityGaps.
+
+**Citizens using:** All CLI commands, all state document keys.
+
+**Referenced from:** §62l PRVS.
+
+## ObservabilityVerificationProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: [ObservabilityContract]`
+
+The **ObservabilityVerificationProtocol (OVP)** defines the two-sub-pass observability and security verification: (1) **OBS sub-pass** — invoke ObservabilityContract (§62l); for each state-mutating operation in scope: verify a TraceRecord is emitted, verify `urace trace list` surfaces it, verify the `--json` output includes the required fields; flag any mutation without a corresponding trace; (2) **SEC sub-pass** — enumerate all external I/O paths (inbox reads, external metric fetches, community feed adapters); for each: verify input is validated before use, verify no credential is written to state or logs, verify file permissions on inbox directory are 0o700.
+
+**OVP gate.** A OVP pass is complete when both sub-passes emit no findings, or all findings are covered by a DecisionRecord. OVP findings: OBS sub-pass findings → WARNING; SEC sub-pass findings → BLOCKING.
+
+**Citizens using:** All TraceRecord emissions, all external I/O paths.
+
+**Referenced from:** §62l PRVS.
+
+## ProductionReleaseVerificationSuite
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [FRVS, DQP, RRP, CCP, OVP]`
+
+The **ProductionReleaseVerificationSuite (PRVS)** is the five-component ordered release verification gate applied before any production-bound commit. PRVS composes FRVS and four supplementary verification protocols into a single named gate.
+
+**PRVS execution order (strict):**
+1. **FRVS** — FullReleaseVerificationSuite (§62l): CSIA → BFP → TCP → SFCP → CIP → CAP → CWP. All 7 sub-passes MUST pass before proceeding.
+2. **DQP** — DesignQualityProtocol (§62l): DRY → KISS → YAGNI. All 3 sub-passes MUST be evaluated.
+3. **RRP** — ResilienceRecoveryProtocol (§62l): DEGRADATION → IDEM. Both sub-passes MUST be evaluated.
+4. **CCP** — CompatibilityContinuityProtocol (§62l): BCP → AGN. Both sub-passes MUST be evaluated.
+5. **OVP** — ObservabilityVerificationProtocol (§62l): OBS → SEC. Both sub-passes MUST be evaluated.
+
+**PRVS gate.** PRVS is PASS when: FRVS is PASS AND all DQP/RRP/CCP findings are either zero or covered by DecisionRecords AND all OVP SEC findings are zero. Any unresolved BLOCKING finding blocks the gate. PRVS is reusable: any subset of its sub-passes MAY be invoked independently by naming the sub-pass directly.
+
+**Citizens using:** FRVS, DQP, RRP, CCP, OVP, RGG.
+
+**Referenced from:** §62l RGG, §62l LCG.
+
+## ReleaseGovernanceGate
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [PRVS]`
+
+The **ReleaseGovernanceGate (RGG)** is the governance checkpoint that wraps PRVS with operator authorization and version tracking. RGG MUST be applied before any commit tagged as a stable or production release.
+
+**RGG steps:**
+1. Run PRVS (§62l). RGG does not proceed if PRVS gate is FAIL.
+2. Verify a DecisionRecord exists that explicitly authorizes this release (authority_basis: operator, scope: release).
+3. Verify the version identifier has been incremented (spec revision or runtime semver) relative to the last stable tag.
+4. Emit a `release-governance-approved` evidence record if all three conditions are met; emit `release-governance-blocked` IntegrityGap (BLOCKING) if any condition fails.
+
+**Citizens using:** PRVS, DecisionRecord, EvidenceRecord.
+
+**Referenced from:** §62l LCG.
+
+## LifecycleChangeGate
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [RGG]`
+
+The **LifecycleChangeGate (LCG)** is the highest-order gate in the URACE construct hierarchy. It governs any change that modifies the URACE lifecycle itself — spec revisions, runtime upgrades, construct additions, or self-evolution policy changes. LCG is the recursion terminus: no higher-order gate is defined above LCG because changes above LCG describe the governance of governance, which is the operator's exclusive authority (AuthorityClosureInvariant §62l).
+
+**LCG steps:**
+1. Run RGG (§62l). LCG does not proceed if RGG gate is FAIL.
+2. Check AuthorityClosureInvariant (§62l): verify the change does not transfer authority to a non-operator entity without explicit operator consent.
+3. Verify state coherence: all active IntegrityGaps have been reviewed; no BLOCKING gap is unacknowledged.
+4. Emit a `lifecycle-change-authorized` evidence record if all three conditions are met; emit `lifecycle-change-blocked` IntegrityGap (BLOCKING) if any condition fails.
+
+**Recursion contract.** LCG is self-applicable: the addition of LCG itself to the spec MUST be verified by LCG. The recursion terminates because LCG's own definition is FOUNDATIONAL (operator-authorized) and does not require a further gate above it.
+
+**Citizens using:** RGG, AuthorityClosureInvariant, EvidenceRecord.
+
+**Referenced from:** (universal — applies to all spec revisions and runtime upgrades)
+
 # 62m. Extended Construct Catalogs
 
 `urace derive --kind <kind>` exposes five construct catalogs beyond AP patterns. Each entry has: `name`, `kind`, `summary`, `provides`, `spec_section`, `standalone`.
@@ -11038,7 +11144,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ResourceEntry | ResourceEntry | resc- | §62b |
 | ROISnapshot | ROISnapshot | rsnp- | §62b |
 
-## Protocol Catalog (31 entries)
+## Protocol Catalog (38 entries)
 
 | ID | Name | Steps | Spec |
 |---|---|---|---|
@@ -11073,6 +11179,13 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | CWP | CycleWiringProtocol | enumerate cycle-entry mechanisms → verify cycle() call-sites → verify ordering constraints | §62l |
 | RBP | ResourceBudgetProtocol | RAM activation → cost tracking → ROI computation → budget gate → efficiency gate → period snapshot | §62l |
 | EIP | ExternalInterfaceProtocol | output surface (--json) → input surface (api call/batch) → machine feedback (--input-json) → compliance contract | §62w |
+| DQP | DesignQualityProtocol | DRY → KISS → YAGNI; design quality sub-passes for every construct and runtime module | §62l |
+| RRP | ResilienceRecoveryProtocol | DEGRADATION → IDEM; resilience and recovery verification for all cycle entry points and inbox handlers | §62l |
+| CCP | CompatibilityContinuityProtocol | BCP → AGN; backwards-compatibility and agnosticism verification for all CLI commands and state keys | §62l |
+| OVP | ObservabilityVerificationProtocol | OBS → SEC; observability coverage and security verification for all mutations and external I/O | §62l |
+| PRVS | ProductionReleaseVerificationSuite | FRVS → DQP → RRP → CCP → OVP; five-component ordered production release gate | §62l |
+| RGG | ReleaseGovernanceGate | PRVS → DecisionRecord authorization → version increment; governance checkpoint for stable releases | §62l |
+| LCG | LifecycleChangeGate | RGG → AuthorityClosureInvariant → state coherence; highest-order gate for all lifecycle changes | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -11333,6 +11446,13 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 | CWP | CycleWiringProtocol | FOUNDATIONAL | true |
 | RBP | ResourceBudgetProtocol | INTEGRATED | false |
 | EIP | ExternalInterfaceProtocol | COMPOSITIONAL | false |
+| DQP | DesignQualityProtocol | INTEGRATED | false |
+| RRP | ResilienceRecoveryProtocol | INTEGRATED | false |
+| CCP | CompatibilityContinuityProtocol | INTEGRATED | false |
+| OVP | ObservabilityVerificationProtocol | INTEGRATED | false |
+| PRVS | ProductionReleaseVerificationSuite | COMPOSITIONAL | false |
+| RGG | ReleaseGovernanceGate | COMPOSITIONAL | false |
+| LCG | LifecycleChangeGate | COMPOSITIONAL | false |
 
 ### Mechanisms (§62c)
 
@@ -13796,6 +13916,13 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `clialignment` | CLIAlignmentProtocol §62l construct (CAP), FRVS pass 10, §62k command known-command+handler+flag verification |
 | `cyclewiring` | CycleWiringProtocol §62l construct (CWP), FRVS pass 11, §62c mechanism cycle() call-site and ordering verification |
 | `externalinterface` | ExternalInterfaceProtocol §62l construct (EIP), machine I/O contract, urace api command, --input-json, §62w External Interface Protocol |
+| `dqp` | DesignQualityProtocol | §62l |
+| `rrp` | ResilienceRecoveryProtocol | §62l |
+| `ccp` | CompatibilityContinuityProtocol | §62l |
+| `ovp` | ObservabilityVerificationProtocol | §62l |
+| `prvs` | ProductionReleaseVerificationSuite | §62l |
+| `rgg` | ReleaseGovernanceGate | §62l |
+| `lcg` | LifecycleChangeGate | §62l |
 
 ## Audit Content
 

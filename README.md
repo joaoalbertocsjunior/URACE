@@ -52,14 +52,14 @@ An **Executor** is any capable runtime URACE can delegate to: an LLM, AI agent, 
 ```text
 urace /auto             run persistent evolution
 urace /pause or /resume suspend or resume the lifecycle
-urace <freeform-text>   describe any task, goal, intent, or constraint in plain language
+urace "<freeform-text>" describe any task, goal, intent, or constraint in plain language
 urace /help             explore commands and reference
 urace /update           guided update sequence
 ```
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Plain text** — the Executor maps your input to any task, goal, intent, constraint, or command — each confirmed individually. Contradictory inputs surface as alternatives.
+**Plain text** — quote multi-word input: `urace "improve onboarding flow"`. The Executor maps your input to any task, goal, intent, constraint, or command — each confirmed individually. Contradictory inputs surface as alternatives. Use `urace add context|goal|source|metric|vital|evidence` to queue structured records directly, no Executor needed.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
