@@ -40,9 +40,9 @@ An **Executor** is any capable runtime URACE can delegate to: an LLM, AI agent, 
 
 ## Get Running
 
-1. Give [`URACE.md`](URACE.md) to a capable Executor — with access to an existing Product, or into an empty folder if the Product is being built from scratch.
+1. Give [`URACE.md`](URACE.md) to a capable Executor.
 2. Say **"Bootstrap."**
-3. Onboard your product(s) using `urace /onboard` — run `urace /onboard help` for a step-by-step guide, then `urace /onboard confirm` to activate the lifecycle.
+3. Run `urace /onboard confirm` to activate the lifecycle. Use `urace /help onboard` for a step-by-step guide.
 4. Follow the setup to define the outcome, delegation and protected boundaries.
 
 `URACE.md` is the only required bootstrap document. Setup keeps system files under `urace/` and activates a `urace` command through an environment-appropriate launcher. Product files can be at any path — URACE is agnostic to folder structure. If bootstrap was interrupted, run `urace /check` before issuing any commands.
@@ -52,29 +52,24 @@ An **Executor** is any capable runtime URACE can delegate to: an LLM, AI agent, 
 ```text
 urace /auto             run persistent evolution
 urace /pause or /resume suspend or resume the lifecycle
-urace <freeform-text>   describe goals, intents, and constraints in plain language
+urace <freeform-text>   describe any task, goal, intent, or constraint in plain language
 urace /help             explore commands and reference
 urace /update           guided update sequence
-urace /product list     list registered Products; /product switch <name> to change active
-urace /fleet run        run all registered Products in parallel
-urace /inbox list       inspect and act on community patch proposals
-urace /onboard status   inspect or confirm the Product Onboard Phase
-urace /resource status  view budget, spend, and ROI for the active Product
 ```
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Plain text** — the Executor maps your input to goals, intents, constraints, and commands — each confirmed individually. Contradictory inputs surface as alternatives.
+**Plain text** — the Executor maps your input to any task, goal, intent, constraint, or command — each confirmed individually. Contradictory inputs surface as alternatives.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference. Shared options including `--dry-run`, `--json`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Update Safely
 
-Run `urace /update` — it guides you through the full update sequence safely. Pass `--opt-in-constructs AP8,AP14` to limit which constructs or patterns the update applies to. Use `@community-inbox` (or any bundle name prefixed with `@`) as a shorthand to scope the update to a named feature bundle. Use `urace /help update` for details.
+Run `urace /update` for the guided update sequence. Use `urace /help update` for options including `--opt-in-constructs` and `@bundle-name` scoping.
 
 ## See Progress
 
-Inspect metrics, vitals and scores with `urace /check`, `urace /vitals` and `urace /change list`. Drill into state with `urace /evidence list`, `urace /blocker list`, `urace /decision list`, `urace /trace list`, and `urace /feedback list`. Track budget, spend, and ROI with `urace /resource status` and `urace /resource report`. All list commands support `--since`, `--until`, `--limit`, `--offset`, and `--json`.
+Inspect metrics, vitals, state, and resource usage with `urace /check`, `urace /vitals`, `urace /change list`, and `urace /resource status`. Use `urace /help <command>` for filtering and output options on any command.
 
 ## Inspect and Modify Context
 
