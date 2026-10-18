@@ -42,9 +42,10 @@ An **Executor** is any capable runtime URACE can delegate to: an LLM, AI agent, 
 
 1. Give [`URACE.md`](URACE.md) to a capable Executor — with access to an existing Product, or into an empty folder if the Product is being built from scratch.
 2. Say **"Bootstrap."**
-3. Follow the setup to define the outcome, delegation and protected boundaries.
+3. Onboard your product(s) using `urace /onboard` — run `urace /onboard help` for a step-by-step guide, then `urace /onboard confirm` to activate the lifecycle.
+4. Follow the setup to define the outcome, delegation and protected boundaries.
 
-`URACE.md` is the only required bootstrap document. Setup validates the result, keeps system files under `urace/`, and activates a `urace` command in the Product folder through an environment-appropriate launcher. Product files can be at any path — subdirectory, sibling folder, absolute path — URACE is agnostic to folder structure. Run `urace /onboard help` at any time for a step-by-step guide. If bootstrapping into an empty folder, place or build the Product first, then run `urace /onboard confirm` to complete the onboard phase and activate the lifecycle. If bootstrap was interrupted, run `urace /check` before issuing any commands.
+`URACE.md` is the only required bootstrap document. Setup keeps system files under `urace/` and activates a `urace` command through an environment-appropriate launcher. Product files can be at any path — URACE is agnostic to folder structure. If bootstrap was interrupted, run `urace /check` before issuing any commands.
 
 ## Use It
 
@@ -58,6 +59,7 @@ urace /product list     list registered Products; /product switch <name> to chan
 urace /fleet run        run all registered Products in parallel
 urace /inbox list       inspect and act on community patch proposals
 urace /onboard status   inspect or confirm the Product Onboard Phase
+urace /resource status  view budget, spend, and ROI for the active Product
 ```
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
@@ -72,7 +74,7 @@ Run `urace /update` — it guides you through the full update sequence safely. P
 
 ## See Progress
 
-Inspect metrics, vitals and scores with `urace /check`, `urace /vitals` and `urace /change list`. Drill into state with `urace /evidence list`, `urace /blocker list`, `urace /decision list`, `urace /trace list`, and `urace /feedback list`. All list commands support `--since`, `--until`, `--limit`, `--offset`, and `--json`.
+Inspect metrics, vitals and scores with `urace /check`, `urace /vitals` and `urace /change list`. Drill into state with `urace /evidence list`, `urace /blocker list`, `urace /decision list`, `urace /trace list`, and `urace /feedback list`. Track budget, spend, and ROI with `urace /resource status` and `urace /resource report`. All list commands support `--since`, `--until`, `--limit`, `--offset`, and `--json`.
 
 ## Inspect and Modify Context
 
