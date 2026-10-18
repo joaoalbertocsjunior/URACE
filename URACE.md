@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r85**
+**Specification version: 2026-10-17-r86**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -9397,6 +9397,37 @@ A `DerivedSystemManifest` MUST conform to the `DerivedSystemManifest` citizen sc
 
 A derived system's compliance obligation is exactly: **every adopted pattern's normative requirements apply; no unadopted pattern's normative requirements apply.** This is the complete and closed contract.
 
+## urace update
+
+```
+urace update [download|explain|apply|resolve]
+             [<reference>]
+             [--opt-in-constructs <comma-list>]
+             [--decision <text>]
+             [--json]
+```
+
+**Subcommands:**
+
+**`update` (no action)** — orchestrated update sequence: runs `download` then `explain`, prompts for operator confirmation, then runs `apply`. Use for guided interactive upgrades. Passes `--opt-in-constructs` through to both phases.
+
+**`update download [<reference>]`** — downloads a candidate spec update from `<reference>` (URL, local path, or hash prefix). Stores the candidate locally. Surfaces new-construct suggestions and construct update detection for any saved manifest or bundle refs (§62j). `--json` emits download receipt with `candidate_path`, `spec_version`, suggestions, and stale-manifest warnings.
+
+**`update explain [<reference>]`** — compares the accepted spec against the candidate. Emits an annotated diff report: sections outside `--opt-in-constructs` scope are marked `[not in opt-in scope]`; opted-in APs are listed as `opted_in_patterns_affected`. `--json` emits structured diff with `opted_in_patterns_affected`, `sections_changed`, and a `safe_to_apply` assessment.
+
+**`update apply [<reference>]`** — applies the candidate update. Sections outside `--opt-in-constructs` scope are preserved verbatim. After apply, `state.derived_manifest_refs` and `state.feature_bundle_refs` are checked for staleness (§62j); stale refs surface `derived-manifest-stale` / `derived-construct-set-stale` warnings. Exit 0 on success; exit 1 on conflict requiring `--decision`. `--json` emits apply receipt with `applied_version`, `sections_modified`, and any stale warnings.
+
+**`update resolve`** — resolves a checkpointed update conflict. `--decision <text>` is required; the decision is recorded as a DecisionRecord before re-attempting apply.
+
+**Key flags:**
+- `--opt-in-constructs <comma-list>` — limit scope to specific AP IDs, construct IDs, or `@bundle-name` shortcuts. Default: all. See `urace update --opt-in-constructs` Contract below.
+- `--decision <text>` — required for `resolve`; attributable operator decision stored as DecisionRecord.
+- `--json` — machine-readable output for all subcommands.
+
+**`update help`** — SD=True; prints a guide for the update workflow.
+
+**Implements:** `urace /update` lifecycle command (§62k). Uses: `urace derive --refresh` for manifest refresh after apply (§62j).
+
 ## `urace update --opt-in-constructs` Contract
 
 The `--opt-in-constructs <comma-list>` flag (also accepted as `--opt-in-patterns` for backward compatibility) is available on all `urace update` subcommands and on the orchestrated `urace update` (no action). Its default is absent — meaning the update applies to all constructs and patterns. Accepted values: AP IDs (e.g. AP8,AP14), construct IDs (e.g. QSM,GoalRecord), and bundle names prefixed with `@` (e.g. `@community-inbox`) may be mixed freely. A `@bundle-name` value is resolved to its full `construct_ids` list before processing; unknown bundle names produce an error.
@@ -9496,19 +9527,19 @@ Applies to: `compact`, `update` (shows what changes would be applied without com
 
 Filter output to records created or updated at or after this ISO-8601 timestamp.
 
-Applies to: `vitals`, `rules`, `change`, `evidence list`, `decision list`, `blocker list`
+Applies to: `vitals`, `rules`, `change`, `evidence list`, `decision list`, `blocker list`, `resource report`
 
 ## --until
 
 Filter output to records created or updated at or before this ISO-8601 timestamp.
 
-Applies to: `vitals`, `rules`, `change`, `evidence list`, `decision list`
+Applies to: `vitals`, `rules`, `change`, `evidence list`, `decision list`, `resource report`
 
 ## --limit
 
 Integer. Limit output to the N most-recent records. Default varies by command (see Defaults Table below).
 
-Applies to: `vitals`, `rules`, `change`, `why`, `evidence list`, `decision list`, `blocker list`, `goal list`
+Applies to: `vitals`, `rules`, `change`, `why`, `evidence list`, `decision list`, `blocker list`, `goal list`, `resource report`
 
 ## --offset
 
@@ -9760,9 +9791,15 @@ urace trace inspect <trace-id> [--json]
 
 **`trace help`** — prints a guide for trace log inspection and filtering. SD=True. `--json` emits `{schema_version, guide}`.
 
+## urace schema
+
 **`schema list`** — lists all registered OutputSchema entries from the OutputSchemaRegistry (§62l). Returns command name, schema_version, stable_since. SD=True. Implements InspectionContract (§62l). `--json` emits `{schema_version, schemas: [...]}`.
 
 **`schema inspect <command>`** — returns the full OutputSchema for the named command including all declared stable fields. Exits 1 if command not found. SD=True. Implements InspectionContract (§62l). `--json` emits schema object.
+
+**Implements:** OutputSchemaRegistry (§62l), InspectionContract (§62l).
+
+## urace feedback
 
 **`feedback submit <target_id>`** — submits an OutcomeFeedbackRecord (§62b) for the given Objective (obj-) or DecisionRecord (dec-). Required: `--signal <POSITIVE|NEGATIVE|NEUTRAL>`. Optional: `--evidence <ev-id>`, `--detail <text>`. Validates target_id prefix. Exits 1 if target_id does not start with obj- or dec-. `--json` emits the created OutcomeFeedbackRecord. Uses OutcomeFeedbackContract (§62l).
 
@@ -9770,19 +9807,25 @@ urace trace inspect <trace-id> [--json]
 
 **`feedback help`** — prints a guide for outcome feedback submission and closed-loop interpretation. SD=True. `--json` emits `{schema_version, guide}`.
 
+**Implements:** OutcomeFeedbackContract (§62l), InspectionContract (§62l). Uses: OutcomeFeedbackRecord (§62b), FeedbackAccumulator (§62c). See §62u Closed-Loop Outcome Feedback.
+
+## urace resource
+
 **`resource status`** — returns current period budget utilization. SD=True. `--json` emits `{schema_version, period_start, executor_calls, time_hours, total_cost, roi, gaps}`. Implements ResourceBudgetProtocol (§62l).
 
-**`resource report`** — returns ROISnapshots in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--since <ISO>`, `--until <ISO>`, `--limit N` (default 20), `--offset M` (default 0), `--json` emits `{schema_version, snapshots, total}`.
+**`resource report`** — returns ROISnapshots in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--since <ISO>`, `--until <ISO>`, `--limit N` (default 20), `--offset M` (default 0). `--json` emits `{schema_version, snapshots, total}`.
 
 **`resource help`** — prints step-by-step guide for resource budget configuration and ROI interpretation. SD=True. `--json` emits `{schema_version, guide}`.
+
+**Implements:** ResourceBudgetProtocol (§62l), InspectionContract (§62l). Uses: ProductBudget (§62b), ResourceEntry (§62b), ROISnapshot (§62b). See §62v Resource Budget Protocol.
 
 ---
 
 # 62l. Shared Reuse Contracts
 
-This section defines thirty-four named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
+This section defines thirty-five named protocols, invariants, canonical clusters, and catalogs that are referenced throughout the spec. Each construct is defined once here. All sections that use these constructs MUST cite them by name rather than restating their content inline.
 
-**Enforcement contract (§62l).** All thirty-four constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-two constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, and ResourceBudgetProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
+**Enforcement contract (§62l).** All thirty-five constructs defined in this section MUST be enforced at runtime by any conforming implementation. The nine explicitly mandated enforcement clauses are: (1) every IntegrityGap emission MUST validate the kind against the IntegrityGapCatalog before appending; (2) the `urace check` output MUST conform to the InspectionSurface schema (11 required categories); (3) all citizens that declare GoverningRecord conformance MUST have `authority_basis`, `scope`, and `established_at` enforced; (4) all citizens that declare GoverningRecord conformance that also use TemporalFields MUST validate timestamp fields as non-empty ISO-8601 strings; (5) all handlers that process premise changes MUST use the RevalidationScope trigger mapping to determine revalidation scope; (6) AuthorityClosureInvariant MUST be checked before treating any action as authority-driven; (7) PatternMechanismMapping MUST be the canonical AP-to-section lookup for derivation operations; (8) JustificationContract MUST be evaluated before any consequential lifecycle action is committed; (9) BoundaryContract MUST govern all lifecycle boundary creation, closure, and recovery. The remaining twenty-three constructs — EUP, OGP, CRRP, WRV, CRC_C, CEP, QE, JOIN, PSP, FOP, AuditRecord, LayerModel, OutputSchemaRegistry, OutcomeFeedbackContract, CanonicalStructuralIntegrityAudit, FullReleaseVerificationSuite, BehavioralFidelityProtocol, TestCoverageProtocol, SchemaFieldCompletenessProtocol, ContractImplementationProtocol, CLIAlignmentProtocol, CycleWiringProtocol, and ResourceBudgetProtocol — are procedurally self-enforcing: their behavioral contracts are stated within their respective definitions below and are binding by virtue of this section declaring them as named constructs that all sections MUST cite rather than restate inline. InspectionContract and ObservabilityContract are additionally procedurally self-enforcing as command-level and emission-level contracts respectively. **Construct metadata kind note.** All §62l constructs carry `kind: Protocol` in their construct metadata line. This is the generic §62l-section metadata value. The authoritative semantic classification of each construct (Canonical Cluster, Catalog, Contract, Invariant, Mapping, or Protocol) is given by the catalog column in §62m and by the construct's own definition header.
 
 ---
 
@@ -13571,6 +13614,7 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r86 | 2026-10-18 | spec+runtime | FRVS + DRY + KISS full pass. (1) §62k: `## urace update`, `## urace schema`, `## urace feedback`, `## urace resource` section headers added for §62k command alignment (CAP compliance); `urace update` command syntax section added (download/explain/apply/resolve/help subcommands, `--opt-in-constructs`, `--decision` flags documented). (2) §62k standard options: `resource report` added to `--since`, `--until`, `--limit`, `--offset` applies-to lists. (3) §62l: enforcement contract counts corrected — "thirty-four" → "thirty-five" constructs; "twenty-two" → "twenty-three" self-enforcing constructs (r85 added RBP to list but counts were not updated). (4) Runtime: `_SD_TRUE_EXACT` completed — 8 missing help entries added: inbox/onboard/product/fleet/trace/feedback/update/schema help; `update help` and `schema help` argparse choices and handlers added. (5) DRY: `_help_action()` shared helper extracted (7 help handlers refactored); `change list` and `constraint list` refactored to use `_inspect_list()`. No behavioral changes. 1128 tests pass. **New external references:** `urace update help` command → §62k (this revision); `urace schema help` command → §62k (this revision). |
 | r85 | 2026-10-17 | spec+runtime | Resource Budget Protocol + help subcommands. (1) §62v: new normative section — ResourceBudgetProtocol (RBP). ROI formula V/C where V=α×Δquality+β×Δcapability+γ×Δmetrics and C=executor_calls×cost_per_executor_call+time_hours×hourly_rate. Per-product budget gate (max_cost, max_time_hours, max_executor_calls → BLOCKING), efficiency gate (roi_floor consecutive check → WARNING, cost-without-value trend → WARNING), period-reset INFO. (2) §62b: 3 new citizens: ProductBudget (pbdg-), ResourceEntry (resc-), ROISnapshot (rsnp-). (3) §62c: ResourceAllocationMechanism (RAM, INTEGRATED) added; wired into cycle() after FeedbackAccumulator. (4) Config.product_budget OPTIONAL field added. State.resource_ledger + State.roi_snapshots OPTIONAL non-compactable fields added. (5) §62l: ResourceBudgetProtocol (RBP, INTEGRATED) construct added; Protocol Catalog 29→30. Mechanism Catalog 10→11. Schema Catalog 40→43. §62l count 33→34. (6) IGC: 4 new kinds (product-budget-exceeded BLOCKING, product-roi-below-floor WARNING, product-efficiency-degraded WARNING, product-budget-period-reset INFO); Contract Catalog IGC count 115→119. (7) §62k: `urace resource status/report/help` commands added; `help` action added to product/fleet/inbox/trace/feedback commands. (8) §80: `resourcebudget` stem added. Runtime: `resource` command added to cli.py; help actions added to product/fleet/inbox/trace/feedback; `_run_ram()` implemented and wired into cycle(); 4 IGC kinds added to primitives.py; `resource_ledger` + `roi_snapshots` in initial_state(). Tests: 10 new R85ResourceBudgetTests. **New external references:** `ResourceBudgetProtocol` construct → §62l (this revision); `ProductBudget` schema → §62b (this revision); `ResourceEntry` schema → §62b (this revision); `ROISnapshot` schema → §62b (this revision); `ResourceAllocationMechanism` mechanism → §62c (this revision); `§62v` section → §62v Resource Budget Protocol (this revision); `product-budget-exceeded` IGC kind → §62l (this revision); `product-roi-below-floor` IGC kind → §62l (this revision); `product-efficiency-degraded` IGC kind → §62l (this revision); `product-budget-period-reset` IGC kind → §62l (this revision); `resourcebudget` stem → §80 (this revision); `urace resource status` command → §62k (this revision); `urace resource report` command → §62k (this revision); `urace resource help` command → §62k (this revision) |
 | r84 | 2026-10-17 | spec+runtime+readme | Onboard help + path-agnosticism + heuristic product scan. (1) §62o: Path-agnosticism contract added — `Config.product_files` entries MAY be relative (from bootstrap root) or absolute; URACE MUST NOT assume any folder hierarchy; bootstrap root and Product root need not be the same directory. (2) New `urace onboard help` subcommand (SD=True): prints step-by-step guide covering single-product bootstrap, multi-product registration, path-agnostic product_files, and lifecycle activation; `--json` emits `{guide: string}`. (3) New `urace onboard status --scan` flag: heuristically scans sibling and subdirectory paths for unregistered Products (detects code files and project markers); surfaces each as `onboard-unregistered-product-hint` (INFO) with suggested `urace product register` command; read-only, SD=True. (4) IGC: `onboard-unregistered-product-hint` (INFO, §62o OnboardGate --scan) added; Contract Catalog IGC count 114→115. (5) §62k `urace onboard` section: command fence updated; `onboard help` and `onboard status --scan` descriptions added. (6) README: path-agnosticism note + `urace /onboard help` tip added to Get Running; diagram fixed (PRODUCTS plural, orphaned ▲ removed, two blank │ lines removed). Runtime: argparse `onboard` choices extended to `[status, confirm, help]`; `--scan` flag added; handlers implemented. 5 new R84OnboardHelpScanTests (onboard help exits 0, guide text, JSON output, scan no-hints, scan detects sibling product dir). 1118 tests pass. **New external references:** `urace onboard help` command → §62k (this revision); `onboard-unregistered-product-hint` IGC kind → §62l (this revision). |
 | r83 | 2026-10-17 | spec+runtime | FRVS pass — 3 findings closed. (1) IGC catalog sync (BLOCKING): 35 gap kinds declared in spec §62l but absent from runtime catalog — all 35 added to INTEGRITY_GAP_CATALOG in primitives.py; 1 kind present in runtime (`compaction-blocked-on-anchor-drift`) absent from spec — row added to §62l IGC table; Contract Catalog IGC count corrected 113 → 114. (2) Agnosticism violations (2): §62k Tier-2 routing section heading "Argparse recovery" → "Argument processor recovery"; `argparse` appears twice in that paragraph prose → "argument processor" / "command arguments"; §62l IGC table `unresolved-effects-reconciliation-failure` resolution column contained `_reconcile_unresolved_effects` (Python private fn notation) → "Reconciliation handler". (3) TCP gaps (BLOCKING): r82 introduced CSI lifecycle gate fix and 4 TraceRecord emissions with no tests; added `R82ObservabilityTests` class (7 new tests): CSI DORMANT/BOOTSTRAPPING gate (2 tests), CSI ACTIVE inclusion (1 test), TraceRecord emission for blocker resolve / inbox apply / inbox reject / feedback submit (4 tests). 1113 tests pass. **New external references:** none. |
