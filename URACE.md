@@ -9728,13 +9728,14 @@ urace onboard confirm [--note <text>] [--json]
 
 ## urace product
 
-Manage the Product Registry. SD=True for `list` and `status`. `switch` and `register` mutate Config. Implements ProductSwitchProtocol (§62l). Uses: ProductEntry (§62b), SwitchRecord (§62b), §62p Product Registry.
+Manage the Product Registry. SD=True for `list` and `status`. `switch`, `register`, and `remove` mutate Config. Implements ProductSwitchProtocol (§62l). Uses: ProductEntry (§62b), SwitchRecord (§62b), §62p Product Registry.
 
 ```
 urace product list [--json]
 urace product status [--json]
 urace product switch <name> [--reason <text>] [--json]
 urace product register <name> --state-path <path> [--product-files <f>...] [--intent-purpose <text>] [--json]
+urace product remove <name> [--force] [--json]
 ```
 
 **`product list`** — shows all ProductEntry records in Config.product_registry. Each entry shows: name, status, registered_at, last_active_at (if any), and whether it has an active OnboardRecord. Marks the currently active product with `*`. `--json` emits array of entries.
@@ -9744,6 +9745,8 @@ urace product register <name> --state-path <path> [--product-files <f>...] [--in
 **`product switch <name>`** — applies ProductSwitchProtocol: validates name in registry, appends SwitchRecord, updates Config.active_product, persists Config. Returns 1 if target not in registry or not ACTIVE. After switch, `lifecycle_state` will be set to ONBOARDING on next cycle entry; operator must run `urace onboard confirm` for the new product.
 
 **`product register <name>`** — adds a new ProductEntry to Config.product_registry. `--state-path` is required (where this product's state file will live). `--product-files` accepts one or more file paths. `--intent-purpose` sets the product's intent text. Fails if name already exists in registry. Persists Config.
+
+**`product remove <name>`** — removes a ProductEntry from Config.product_registry. MUST NOT remove the currently active product; attempting to do so emits `product-remove-active-blocked` (BLOCKING) and returns 1. Does NOT delete the state file — only deregisters the entry. `--force` skips the confirmation prompt. Persists Config on success.
 
 **`product help`** — prints a guide for product registration, switching, and multi-product management. SD=True. `--json` emits `{schema_version, guide}`.
 
@@ -10602,6 +10605,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `product-registry-unknown-product` | WARNING | §62c ProductSwitchProtocol | Target product not found in Config.product_registry or has status≠ACTIVE; register or activate it first |
 | `product-switch-pending-onboard` | INFO | §62c ProductSwitchProtocol | Product switch applied; new active product awaits onboard confirmation (`urace onboard confirm`) |
 | `product-registry-duplicate-name` | WARNING | §62b ProductEntry uniqueness contract | Two ProductEntry records share the same name; remove the duplicate before switching |
+| `product-registry-duplicate-state-path` | WARNING | §62p State Isolation Contract | Two ProductEntry records share the same state_path; fix before registering or switching |
+| `product-remove-active-blocked` | BLOCKING | §62k `urace product remove` | Cannot remove the currently active product; switch to a different product first |
 | `fleet-member-crashed` | WARNING | §62l FOP clause 4 | Fleet member process exited unexpectedly; check member logs; orchestrator will attempt restart |
 | `fleet-duplicate-state-path` | BLOCKING | §62l FOP clause 1 | Two fleet members share the same state_path; fix product_registry before starting fleet |
 | `fleet-signal-broadcast-skipped` | INFO | §62l FOP clause 3 | Signal broadcast attempted but member inbox not writable; check file permissions |
@@ -10904,7 +10909,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (119 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (121 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -11307,6 +11312,7 @@ Each ProductEntry MUST declare a unique `state_path`. Two ProductEntry records w
 
 - **register:** Adds ProductEntry to Config.product_registry. Does not create the state file (created on `urace init` or first `urace auto` for that product).
 - **switch:** Applies PSP; sets Config.active_product; triggers re-onboard.
+- **remove:** Removes ProductEntry from Config.product_registry. Blocked if the named product is currently active (`product-remove-active-blocked` BLOCKING). Does not delete the state file.
 - **archive:** (future) Sets ProductEntry.status = ARCHIVED; prevents switching to archived products.
 
 **Implements:** ProductSwitchProtocol (§62l).
