@@ -9485,7 +9485,7 @@ Options defined here apply across all commands that accept them. Per-command spe
 
 Emit output as a machine-readable JSON document (or JSON Lines for streaming commands such as `auto`). Human-readable output is suppressed. Exit codes are unaffected.
 
-Applies to: `check`, `vitals`, `change`, `configuration`, `self-evolution`, `commands`, `inbox`, `derive`, `context`, `intent`, `constraint`, `rules`, `source`, `metric`, `vital`, `goal`, `policy`, `budget`, `evaluation`, `report`, `update`, `plan`, `pause`, `resume`, `compact`, `decompact`, `amend`, `why`, `quality`, `crc`, `auto`
+Applies to: `add`, `add-context`, `add-goal`, `add-metric`, `add-source`, `add-vital`, `amend`, `auto`, `autonomous`, `blocker`, `budget`, `change`, `check`, `commands`, `compact`, `compliance`, `configuration`, `constraint`, `context`, `crc`, `decision`, `decompact`, `derive`, `evaluation`, `evidence`, `executor`, `feedback`, `fleet`, `goal`, `govern`, `help`, `inbox`, `integrity-signal`, `intent`, `metric`, `milestone`, `onboard`, `plan`, `policy`, `pause`, `product`, `quality`, `report`, `resource`, `resume`, `rules`, `schema`, `self-evolution`, `source`, `trace`, `update`, `vital`, `vitals`, `why`
 
 ## --scope
 
@@ -9728,7 +9728,7 @@ urace onboard confirm [--note <text>] [--json]
 
 ## urace product
 
-Manage the Product Registry. SD=True for `list` and `status`. `switch`, `register`, and `remove` mutate Config. Implements ProductSwitchProtocol (§62l). Uses: ProductEntry (§62b), SwitchRecord (§62b), §62p Product Registry.
+Manage the Product Registry. SD=True for `list` and `status`. `switch`, `register`, `remove`, `activate`, and `deactivate` mutate Config. Implements ProductSwitchProtocol (§62l). Uses: ProductEntry (§62b), SwitchRecord (§62b), §62p Product Registry.
 
 ```
 urace product list [--json]
@@ -9736,6 +9736,8 @@ urace product status [--json]
 urace product switch <name> [--reason <text>] [--json]
 urace product register <name> --state-path <path> [--product-files <f>...] [--intent-purpose <text>] [--json]
 urace product remove <name> [--force] [--json]
+urace product deactivate <name> [--json]
+urace product activate <name> [--json]
 ```
 
 **`product list`** — shows all ProductEntry records in Config.product_registry. Each entry shows: name, status, registered_at, last_active_at (if any), and whether it has an active OnboardRecord. Marks the currently active product with `*`. `--json` emits array of entries.
@@ -9747,6 +9749,10 @@ urace product remove <name> [--force] [--json]
 **`product register <name>`** — adds a new ProductEntry to Config.product_registry. `--state-path` is required (where this product's state file will live). `--product-files` accepts one or more file paths. `--intent-purpose` sets the product's intent text. Fails if name already exists in registry. Persists Config.
 
 **`product remove <name>`** — removes a ProductEntry from Config.product_registry. MUST NOT remove the currently active product; attempting to do so emits `product-remove-active-blocked` (BLOCKING) and returns 1. Does NOT delete the state file — only deregisters the entry. `--force` skips the confirmation prompt. Persists Config on success.
+
+**`product deactivate <name>`** — sets ProductEntry.status to INACTIVE. INACTIVE products cannot be switched to (`product-registry-unknown-product` WARNING on switch attempt). MUST NOT deactivate the currently active product; attempting to do so emits `product-deactivate-active-blocked` (BLOCKING) and returns 1. Persists Config.
+
+**`product activate <name>`** — sets ProductEntry.status to ACTIVE, re-enabling the product for switching. Persists Config.
 
 **`product help`** — prints a guide for product registration, switching, and multi-product management. SD=True. `--json` emits `{schema_version, guide}`.
 
@@ -10607,6 +10613,7 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `product-registry-duplicate-name` | WARNING | §62b ProductEntry uniqueness contract | Two ProductEntry records share the same name; remove the duplicate before switching |
 | `product-registry-duplicate-state-path` | WARNING | §62p State Isolation Contract | Two ProductEntry records share the same state_path; fix before registering or switching |
 | `product-remove-active-blocked` | BLOCKING | §62k `urace product remove` | Cannot remove the currently active product; switch to a different product first |
+| `product-deactivate-active-blocked` | BLOCKING | §62k `urace product deactivate` | Cannot deactivate the currently active product; switch to a different product first |
 | `fleet-member-crashed` | WARNING | §62l FOP clause 4 | Fleet member process exited unexpectedly; check member logs; orchestrator will attempt restart |
 | `fleet-duplicate-state-path` | BLOCKING | §62l FOP clause 1 | Two fleet members share the same state_path; fix product_registry before starting fleet |
 | `fleet-signal-broadcast-skipped` | INFO | §62l FOP clause 3 | Signal broadcast attempted but member inbox not writable; check file permissions |
@@ -10909,7 +10916,7 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 | ID | Name | Provides | Spec |
 |---|---|---|---|
 | GRC | GoverningRecord | governance provenance, authority-basis traceability | §62l |
-| IGC | IntegrityGapCatalog | named gap vocabulary (121 kinds), canonical severity | §62l |
+| IGC | IntegrityGapCatalog | named gap vocabulary (122 kinds), canonical severity | §62l |
 | ISC | InspectionSurface | structured health output (11 categories) | §62l |
 | ACI | AuthorityClosureInvariant | non-authority source enumeration, closure check | §62l |
 | RVS | RevalidationScope | trigger-to-scope mapping, minimum revalidation contract | §62l |
@@ -11311,8 +11318,10 @@ Each ProductEntry MUST declare a unique `state_path`. Two ProductEntry records w
 ## Registry Lifecycle
 
 - **register:** Adds ProductEntry to Config.product_registry. Does not create the state file (created on `urace init` or first `urace auto` for that product).
-- **switch:** Applies PSP; sets Config.active_product; triggers re-onboard.
+- **switch:** Applies PSP; sets Config.active_product; triggers re-onboard. Blocked for INACTIVE or ARCHIVED products.
 - **remove:** Removes ProductEntry from Config.product_registry. Blocked if the named product is currently active (`product-remove-active-blocked` BLOCKING). Does not delete the state file.
+- **deactivate:** Sets ProductEntry.status = INACTIVE. Blocked if the named product is currently active (`product-deactivate-active-blocked` BLOCKING). INACTIVE products cannot be switched to.
+- **activate:** Sets ProductEntry.status = ACTIVE. Re-enables an INACTIVE product for switching.
 - **archive:** (future) Sets ProductEntry.status = ARCHIVED; prevents switching to archived products.
 
 **Implements:** ProductSwitchProtocol (§62l).
