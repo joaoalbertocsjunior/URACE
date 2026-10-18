@@ -2671,7 +2671,7 @@ URACE MUST NOT silently rewrite a baseline or achieved result. Changes to measur
 
 Follow-up frequency MUST be proportionate to the rate at which meaningful change can occur, decision value, cost and risk. “Continuous” means that every material accepted increment retains a defined path to the next observation or decision; it does not require constant polling or prevent valid dormancy.
 
-When a configured observation source for an established `ProgressProfile` measure becomes permanently unavailable after its baseline has been recorded, URACE MUST preserve the last observed value, observation time and source identifier as `LAST_KNOWN_GOOD` state, MUST surface the source unavailability as a named observation gap in the progress profile, and MUST NOT treat the absence of a new observation as a zero-value observation or as a regression against the baseline. Permanent measure unavailability does not by itself terminate the governing Objective or trigger a goal revision; it surfaces a specific measurement gap that requires an authorized lifecycle operation — such as `urace add-goal` with an updated `observationMethod` — to establish a replacement measure with a new, explicitly attributed baseline. Until a replacement measure is authorized and established, the Objective status MUST reflect the observation gap rather than an inferred trend derived from the last known value alone.
+When a configured observation source for an established `ProgressProfile` measure becomes permanently unavailable after its baseline has been recorded, URACE MUST preserve the last observed value, observation time and source identifier as `LAST_KNOWN_GOOD` state, MUST surface the source unavailability as a named observation gap in the progress profile, and MUST NOT treat the absence of a new observation as a zero-value observation or as a regression against the baseline. Permanent measure unavailability does not by itself terminate the governing Objective or trigger a goal revision; it surfaces a specific measurement gap that requires an authorized lifecycle operation — such as `urace declare goal` with an updated `observationMethod` — to establish a replacement measure with a new, explicitly attributed baseline. Until a replacement measure is authorized and established, the Objective status MUST reflect the observation gap rather than an inferred trend derived from the last known value alone.
 
 ## Autonomous Operational Feedback
 
@@ -3102,7 +3102,7 @@ The runtime accepts free-form text and direct commands through a single top-leve
 
 **Mixed input.** When free-form text contains both `/command` references and lifecycle-item descriptions, the Executor's ClassificationBatch MAY include `command`-type items alongside `goal`, `intent`, and `constraint` items. A `command`-type item's `parameters` MUST include a `command` field naming the lifecycle operation and an optional `args` list. The runtime executes command-type items in order, interleaved with the confirmation flow for lifecycle items.
 
-**Executor unavailability.** When the Executor is unavailable or over budget, Universal Input MUST NOT attempt heuristic classification. It MUST inform the operator and direct them to the `/`-prefixed direct commands (`urace /add-goal`, `urace /intent add`, `urace /constraint add`).
+**Executor unavailability.** When the Executor is unavailable or over budget, Universal Input MUST NOT attempt heuristic classification. It MUST inform the operator and direct them to the `/`-prefixed direct commands (`urace /declare goal`, `urace /intent add`, `urace /constraint add`).
 
 **No flag override.** Free-form input accepts only the text argument. There is no type-selection flag; direct commands using `/` serve that purpose. There is no confirmation-skip flag; interactive confirmation is always required for lifecycle items.
 
@@ -9497,11 +9497,7 @@ All available `urace` commands, in priority order. SD=True means no Executor inv
 | `check` | evaluate lifecycle health (IntegrityGaps, gates) | Yes |
 | `vitals` | show progress, credit usage, and lifecycle health | Yes |
 | `add` | classify free text as goal, intent, or constraint via Executor | No |
-| `add-context` | durably queue authoritative context for the next cycle | Yes |
-| `add-goal` | durably queue a Product or URACE goal | Yes |
-| `add-source` | queue an external metric or Evidence connector | Yes |
-| `add-metric` | queue a metric mapping onto a connector | Yes |
-| `add-vital` | queue a direct or ratio vital | Yes |
+| `declare` | directly queue a typed record (context/goal/source/metric/vital) without Executor | Yes |
 | `constraint` | add or manage PROHIBITION/PERMISSION rules | No |
 | `intent` | add or manage DIRECTIVE rules | No |
 | `goal` | inspect, forecast, or manage goals | Yes |
@@ -9532,6 +9528,11 @@ All available `urace` commands, in priority order. SD=True means no Executor inv
 | `self-evolution` | inspect or configure self-evolution policy | Yes |
 | `executor` | inspect, attach, or detach the configured Executor | Yes |
 | `executor-capacity` * | defer or clear Executor capacity | No |
+| `add-context` * | deprecated alias for `declare context` | Yes |
+| `add-goal` * | deprecated alias for `declare goal` | Yes |
+| `add-source` * | deprecated alias for `declare source` | Yes |
+| `add-metric` * | deprecated alias for `declare metric` | Yes |
+| `add-vital` * | deprecated alias for `declare vital` | Yes |
 | `api` | machine interface: call/batch/watch/version for external tools (EIP §62w) | Partial |
 | `feedback` | submit or list outcome feedback | Partial |
 | `schema` | inspect output schema registry | Yes |
@@ -9554,7 +9555,7 @@ All available `urace` commands, in priority order. SD=True means no Executor inv
 
 Emit output as a machine-readable JSON document (or JSON Lines for streaming commands such as `auto`). Human-readable output is suppressed. Exit codes are unaffected.
 
-Applies to: `add`, `add-context`, `add-goal`, `add-metric`, `add-source`, `add-vital`, `amend`, `auto`, `autonomous`, `blocker`, `budget`, `change`, `check`, `commands`, `compact`, `compliance`, `configuration`, `constraint`, `context`, `crc`, `decision`, `decompact`, `derive`, `evaluation`, `evidence`, `executor`, `feedback`, `fleet`, `goal`, `govern`, `help`, `inbox`, `integrity-signal`, `intent`, `metric`, `milestone`, `onboard`, `plan`, `policy`, `pause`, `product`, `quality`, `report`, `resource`, `resume`, `rules`, `schema`, `self-evolution`, `source`, `trace`, `update`, `vital`, `vitals`, `why`
+Applies to: `add`, `declare`, `amend`, `auto`, `autonomous`, `blocker`, `budget`, `change`, `check`, `commands`, `compact`, `compliance`, `configuration`, `constraint`, `context`, `crc`, `decision`, `decompact`, `derive`, `evaluation`, `evidence`, `executor`, `feedback`, `fleet`, `goal`, `govern`, `help`, `inbox`, `integrity-signal`, `intent`, `metric`, `milestone`, `onboard`, `plan`, `policy`, `pause`, `product`, `quality`, `report`, `resource`, `resume`, `rules`, `schema`, `self-evolution`, `source`, `trace`, `update`, `vital`, `vitals`, `why`
 
 ## --scope
 
@@ -9566,7 +9567,7 @@ Applies to: `intent`, `constraint`, `rules`
 
 Integer priority weight. Higher values indicate higher scheduling priority.
 
-Applies to: `add-goal` (default: 70), `executor` (default: 100), `goal`
+Applies to: `declare goal` (default: 70), `executor` (default: 100), `goal`
 
 ## --kind
 
@@ -9584,7 +9585,7 @@ Applies to: `intent` (rule ID for supersede/deactivate), `constraint` (rule ID f
 
 String identifying the origin of input. Semantics are command-local.
 
-Applies to: `add-context` (default: `repository owner`), `add-metric` (REQUIRED — metric source name)
+Applies to: `declare context` (default: `repository owner`), `declare metric` (REQUIRED — metric source name)
 
 ## --dry-run
 
@@ -9736,8 +9737,8 @@ List IntegritySignal records. Supports filtering by signal_type and severity. De
 | Command | Option | Default |
 |---|---|---|
 | `derive` | `--kind` | `AP` (all architectural patterns) |
-| `metric add` | `--direction` | `nondecreasing` |
-| `goal add` | `--priority` | 70 |
+| `declare metric` | `--direction` | `nondecreasing` |
+| `declare goal` | `--priority` | 70 |
 | `executor` | `--id` | `codex-primary` |
 | `compact` | `--dry-run` | false |
 | `auto` | `--verbose` | false |
@@ -9951,74 +9952,38 @@ Routes `<text>` to the Executor for classification. The Executor returns a Class
 
 `--json` emits `{"status": "classified", "text": <str>, "queued": [<kind> <id>, ...]}`.
 
-## urace add-context
+## urace declare
 
-Durably queue authoritative context text for the next cycle. SD=True; no Executor required.
-
-```
-urace add-context <text> [--source <label>] [--json]
-```
-
-Writes directly to the Durable Inbox (AP14) via `queue_input`. Context is applied at the next cycle boundary or lifecycle restart. `<text>` MUST be 20,000 characters or fewer. `--source` labels the origin of the context (default: `repository owner`). No Executor invocation. Uses: Durable Inbox (§62c), AP14.
-
-`--json` emits `{"status": "queued", "id": <str>, "text": <str>, "source": <str>}`.
-
-## urace add-goal
-
-Durably queue a structured Product or URACE goal. SD=True; no Executor required.
+Directly queue a typed structured record to the Durable Inbox (AP14). SD=True; no Executor required. All subcommands write immediately to State; records are applied at the next cycle boundary or lifecycle restart.
 
 ```
-urace add-goal <title> --success-measure <text> --reason <text> [--target <text>]
+urace declare context <text> [--source <label>] [--json]
+urace declare goal <title> --success-measure <text> --reason <text> [--target <text>]
                [--priority N] [--expected-value F] [--estimated-cost F] [--risk F] [--urgency F]
                [--necessity-evidence <text>] [--lower-impact-insufficient]
                [--depends-on <id>...] [--deadline <ISO>] [--not-before <ISO>]
                [--estimate-min-hours N] [--estimate-max-hours N] [--estimate-confidence low|medium|high]
                [--priority-floor N] [--priority-ceiling N] [--pin]
                [--json]
-```
-
-Writes a structured goal payload directly to the Durable Inbox (AP14) via `queue_input`. No Executor invocation. Float parameters (`--expected-value`, `--estimated-cost`, `--risk`, `--urgency`) MUST be in [0.0, 1.0]. `--estimate-min-hours` MUST be ≤ `--estimate-max-hours`. `--deadline` and `--not-before` MUST be valid ISO-8601 date/time strings. Uses: Durable Inbox (§62c), AP14.
-
-`--json` emits `{"status": "queued", "id": <str>, "kind": "goal", "title": <str>}`.
-
-## urace add-source
-
-Queue an external metric or Evidence connector source. SD=True; no Executor required.
-
-```
-urace add-source <id> --kind <source-kind> --location <path-or-url> [--visibility private|public]
+urace declare source <id> --kind <source-kind> --location <path-or-url> [--visibility private|public]
                  [--credential-env <env-var>] [--json]
-```
-
-Writes a source connector payload directly to the Durable Inbox (AP14) via `queue_input`. `--kind` discriminates the connector type (e.g., `github_repository`). `--location` is a path or URL; for `github_repository`, the `--location` value is stored under the `repository` key. `--credential-env` specifies an environment variable name holding the credential (no secrets stored in State). Uses: Durable Inbox (§62c), AP14.
-
-`--json` emits `{"status": "queued", "id": <str>, "id_arg": <str>, "kind": <str>}`.
-
-## urace add-metric
-
-Queue a metric definition mapped onto a connector source. SD=True; no Executor required.
-
-```
-urace add-metric <name> --source <source-id> --path <json-path>
+urace declare metric <name> --source <source-id> --path <json-path>
                  [--direction nondecreasing|nonincreasing] [--target F] [--json]
-```
-
-Writes a metric definition payload directly to the Durable Inbox (AP14) via `queue_input`. `--source` MUST reference a registered source connector. `--path` is the JSON path expression extracting the metric value from the source response. `--direction` defaults to `nondecreasing`. Uses: Durable Inbox (§62c), AP14.
-
-`--json` emits `{"status": "queued", "id": <str>, "name": <str>, "source": <str>}`.
-
-## urace add-vital
-
-Queue a direct or ratio vital definition. SD=True; no Executor required.
-
-```
-urace add-vital <name> --numerator <metric-id> [--denominator <metric-id>]
+urace declare vital <name> --numerator <metric-id> [--denominator <metric-id>]
                 [--window <duration>] [--description <text>] [--json]
 ```
 
-Writes a vital definition payload directly to the Durable Inbox (AP14) via `queue_input`. A vital without `--denominator` is a direct vital (raw value). A vital with `--denominator` is a ratio vital (numerator ÷ denominator). `--window` is a duration string (e.g., `7d`, `1h`). Uses: Durable Inbox (§62c), AP14.
+**`declare context`** — queue authoritative context text. `<text>` MUST be 20,000 characters or fewer. `--source` labels the origin (default: `repository owner`). `--json` emits `{"status": "queued", "id": <str>, "text": <str>, "source": <str>}`.
 
-`--json` emits `{"status": "queued", "id": <str>, "name": <str>}`.
+**`declare goal`** — queue a structured Product or URACE goal. Float parameters (`--expected-value`, `--estimated-cost`, `--risk`, `--urgency`) MUST be in [0.0, 1.0]. `--estimate-min-hours` MUST be ≤ `--estimate-max-hours`. `--deadline` and `--not-before` MUST be valid ISO-8601 strings. `--json` emits `{"status": "queued", "id": <str>, "kind": "goal", "title": <str>}`.
+
+**`declare source`** — queue an external metric or Evidence connector. `--kind` discriminates the connector type (e.g., `github_repository`). `--credential-env` names the environment variable holding the credential; no secrets stored in State. `--json` emits `{"status": "queued", "id": <str>, "id_arg": <str>, "kind": <str>}`.
+
+**`declare metric`** — queue a metric definition. `--source` MUST reference a registered source connector. `--path` is the JSON path extracting the value from the source response. `--direction` defaults to `nondecreasing`. `--json` emits `{"status": "queued", "id": <str>, "name": <str>, "source": <str>}`.
+
+**`declare vital`** — queue a vital definition. Without `--denominator`: direct vital (raw value). With `--denominator`: ratio vital (numerator ÷ denominator). `--window` is a duration string (e.g., `7d`, `1h`). `--json` emits `{"status": "queued", "id": <str>, "name": <str>}`.
+
+**Backwards compatibility.** `add-context`, `add-goal`, `add-source`, `add-metric`, `add-vital` remain valid as deprecated aliases; each prints a deprecation notice and delegates to the corresponding `declare` subcommand. Uses: Durable Inbox (§62c), AP14.
 
 ## urace executor
 
