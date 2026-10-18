@@ -13,17 +13,17 @@ You set the destination and boundaries. URACE delegates execution to replaceable
 ```text
 BEFORE BOOTSTRAP                         AFTER BOOTSTRAP
 
-        URACE.md                         YOU — Select Product(s) + Outcomes
-           │                              │ RETAINS INTENT + AUTHORITY
-           ▼                              ▼
-       EXECUTOR ── builds ───────► URACE SYSTEM ◄── RESULTS + EVIDENCE ◄── PRODUCT
-                                      │    │  ProductRegistry                │
-                                      │    └─ Fleet: run all products        │                                ▲
-                                      │                                      │
-                                      │                                      │
-                                      │ assigns bounded work                 │ accepted changes
-                                      ▼                                      │
-                                  EXECUTORS ── execute and return ──► URACE VALIDATES
+    URACE.md                         YOU — Select Product(s) + Outcomes
+        │                              │ RETAINS INTENT + AUTHORITY
+        ▼                              ▼
+    EXECUTOR ── builds ───────► URACE SYSTEM ◄── RESULTS + EVIDENCE ◄── PRODUCT
+                                    │    │  ProductRegistry                │
+                                    │    └─ Fleet: run all products        │                                ▲
+                                    │                                      │
+                                    │                                      │
+                                    │ assigns bounded work                 │ accepted changes
+                                    ▼                                      │
+                                EXECUTORS ── execute and return ──► URACE VALIDATES
 ```
 
 ## Why URACE
