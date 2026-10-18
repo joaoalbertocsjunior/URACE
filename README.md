@@ -65,7 +65,7 @@ urace /update           guided update sequence
 
 ## Update Safely
 
-Run `urace /update` for the guided update sequence. Use `urace /help update` for options including `--opt-in-constructs` and `@bundle-name` scoping. Pass `--hash <sha256>` to verify the downloaded spec before applying.
+Run `urace /update` for the guided update sequence. Use `urace /help update` for options including `--opt-in-constructs` and `@bundle-name` scoping. Pass `--hash <sha256>` to verify the downloaded spec; pass `--verify` to re-verify the stored candidate before applying.
 
 ## See Progress
 
@@ -106,7 +106,7 @@ urace derive "resilient event log with compaction"
 urace derive "quality tracking with regression gates" --kind mechanism,schema
 ```
 
-Run `urace derive` with no arguments to browse, or `urace /help derive` for filtering and bundle options. Use `--verify` to check a saved manifest's integrity hash.
+Run `urace derive` with no arguments to browse, or `urace /help derive` for filtering and bundle options. Use `--verify` to re-verify all saved manifest hashes; use `--hash <sha256>` to verify a specific manifest.
 
 ## Consequential Use
 

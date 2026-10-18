@@ -9656,13 +9656,13 @@ Applies to: `derive`
 
 Provide the expected SHA-256 hex digest of the downloaded artifact. When supplied, the implementation MUST compute the SHA-256 of the downloaded bytes before writing to disk and compare against the provided value. On mismatch: emit IntegrityGap(kind="spec-update-hash-mismatch", severity=BLOCKING, detail=`hash mismatch: expected <expected> got <actual>`), discard the download, and exit 1. On match: proceed normally.
 
-Applies to: `update download`, `update apply`
+Applies to: `update download`, `update apply`, `derive` (§62k --hash on derive: verify a specific saved manifest against the expected hash; use `--hash <prefix>` to match by hash prefix)
 
 ## --verify
 
 Re-verify the content hash of a previously saved derived manifest. When supplied on `derive`, the implementation reads the stored `content_hash` field from the manifest and compares it against the SHA-256 of the re-resolved manifest bytes. On mismatch: emit IntegrityGap(kind="manifest-hash-mismatch", severity=WARNING, detail=`manifest <id> hash diverged since save`). On match: exit 0 with verification confirmation. When supplied on `update apply`, re-verifies the candidate spec file before applying.
 
-Applies to: `derive`, `update apply`
+Applies to: `derive`, `update download`, `update apply` (§62k --verify on `update apply`: explicitly re-verifies the candidate file hash against the stored sha256 before queuing; if no stored hash is found, a warning is printed and execution continues)
 
 ## urace /quality
 
@@ -11146,46 +11146,46 @@ Portable, schema-bearing citizen data structures. Each carries a declared `id_pr
 
 ## Protocol Catalog (38 entries)
 
-| ID | Name | Steps | Spec |
-|---|---|---|---|
-| EUP | EffectUncertaintyProtocol | classify INDETERMINATE → hold before retry → preserve durable record | §62l |
-| OGP | OperatorGateProtocol | surface BLOCKING gap → hold state → await clearance → emit gate event | §62l |
-| CRRP | CognitiveResetRecoveryProtocol | 6-step cognitive reset recovery | §62l |
-| WRV | WakeRegistrationVerification | restart wakeability audit | §62l |
-| CRC_C | ComplianceRecordingContract | per-domain compliance persistence | §62l |
-| CEP | ConstructElevationProtocol | 4-gate elevation test for promoting concepts to named constructs | §62l |
-| SCP | SpecConstructionProtocol | 3-gate pre-extension enforcement: definition-first, completeness declaration, single-pass atomicity | §62n |
-| DAI | ConstructDependencyAcyclicityInvariant | acyclicity check → self-reference check → FeatureBundle DAG validation → surface BLOCKING gap | §62n |
-| PPP | PatchProposalProtocol | T&C gate → signal ingest → relevance+confidence scoring → patch synthesis → approval routing (AUTO/SMART/HUMAN) → expiry; `urace /inbox list|apply|reject` | §62c PPP_M |
-| JC | JustificationContract | evaluate 5-predicate justification test → record JustificationContext → prevent unjustified actions | §62l |
-| BC | BoundaryContract | open boundary → verify conditions → commit atomically → handle incomplete on restart | §62l |
-| PMM | PatternMechanismMapping | AP-to-section lookup → role classification → uniqueness check → ambiguity resolution | §62l |
-| QE | QualityEnsuranceProtocol | enumerate changed constructs → field ordering check → cross-reference resolution → contract consistency → count/catalog drift → emit finding list (PASS or degradations) | §62l |
-| JOIN | JoinProtocol | enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs) | §62l |
-| PSP | ProductSwitchProtocol | validate target → record switch → update active product → trigger re-onboard | §62l |
-| FOP | FleetOrchestrationProtocol | member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop | §62l |
-| InspectionContract | InspectionContract | read-only → filter → paginate → dual-output → zero-failure-exit; governs all SD=True inspection commands | §62l |
-| ObservabilityContract | ObservabilityContract | covered mutations → required record → kind mapping; autonomy gap trace-record-missing; inspection surface urace trace list | §62l |
-| LayerModel | LayerModel | define 5-layer architecture (L0–L4) + cross-layer coupling rules; skip-layer prohibition; L4 read-only | §62l |
-| OutputSchemaRegistry | OutputSchemaRegistry | catalog all --json output schemas; schema_version contract; output-schema-unregistered gap | §62l |
-| OutcomeFeedbackContract | OutcomeFeedbackContract | feedback collection → AuditRecord → accumulator → feedback-overdue window → closed loop | §62l |
-| CSIA | CanonicalStructuralIntegrityAudit | DEGRADATION(QE) → JOIN → NSS-check → SCP-check → IGC-check; both URACE.md and runtime scopes | §62l |
-| FRVS | FullReleaseVerificationSuite | CSIA → BFP → TCP → SFCP → CIP → CAP → CWP; 11-pass full release verification | §62l |
-| BFP | BehavioralFidelityProtocol | enumerate MUST/SHALL clauses → identify enforcement call-sites → flag unenforceable clauses | §62l |
-| TCP | TestCoverageProtocol | enumerate new citizens/mechanisms/constructs/gaps → verify test coverage → verify declared delta | §62l |
-| SFCP | SchemaFieldCompletenessProtocol | enumerate §62b citizens → verify REQUIRED/OPTIONAL fields in runtime construction | §62l |
-| CIP | ContractImplementationProtocol | enumerate §62l clauses → identify enforcement call-sites → flag unimplemented/unreachable clauses | §62l |
-| CAP | CLIAlignmentProtocol | enumerate §62k commands → verify known-command entry + handler + required flags | §62l |
-| CWP | CycleWiringProtocol | enumerate cycle-entry mechanisms → verify cycle() call-sites → verify ordering constraints | §62l |
-| RBP | ResourceBudgetProtocol | RAM activation → cost tracking → ROI computation → budget gate → efficiency gate → period snapshot | §62l |
-| EIP | ExternalInterfaceProtocol | output surface (--json) → input surface (api call/batch) → machine feedback (--input-json) → compliance contract | §62w |
-| DQP | DesignQualityProtocol | DRY → KISS → YAGNI; design quality sub-passes for every construct and runtime module | §62l |
-| RRP | ResilienceRecoveryProtocol | DEGRADATION → IDEM; resilience and recovery verification for all cycle entry points and inbox handlers | §62l |
-| CCP | CompatibilityContinuityProtocol | BCP → AGN; backwards-compatibility and agnosticism verification for all CLI commands and state keys | §62l |
-| OVP | ObservabilityVerificationProtocol | OBS → SEC; observability coverage and security verification for all mutations and external I/O | §62l |
-| PRVS | ProductionReleaseVerificationSuite | FRVS → DQP → RRP → CCP → OVP; five-component ordered production release gate | §62l |
-| RGG | ReleaseGovernanceGate | PRVS → DecisionRecord authorization → version increment; governance checkpoint for stable releases | §62l |
-| LCG | LifecycleChangeGate | RGG → AuthorityClosureInvariant → state coherence; highest-order gate for all lifecycle changes | §62l |
+| ID | Name | Category | Steps | Spec |
+|---|---|---|---|---|
+| EUP | EffectUncertaintyProtocol | LIFECYCLE | classify INDETERMINATE → hold before retry → preserve durable record | §62l |
+| OGP | OperatorGateProtocol | GOVERNANCE | surface BLOCKING gap → hold state → await clearance → emit gate event | §62l |
+| CRRP | CognitiveResetRecoveryProtocol | LIFECYCLE | 6-step cognitive reset recovery | §62l |
+| WRV | WakeRegistrationVerification | LIFECYCLE | restart wakeability audit | §62l |
+| CRC_C | ComplianceRecordingContract | GOVERNANCE | per-domain compliance persistence | §62l |
+| CEP | ConstructElevationProtocol | STRUCTURAL | 4-gate elevation test for promoting concepts to named constructs | §62l |
+| SCP | SpecConstructionProtocol | STRUCTURAL | 3-gate pre-extension enforcement: definition-first, completeness declaration, single-pass atomicity | §62n |
+| DAI | ConstructDependencyAcyclicityInvariant | STRUCTURAL | acyclicity check → self-reference check → FeatureBundle DAG validation → surface BLOCKING gap | §62n |
+| PPP | PatchProposalProtocol | COMMUNITY | T&C gate → signal ingest → relevance+confidence scoring → patch synthesis → approval routing (AUTO/SMART/HUMAN) → expiry; `urace /inbox list|apply|reject` | §62c PPP_M |
+| JC | JustificationContract | GOVERNANCE | evaluate 5-predicate justification test → record JustificationContext → prevent unjustified actions | §62l |
+| BC | BoundaryContract | GOVERNANCE | open boundary → verify conditions → commit atomically → handle incomplete on restart | §62l |
+| PMM | PatternMechanismMapping | GOVERNANCE | AP-to-section lookup → role classification → uniqueness check → ambiguity resolution | §62l |
+| QE | QualityEnsuranceProtocol | VERIFICATION | enumerate changed constructs → field ordering check → cross-reference resolution → contract consistency → count/catalog drift → emit finding list (PASS or degradations) | §62l |
+| JOIN | JoinProtocol | VERIFICATION | enumerate new/modified constructs → "Used in:" resolution → "Referenced from:" resolution → "Citizens using:" completeness → universal scope classification → emit finding list (PASS or unresolved refs) | §62l |
+| PSP | ProductSwitchProtocol | COMMUNITY | validate target → record switch → update active product → trigger re-onboard | §62l |
+| FOP | FleetOrchestrationProtocol | COMMUNITY | member isolation → independent lifecycle → signal broadcast → crash recovery → graceful stop | §62l |
+| InspectionContract | InspectionContract | I/O | read-only → filter → paginate → dual-output → zero-failure-exit; governs all SD=True inspection commands | §62l |
+| ObservabilityContract | ObservabilityContract | I/O | covered mutations → required record → kind mapping; autonomy gap trace-record-missing; inspection surface urace trace list | §62l |
+| LayerModel | LayerModel | STRUCTURAL | define 5-layer architecture (L0–L4) + cross-layer coupling rules; skip-layer prohibition; L4 read-only | §62l |
+| OutputSchemaRegistry | OutputSchemaRegistry | I/O | catalog all --json output schemas; schema_version contract; output-schema-unregistered gap | §62l |
+| OutcomeFeedbackContract | OutcomeFeedbackContract | I/O | feedback collection → AuditRecord → accumulator → feedback-overdue window → closed loop | §62l |
+| CSIA | CanonicalStructuralIntegrityAudit | VERIFICATION | DEGRADATION(QE) → JOIN → NSS-check → SCP-check → IGC-check; both URACE.md and runtime scopes | §62l |
+| FRVS | FullReleaseVerificationSuite | VERIFICATION | CSIA → BFP → TCP → SFCP → CIP → CAP → CWP; 11-pass full release verification | §62l |
+| BFP | BehavioralFidelityProtocol | VERIFICATION | enumerate MUST/SHALL clauses → identify enforcement call-sites → flag unenforceable clauses | §62l |
+| TCP | TestCoverageProtocol | VERIFICATION | enumerate new citizens/mechanisms/constructs/gaps → verify test coverage → verify declared delta | §62l |
+| SFCP | SchemaFieldCompletenessProtocol | VERIFICATION | enumerate §62b citizens → verify REQUIRED/OPTIONAL fields in runtime construction | §62l |
+| CIP | ContractImplementationProtocol | VERIFICATION | enumerate §62l clauses → identify enforcement call-sites → flag unimplemented/unreachable clauses | §62l |
+| CAP | CLIAlignmentProtocol | VERIFICATION | enumerate §62k commands → verify known-command entry + handler + required flags | §62l |
+| CWP | CycleWiringProtocol | VERIFICATION | enumerate cycle-entry mechanisms → verify cycle() call-sites → verify ordering constraints | §62l |
+| RBP | ResourceBudgetProtocol | LIFECYCLE | RAM activation → cost tracking → ROI computation → budget gate → efficiency gate → period snapshot | §62l |
+| EIP | ExternalInterfaceProtocol | I/O | output surface (--json) → input surface (api call/batch) → machine feedback (--input-json) → compliance contract | §62w |
+| DQP | DesignQualityProtocol | VERIFICATION | DRY → KISS → YAGNI; design quality sub-passes for every construct and runtime module | §62l |
+| RRP | ResilienceRecoveryProtocol | VERIFICATION | DEGRADATION → IDEM; resilience and recovery verification for all cycle entry points and inbox handlers | §62l |
+| CCP | CompatibilityContinuityProtocol | VERIFICATION | BCP → AGN; backwards-compatibility and agnosticism verification for all CLI commands and state keys | §62l |
+| OVP | ObservabilityVerificationProtocol | VERIFICATION | OBS → SEC; observability coverage and security verification for all mutations and external I/O | §62l |
+| PRVS | ProductionReleaseVerificationSuite | VERIFICATION | FRVS → DQP → RRP → CCP → OVP; five-component ordered production release gate | §62l |
+| RGG | ReleaseGovernanceGate | GOVERNANCE | PRVS → DecisionRecord authorization → version increment; governance checkpoint for stable releases | §62l |
+| LCG | LifecycleChangeGate | GOVERNANCE | RGG → AuthorityClosureInvariant → state coherence; highest-order gate for all lifecycle changes | §62l |
 
 ## AP Pattern Abbreviations (r49 additions)
 
@@ -11318,7 +11318,7 @@ FOUNDATIONAL ──── COMPOSITIONAL ──── INTEGRATED
  standalone)                         least standalone)
 ```
 
-**Reuse rule.** Prefer the highest kind at the lowest tier that satisfies your requirement. FOUNDATIONAL AP: maximally structurally reusable. FOUNDATIONAL Primitive: maximally leaf-reusable.
+**Reuse rule.** Prefer the highest kind at the lowest tier that satisfies your requirement. FOUNDATIONAL AP: maximally structurally reusable. FOUNDATIONAL Primitive: maximally leaf-reusable. *Example:* for a behavioral contract reusable across 3+ sections, prefer a FOUNDATIONAL Protocol over a FOUNDATIONAL Mechanism (same tier, higher kind = more abstract); for a field type reusable across 10+ schemas, prefer a FOUNDATIONAL Primitive over a FOUNDATIONAL Schema (same tier, higher kind = more abstract).
 
 **Tier definitions (apply to all kinds):**
 
@@ -11326,7 +11326,7 @@ FOUNDATIONAL ──── COMPOSITIONAL ──── INTEGRATED
 |---|---|
 | `FOUNDATIONAL` | standalone=true, or all declared dependencies are themselves FOUNDATIONAL |
 | `COMPOSITIONAL` | depends on one or more FOUNDATIONAL constructs; not usable in isolation |
-| `INTEGRATED` | depends on one or more COMPOSITIONAL or INTEGRATED constructs |
+| `INTEGRATED` | depends on one or more COMPOSITIONAL or INTEGRATED constructs (highest dependency depth — this is a structural position, not a quality tier) |
 
 ## Mandatory Construct Metadata
 
@@ -11335,7 +11335,7 @@ Every construct MUST carry a metadata line immediately after its `##` heading. F
 **AP:** `**Derivation metadata.** kind: AP · tier: X · standalone: X · requires: [...] · provides: [...] · realizes: [<ConstructID>, ...] (OPTIONAL)`
 *(kind: AP is implied by §62i section membership; the metadata line is already established. `realizes:` is OPTIONAL; when present, it lists the Mechanism and Protocol IDs that directly implement this AP. This makes the AP→implementation link machine-readable without requiring PMM table lookup.)*
 
-**Protocol:** `**Construct metadata.** kind: Protocol · tier: X · standalone: X · depends: [...]`
+**Protocol:** `**Construct metadata.** kind: Protocol · tier: X · standalone: X · depends: [...] · semantic_kind: X` (OPTIONAL; semantic_kind classifies the Protocol's role within the `kind: Protocol` category; closed enum: `Protocol` | `Contract` | `Invariant` | `Catalog` | `Suite` | `Gate` | `Mapping` | `Cluster`; omit when the construct is a plain Protocol)
 
 **Mechanism:** `**Construct metadata.** kind: Mechanism · tier: X · standalone: false · governed-by: [AP_N, ...]`
 
@@ -11456,31 +11456,31 @@ Complete cross-reference of all named constructs by kind and tier. Primitives (�
 
 ### Mechanisms (§62c)
 
-| ID | Name | Tier | Governed by |
-|---|---|---|---|
-| IQM | Input Queue Mechanism | FOUNDATIONAL | AP14 |
-| TXM | Transaction Mechanism | COMPOSITIONAL | AP16, AP27 |
-| ARM | Authority Resolution Mechanism | FOUNDATIONAL | AP35 |
-| DCM | Digest Computation | FOUNDATIONAL | AP36 |
-| VTS | Value Trajectory Self-Correction Mechanism | INTEGRATED | AP8, AP9 |
-| SPD | Scope Priority Derivation Mechanism | COMPOSITIONAL | AP8 |
-| EMC | External Metric Collection Mechanism | COMPOSITIONAL | AP13 |
-| DAI | Destination Anchor Integrity Mechanism | COMPOSITIONAL | AP35, OGP |
-| SEG | Self-Evolution Eligibility Gate Mechanism | INTEGRATED | AP34 |
-| DCG | Discovery Credit Gate Mechanism | COMPOSITIONAL | AP10, AP29 |
-| QSM | Quality Streak Mechanism | COMPOSITIONAL | AP9, AP20 |
-| RIM | Re-Ingestion Mechanism | INTEGRATED | AP21 |
-| SDM | Staleness Detection Mechanism | COMPOSITIONAL | AP13 |
-| CBM | Context Budget Mechanism | COMPOSITIONAL | AP24 |
-| WRM | Wake Registration Verification Mechanism | COMPOSITIONAL | AP29, WRV |
-| SSE | Sweet Spot Evaluation Mechanism | INTEGRATED | AP25 |
-| CEG | Capability Envelope Gate | INTEGRATED | AP25, AP33 |
-| TCG | Test Coverage Gate | COMPOSITIONAL | AP9 |
-| CCA | Crash-Consistent Acceptance | COMPOSITIONAL | AP27 |
-| LKS | Last-Known-Stable Product Recovery | COMPOSITIONAL | AP22 |
-| MBV | Metric Baseline Verification | COMPOSITIONAL | AP13 |
-| CSI | Community Signal Ingestion Mechanism | INTEGRATED | AP38, AP14 |
-| PPP_M | Patch Proposal Pipeline Mechanism | INTEGRATED | AP38, AP4 |
+| ID | Name | Tier | Role | Governed by |
+|---|---|---|---|---|
+| IQM | Input Queue Mechanism | FOUNDATIONAL | standard | AP14 |
+| TXM | Transaction Mechanism | COMPOSITIONAL | standard | AP16, AP27 |
+| ARM | Authority Resolution Mechanism | FOUNDATIONAL | standard | AP35 |
+| DCM | Digest Computation | FOUNDATIONAL | standard | AP36 |
+| VTS | Value Trajectory Self-Correction Mechanism | INTEGRATED | standard | AP8, AP9 |
+| SPD | Scope Priority Derivation Mechanism | COMPOSITIONAL | standard | AP8 |
+| EMC | External Metric Collection Mechanism | COMPOSITIONAL | standard | AP13 |
+| DAI | Destination Anchor Integrity Mechanism | COMPOSITIONAL | standard | AP35, OGP |
+| SEG | Self-Evolution Eligibility Gate Mechanism | INTEGRATED | gate | AP34 |
+| DCG | Discovery Credit Gate Mechanism | COMPOSITIONAL | gate | AP10, AP29 |
+| QSM | Quality Streak Mechanism | COMPOSITIONAL | standard | AP9, AP20 |
+| RIM | Re-Ingestion Mechanism | INTEGRATED | standard | AP21 |
+| SDM | Staleness Detection Mechanism | COMPOSITIONAL | standard | AP13 |
+| CBM | Context Budget Mechanism | COMPOSITIONAL | standard | AP24 |
+| WRM | Wake Registration Verification Mechanism | COMPOSITIONAL | standard | AP29, WRV |
+| SSE | Sweet Spot Evaluation Mechanism | INTEGRATED | standard | AP25 |
+| CEG | Capability Envelope Gate | INTEGRATED | gate | AP25, AP33 |
+| TCG | Test Coverage Gate | COMPOSITIONAL | gate | AP9 |
+| CCA | Crash-Consistent Acceptance | COMPOSITIONAL | standard | AP27 |
+| LKS | Last-Known-Stable Product Recovery | COMPOSITIONAL | standard | AP22 |
+| MBV | Metric Baseline Verification | COMPOSITIONAL | standard | AP13 |
+| CSI | Community Signal Ingestion Mechanism | INTEGRATED | standard | AP38, AP14 |
+| PPP_M | Patch Proposal Pipeline Mechanism | INTEGRATED | standard | AP38, AP4 |
 
 ### Schemas (r54–r55, r61, and r62 additions)
 
