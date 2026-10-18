@@ -7402,26 +7402,32 @@ The lifecycle controller MUST NOT self-authorize compaction outside these two pa
 ## urace compact
 
 ```
-urace compact <field-path> [--dry-run] [--mode ARCHIVE|ROLLING_EVICTION] [--status] [--json] [--format json|xml]
+urace compact [<field-path>] [--target FIELD[:PREDICATE]|all] [--dry-run] [--mode ARCHIVE|ROLLING_EVICTION] [--status] [--format json|xml]
 ```
 
 Initiates compaction of an accumulating list field. MUST be rejected if the field's RetentionPolicy has `compaction_mode: PROHIBITED` or if the field is not in the default governance table above. `--dry-run` reports eligible records and would-be CompactionSummary without committing. The command is written to the inbox and processed at the next safe lifecycle boundary; it MUST NOT execute synchronously within the same cycle that receives it.
 
 `--status` — show compaction manifest status (event count, `last_compacted_at`, archive file counts per field) without queuing a new compaction. Safe read-only operation.
 
-`--product <id>` — operate on the named registered product's state without switching the active product. `--products <id,...>|all` — operate on multiple products in dependency order (MultiProductCompactionProtocol §62l).
+`--target all` — queue compaction for all governed non-PROHIBITED fields in a single operation.
 
-`--format json|xml` — machine-readable output format. `--format xml` forces JSON-mode output from the handler then converts to elements-only XML with a `<urace>` root tag. Available as a global flag on any command: `urace --format xml compact ...`. `--json` is equivalent to `--format json`.
+`--target <field>` — equivalent to passing `<field-path>` as a positional argument.
+
+`--product <id[,...]>|all` — operate on the named registered product(s). Comma-separated or `all`. `--products` is a hidden alias.
+
+`--format json|xml` — machine-readable output format. `--format xml` forces JSON-mode output from the handler then converts to elements-only XML with a `<urace>` root tag. Available as a global flag before the subcommand (`urace --format xml compact ...`) or as a per-subcommand flag (`urace compact ... --format xml`). `--json` is a hidden alias for `--format json`.
 
 **Multi-field atomicity.** The runtime exposes `compact_fields(field_paths, policies, authorized_by)` for operators needing to compact multiple fields in a single atomic operation. It executes in two passes: pass 1 validates all fields (dry-run each); pass 2 commits only if pass 1 had zero errors. A partial pass-2 failure emits a `compaction-partial-failure` WARNING IntegrityGap without reverting already-compacted fields.
 
 ## urace decompact
 
 ```
-urace decompact <compaction-event-id> [--record-id <id>]
+urace decompact [<compaction-event-id>] [--target FIELD:latest|FIELD:EVENT-ID] [--record-id <id>]
 ```
 
 **Full decompaction** (no `--record-id`): Restores all original records from an ARCHIVE-mode CompactionEvent. MUST be rejected if `CompactionEvent.compaction_mode` is ROLLING_EVICTION, the archive file is missing or unreadable, or digest verification fails. On success: removes the CompactionSummary, inserts restored records at the same position, and records an inverse CompactionEvent in the manifest with `authorized_by` set to the inbox Input id. After decompaction the live list is identical to its pre-compaction state.
+
+`--target FIELD:latest` — auto-resolve the most-recent CompactionEvent for `FIELD` from the manifest; omit the positional `<compaction-event-id>`.
 
 **Incremental decompaction** (`--record-id <id>`): Extracts a single record from an ARCHIVE-mode CompactionEvent without restoring the full segment. MUST be rejected under the same conditions as full decompaction. On success: the single record is returned as structured output (it is NOT re-inserted into the live list); the CompactionSummary and archive file are left intact. The operation MUST NOT modify the live list or the manifest. `CompactionSummary.record_ids` MUST contain the requested id; if absent, the implementation MUST fall back to a sequential archive scan. A record-id not present in the archive is a non-fatal error; the command exits with a descriptive error and no state modification.
 
@@ -7430,10 +7436,12 @@ urace decompact <compaction-event-id> [--record-id <id>]
 ## urace amend
 
 ```
-urace amend <compaction-event-id> <record-id> --notice <text>
+urace amend [<compaction-event-id> <record-id>] [--target RECORD-ID] --notice <text>
 ```
 
 Applies an in-place amendment to a single record within an ARCHIVE-mode CompactionEvent's archive file. Appends an ArchiveAmendment to `{archive_path}.amendments.jsonl`. Does NOT modify the CompactionSummary or CompactionManifest (the `original_digest` commitment is preserved as the immutable audit anchor). MUST be rejected if: the compaction event is ROLLING_EVICTION; the archive file is missing or unreadable; the record-id is not present in the archive. The amendment is written to the inbox and processed at the next safe lifecycle boundary. Use this command to flag a DecisionRecord as PROVENANCE_REVISED while it remains in archive storage, without a full decompaction round-trip.
+
+`--target RECORD-ID` — auto-find the CompactionEvent containing this record id by scanning `record_ids_covered` in the manifest; omit both positional arguments.
 
 **Amendment-aware digest.** After one or more `urace amend` operations on an archive, the live archive content diverges from `original_digest` (which was computed before any amendment). Subsequent `urace decompact` on the same event MUST verify the current archive digest against the LAST `after_digest` in `{archive_path}.amendments.jsonl` rather than `original_digest`. `original_digest` is preserved in the CompactionManifest as the pre-amendment audit anchor; the amendment log provides the current authoritative digest. Startup verification (`verify_manifest_on_startup`) MUST apply the same amendment-aware logic. An archive with no amendments uses `original_digest` directly.
 
@@ -9588,13 +9596,39 @@ Applies to: `add`, `amend`, `auto`, `autonomous`, `blocker`, `budget`, `change`,
 --format json|xml
 ```
 
-Global top-level flag that specifies the machine-readable output format. Default: `json`. Equivalent: `--format json` = `--json`.
+Specifies the machine-readable output format. Available as a global top-level flag (before the subcommand) or as a per-subcommand flag (after the subcommand). Default when omitted: human-readable output. `--json` is a hidden backward-compatible alias for `--format json`.
 
-`--format xml` — forces JSON-mode output from the command handler, then converts to elements-only XML. Root tag: `<urace>`. Dicts become named child elements; lists become repeated `<item>` elements; `None` becomes `<null/>`; strings are XML-escaped. Non-JSON output (error messages, human text) passes through unchanged (graceful fallback). Example: `urace --format xml compact decision_records --status`.
+- `--format json` — same as `--json`; emit machine-readable JSON.
+- `--format xml` — forces JSON-mode output from the command handler, then converts to elements-only XML via the runtime format converter. Root tag: `<urace>`. Dicts become named child elements; lists become repeated `<item>` elements; `None` becomes `<null/>`; strings are XML-escaped. Non-JSON text (error messages, human output) passes through unchanged (graceful fallback).
 
-`--format xml` MUST be specified as a global flag before the subcommand: `urace --format xml <command> [args]`. It MUST NOT appear after the subcommand name.
+Examples:
+```
+urace --format xml compact decision_records --status   # global flag
+urace compact decision_records --status --format xml   # per-subcommand flag
+urace compact decision_records --status --json         # json alias
+```
+
+**OutputFormatContract (§62k).** Every command handler that emits structured output MUST route machine-readable output through `_print_fmt(data, fmt)`. When `--format xml` is active, `_XmlConvertStream` wraps `sys.stdout` and auto-converts any JSON written to stdout; handlers do not need modification. `_print_fmt` is the canonical output function for all machine-readable output. `args.json` is set to `True` whenever any format is requested (JSON or XML) — existing handler conditionals remain valid.
 
 Applies to: all commands that support `--json`.
+
+## --target
+
+```
+--target FIELD[:PREDICATE]|all|RECORD-ID
+```
+
+Unified scope-targeting flag. Resolves a scope expression to a concrete field, event, or record via the ScopeTargetResolver. Supported forms:
+
+- `all` — targets all governed non-PROHIBITED fields (compact only).
+- `FIELD` — equivalent to passing the field as a positional argument.
+- `FIELD:latest` — resolves to the most-recent CompactionEvent for `FIELD` in the manifest.
+- `FIELD:EVENT-ID` — resolves to the exact CompactionEvent by id.
+- `RECORD-ID` — scans manifest events for `record_ids_covered` and auto-finds the enclosing event.
+
+**ScopeTargetContract (§62k).** The ScopeTargetResolver is the canonical constructor for scope resolution. It returns `{field, predicate, resolved_id, error}`. Callers MUST check `error` before using `resolved_id`. If resolution fails, a `scope-target-not-resolvable` WARNING IntegrityGap MAY be emitted and the command MUST exit 1 with a descriptive message.
+
+Applies to: `compact`, `decompact`, `amend`.
 
 ## --scope
 
@@ -14051,6 +14085,8 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r106 | 2026-10-18 | spec+runtime | OutputFormatContract + ScopeTargetContract + --target. (1) §62k `--format`: per-subparser placement now supported (both `urace --format xml compact ...` and `urace compact ... --format xml` work); OutputFormatContract declared (`_print_fmt` canonical output fn; `_XmlConvertStream` auto-converts JSON→XML when `--format xml` active; `args.json` always set for backward compat). (2) §62k `--target` new standard option: ScopeTargetContract declared; `_resolve_scope_target(target_expr, state_path) -> {field, predicate, resolved_id, error}` canonical constructor; `compact --target all` queues all governed non-PROHIBITED fields; `decompact --target FIELD:latest` auto-resolves most-recent event; `amend --target RECORD-ID` auto-finds event via `record_ids_covered`. (3) §62k `--product`/`--products` collapse: single `--product ID[,...]|all` flag; `--products` hidden alias; `_resolve_product_targets` accepts comma-separated or `all` in unified `combined` param. (4) IGC: 2 new kinds (`multi-product-compact-cycle` BLOCKING §62k, `scope-target-not-resolvable` WARNING §62k); Contract Catalog IGC count 119→121. (5) compact/decompact/amend: positional args now optional (`nargs="?"`); `--target` wired in handlers. (6) `--json` per-subparser now hidden alias via `action="store_const", const="json", dest="format"`. Tests: 28 new tests (R106FormatPerSubparserTests/R106ScopeTargetTests/R106ProductCollapseTests/R106CompactTargetTests/R106OutputFormatContractTests). 1238 tests pass. **New external references:** `OutputFormatContract` contract → §62k --format (this revision); `ScopeTargetContract` contract → §62k --target (this revision); `_resolve_scope_target` constructor → §62k --target (this revision); `multi-product-compact-cycle` IGC kind → §62l (this revision); `scope-target-not-resolvable` IGC kind → §62l (this revision). |
+| r105 | 2026-10-18 | spec+runtime | Compaction gap closure (8 gaps) + --format json\|xml. (1) Gap 1+6 (amendment-aware digest): `_get_expected_digest(archive_path, original_digest)` — uses last `after_digest` from `.amendments.jsonl`; used in `decompact_field()` and `verify_manifest_on_startup()`; `original_digest` preserved as immutable audit anchor. (2) Gap 2 (_DEFAULT_GOVERNANCE expanded): 6 → 14 governed fields; `integrity_gaps`/`objectives` PROHIBITED; `_ACTIVE_GUARD_FIELDS` frozenset for records with `active=True`. (3) Gap 3: `check_retention_violations()` checks all 10 governed fields. (4) Gap 4: `_eligible_indices()` timestamp-oldest ordering with `field_path` param; no-timestamp records treated as newest. (5) Gap 5: `check_archive_ceiling()` emits `archive-count-ceiling` WARNING; DRY helpers `_governance_archive_subpath()` + `_count_archive_files()`. (6) Gap 7: `get_compaction_status()` → manifest event count, last_compacted_at, archive counts; `compact --status` flag. (7) Gap 8: `compact_fields()` 2-pass atomic method — pass 1 validates all, pass 2 commits on zero errors; `compaction-partial-failure` WARNING on partial pass-2 failure. (8) `--format json|xml`: `_json_to_xml()` recursive converter, `_print_fmt(data, fmt)` canonical output helper, `_XmlConvertStream` stdout wrapper; top-level `--format` flag; compact/decompact/amend/crc migrated to `_print_fmt`. IGC: `archive-count-ceiling` (WARNING §62f) + `compaction-partial-failure` (WARNING §62f) added. §62f governance table expanded (14 rows). 1210 tests pass (31 new). **New external references:** `archive-count-ceiling` IGC kind → §62l (this revision); `compaction-partial-failure` IGC kind → §62l (this revision); `_print_fmt` output helper → §62k --format (this revision); `compact --status` flag → §62k `urace compact` (this revision). |
 | r86 | 2026-10-18 | spec+runtime | FRVS + DRY + KISS full pass. (1) §62k: `## urace update`, `## urace schema`, `## urace feedback`, `## urace resource` section headers added for §62k command alignment (CAP compliance); `urace update` command syntax section added (download/explain/apply/resolve/help subcommands, `--opt-in-constructs`, `--decision` flags documented). (2) §62k standard options: `resource report` added to `--since`, `--until`, `--limit`, `--offset` applies-to lists. (3) §62l: enforcement contract counts corrected — "thirty-four" → "thirty-five" constructs; "twenty-two" → "twenty-three" self-enforcing constructs (r85 added RBP to list but counts were not updated). (4) Runtime: `_SD_TRUE_EXACT` completed — 8 missing help entries added: inbox/onboard/product/fleet/trace/feedback/update/schema help; `update help` and `schema help` argparse choices and handlers added. (5) DRY: `_help_action()` shared helper extracted (7 help handlers refactored); `change list` and `constraint list` refactored to use `_inspect_list()`. No behavioral changes. 1128 tests pass. **New external references:** `urace update help` command → §62k (this revision); `urace schema help` command → §62k (this revision). |
 | r85 | 2026-10-17 | spec+runtime | Resource Budget Protocol + help subcommands. (1) §62v: new normative section — ResourceBudgetProtocol (RBP). ROI formula V/C where V=α×Δquality+β×Δcapability+γ×Δmetrics and C=executor_calls×cost_per_executor_call+time_hours×hourly_rate. Per-product budget gate (max_cost, max_time_hours, max_executor_calls → BLOCKING), efficiency gate (roi_floor consecutive check → WARNING, cost-without-value trend → WARNING), period-reset INFO. (2) §62b: 3 new citizens: ProductBudget (pbdg-), ResourceEntry (resc-), ROISnapshot (rsnp-). (3) §62c: ResourceAllocationMechanism (RAM, INTEGRATED) added; wired into cycle() after FeedbackAccumulator. (4) Config.product_budget OPTIONAL field added. State.resource_ledger + State.roi_snapshots OPTIONAL non-compactable fields added. (5) §62l: ResourceBudgetProtocol (RBP, INTEGRATED) construct added; Protocol Catalog 29→30. Mechanism Catalog 10→11. Schema Catalog 40→43. §62l count 33→34. (6) IGC: 4 new kinds (product-budget-exceeded BLOCKING, product-roi-below-floor WARNING, product-efficiency-degraded WARNING, product-budget-period-reset INFO); Contract Catalog IGC count 115→119. (7) §62k: `urace resource status/report/help` commands added; `help` action added to product/fleet/inbox/trace/feedback commands. (8) §80: `resourcebudget` stem added. Runtime: `resource` command added to cli.py; help actions added to product/fleet/inbox/trace/feedback; `_run_ram()` implemented and wired into cycle(); 4 IGC kinds added to primitives.py; `resource_ledger` + `roi_snapshots` in initial_state(). Tests: 10 new R85ResourceBudgetTests. **New external references:** `ResourceBudgetProtocol` construct → §62l (this revision); `ProductBudget` schema → §62b (this revision); `ResourceEntry` schema → §62b (this revision); `ROISnapshot` schema → §62b (this revision); `ResourceAllocationMechanism` mechanism → §62c (this revision); `§62v` section → §62v Resource Budget Protocol (this revision); `product-budget-exceeded` IGC kind → §62l (this revision); `product-roi-below-floor` IGC kind → §62l (this revision); `product-efficiency-degraded` IGC kind → §62l (this revision); `product-budget-period-reset` IGC kind → §62l (this revision); `resourcebudget` stem → §80 (this revision); `urace resource status` command → §62k (this revision); `urace resource report` command → §62k (this revision); `urace resource help` command → §62k (this revision) |
 | r84 | 2026-10-17 | spec+runtime+readme | Onboard help + path-agnosticism + heuristic product scan. (1) §62o: Path-agnosticism contract added — `Config.product_files` entries MAY be relative (from bootstrap root) or absolute; URACE MUST NOT assume any folder hierarchy; bootstrap root and Product root need not be the same directory. (2) New `urace onboard help` subcommand (SD=True): prints step-by-step guide covering single-product bootstrap, multi-product registration, path-agnostic product_files, and lifecycle activation; `--json` emits `{guide: string}`. (3) New `urace onboard status --scan` flag: heuristically scans sibling and subdirectory paths for unregistered Products (detects code files and project markers); surfaces each as `onboard-unregistered-product-hint` (INFO) with suggested `urace product register` command; read-only, SD=True. (4) IGC: `onboard-unregistered-product-hint` (INFO, §62o OnboardGate --scan) added; Contract Catalog IGC count 114→115. (5) §62k `urace onboard` section: command fence updated; `onboard help` and `onboard status --scan` descriptions added. (6) README: path-agnosticism note + `urace /onboard help` tip added to Get Running; diagram fixed (PRODUCTS plural, orphaned ▲ removed, two blank │ lines removed). Runtime: argparse `onboard` choices extended to `[status, confirm, help]`; `--scan` flag added; handlers implemented. 5 new R84OnboardHelpScanTests (onboard help exits 0, guide text, JSON output, scan no-hints, scan detects sibling product dir). 1118 tests pass. **New external references:** `urace onboard help` command → §62k (this revision); `onboard-unregistered-product-hint` IGC kind → §62l (this revision). |
@@ -14096,22 +14132,4 @@ Where `<item>` is the fully-qualified name (e.g. `Config.retention.auto_trigger_
 | r44 | 2026-10-14 | spec+runtime | `--from-constraints`: HardConstraint-to-construct suggestion; `--from-inspection`: InspectionSurface gap-to-construct suggestion; ConstraintDerivedSuggestion + GapDerivedSuggestion contracts |
 | r43 | 2026-10-14 | spec | Purge all runtime-specific function/variable names from spec body; add Revision Log (§82); all contracts now stated in executor-agnostic terms |
 | r42 | 2026-10-14 | spec | `--constructs` canonical arg; `--patterns` backward-compat alias; "Building Blocks" canonical user-facing name for 60 derivable constructs |
-| r41 | 2026-10-14 | spec | §62m Extended Construct Catalogs: Mechanism (6), Schema (20), Protocol (2), Contract (6); `--kind` flag; DerivedConstructSet citizen; ConstructCatalog; IntentSuggestionEngine construct mode |
-| r40 | 2026-10-14 | spec | Intent-first `urace derive`: positional `<intent>` arg; `--suggest` dry-run; `--from-goals`; IntentSuggestionEngine contract; GoalDerivedSuggestion |
-| r39 | 2026-10-14 | runtime-only | §62l enforcement wiring pass — no new normative spec contracts added; existing contracts from r38 implemented in reference runtime |
-| r38 | 2026-10-14 | spec | §62l Shared Reuse Contracts: GoverningRecord cluster, EffectUncertaintyProtocol, OperatorGateProtocol, AuthorityClosureInvariant, RevalidationScope, InspectionSurface, IntegrityGapCatalog (20 kinds), PatternMechanismMapping |
-| r37 | 2026-10-14 | spec | §72 PolicyRecord/HardConstraint/PolicyKind/PolicyStatus/ConstraintEnforcement; §37 AssessmentRecord; §36 DiscoveryRecord/DiscoveryCycleStatus; §59 MarketSignal/FitHypothesis; §63 OwnershipMarker/ConcurrencyPolicy; §76 minimum viable behaviors list |
-| r36 | 2026-10-14 | spec | DerivedManifestRef (dmr-), DerivationRecord (drv-), DerivationKind enum; `urace derive` --refresh/--apply-capabilities/--derive-milestone/--show-delta; derivation_records/derivation_refs State fields |
-| r35 | 2026-10-14 | spec | Milestone chain; TestRecord as citizen; pattern→capability gap detection; `--opt-in-patterns` AP range extended to AP0–AP25 |
-| r34 | 2026-10-14 | spec | AP25 Bounded Evolution Band; full wiring pass over quality/resilience/orchestration patterns |
-| r33 | 2026-10-14 | spec | Quality/resilience architectural wiring pass |
-| r32 | 2026-10-14 | spec | AP24 Derivation Framework; pattern count updated to 25 |
-| r30–r31 | 2026-10-14 | spec | Comprehensive quality/resilience/orchestration pass; pattern count 24→25 |
-| r29 | 2026-10-14 | spec | AP range reference updated AP0–AP19 → AP0–AP24 |
-| r28 | 2026-10-14 | spec | Stale manifest detection; update system integration with derived manifests |
-| r27 | 2026-10-14 | spec | Skip-by-default derive contract; `--opt-in-patterns` flag; update orchestration |
-| r26 | 2026-10-14 | spec | §62j Derivation Framework; DerivedSystemManifest; PatternCatalog AP0–AP24; `urace derive` command |
-| r25 | 2026-10-14 | spec | AP20–AP23 (Circuit Breaker, Compaction, Checkpoint, Justification Chain) |
-| r24 | 2026-10-14 | spec | §62i AP17–AP19 (Formula Rule Pairs, Scheduled Task, Customization Layer) |
-| r23 | 2026-10-14 | spec | §62i AP11–AP16 (Bridge, Orchestrator, Observer, Input Queue, Event Bus, State Snapshot) |
-| r22 | 2026-10-14 | spec | Canonical term coverage: Primitive, Communication, Diagram, Method; §81 stems +14; §62a /prefix fix |
+| r22–r41 | 2026-10-14 | spec | Foundational build-out (see git log for individual entries). r22: canonical term coverage; r23–r25: AP11–AP23; r26: §62j Derivation Framework, PatternCatalog AP0–AP24, `urace derive`; r27–r28: `--opt-in-patterns`, stale manifest detection; r29–r35: AP25, milestone chain, quality/resilience patterns; r36: DerivedManifestRef, DerivationRecord; r37: PolicyRecord, HardConstraint, AssessmentRecord; r38: §62l Shared Reuse Contracts, IntegrityGapCatalog (20 kinds); r39: §62l runtime wiring; r40: intent-first `urace derive`, IntentSuggestionEngine; r41: §62m Extended Construct Catalogs. |
