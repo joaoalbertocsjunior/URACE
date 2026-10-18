@@ -7330,11 +7330,18 @@ Default governance table:
 | `ChangeHistoryEntry` lists | §62d | — | PROHIBITED |
 | `DecisionRecord` lists | §62d | 2 000 entries | ARCHIVE |
 | `StatusTransition` lists | §62d | 500 per citizen | ARCHIVE |
-| `integrity_gaps` | §62b | 500 entries | ROLLING_EVICTION |
+| `integrity_gaps` | §62b | — | PROHIBITED |
+| `objectives` | §62b | — | PROHIBITED |
 | `status_transitions` | §62b | 500 entries | ARCHIVE |
 | `assessment_records` | §62b | 1 000 entries | ARCHIVE |
 | `processed_input_ids` | §62b | 1 000 entries | ROLLING_EVICTION |
 | `chunks` | §62f | 1 000 entries | ARCHIVE |
+| `evidence` | §62b | 5 000 entries | ARCHIVE |
+| `operations` | §62b | 2 000 entries | ARCHIVE |
+| `trace_records` | §62r | 1 000 entries | ARCHIVE |
+| `community_signals` | §62n | 500 entries | ROLLING_EVICTION |
+| `patch_proposals` | §62n | 500 entries | ARCHIVE |
+| `wake_registrations` | §67 | 200 entries | ARCHIVE |
 
 Implementations MAY configure different ceilings via RetentionPolicy records established through an attributable operator input. A RetentionPolicy MUST NOT change the mode of a PROHIBITED field.
 
@@ -7366,10 +7373,12 @@ Any aggregation query over a governed list MUST account for CompactionSummary en
 
 A record in a governed list is eligible for compaction when it satisfies at least one of the following:
 
-1. **Entry-count ceiling**: the list length exceeds `RetentionPolicy.max_entries`, and the record is among the oldest entries (lowest `created_at` or equivalent timestamp field) beyond the ceiling.
+1. **Entry-count ceiling**: the list length exceeds `RetentionPolicy.max_entries`, and the record is among the oldest entries by timestamp beyond the ceiling. Oldest-by-timestamp ordering MUST be used (not positional/insertion-order). Records without a parseable timestamp are treated as most-recent and selected last.
 2. **Age ceiling**: `RetentionPolicy.max_age_days` is set and the record's timestamp field is older than `max_age_days` calendar days before the current boundary.
 
-An implementation MUST evaluate eligibility deterministically: entry-count eligibility MUST prefer the oldest entries, and age eligibility MUST use UTC timestamps. When both criteria apply, a record eligible under either is eligible.
+An implementation MUST evaluate eligibility deterministically using UTC timestamps. When both criteria apply, a record eligible under either is eligible.
+
+**Active-record guard.** Records with `active: true` in fields declared as active-guarded (`integrity_gaps`, `community_signals`, `patch_proposals`) MUST never be eligible for compaction regardless of age or count. Compacting an active health signal would silently mask unresolved issues.
 
 ## Lifecycle boundary requirement
 
@@ -7393,12 +7402,18 @@ The lifecycle controller MUST NOT self-authorize compaction outside these two pa
 ## urace compact
 
 ```
-urace compact <field-path> [--dry-run] [--mode ARCHIVE|ROLLING_EVICTION]
+urace compact <field-path> [--dry-run] [--mode ARCHIVE|ROLLING_EVICTION] [--status] [--json] [--format json|xml]
 ```
 
 Initiates compaction of an accumulating list field. MUST be rejected if the field's RetentionPolicy has `compaction_mode: PROHIBITED` or if the field is not in the default governance table above. `--dry-run` reports eligible records and would-be CompactionSummary without committing. The command is written to the inbox and processed at the next safe lifecycle boundary; it MUST NOT execute synchronously within the same cycle that receives it.
 
-`--product <id>` — operate on the named registered product's state without switching the active product. `--products <id,...>|all` — operate on multiple products in dependency order (MultiProductCompactionProtocol §62l). `--no-verify` — skip automatic hash verification on `update apply` and `derive` operations.
+`--status` — show compaction manifest status (event count, `last_compacted_at`, archive file counts per field) without queuing a new compaction. Safe read-only operation.
+
+`--product <id>` — operate on the named registered product's state without switching the active product. `--products <id,...>|all` — operate on multiple products in dependency order (MultiProductCompactionProtocol §62l).
+
+`--format json|xml` — machine-readable output format. `--format xml` forces JSON-mode output from the handler then converts to elements-only XML with a `<urace>` root tag. Available as a global flag on any command: `urace --format xml compact ...`. `--json` is equivalent to `--format json`.
+
+**Multi-field atomicity.** The runtime exposes `compact_fields(field_paths, policies, authorized_by)` for operators needing to compact multiple fields in a single atomic operation. It executes in two passes: pass 1 validates all fields (dry-run each); pass 2 commits only if pass 1 had zero errors. A partial pass-2 failure emits a `compaction-partial-failure` WARNING IntegrityGap without reverting already-compacted fields.
 
 ## urace decompact
 
@@ -7418,7 +7433,11 @@ urace decompact <compaction-event-id> [--record-id <id>]
 urace amend <compaction-event-id> <record-id> --notice <text>
 ```
 
-Applies an in-place amendment to a single record within an ARCHIVE-mode CompactionEvent's archive file. Appends an ArchiveAmendment to `{archive_path}.amendments.jsonl`. Does NOT modify the CompactionSummary or CompactionManifest (the `original_digest` commitment is preserved). MUST be rejected if: the compaction event is ROLLING_EVICTION; the archive file is missing or unreadable; the record-id is not present in the archive. The amendment is written to the inbox and processed at the next safe lifecycle boundary. Use this command to flag a DecisionRecord as PROVENANCE_REVISED while it remains in archive storage, without a full decompaction round-trip.
+Applies an in-place amendment to a single record within an ARCHIVE-mode CompactionEvent's archive file. Appends an ArchiveAmendment to `{archive_path}.amendments.jsonl`. Does NOT modify the CompactionSummary or CompactionManifest (the `original_digest` commitment is preserved as the immutable audit anchor). MUST be rejected if: the compaction event is ROLLING_EVICTION; the archive file is missing or unreadable; the record-id is not present in the archive. The amendment is written to the inbox and processed at the next safe lifecycle boundary. Use this command to flag a DecisionRecord as PROVENANCE_REVISED while it remains in archive storage, without a full decompaction round-trip.
+
+**Amendment-aware digest.** After one or more `urace amend` operations on an archive, the live archive content diverges from `original_digest` (which was computed before any amendment). Subsequent `urace decompact` on the same event MUST verify the current archive digest against the LAST `after_digest` in `{archive_path}.amendments.jsonl` rather than `original_digest`. `original_digest` is preserved in the CompactionManifest as the pre-amendment audit anchor; the amendment log provides the current authoritative digest. Startup verification (`verify_manifest_on_startup`) MUST apply the same amendment-aware logic. An archive with no amendments uses `original_digest` directly.
+
+**Archive ceiling monitoring.** The system emits an `archive-count-ceiling` WARNING IntegrityGap when any governed field accumulates more than 10 archive files (default threshold, configurable). Excessive archive accumulation indicates compaction without consolidation; operators SHOULD periodically decompact and recompact to merge archives.
 
 ## Objective-Lifecycle Chunking (optional)
 
@@ -9559,9 +9578,23 @@ All available `urace` commands, in priority order. SD=True means no Executor inv
 
 ## --json
 
-Emit output as a machine-readable JSON document (or JSON Lines for streaming commands such as `auto`). Human-readable output is suppressed. Exit codes are unaffected.
+Emit output as a machine-readable JSON document (or JSON Lines for streaming commands such as `auto`). Human-readable output is suppressed. Exit codes are unaffected. Equivalent to `--format json`.
 
 Applies to: `add`, `amend`, `auto`, `autonomous`, `blocker`, `budget`, `change`, `check`, `commands`, `compact`, `compliance`, `configuration`, `constraint`, `context`, `crc`, `decision`, `decompact`, `derive`, `evaluation`, `evidence`, `executor`, `feedback`, `fleet`, `goal`, `govern`, `help`, `inbox`, `integrity-signal`, `intent`, `metric`, `milestone`, `onboard`, `plan`, `policy`, `pause`, `product`, `quality`, `report`, `resource`, `resume`, `rules`, `schema`, `self-evolution`, `source`, `trace`, `update`, `vital`, `vitals`, `why`
+
+## --format
+
+```
+--format json|xml
+```
+
+Global top-level flag that specifies the machine-readable output format. Default: `json`. Equivalent: `--format json` = `--json`.
+
+`--format xml` — forces JSON-mode output from the command handler, then converts to elements-only XML. Root tag: `<urace>`. Dicts become named child elements; lists become repeated `<item>` elements; `None` becomes `<null/>`; strings are XML-escaped. Non-JSON output (error messages, human text) passes through unchanged (graceful fallback). Example: `urace --format xml compact decision_records --status`.
+
+`--format xml` MUST be specified as a global flag before the subcommand: `urace --format xml <command> [args]`. It MUST NOT appear after the subcommand name.
+
+Applies to: all commands that support `--json`.
 
 ## --scope
 
@@ -10695,6 +10728,8 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 | `over-engineered` | WARNING | §59b capability envelope | Complexity reduction objective |
 | `cognitive-resume-stale` | WARNING | §62e CRC verification | CRC regeneration from current state |
 | `compaction-manifest-divergence` | BLOCKING | §62f compaction | Manual manifest repair |
+| `archive-count-ceiling` | WARNING | §62f compaction | Decompact-and-recompact to consolidate archive files |
+| `compaction-partial-failure` | WARNING | §62f compaction | Investigate failed field(s); re-run compact_fields |
 | `capability-envelope-breach` | WARNING | §59b envelope gate | CAPABILITY_SCOPE_EXPANSION DecisionRecord |
 | `capability-without-test-coverage` | WARNING | §59b test coverage gate | Add TestRecord(kind=CAPABILITY_GATE) |
 | `pattern-capability-gap` | WARNING | §62j derivation | Register CapabilityStatement or apply caps |

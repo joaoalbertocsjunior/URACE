@@ -63,7 +63,7 @@ urace add evidence --kind test-pass --summary "CI green"
 
 **Plain text** — quote multi-word input: `urace "improve onboarding flow"`. The Executor maps your input to any task, goal, intent, constraint, or command — each confirmed individually. Contradictory inputs surface as alternatives. Use `urace add context|goal|source|metric|vital|evidence` to queue structured records directly, no Executor needed.
 
-`urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
+`urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Update Safely
 
@@ -88,7 +88,15 @@ Use `urace /help compact` for details.
 
 ## Machine Interface
 
-URACE exposes a machine-readable interface for automation and external tools. Every command supports `--json` output. Structured commands can be issued via `urace api`:
+URACE exposes a machine-readable interface for automation and external tools. Every command supports `--json` output. For XML consumers, use `--format xml` (or `--format json` explicitly) — available as a top-level flag on any command:
+
+```text
+urace --format xml compact decision_records --status
+urace --format xml crc show
+urace --format json inspect                    # same as --json
+```
+
+`--format xml` forces JSON-mode output from the handler then converts to elements-only XML with a `<urace>` root. Non-JSON output (error messages, human text) passes through unchanged. Structured commands can also be issued via `urace api`:
 
 ```text
 urace api call --command <command> [--params <json>]
