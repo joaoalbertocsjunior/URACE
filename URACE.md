@@ -1694,7 +1694,8 @@ ERROR_INTERRUPTED  — enumeration error halted the cycle; conclusion is partial
 Every assessment cycle MUST execute the following mechanism phases in the declared order. This is the normative execution sequence; the full dependency graph is defined in §62l MechanismDependencyDAG.
 
 ```
-Phase 0 — Mechanism readiness  MechanismReadinessContract (§62l); first cycle only; skipped when mechanism_set_hash unchanged
+Phase 0a — Mechanism readiness   MechanismReadinessContract (§62l); first cycle only; skipped when mechanism_set_hash unchanged
+Phase 0b — Intent ambiguity audit IntentAmbiguityAudit (§62l); first cycle only and on DIRECTIVE_MUTATION; seven-check gate; surfaces all BLOCKING Intent defects before Phase 1
 Phase 1 — Boundary open       LifecycleBoundary created; state_before snapshotted (§74)
 Phase 2 — Feedback            FeedbackAccumulator (§62c)
 Phase 3 — Intent gap          IntentFulfillmentMechanism (§62c) + DirectiveCoverageContract (§62l)
@@ -1710,7 +1711,7 @@ Phase 11 — Completion fan-out  ObjectiveCompletionContract (§62l) if Objectiv
 Phase 12 — Boundary close     LifecycleBoundary closed; state_after snapshotted
 ```
 
-**Phase ordering contract.** Phase N MUST NOT begin before Phase N−1 produces its output citizen or emits a terminal IntegrityGap. A cycle that skips a phase or executes phases out of order is a `cycle-phase-ordering-violation` BLOCKING IntegrityGap. Phase 7 (ExploreExploitDecision) MUST be recorded before any Executor dispatch or discovery invocation. Phase 11 runs only when the current Objective's status transitions to completed during Phase 9–10; otherwise it is skipped. Phase 0 runs exactly once at first-cycle bootstrap and is skipped on all subsequent cycles unless mechanism_set_hash changes. Phase 8.5 is conditional: it runs only when ExploreExploitDecision.decision = exploit.
+**Phase ordering contract.** Phase N MUST NOT begin before Phase N−1 produces its output citizen or emits a terminal IntegrityGap. A cycle that skips a phase or executes phases out of order is a `cycle-phase-ordering-violation` BLOCKING IntegrityGap. Phase 7 (ExploreExploitDecision) MUST be recorded before any Executor dispatch or discovery invocation. Phase 11 runs only when the current Objective's status transitions to completed during Phase 9–10; otherwise it is skipped. Phase 0a runs exactly once at first-cycle bootstrap and is skipped on all subsequent cycles unless mechanism_set_hash changes. Phase 0b runs at first-cycle bootstrap and re-runs on any DIRECTIVE_MUTATION Input; it MUST complete with no BLOCKING gaps before Phase 1 proceeds. Phase 8.5 is conditional: it runs only when ExploreExploitDecision.decision = exploit.
 
 ---
 
@@ -6687,6 +6688,78 @@ Referenced from: §62l AdaptiveConfigProposalProtocol, §62l GapCalibrationProto
 
 ---
 
+## IntentFormulaValidityRecord (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+
+Records the cross-correlation assessment between `intent_gap_score` movement and operator `OutcomeFeedbackRecord` signals over a validation window. Produced by `IntentFormulaValidityProtocol` (§62l).
+
+```
+IntentFormulaValidityRecord {
+  id                         REQUIRED  Identifier; prefix "ifvr-"
+  created_at                 REQUIRED  ISO-8601 timestamp
+  updated_at                 REQUIRED  ISO-8601 timestamp
+  directive_id               REQUIRED  string; DIRECTIVE rule id this record covers
+  window_start_cycle         REQUIRED  int; first cycle index in validation window
+  window_end_cycle           REQUIRED  int; last cycle index in validation window
+  gap_reduction_cycles       REQUIRED  int; count of cycles with intent_gap_score decrease ≥ threshold
+  negative_feedback_cycles   REQUIRED  int; count of cycles with negative OutcomeFeedbackRecord signals
+  negativity_rate            REQUIRED  float ∈ [0, 1]; negative_feedback_cycles / gap_reduction_cycles
+  verdict                    REQUIRED  IntentFormulaValidityVerdict
+  drift_detected             REQUIRED  bool; true when negativity_rate ≥ Config.intent_formula.feedback_negativity_threshold
+}
+```
+
+**IntentFormulaValidityVerdict enum.**
+```
+VALID           — negativity_rate < feedback_negativity_threshold; formula is tracking Intent correctly
+DRIFTING        — negativity_rate ≥ feedback_negativity_threshold; formula likely measuring proxy, not Intent
+INSUFFICIENT_DATA — fewer than Config.intent_formula.min_window_feedback_count feedback records in window
+```
+
+Uses TemporalFields: created_at, updated_at. Used in: State.intent_formula_validity_records.
+
+**Referenced from:** §62l IntentFormulaValidityProtocol.
+
+---
+
+## AuthorityCeilingRecord (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+
+Records the binding constraint classification for a cycle where `EligibleActionSet.candidate_count = 0`. The `binding_constraint` field identifies whether the gap is authority-blocked, evidence-blocked, capability-blocked, or budget-blocked — enabling the operator to take the correct corrective action.
+
+```
+AuthorityCeilingRecord {
+  id                     REQUIRED  Identifier; prefix "acr-"
+  created_at             REQUIRED  ISO-8601 timestamp
+  updated_at             REQUIRED  ISO-8601 timestamp
+  cycle_id               REQUIRED  string; assessment cycle id (from CheckpointRecord or GapCycleRecord)
+  eligible_action_set_id REQUIRED  string; EligibleActionSet.id for this cycle
+  binding_constraint     REQUIRED  AuthorityCeilingConstraintKind
+  authority_scope        OPTIONAL  string; the specific scope that would need expansion if binding_constraint = AUTHORITY_BOUNDARY
+  required_delegation    OPTIONAL  string; description of the Authority delegation that would unlock candidates
+  evidence_gaps          OPTIONAL  list[string]; InferenceResult ids below threshold if binding_constraint = EVIDENCE_INSUFFICIENT
+  capability_gaps        OPTIONAL  list[string]; Executor capability names unavailable if binding_constraint = CAPABILITY_UNAVAILABLE
+  consecutive_ceiling_count REQUIRED int; how many consecutive cycles have had the same binding_constraint
+}
+```
+
+**AuthorityCeilingConstraintKind enum.**
+```
+AUTHORITY_BOUNDARY    — all candidates filtered due to unauthorized scope; Authority expansion required
+EVIDENCE_INSUFFICIENT — all candidates filtered due to InferenceResult.posterior_confidence below threshold
+CAPABILITY_UNAVAILABLE — all candidates filtered due to no eligible Executor for required task class
+BUDGET_EXHAUSTED      — all candidates filtered due to BudgetFeasibilityGate rejection
+COMPOSITE             — multiple constraint kinds contributed equally; see evidence_gaps and capability_gaps
+```
+
+Uses TemporalFields: created_at, updated_at. Used in: State.authority_ceiling_records.
+
+**Referenced from:** §62l AuthorityCeilingSignal, §62c EligibleActionEnumerator.
+
+---
+
 # 62c. Mechanism Contracts
 
 Mechanisms are the interlinking processes that move citizens from one state to another. Each mechanism MUST behave according to the contracts in this section regardless of implementation language, Executor type, or runtime environment.
@@ -7846,6 +7919,15 @@ All gap emissions are idempotent: RAM checks whether the gap kind already exists
       - Add to candidates
 3. Sort candidates descending by joint_score
 4. Create EligibleActionSet citizen with all computed fields
+5. If candidates list is empty after all filtering: classify binding constraint:
+   a. If any candidate was filtered only by "unauthorized scope" and no other reason: binding_constraint = AUTHORITY_BOUNDARY; populate authority_scope from the filtered candidate's target_scope
+   b. Else if any candidate was filtered only by "insufficient evidence confidence": binding_constraint = EVIDENCE_INSUFFICIENT; populate evidence_gaps from filtered InferenceResult ids
+   c. Else if no Executor was available for required task class: binding_constraint = CAPABILITY_UNAVAILABLE; populate capability_gaps
+   d. Else if BudgetFeasibilityGate rejected all candidates: binding_constraint = BUDGET_EXHAUSTED
+   e. Else: binding_constraint = COMPOSITE
+   Create AuthorityCeilingRecord citizen with binding_constraint, authority_scope/required_delegation/evidence_gaps/capability_gaps as applicable, and consecutive_ceiling_count = (count of prior AuthorityCeilingRecord entries with same binding_constraint in State.authority_ceiling_records)
+6. If binding_constraint = AUTHORITY_BOUNDARY AND consecutive_ceiling_count ≥ Config.authority.ceiling_consecutive_threshold (default 3):
+   Emit IntegrityGap(kind="authority-ceiling-reached", severity=BLOCKING) with detail=authority_scope
 
 **Output.** EligibleActionSet citizen appended to State.eligible_action_sets.
 
@@ -7853,6 +7935,7 @@ All gap emissions are idempotent: RAM checks whether the gap kind already exists
 - `eas-no-candidates` (WARNING) — candidates list is empty after all filtering; triggers explore decision in ExploreExploitPolicy
 - `eas-unauthorized-candidate` (BLOCKING) — a candidate bypassed scope check
 - `eas-inference-missing` (WARNING) — no InferenceResult available for a candidate; default confidence applied
+- `authority-ceiling-reached` (BLOCKING) — AUTHORITY_BOUNDARY binding constraint persisted for ≥ ceiling_consecutive_threshold consecutive cycles; Authority expansion required
 
 **Used in:** §37 Assessment cycle (after IntentFulfillmentMechanism, before ObjectiveUtilityFormula ranking). §43 Autonomous Executor Selection (reads EligibleActionSet.candidates[0] as primary candidate).
 **Referenced from:** §62b EligibleActionSet, §62b ObjectiveRankRecord.
@@ -12827,6 +12910,36 @@ GoverningRecord {
 
 ---
 
+## IntentAmbiguityAudit
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []` · `semantic_kind: Protocol`
+
+The **IntentAmbiguityAudit** is a Phase 0 pre-execution exhaustive check that surfaces all Intent specification defects before the first assessment cycle attempts execution. It replaces the reactive per-cycle intent elicitation pattern with a single structured operator pass at bootstrap — or re-run on DIRECTIVE mutation.
+
+**When it runs.** Phase 0 of the Canonical Cycle Phases (§37): first-cycle bootstrap only, and on every DIRECTIVE_MUTATION Input. It runs AFTER MechanismReadinessContract (Phase 0a) and BEFORE any execution cycle proceeds.
+
+**Seven-check contract.** For each active DIRECTIVE:
+1. **Coverage dimensions declared.** DIRECTIVE.coverage_dimensions is non-empty. Violation: emit IntegrityGap(kind="intent-coverage-dimensions-missing", severity=BLOCKING).
+2. **At least one IntentFulfillmentBinding per dimension.** Every declared coverage_dimension has ≥ 1 active IntentFulfillmentBinding. Violation: emit IntegrityGap(kind="intent-dimension-unbound", severity=BLOCKING) naming the dimension.
+3. **Binding formula references registered metrics.** Every IntentFulfillmentBinding.fulfillment_formula references only metric_ids present in MetricRegistry. Violation: emit IntegrityGap(kind="intent-binding-metric-unregistered", severity=BLOCKING) naming the metric_id.
+4. **Metric baselines set.** Every metric_id referenced in active bindings has a non-null baseline in MetricRegistry. Violation: emit IntegrityGap(kind="intent-metric-baseline-missing", severity=BLOCKING).
+5. **Target thresholds set.** Every IntentFulfillmentBinding has a non-null target_threshold. Violation: emit IntegrityGap(kind="intent-binding-threshold-missing", severity=BLOCKING).
+6. **No orphan bindings.** No IntentFulfillmentBinding references a DIRECTIVE that is not active. Violation: emit IntegrityGap(kind="intent-binding-orphaned", severity=WARNING).
+7. **Elicitation questions surfaced.** For every BLOCKING gap emitted in checks 1–5: invoke OperatorIntentElicitationProtocol to generate a structured clarification question. All questions MUST be surfaced together in one operator-facing pass before any execution cycle proceeds.
+
+**Blocking gate.** The audit MUST block all execution phases (Phase 1 onward) until all BLOCKING checks pass. WARNING gaps (check 6) are surfaced but do not block.
+
+**Re-run contract.** A DIRECTIVE_MUTATION Input MUST trigger a full re-run of all seven checks for the affected DIRECTIVE before any cycle proceeds under the new DIRECTIVE.
+
+**IntentAmbiguityAuditRecord.** The audit produces one `IntentAmbiguityAuditRecord` per run, recording: run_at timestamp, directive_ids_checked, checks_passed (list of check numbers 1–7 that passed), checks_blocked (list), gap_ids_emitted (list of IntegrityGap ids).
+
+**State Document.** `intent_ambiguity_audit_records` OPTIONAL list of IntentAmbiguityAuditRecord.
+
+**Citizens using IntentAmbiguityAudit:** IntentAmbiguityAuditRecord (§62b — add this schema reference).
+**Referenced from:** §37 Canonical Cycle Phases Phase 0, §62l MechanismReadinessContract, §62l OperatorIntentElicitationProtocol.
+
+---
+
 ### Audit & Observability
 
 ## AuditRecord Canonical Cluster
@@ -14439,6 +14552,48 @@ The **EvidenceSupersessionContract** governs the conditions under which an Evide
 
 ---
 
+## IntentFormulaValidityProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [IntentFormulaValidityRecord, OutcomeFeedbackContract, IntentFulfillmentMechanism, GapCalibrationProtocol]` · `semantic_kind: Contract`
+
+The **IntentFormulaValidityProtocol** defends against Goodhart's Law in the `gap()` function: when the `fulfillment_formula` in `IntentFulfillmentBinding` optimizes a proxy metric rather than actual Intent, `argmin(gap())` converges to the wrong destination. This protocol detects structural formula drift by cross-correlating gap reduction cycles with operator feedback signals.
+
+**Validation window.** After every `Config.intent_formula.validation_window_cycles` assessment cycles (default 10), the protocol runs once per active DIRECTIVE that has both `IntentFulfillmentBinding` records AND `OutcomeFeedbackRecord` records within the window.
+
+**Cross-correlation algorithm.**
+1. Collect cycles in window where `intent_gap_score` decreased by ≥ `Config.intent_formula.min_gap_reduction_threshold` (default 0.05) — these are `gap_reduction_cycles`
+2. For each `gap_reduction_cycle`: check if any `OutcomeFeedbackRecord` with `signal = NEGATIVE` was recorded within `Config.intent_formula.feedback_window_hours` (default 48 hours) after that cycle's close
+3. Compute `negativity_rate = negative_feedback_cycles / max(1, gap_reduction_cycles)`
+4. If `negativity_rate ≥ Config.intent_formula.feedback_negativity_threshold` (default 0.6): verdict = DRIFTING; `drift_detected = true`
+5. If fewer than `Config.intent_formula.min_window_feedback_count` (default 3) feedback records exist in window: verdict = INSUFFICIENT_DATA
+6. Otherwise: verdict = VALID
+
+**On DRIFTING verdict.**
+1. Create IntentFormulaValidityRecord with verdict = DRIFTING
+2. Emit IntegrityGap(kind="intent-formula-structural-drift", severity=BLOCKING) with detail = directive_id
+3. Surface in InspectionSurface `operator_gates` with prompt: "Intent formula for directive {directive_id} is producing gap reduction but negative operator feedback ({negativity_rate:.0%} negativity rate over {window} cycles). Review IntentFulfillmentBinding formulas — the gap measure may not track actual Intent."
+4. Halt autonomous execution for the affected DIRECTIVE until operator either: (a) updates the `fulfillment_formula` and clears the gap, or (b) explicitly overrides via `urace intent formula-override <directive_id>` with a JustificationContext
+
+**On VALID verdict.** Create IntentFormulaValidityRecord with verdict = VALID. No gap emitted.
+
+**On INSUFFICIENT_DATA verdict.** Create IntentFormulaValidityRecord with verdict = INSUFFICIENT_DATA. No gap emitted; re-evaluate after next window.
+
+**Gap emissions.**
+- `intent-formula-structural-drift` (BLOCKING) — fulfillment_formula is producing gap reduction that consistently precedes negative operator feedback; formula likely measuring proxy
+- `intent-formula-validation-skipped` (WARNING) — validation window elapsed but no OutcomeFeedbackRecord records exist for the DIRECTIVE; operator feedback collection recommended
+
+**Config keys.**
+- `Config.intent_formula.validation_window_cycles` (default 10) — cycles between validation runs
+- `Config.intent_formula.min_gap_reduction_threshold` (default 0.05) — minimum gap_score decrease to count as a gap-reduction cycle
+- `Config.intent_formula.feedback_negativity_threshold` (default 0.6) — negativity_rate above which DRIFTING is declared
+- `Config.intent_formula.feedback_window_hours` (default 48) — hours after cycle close within which feedback is attributed to that cycle
+- `Config.intent_formula.min_window_feedback_count` (default 3) — minimum feedback records needed for a valid assessment
+
+**Citizens using IntentFormulaValidityProtocol:** IntentFormulaValidityRecord (§62b).
+**Referenced from:** §62l OutcomeFeedbackContract, §62l GapCalibrationProtocol, §37 Assessment cycle.
+
+---
+
 ### Trust & Safety
 
 ## RollbackDecisionContract
@@ -14477,6 +14632,35 @@ Override: operator MAY force any path via `urace rollback <operation_id> [--full
 **Referenced from:** §62b RollbackDecisionRecord, §52 Indeterminate Effects, §53 Effect Reconciliation, §62i AP27.
 
 ---
+## AuthorityCeilingSignal
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [AuthorityCeilingRecord, EligibleActionEnumerator, AuthorityClosureInvariant]` · `semantic_kind: Contract`
+
+The **AuthorityCeilingSignal** formalizes the operator-facing signal that the gap cannot be closed within current Authority — distinguishing it from evidence/capability/budget gaps. It governs how the `EligibleActionEnumerator` classifies empty `EligibleActionSet` results and when the BLOCKING escalation fires.
+
+**Signal classification contract.** When `EligibleActionSet.candidate_count = 0`, the `EligibleActionEnumerator` MUST create an `AuthorityCeilingRecord` classifying the binding constraint (AUTHORITY_BOUNDARY, EVIDENCE_INSUFFICIENT, CAPABILITY_UNAVAILABLE, BUDGET_EXHAUSTED, or COMPOSITE). This classification MUST be computed before the `eas-no-candidates` WARNING gap is emitted.
+
+**BLOCKING escalation contract.** When the same `binding_constraint` kind appears in N consecutive `AuthorityCeilingRecord` entries (N = `Config.authority.ceiling_consecutive_threshold`, default 3):
+- Emit IntegrityGap(kind="authority-ceiling-reached", severity=BLOCKING) with detail = the authority_scope or evidence_gaps or capability_gaps as applicable
+- Surface in InspectionSurface `operator_gates` category with: binding_constraint kind, suggested corrective action (Authority delegation expansion / Evidence collection / Executor capability provisioning / Budget increase), and the specific blocking scope
+
+**Corrective action mapping.**
+| binding_constraint | Suggested corrective action |
+|---|---|
+| AUTHORITY_BOUNDARY | Expand delegation scope via `urace govern authorize --scope <authority_scope>` |
+| EVIDENCE_INSUFFICIENT | Collect evidence for hypothesis via `urace evidence add` or `urace explore` |
+| CAPABILITY_UNAVAILABLE | Register missing capability via `urace executor register` |
+| BUDGET_EXHAUSTED | Increase budget via `urace budget set` or review cost estimates |
+| COMPOSITE | Review `urace check` categories: `authority`, `evidence`, `capability`, `budget` |
+
+**Non-blocking window.** For cycles 1 through `ceiling_consecutive_threshold - 1`, the record is INFO-level only. The BLOCKING gap fires only at cycle N.
+
+**Citizens using AuthorityCeilingSignal:** AuthorityCeilingRecord (§62b).
+**Referenced from:** §62c EligibleActionEnumerator, §62l AuthorityClosureInvariant, §37 Assessment cycle.
+
+---
+
+
 
 ## SemanticConflictDetectionProtocol
 
@@ -18172,6 +18356,7 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r110 | 2026-10-19 | spec | Gap A+B+C closure: IntentFormulaValidityProtocol (§62l) + IntentFormulaValidityRecord (§62b) — Goodhart drift detection on gap() formula; AuthorityCeilingRecord (§62b) + AuthorityCeilingSignal (§62l) — binding constraint classification (AUTHORITY_BOUNDARY/EVIDENCE_INSUFFICIENT/CAPABILITY_UNAVAILABLE/BUDGET_EXHAUSTED); IntentAmbiguityAudit (§62l) — Phase 0b exhaustive Intent pre-execution gate (7 checks); EligibleActionEnumerator extended with constraint classification; Phase 0a/0b split in §37. **New external references:** `IntentFormulaValidityRecord` → §62b; `AuthorityCeilingRecord` → §62b; `IntentFormulaValidityProtocol` → §62l; `AuthorityCeilingSignal` → §62l; `IntentAmbiguityAudit` → §62l; 6 new IGC kinds → §62l. |
 | r109 | 2026-10-19 | spec+runtime | Structural fixes S2–S11: §62l domain sub-headers (8 domains); IGC kind retirement contract (§62l); State Document field retirement contract (§62e); LayerModel→tier diagram mapping table (§62s); AP deprecated_since/superseded_by metadata fields (§62n); FEATURE_BUNDLE_REGISTRY (22 entries); RETIRED_IGC_KINDS + validate_igc_kind_entries(); schema_export.py module; urace schema export CLI; test_urace_r109.py domain split; R109IGCParityTests + R109DAGAcyclicityTests + R109SchemaExportTests; 1274 tests. **New external references:** `FEATURE_BUNDLE_REGISTRY` → primitives.py; `RETIRED_IGC_KINDS` → primitives.py; `validate_igc_kind_entries` → primitives.py; `schema_export` → §62t. |
 | r108 | 2026-10-19 | spec+runtime | Architectural Composition diagram gap closure (G1–G13): 7-tier diagram (TOPMOST CALCULUS + T0–T6) with FoldOperator, L0–L4 layer labels, learning-loop evidence path, AP0–AP38 placements; 21 FeatureBundle spec-defined entries in §62j; --kind enum extended; §82 compression; 1258 tests. **New external references:** see r108 inline §62j FeatureBundle table annotations. |
 | r107 | 2026-10-19 | spec+runtime | Rounds 6–8 gap closure: 20+ §62b citizens (GapCalibrationRecord, ExecutorTrustProfile, EvidenceSufficiencySnapshot, MetricRegistry, AdaptiveConfigProposal, etc.), 7 §62c mechanisms, 30+ §62l protocols/contracts (ConvergenceOrderingContract, EvidenceSufficiencyContract, RollbackVerificationContract, PolicyConflictResolutionProtocol, etc.), 30 IGC kinds, 15 State fields wired to runtime; 6-tier Architectural Composition diagram (AP0–AP38 + FoldOperator + learning loop); 28 cross-references; 21 FeatureBundles; --kind extended (formula\|gap-catalog\|technique); §82 compression. **New external references:** see rounds 6–8 inline §62b/§62c/§62l annotations. |
