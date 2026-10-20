@@ -91,14 +91,24 @@ URACE compresses lifecycle state gradually as it grows and decompresses on deman
 
 ## Machine Interface
 
-URACE exposes a machine-readable interface for automation and external tools. Every command supports `--json` output. For XML consumers, use `--format xml` — converts to elements-only XML with a `<urace>` root. Structured commands and feedback can be issued programmatically. Full I/O contract: [External Interface Protocol](URACE.md#62w-external-interface-protocol).
+URACE exposes a machine-readable interface for automation and external tools. Every command supports `--json` output. For XML consumers, use `--format xml` (or `--format json` explicitly) — available as a top-level flag on any command:
+
+```text
+urace --format xml compact decision_records --status
+urace --format xml crc show
+urace --format json inspect                    # same as --json
+```
+
+`--format xml` forces JSON-mode output from the handler then converts to elements-only XML with a `<urace>` root. Non-JSON output (error messages, human text) passes through unchanged. Structured commands can also be issued via `urace api`:
 
 ```text
 urace api call --command <command> [--params <json>]
 urace api batch --input-json <path|->
 urace api watch [--follow]
-urace feedback submit --input-json <path|->
+urace api version
 ```
+
+Feedback and lifecycle events can be submitted in machine-readable form via `urace feedback submit --input-json`. The full I/O contract is defined in [External Interface Protocol](URACE.md#62w-external-interface-protocol).
 
 ## Reuse URACE Building Blocks The Way You Want
 
