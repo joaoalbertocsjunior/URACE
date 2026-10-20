@@ -63,7 +63,7 @@ urace add evidence --kind test-pass --summary "CI green"
 
 **Plain text** — `urace "improve onboarding flow"`. A universal router: one prompt resolves to one or more commands dispatched in the correct order. Contradictory sub-intents surface as conflicts before dispatch.
 
-The full command list with category and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
+`urace /help` lists all commands; `urace /help <command>` gives per-command reference. The full command list with category and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Update Safely
 
