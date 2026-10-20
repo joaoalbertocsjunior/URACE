@@ -61,29 +61,22 @@ urace add evidence --kind test-pass --summary "CI green"
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Plain text** — quote multi-word input: `urace "improve onboarding flow"`. The freeform entry point is a universal router: a single prompt may resolve to multiple commands dispatched in the correct order. `urace "add goal reduce churn and check status"` produces a route graph — two operations, sequenced, each confirmed. Contradictory sub-intents surface as conflicts before anything runs. Use `urace add context|goal|source|metric|vital|evidence` to queue structured records directly, no Executor needed.
+**Plain text** — `urace "improve onboarding flow"`. A universal router: one prompt resolves to one or more commands dispatched in the correct order. Contradictory sub-intents surface as conflicts before dispatch. Use `urace add context|goal|source|metric|vital|evidence` to queue records directly, no Executor needed.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Connect Data Sources
 
-URACE can feed from and feed into any structural data source — databases, files, or cloud object stores — without coupling to a specific technology. Register a source once; URACE handles the rest.
+Register any database, file, or cloud store once; URACE feeds from it as evidence and can write records back. `--direction read|write|both` controls flow. Credentials stored as pointers only — env var, vault path, or k8s secret ref; never raw values in state.
 
 ```text
-urace data add sales-db --type postgres --connect "postgresql://host/db" --direction both
-urace data add metrics  --type csv      --connect ./metrics.csv
-urace data add graph    --type neo4j    --connect "bolt://localhost:7687" --direction read
-urace data sync sales-db    # PULL latest rows → Evidence
-urace data push sales-db    # PUSH URACE records → database
-urace data list             # show all registered sources
-urace data inspect sales-db # connectivity status + metadata
-urace data update metrics --label "quarterly export"
-urace data remove metrics
+urace data add mydb --type postgres --connect "postgresql://host/db" --direction both
+urace data sync mydb          # PULL → Evidence
+urace data push mydb          # PUSH URACE records → source
+urace data list|inspect|update|remove
 ```
 
-**`--direction`** controls data flow: `read` (evidence ingestion only), `write` (record emission only), or `both` (bidirectional). Credentials are never stored in URACE state — only a pointer (env var name, vault path, or k8s secret ref).
-
-Supported adapter kinds include SQL (postgres, mysql, sqlite, mssql, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb, neptune), time-series (influxdb, timescaledb), search (elasticsearch), structured files (csv, excel, parquet, avro, arrow), semi-structured (json, xml, yaml), and cloud stores (s3, gcs, azure-blob). New adapters can be registered via `Config.data.registered_adapters` without a spec change.
+Adapters: SQL (postgres, mysql, sqlite, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb), time-series (influxdb, timescaledb), search (elasticsearch), files (csv, excel, parquet, json, xml, yaml), cloud (s3, gcs, azure-blob). Extensible via `Config.data.registered_adapters`.
 
 ## Update Safely
 
@@ -95,37 +88,11 @@ Inspect metrics, vitals, state, and resource usage with `urace /check`, `urace /
 
 ## Inspect and Modify Context
 
-URACE automatically and gradually compresses its full lifecycle state — objectives, evidence, decisions, operations, and all user-added context — as it grows, to maintain reliability over long runs. It decompresses gradually too, restoring full human-readable form for inspection or modification.
-
-```text
-urace /compact      gradually compress lifecycle state for reliability
-urace /decompact    gradually restore full human-readable form
-urace /amend <id>   correct a record in place without full decompaction
-urace /crc show     inspect the current full-context Cognitive Resume
-```
-
-Use `urace /help compact` for details.
+URACE compresses lifecycle state gradually as it grows and decompresses on demand. Use `urace /compact`, `/decompact`, `/amend <id>`, and `/crc show` to manage it. See `urace /help compact`.
 
 ## Machine Interface
 
-URACE exposes a machine-readable interface for automation and external tools. Every command supports `--json` output. For XML consumers, use `--format xml` (or `--format json` explicitly) — available as a top-level flag on any command:
-
-```text
-urace --format xml compact decision_records --status
-urace --format xml crc show
-urace --format json inspect                    # same as --json
-```
-
-`--format xml` forces JSON-mode output from the handler then converts to elements-only XML with a `<urace>` root. Non-JSON output (error messages, human text) passes through unchanged. Structured commands can also be issued via `urace api`:
-
-```text
-urace api call --command <command> [--params <json>]
-urace api batch --input-json <path|->
-urace api watch [--follow]
-urace api version
-```
-
-Feedback and lifecycle events can be submitted in machine-readable form via `urace feedback submit --input-json`. The full I/O contract is defined in [External Interface Protocol](URACE.md#62w-external-interface-protocol).
+Every command supports `--json` output. Use `--format xml` for XML consumers (elements-only `<urace>` root). Issue structured commands via `urace api call|batch|watch|version`. Submit feedback programmatically via `urace feedback submit --input-json`. Full I/O contract: [External Interface Protocol](URACE.md#62w-external-interface-protocol).
 
 ## Reuse URACE Building Blocks The Way You Want
 
