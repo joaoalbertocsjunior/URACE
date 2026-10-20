@@ -1224,6 +1224,7 @@ Evidence {
   credibility?
   relevance?
   content_hash          REQUIRED  string; SHA-256 of the concatenation of kind + summary + (metric_value if present) + source at creation time; computed by the producing executor and verified by NormativeIntegrityContract on every Evidence read; mismatch emits IntegrityGap(kind="evidence-integrity-violated", severity=BLOCKING)
+  data_source_id        OPTIONAL  string; ref to DataSourceRecord if evidence was produced by a PULL operation
   limitations?
   contradictions?
 }
@@ -1698,7 +1699,7 @@ Every assessment cycle MUST execute the following mechanism phases in the declar
 Phase 0a — Mechanism readiness   MechanismReadinessContract (§62l); first cycle only; skipped when mechanism_set_hash unchanged; StateSpaceAuditContract (§62l) verifies FSM completeness; CapabilityDegradationContract (§62l) checks bootstrap capability; StateSchemaMigrationProtocol (§62l) runs pre-Phase-0a on State load
 Phase 0b — Intent ambiguity audit IntentAmbiguityAudit (§62l) + GoalCoverageCompletenessProtocol (§62l); first cycle only and on DIRECTIVE_MUTATION or GoalRecord mutation; eight-check gate (checks 1–7: binding/formula/metric/baseline/threshold validity; check 8: executable goal→objective→metric path existence); surfaces all BLOCKING Intent defects before Phase 1; GoalDecompositionProtocol (§62l) evaluates goal tree satisfaction as part of check 8
 Phase 1 — Boundary open       LifecycleBoundary created; state_before snapshotted (§74); DeadlineEnforcementContract (§62l) checks all ACTIVE DeadlineRecords before any other phase proceeds
-Phase 2 — Feedback            FeedbackAccumulator (§62c)
+Phase 2 — Feedback            FeedbackAccumulator (§62c); DataSourceRegistryProtocol resolves CONNECTED READ/BIDIRECTIONAL DataSourceRecords to Evidence (DataSyncRecord produced per source)
 Phase 3 — Intent gap          IntentFulfillmentMechanism (§62c) + IntentAggregationFormula (§62l) + UncertaintyPropagationFormula (§62l) + DirectiveCoverageContract (§62l); IntentAggregationFormula produces IntentAggregateGapRecord; UncertaintyPropagationFormula produces UncertaintyBand
 Phase 4 — Authority           AuthorityClosureOperator (§62c) → AuthoritySnapshot
 Phase 5 — Inference           EvidenceInferenceMechanism (§62c) for active hypotheses
@@ -1714,6 +1715,7 @@ Phase 9 — Execute or discover  dispatch to Executor (exploit) or EvidenceReque
 Phase 10 — Validate           independent validation gate (§60); ValueAccountingProtocol (§62l) creates ValueLedgerEntry on commit; NormativeIntegrityContract (§62l) pre-commit invariant gate
 Phase 10b — Transition valid.  StateTransitionValidationProtocol (§62l); recomputes aggregate gap post-commit; REGRESSION → gap-regression-detected BLOCKING gap + auto suspension
 Phase 11 — Completion fan-out  ObjectiveCompletionContract (§62l) if Objective completed
+Phase 11+ — Data push           DataSourceRegistryProtocol executes PUSH for CONNECTED WRITE/BIDIRECTIONAL DataSourceRecords (DataSyncRecord produced per target)
 Phase 12 — Boundary close     LifecycleBoundary closed; state_after snapshotted; OperatorAttentionContract (§62l) produces AttentionBudgetRecord
 Phase 12b — Strategic review  StrategicReviewProtocol (§62l); conditional: runs every Config.strategy.review_interval_cycles (default 20) cycles; five-signal meta-assessment; DIVERGING verdict fires strategy-diverging BLOCKING review gate
 ```
@@ -5129,7 +5131,8 @@ TraceRecord {
   decision_id   OPTIONAL  string; id of the DecisionRecord this trace is associated with
   summary       REQUIRED  string; human-readable description of what changed and why
   detail        OPTIONAL  string; extended context or correction reference
-  recorded_by   REQUIRED  string; who or what produced this record (default "runtime")
+  recorded_by            REQUIRED  string; who or what produced this record (default "runtime")
+  route_graph_record_id  OPTIONAL  string; ref to RouteGraphRecord if this trace was produced by a multi-route dispatch
 }
 ```
 
@@ -5176,6 +5179,7 @@ OutcomeFeedbackRecord {
   evidence_id  OPTIONAL  string; ev- id corroborating the feedback signal
   detail       OPTIONAL  string; operator-provided explanation
   processed    OPTIONAL  bool; default false; set true by FeedbackAccumulator (§62c) after applying
+  data_sink_id OPTIONAL  string; ref to DataSourceRecord if this feedback record was written via a PUSH operation
 }
 ```
 
@@ -7459,6 +7463,90 @@ FleetResourceRegistry {
 - Entries auto-released after lock_timeout_cycles; auto-release emits IntegrityGap(kind="fleet-resource-lock-timeout", severity=WARNING)
 
 **Referenced from:** §62l CrossProductConflictProtocol.
+
+---
+
+## DataSourceRecord (citizen schema)
+
+Registered structural data source (database, file, or object store) with adapter kind, direction, and credential reference.
+
+```
+DataSourceRecord {
+  id                    REQUIRED  string; prefix dsr-
+  name                  REQUIRED  string; operator-assigned name
+  adapter_kind          REQUIRED  string; registered adapter kind (e.g., postgres, mongodb, neo4j, csv, excel, parquet, json, xml, s3)
+  direction             REQUIRED  enum; READ | WRITE | BIDIRECTIONAL
+  connection_metadata   OPTIONAL  object; adapter-specific parameters (host, port, path, database); NEVER raw credentials
+  credential_record_id  OPTIONAL  string; ref to CredentialRecord
+  status                REQUIRED  enum; PENDING | CONNECTED | DISCONNECTED | DEGRADED
+  last_sync_cycle       OPTIONAL  integer
+  last_push_cycle       OPTIONAL  integer
+  schema_hint           OPTIONAL  string
+  label                 OPTIONAL  string
+}
+```
+
+**Referenced from:** §62v DataSourceRegistry.
+
+---
+
+## CredentialRecord (citizen schema)
+
+Credential pointer for a data source; stores only a reference to a secret — never the secret itself.
+
+```
+CredentialRecord {
+  id              REQUIRED  string; prefix cred-
+  data_source_id  REQUIRED  string; ref to DataSourceRecord
+  auth_kind       REQUIRED  enum; DSN | API_KEY | OAUTH2 | CERT | BASIC | KERBEROS | IAM_ROLE | VAULT_PATH | ENV_VAR
+  secret_ref      REQUIRED  string; pointer to secret (env var name, vault path, k8s secret ref); NEVER the raw credential
+  expires_at      OPTIONAL  string; ISO-8601
+}
+```
+
+**Referenced from:** §62v DataSourceRegistry.
+
+---
+
+## DataSyncRecord (citizen schema)
+
+Audit record for a single PULL (feed-from) or PUSH (feed-in) operation against a data source.
+
+```
+DataSyncRecord {
+  id                    REQUIRED  string; prefix dsync-
+  data_source_id        REQUIRED  string
+  cycle                 REQUIRED  integer
+  direction             REQUIRED  enum; PULL | PUSH
+  rows_affected         OPTIONAL  integer
+  evidence_ids_produced OPTIONAL  array; Evidence IDs created (PULL only)
+  records_written       OPTIONAL  array; schema-prefixed record IDs pushed (PUSH only)
+  status                REQUIRED  enum; SUCCESS | PARTIAL | FAILED
+  error_msg             OPTIONAL  string
+}
+```
+
+**Referenced from:** §62v DataSourceRegistry.
+
+---
+
+## RouteGraphRecord (citizen schema)
+
+Multi-route DAG derived from a single freeform prompt by UniversalEntryProtocol.
+
+```
+RouteGraphRecord {
+  id              REQUIRED  string; prefix rgr-
+  prompt          REQUIRED  string; original freeform input
+  route_nodes     REQUIRED  array; list of RouteNode objects {node_id: string, route_type: enum COMMAND|EXECUTOR|DATA_OPERATION, target: string, confidence: number [0,1], args: object OPTIONAL, status: enum PENDING|DISPATCHED|SUCCEEDED|FAILED|SKIPPED}
+  route_edges     REQUIRED  array; list of RouteEdge objects {from_node_id: string, to_node_id: string, dependency_type: enum SEQUENTIAL|PARALLEL|CONDITIONAL}
+  conflict_pairs  OPTIONAL  array; pairs of node_ids with detected state conflicts
+  dispatch_tier   REQUIRED  enum; AUTO | CONFIRM | ABORT
+  status          REQUIRED  enum; PENDING | DISPATCHED | PARTIAL | COMPLETE | FAILED | CONFLICT
+}
+```
+
+**Referenced from:** §62w UniversalEntryProtocol.
 
 ---
 
@@ -13768,6 +13856,13 @@ Consumes: Config Document (operator-provided overrides vs. construct defaults)
 Phase: bootstrap (Phase 0a scan); ongoing (record PolicyOverrideRecords when Config overrides construct defaults; gate Config mutations before they take effect)
 IGC: policy-mechanism-coupling-detected (WARNING), policy-scanner-blocking-violation (BLOCKING)
 
+**UniversalEntryProtocol** `protocol` COMPOSITIONAL
+Extends freeform `urace <text>` entry to a multi-route DAG dispatcher. A single prompt decomposes into sub-intents via semantic connective splitting; each sub-intent is classified via ClassificationBatch to produce a RouteNode. Route edges encode SEQUENTIAL/PARALLEL/CONDITIONAL dependencies. Conflict detection (same State field, contradictory mutations) → ABORT tier. Cycle detection enforces DAG invariant. Dispatch tiers: AUTO (all nodes ≥ confidence_threshold, no conflicts), CONFIRM (ambiguous), ABORT (conflict/cycle).
+Produces: RouteGraphRecord
+Consumes: ClassificationBatch, DataSourceRegistryProtocol
+Phase: pre-Phase-1 routing; dispatches into normal phase sequence per RouteNode type
+IGC: route-conflict-detected (BLOCKING), route-graph-cycle-detected (BLOCKING), route-dispatch-partial (WARNING), universal-route-ambiguous (WARNING), route-confidence-below-threshold (WARNING)
+
 **CausalModelProtocol** `protocol` FOUNDATIONAL
 Maintains a causal graph over Product signals — hypothesizes directed edges from intervention/outcome pairs, promotes to CONFIRMED via StateTransitionValidationRecord regression labels, flags confounders. Produces CausalModelRecord per cycle post Phase 10b. GapImpactEstimationProtocol weights Δgap estimates by causal confidence, preferring interventions on CONFIRMED non-confounded causes.
 Produces: CausalEdgeRecord, CausalModelRecord
@@ -15779,6 +15874,13 @@ This lookup is the ONLY change to the ObjectiveUtilityFormula computation; the f
 
 ---
 
+**DataSourceRegistryProtocol** `protocol` FOUNDATIONAL
+Bidirectional data adapter registry. Resolves CONNECTED READ/BIDIRECTIONAL DataSourceRecords to Evidence at Phase 2 (PULL); executes PUSH to CONNECTED WRITE/BIDIRECTIONAL DataSourceRecords at Phase 11+ (PUSH). Credential isolation via CredentialRecord.secret_ref pointer-only contract. Adapter agnosticism boundary encapsulates all concrete storage technology.
+Produces: DataSourceRecord, CredentialRecord, DataSyncRecord
+Consumes: OutputSchemaRegistry
+Phase: Phase 2 (PULL), Phase 11+ (PUSH)
+IGC: data-source-sync-failed (BLOCKING), data-source-write-failed (BLOCKING), data-source-credential-expired (BLOCKING), data-source-credential-exposed (BLOCKING), data-source-direction-violation (BLOCKING), data-source-schema-mismatch (WARNING), data-source-connectivity-lost (WARNING), data-source-write-rejected (WARNING)
+
 ### Trust & Safety
 
 **RecursiveSelfModificationGate** `gate` FOUNDATIONAL
@@ -17447,6 +17549,156 @@ If an accepted Objective has no OutcomeFeedbackRecord after `config.feedback.win
 **Implements:** OutcomeFeedbackContract (§62l), InspectionContract (§62l), AuditRecord (§62l).
 **Uses:** OutcomeFeedbackRecord (§62b), FeedbackAccumulator (§62c), OutcomeFeedbackContract (§62l).
 **Referenced from:** §62l OutcomeFeedbackContract, §62b OutcomeFeedbackRecord, §62c FeedbackAccumulator.
+
+---
+
+# 62v. DataSourceRegistry
+
+Storage-agnostic registry for structural data sources — databases, files, and object stores of any kind. Provides bidirectional data flow: evidence ingestion (PULL, feed-from) and record emission (PUSH, feed-in). Enforces credential isolation and adapter abstraction so the core cycle never references a concrete storage technology.
+
+## DataSourceRegistryProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [OutputSchemaRegistry]`
+
+| Attribute | Value |
+|-----------|-------|
+| Kind | FOUNDATIONAL |
+| Domain | Evidence & Convergence |
+| Produces | DataSourceRecord, CredentialRecord, DataSyncRecord |
+| Consumes | OutputSchemaRegistry (for PUSH target selection) |
+
+## Adapter Agnosticism Boundary
+
+URACE's core cycle references only `DataSourceRecord`. Concrete adapter logic (query dialect, file parser, wire protocol) is encapsulated by the registered adapter. Adding a new storage technology requires only registering a new `adapter_kind` value — no spec change.
+
+**Registered adapter catalog (open; extensible by operator via Config.data.registered_adapters):**
+
+| Category | Adapter kinds |
+|----------|--------------|
+| SQL | postgres, mysql, sqlite, mssql, oracle, cockroachdb, redshift, bigquery, snowflake |
+| NoSQL document | mongodb, couchdb, firestore, dynamodb, cosmosdb |
+| NoSQL key-value | redis, etcd |
+| Graph | neo4j, neptune, arangodb, tigergraph, janusgraph |
+| Time-series | influxdb, timescaledb, questdb, prometheus |
+| Search | elasticsearch, opensearch |
+| Mixed/multi-model | surreal, fauna |
+| Structured files | csv, tsv, excel, parquet, avro, orc, arrow |
+| Semi-structured | json, jsonl, xml, yaml, toml |
+| Binary | hdf5, netcdf, protobuf |
+| Cloud object stores | s3, gcs, azure-blob |
+
+## Credential Isolation
+
+`CredentialRecord.secret_ref` MUST be a pointer only (env var name, vault path, k8s secret ref). Raw credentials MUST NOT appear in any URACE record, State field, or log entry. Detection of a raw credential in any record → `data-source-credential-exposed` BLOCKING, cycle halted.
+
+## Feed-From (PULL) — Phase 2
+
+At Phase 2, DataSourceRegistryProtocol resolves all `DataSourceRecord`s with `direction = READ | BIDIRECTIONAL` and `status = CONNECTED`. For each, the adapter executes a read operation and produces one or more `Evidence` records with `data_source_id` set. A `DataSyncRecord` (direction=PULL) is produced per operation. Sync failure → `data-source-sync-failed` BLOCKING.
+
+## Feed-In (PUSH) — Phase 11+
+
+After Phase 11 (cycle completion), DataSourceRegistryProtocol executes PUSH for all `DataSourceRecord`s with `direction = WRITE | BIDIRECTIONAL` and `status = CONNECTED`. The records to push are selected per `OutputSchemaRegistry`. A `DataSyncRecord` (direction=PUSH) is produced per operation. Write failure → `data-source-write-failed` BLOCKING.
+
+## Direction Violation
+
+Attempting PUSH to a READ-only source or PULL from a WRITE-only source → `data-source-direction-violation` BLOCKING.
+
+## Update Semantics
+
+An existing `DataSourceRecord` MAY be updated (name, adapter_kind, connection_metadata, direction, label) via `urace data update`. Status transitions back to PENDING on connection_metadata or credential change, requiring re-verification.
+
+## CLI Surface
+
+| Command | Description |
+|---------|-------------|
+| `urace data add <name> --type <kind> --connect <dsn\|path> [--direction read\|write\|both] [--label <text>]` | Register new data source |
+| `urace data update <name> [--type <kind>] [--connect <dsn\|path>] [--direction read\|write\|both] [--label <text>]` | Update existing registration |
+| `urace data remove <name>` | Deregister data source |
+| `urace data list [--type <kind>]` | List registered sources |
+| `urace data sync <name>` | Execute PULL → Evidence |
+| `urace data push <name>` | Execute PUSH → data source |
+| `urace data inspect <name>` | Show metadata + connectivity status |
+
+## IGC Kinds
+
+| Kind | Severity | Trigger |
+|------|----------|---------|
+| `data-source-sync-failed` | BLOCKING | PULL operation failed |
+| `data-source-write-failed` | BLOCKING | PUSH operation failed |
+| `data-source-credential-expired` | BLOCKING | `CredentialRecord.expires_at` passed |
+| `data-source-credential-exposed` | BLOCKING | Raw credential detected in any record or State field |
+| `data-source-direction-violation` | BLOCKING | Operation direction mismatches `DataSourceRecord.direction` |
+| `data-source-schema-mismatch` | WARNING | Resolved schema differs from `schema_hint` |
+| `data-source-connectivity-lost` | WARNING | Source was CONNECTED; now unreachable |
+| `data-source-write-rejected` | WARNING | PUSH partially rejected by target |
+
+**Implements:** InspectionContract (§62l).
+**Uses:** DataSourceRecord (§62b), CredentialRecord (§62b), DataSyncRecord (§62b), OutputSchemaRegistry (§62l).
+**Referenced from:** §62b DataSourceRecord, §62b CredentialRecord, §62b DataSyncRecord, §62b Evidence (data_source_id), §62b OutcomeFeedbackRecord (data_sink_id), §37 Phase 2, §37 Phase 11+.
+
+---
+
+# 62w. UniversalEntryProtocol
+
+Extends the freeform entry point (`urace <text>`) to a universal, use-agnostic router. A single prompt may resolve to a `RouteGraph` — a DAG of ordered command, executor, and data operations — enabling multi-intent prompts to dispatch correctly to multiple routes without user overhead.
+
+## UniversalEntryProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: true` · `depends: [ClassificationBatch, DataSourceRegistryProtocol]`
+
+| Attribute | Value |
+|-----------|-------|
+| Kind | COMPOSITIONAL |
+| Domain | Core Governance |
+| Produces | RouteGraphRecord |
+| Consumes | ClassificationBatch, DataSourceRegistryProtocol |
+
+## Route Resolution
+
+A freeform prompt is decomposed into sub-intents (split on semantic connectives: "and", "then", "also", "after", ","). Each sub-intent is classified via ClassificationBatch to produce a `RouteNode`. Dependencies between nodes are inferred from semantic ordering cues and argument cross-references (e.g., a node that references the output of another is made SEQUENTIAL on it).
+
+## Conflict Detection
+
+If two `RouteNode`s would mutate the same State field with contradictory values, they are recorded as a `conflict_pair`. `dispatch_tier` is set to ABORT and `route-conflict-detected` BLOCKING is emitted. User resolution required before dispatch proceeds.
+
+## Cycle Detection
+
+`RouteGraph.route_edges` MUST form a DAG. A cycle → `route-graph-cycle-detected` BLOCKING.
+
+## Dispatch Tiers
+
+| Condition | Tier | Behavior |
+|-----------|------|----------|
+| All nodes confidence ≥ `Config.routing.confidence_threshold`, no conflicts | AUTO | Dispatch immediately in topological order |
+| Any node below threshold or ambiguous classification | CONFIRM | Present RouteGraph to operator; await approval |
+| Conflict or cycle detected | ABORT | Halt dispatch; surface conflict_pairs |
+
+## Execution Model
+
+- **SEQUENTIAL** edges: nodes execute in topological order; each waits for its dependency.
+- **PARALLEL** edges: nodes with no unresolved dependencies execute concurrently.
+- **CONDITIONAL** edges: downstream node executes only if condition evaluates true at dispatch time.
+
+## Partial Failure
+
+If a node fails and has no downstream dependents → `route-dispatch-partial` WARNING; remaining independent nodes continue. If a failed node has dependents, dependents transition to SKIPPED.
+
+## Observability
+
+Each dispatched `RouteNode` emits an individual `TraceRecord` with `route_graph_record_id` set to the parent `RouteGraphRecord.id`. The full RouteGraph is visible via `urace trace <rgr-id>`.
+
+## IGC Kinds
+
+| Kind | Severity | Trigger |
+|------|----------|---------|
+| `route-conflict-detected` | BLOCKING | Two nodes mutate same State field contradictorily |
+| `route-graph-cycle-detected` | BLOCKING | RouteGraph contains a cycle |
+| `route-dispatch-partial` | WARNING | One or more nodes failed; independent nodes continued |
+| `universal-route-ambiguous` | WARNING | Sub-intent below classification confidence threshold |
+| `route-confidence-below-threshold` | WARNING | Route produced but confidence < `Config.routing.confidence_threshold` |
+
+**Uses:** RouteGraphRecord (§62b), ClassificationBatch (§62b), DataSourceRegistryProtocol (§62v), TraceRecord (§62b).
+**Referenced from:** §62b RouteGraphRecord, §62b TraceRecord (route_graph_record_id), §3 Universal Input.
 
 ---
 
@@ -19614,6 +19866,7 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r117 | 2026-10-20 | spec | §62v DataSourceRegistry (DataSourceRegistryProtocol FOUNDATIONAL) + §62w UniversalEntryProtocol (COMPOSITIONAL); bidirectional data flow (PULL/PUSH); 4 new §62b schemas (DataSourceRecord dsr-, CredentialRecord cred-, DataSyncRecord dsync-, RouteGraphRecord rgr-); optional fields on Evidence (data_source_id), OutcomeFeedbackRecord (data_sink_id), TraceRecord (route_graph_record_id); 13 new IGC kinds (data-source-sync-failed, data-source-write-failed, data-source-credential-expired, data-source-credential-exposed, data-source-direction-violation, data-source-schema-mismatch, data-source-connectivity-lost, data-source-write-rejected, route-conflict-detected, route-graph-cycle-detected, route-dispatch-partial, universal-route-ambiguous, route-confidence-below-threshold); `urace data` CLI surface (add/update/remove/list/sync/push/inspect). |
 | r116 | 2026-10-19 | spec | Full closure of all 14 gaps: 31 residual issues resolved across C1-C7, A1-A4, S1-S3. Closes every residual issue identified in the post-r115 audit. All 14 gaps now have zero known residual issues: **C4:** bootstrap hash-lock (`State.bootstrap_file_hashes`); `State.last_self_modification_cycle` for cooldown tracking; RollbackRecord verified before any self-mod approved. **C5:** Evidence.content_hash for N3 structural enforcement; NORMATIVE_HALT lifecycle state defined with SD=True commands remaining operational; NIC ordering before BOUNDARY formally hardcoded; atomic mutation contract (all-or-nothing); halt semantics fully specified. **S1:** GapCalibrationProtocol formally consumes FeedbackLatencyRecord with latency-adjusted discount formula; loop_id closed enum (5 values); minimum sample guard (Config.feedback.latency_min_samples); oscillation dampening wired to LearningWeightUpdateFormula (α × damping_factor for N cycles). **A3:** ObjectiveDependencyContract fallback changed from "all SATISFIED" (dangerous) to SERIALIZED execution; mutual fallback cycle detection. **C1:** Empty AND/OR node → goal-tree-node-empty BLOCKING; GoalRecord deletion blocked by orphaned LEAF GoalTreeNode gate → goal-tree-orphan-detected BLOCKING. **C3:** mutation_reason REQUIRED (not OPTIONAL); goal_tree_node_ids_snapshot field added to IntentVersionRecord; rollback GoalTreeNode reconciliation specified. **C2:** SATISFIED→BLOCKING reversion cross-referenced to RollbackCompletenessAttestation and Objective status mutations; DATA dependency semantics formally defined (output_artifact_id). **A1:** Scanner tiered: BLOCKING for new (≥r114) constructs, WARNING for legacy; Config mutation gate added (validation before Config update takes effect). **C6:** Calibration formula: rolling geometric mean of realized/expected ratios; `State.value_calibration_factor`; multi-dimensional value (multiple ValueLedgerEntry per Operation per dimension). **A2:** Concurrent cycle trigger queuing (EventTriggerRecord.status = QUEUED); HMAC-SHA256 WEBHOOK auth with timestamp anti-replay. **C7:** Tiered escalation (persistent overload → BLOCKING after N cycles); AttentionBudgetRecord.consecutive_overload_cycles; overloaded=true records non-compactable. **S2:** Pessimistic lock model (reserve-before-dispatch, atomic compare-and-set); TOCTOU prevention requirement; fleet-lock-reservation-conflict WARNING. **S3:** Transform §62b schema defined (tfm-); SchemaMigrationRecord bootstrap destination specified; dry-run mode (`urace /check --migration-dry-run`). **A4:** LifecycleTrigger enum (18 values) defines closed FSM input alphabet for StateSpaceAuditContract completeness verification. **New §62b schemas:** Transform (tfm-). **New State fields:** last_self_modification_cycle, bootstrap_file_hashes, value_calibration_factor. **New IGC kinds:** goal-tree-node-empty (BLOCKING), goal-tree-orphan-detected (BLOCKING), evidence-integrity-violated (BLOCKING), feedback-loop-oscillation-damped (WARNING), dependency-rollback-revert (WARNING), fleet-lock-reservation-conflict (WARNING), operator-overload-escalated (BLOCKING), policy-scanner-blocking-violation (BLOCKING). **New enum:** LifecycleTrigger (18 values), FeedbackLatencyRecord.loop_id closed enum (5 values). **New CLI:** `urace /check --migration-dry-run`. **New external references:** `Transform` → §62b; `last_self_modification_cycle` → §62b State Document; `bootstrap_file_hashes` → §62b State Document; `value_calibration_factor` → §62b State Document; `NORMATIVE_HALT` → §62b lifecycle_state enum; `LifecycleTrigger` enum (18 values) → §62l StateSpaceAuditContract; `FeedbackLatencyRecord.loop_id` closed enum → §62b; `EventTriggerRecord.status` enum → §62b; `AttentionBudgetRecord.consecutive_overload_cycles` → §62b; `IntentVersionRecord.goal_tree_node_ids_snapshot` → §62b; goal-tree-node-empty (BLOCKING) → §62l; goal-tree-orphan-detected (BLOCKING) → §62l; evidence-integrity-violated (BLOCKING) → §62l; feedback-loop-oscillation-damped (WARNING) → §62l; dependency-rollback-revert (WARNING) → §62l; fleet-lock-reservation-conflict (WARNING) → §62l; operator-overload-escalated (BLOCKING) → §62l; policy-scanner-blocking-violation (BLOCKING) → §62l. |
 | r115 | 2026-10-19 | spec | Hardening pass: 79-issue correctness, security, and architectural audit closure. **Critical architectural fixes:** Phase 8/8.5 circular dependency resolved (Phase 8.6 for PlanningHorizonProtocol, Phase 8.7 for PortfolioExecutionProtocol, after Phase 8.5 GapImpactEstimates); RollbackRecord §62b schema defined; FleetResourceRegistry §62b schema defined; NormativeIntegrityContract enforcement model clarified as runtime-layer (not self-referential); RecursiveSelfModificationGate strengthened with evidence independence, cooldown, LCG chain, bootstrap protection, and boundary definition. **Formula completeness:** IntentAggregationFormula zero-divisor guard + directive-count=0 case; UncertaintyPropagationFormula zero-divisor guard + horizon cap + consecutive escalation; ValueLedgerEntry ROI zero-guard + feedback timeout; FeedbackLatencyRecord oscillation formula formalized (≥3 reversals, magnitude threshold, discount formula); StateTransitionValidationProtocol exploit-only scope + NEUTRAL accumulation gate + portfolio baseline clarification. **Algorithm definitions:** IntentDriftProtocol semantic_distance now formally defined (Sørensen–Dice complement on lowercased tokenized text); DIVERGED timing (next cycle); retry cap preventing infinite Phase 0b loop. **Security hardening:** GoalTreeNode creation restricted to authorized principals (Executor-created OR nodes blocked); AdversarialRobustnessProtocol: self-provided CausalEdge exculpatory paths blocked, SUSPECTED accumulation escalation; NormativeIntegrityContract N6+N7 added; WEBHOOK authentication requirement. **Capability degradation:** complete fallback catalog for all 20 FOUNDATIONAL constructs; NormativeIntegrityContract and StateSchemaMigrationProtocol explicitly have NO fallback (system halts); DegradationRecord.cascade_level added; data-insufficient and initialization-incomplete defined as IGC kinds. **Schema completeness:** PrincipalRecord.is_active semantics + bootstrap creation path; ObjectiveDependencyRecord status update trigger; ConstraintCandidate ESCALATED status; FleetKnowledgeRecord payload_schema + applicable_domains default; ResourceConflictRecord requeue + ESCALATED path; StateSpaceAuditRecord.deadlock_states; SelfModificationRecord PENDING verdict + rollback_record_id + evidence_source_count; DegradationRecord.cascade_level + fallback_verified; GoalTreeNode.satisfied recomputation mandate + BLOCKING for uncovered leaves. **IGC bindings added:** fsm-deadlock-detected (BLOCKING), causal-graph-cycle-detected (BLOCKING), normative-enforcement-unavailable (BLOCKING), self-modification-rollback-missing (BLOCKING), goal-tree-unauthorized-mutation (BLOCKING), uncertainty-high-consecutive-cycles (BLOCKING), intent-drift-retry-cap-reached (BLOCKING), adversarial-pattern-accumulated (WARNING), schema-migration-partial (WARNING), neutral-operation-accumulation (WARNING), dependency-gate-blocked-all-objectives (WARNING), value-feedback-timeout (WARNING), lookahead-plan-cold-start (WARNING), intent-aggregation-no-directives (WARNING), data-insufficient (WARNING), initialization-incomplete (WARNING). **Cross-references wired:** IntentDriftProtocol Consumes → IntentVersionRecord; ExplanationProtocol Consumes → CausalModelRecord + CausalEdgeRecord + SD=True clarification; GapCalibrationProtocol Referenced-from → FeedbackLoopLatencyContract latency-adjusted weighting. **Config keys:** 20 new Config.X.Y keys registered under PolicyLayerContract for all r112–r115 behavioral parameters. **CLI:** `urace intent rollback <version>`, `urace add principal` added. New §62b schemas: RollbackRecord (rbr-), FleetResourceRegistry (frr-). New IGC kinds: 16. |
 | r114 | 2026-10-19 | spec | Concept, architectural, and structural gap closure: goal decomposition, objective dependencies, intent versioning, self-modification gate, normative constraints, value accounting, operator attention, policy/mechanism separation, reactive events, capability degradation, FSM completeness, feedback latency, cross-product conflicts, state schema migration. Closes fourteen gaps spanning concepts, architecture, and structural mechanisms: **C1 (GoalDecompositionProtocol):** AND/OR compositional goal tree (GoalTreeNode); check 8 of Phase 0b extended to evaluate tree satisfaction. **C2 (ObjectiveDependencyContract):** Formal Objective dependency DAG; PortfolioExecutionProtocol respects sequencing; cycle detection emits BLOCKING gap. **C3 (IntentVersioningProtocol):** Versioned Intent snapshots (IntentVersionRecord) on every mutation; delta audit and rollback. **C4 (RecursiveSelfModificationGate):** Elevated evidence (3 CONFIRMED) + all precedence ≤ 1 principal approvals + pre-committed rollback required for system-file changes. **C5 (NormativeIntegrityContract):** Five inviolable normative invariants (N1–N5) superseding operator BOUNDARY rules; NormativeViolationRecord + BLOCKING gap on breach. **C6 (ValueAccountingProtocol):** ValueLedgerEntry per committed Operation; expected_value back-filled with realized_value from OutcomeFeedback; ROI computed per cycle. **C7 (OperatorAttentionContract):** AttentionBudgetRecord aggregating pending review queue; WARNING on overload and stale items. **A1 (PolicyLayerContract):** All construct behavioral parameters have Config Document keys; PolicyOverrideRecord tracks operator deviations; reconfiguration without spec edits. **A2 (ReactiveEventProtocol):** Event-driven cycle triggers (METRIC_THRESHOLD, WEBHOOK, EXTERNAL_STATE_CHANGE); debounce + storm protection; EventTriggerRecord. **A3 (CapabilityDegradationContract):** Formal fallback chains for FOUNDATIONAL constructs; DegradationRecord; fallback-chain-exhausted BLOCKING when no fallback available. **A4 (StateSpaceAuditContract):** Lifecycle FSM completeness verification at bootstrap; undefined transitions → BLOCKING; unreachable states → WARNING. **S1 (FeedbackLoopLatencyContract):** Per-loop latency measurement (FeedbackLatencyRecord); oscillation detection; latency-adjusted GapCalibrationProtocol weighting. **S2 (CrossProductConflictProtocol):** Cross-product resource conflict detection and arbitration in fleet execution; ResourceConflictRecord; UNRESOLVED → BLOCKING + suspension. **S3 (StateSchemaMigrationProtocol):** Formal State Document schema migration on spec version mismatch; SchemaMigrationRecord; FAILED → BLOCKING halt. **New §62b schemas (14):** GoalTreeNode (gtn-), ObjectiveDependencyRecord (odr-), IntentVersionRecord (ivr-), SelfModificationRecord (smr-), NormativeViolationRecord (nvr-), ValueLedgerEntry (vle-), AttentionBudgetRecord (abr-), PolicyOverrideRecord (por-), EventTriggerRecord (etr-), DegradationRecord (dgr-), StateSpaceAuditRecord (ssar-), FeedbackLatencyRecord (flr-), ResourceConflictRecord (rcr-), SchemaMigrationRecord (scmr-). **New §62l constructs (14):** GoalDecompositionProtocol, IntentVersioningProtocol, PolicyLayerContract, RecursiveSelfModificationGate, NormativeIntegrityContract, ValueAccountingProtocol, FeedbackLoopLatencyContract, ObjectiveDependencyContract, ReactiveEventProtocol, CrossProductConflictProtocol, OperatorAttentionContract, CapabilityDegradationContract, StateSpaceAuditContract, StateSchemaMigrationProtocol. **New §37 phases:** Phase 0a/0b/8/9/10/12 extended; ordering contract extended. **New IGC kinds (28):** goal-tree-cycle-detected, goal-tree-leaf-uncovered, objective-dependency-violated, objective-dependency-cycle, intent-version-missing, intent-version-rollback-failed, self-modification-evidence-insufficient, self-modification-principal-insufficient, normative-invariant-violated, audit-log-suppression-attempted, value-baseline-missing, expected-value-uncalibrated, operator-attention-overload, review-queue-stale, policy-mechanism-coupling-detected, event-trigger-missed, event-trigger-storm, capability-degraded, fallback-chain-exhausted, fsm-transition-undefined, fsm-state-unreachable, feedback-loop-oscillation-detected, feedback-latency-stale, cross-product-resource-conflict, fleet-resource-lock-timeout, state-schema-incompatible, migration-transform-failed, normative-invariant-supersedes-boundary. **New external references:** `GoalTreeNode` → §62b; `ObjectiveDependencyRecord` → §62b; `IntentVersionRecord` → §62b; `SelfModificationRecord` → §62b; `NormativeViolationRecord` → §62b; `ValueLedgerEntry` → §62b; `AttentionBudgetRecord` → §62b; `PolicyOverrideRecord` → §62b; `EventTriggerRecord` → §62b; `DegradationRecord` → §62b; `StateSpaceAuditRecord` → §62b; `FeedbackLatencyRecord` → §62b; `ResourceConflictRecord` → §62b; `SchemaMigrationRecord` → §62b; `GoalDecompositionProtocol` → §62l; `IntentVersioningProtocol` → §62l; `PolicyLayerContract` → §62l; `RecursiveSelfModificationGate` → §62l; `NormativeIntegrityContract` → §62l; `ValueAccountingProtocol` → §62l; `FeedbackLoopLatencyContract` → §62l; `ObjectiveDependencyContract` → §62l; `ReactiveEventProtocol` → §62l; `CrossProductConflictProtocol` → §62l; `OperatorAttentionContract` → §62l; `CapabilityDegradationContract` → §62l; `StateSpaceAuditContract` → §62l; `StateSchemaMigrationProtocol` → §62l; 28 new IGC kinds → §62l. |
