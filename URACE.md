@@ -11705,102 +11705,156 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
 ║  next_state = argmin( gap(State, Intent) ) | Authority ∧ Evidence               ║
 ║       │                    │                    │              │                 ║
 ║    State                Intent             Authority        Evidence             ║
+║                                                │              │                 ║
+║  AuthorityClosureInvariant ──governs──► Authority node                          ║
+║  RevalidationScope ──triggers──► argmin re-evaluation on premise change         ║
+║  GapScalingFormula ──normalizes──► gap() inputs ◄──────────── Evidence          ║
 ╚═══════╪════════════════════╪════════════════════╪══════════════╪═════════════════╝
         │                    │                    │              │
         ▼                    ▼                    ▼              ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  TIER 0 — FOUNDATIONAL  (standalone=true or all deps foundational)              │
+│  TIER 0 — FOUNDATIONAL  (standalone=true; LayerModel L0–L4 substrate)           │
+│                                                                                 │
+│  Type system (base citizen clusters):                                           │
+│    CitizenBase ──base──► AP0 (Citizen)                                          │
+│    AuthorizedCitizen ──extends──► CitizenBase ──authority──► AP1 (Scalar)       │
+│    TemporalCitizen ──extends──► CitizenBase ──timestamps──► AP3 (Log)           │
 │                                                                                 │
 │  AP0 (Citizen) ──identity──► AP2 (Schema) ──validates──► AP3 (Log)             │
 │       │                           │                           │                 │
-│  AP1 (Scalar) ──forms────► AP2   AP5 (Idem.) ──guards──► AP3  AP6 (Causal)    │
-│       │                                                        │                │
-│  AP7 (SRLC) ──canonizes──► AP1                                 │                │
-│       │                                                        │                │
-│  AP26 (LSM) ──states──► AP0 ──records──► AP3                  │                │
-│       │                                                        │                │
-│  AP35 (GovLedger) ──rules──► AP3; AP17 (LSC) ──reduces──► AP35│                │
-│                                                                │                │
-│  GoverningRecord cluster ──anchors──► AP35                     │                │
-│  AuditRecord cluster     ──appends──► AP3 ◄────────────────────┘                │
+│  AP1 (Scalar) ──forms────► AP2   AP5 (Idem.) ──guards──► AP3                  │
+│                                                                                 │
+│  AP7 (SRLC) ──canonizes──► AP1                                                  │
+│  AP26 (LSM) ──states──► AP0 ──records──► AP3                                   │
+│  AP35 (GovLedger) ──rules──► AP3; AP17 (LSC) ──reduces──► AP35                 │
+│                                                                                 │
+│  GoverningRecord cluster ──anchors──► AP35                                      │
+│  AuditRecord cluster     ──appends──► AP3                                       │
+│  MetricRegistry (citizen) ──registers──► gap() operand definitions             │
 └─────────────────────────────────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  TIER 1 — COMPOSITIONAL  (requires foundational + other compositional APs)      │
+│  TIER 1 — COMPOSITIONAL  (requires ≥1 FOUNDATIONAL; LayerModel L1–L2)           │
 │                                                                                 │
-│  AP4 (Contract) ◄──bridges── AP11 (Bridge) ◄──causal── AP6                    │
-│       │                                                                         │
-│  AP8 (Fixpt) ──iterates──► AP12 (Orch.) ──sequences──► AP14 (Inbox)           │
-│       │  ◄─── StateFoldContract (§62l) ─── ConvergenceOrderingContract         │
-│       │                    │                           │                        │
+│  AP6 (Causal) ──chain──► AP3; AP6 ──causes──► AP11 (Bridge) ──bridges──► AP4  │
+│                                                                                 │
+│  AP4 (Contract) ◄──uses── AP8 (Fixpt) ──iterates──► AP12 (Orch.)               │
+│  AP12 ──sequences──► AP14 (Inbox); AP8 ◄─── StateFoldContract (§62l)           │
+│                                                                                 │
 │  AP9 (Mono.) ──guards──► AP10 (Retry) ──feeds────► AP15 (Bcast)               │
-│       │                    │                           │                        │
-│  AP25 (BEB) ──bounds──► AP9; AP25 ──gates──► AP4      │                        │
-│                             │                           │                        │
-│  AP13 (Observer) ◄──reads───┘ ──observes──► AP16 (Snap+Log)                   │
-│                                                  │                              │
+│  AP25 (BEB) ──bounds──► AP9; AP25 ──gates──► AP4                               │
+│  AP13 (Obs.) ◄──reads── AP10 ──observes──► AP16 (Snap+Log)                    │
+│                                                                                 │
 │  AP28 (IVGate) ──validates──► AP4; AP14 ──queues──► AP28                       │
-│       │                                                                         │
 │  AP29 (Dormancy) ──registers──► AP3; AP29 ──revives──► AP26                    │
 │  AP30 (PartBlk) ──blocks──► AP3; AP30 ──scopes──► AP4                          │
 │  AP32 (SWLock) ──locks──► AP3; AP32 ──guards──► AP26                           │
 │  AP33 (PolGate) ──gates──► AP4; AP0 ──scopes──► AP33                           │
-│       │  ◄─── AutonomyBoundaryAuditContract; PolicyConflictResolutionProtocol   │
+│                                                                                 │
+│  EvidenceSufficiencyGate ──gates──► AP4 (commit)                                │
+│  EvidenceStabilizationGate ──anchors──► gap() Evidence mid-cycle                │
+│  ExecutorTrustDegradationFormula ──decays──► AP10 executor trust on failure     │
 └─────────────────────────────────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  TIER 2 — INTEGRATED  (depends on integrated APs or multi-AP cluster)           │
+│  TIER 2 — INTEGRATED  (depends on INTEGRATED APs or multi-AP cluster)           │
 │                                                                                 │
-│  AP16 (Snap) ──feeds──► AP20 (CircBreaker) ──gates──► AP4                      │
-│       │                                                                         │
+│  AP16 (Snap) ──feeds──► AP20 (CB) ──gates──► AP4                               │
 │  AP18 (Sched) ──triggers──► AP12 ──writes──► AP14                              │
-│       │  ◄─── CycleTriggerQualificationProtocol                                 │
 │  AP19 (Custom) ──overrides──► AP4 ──preserved──► AP16                          │
 │                                                                                 │
 │  AP21 (Compact) ──reduces──► AP3                                                │
-│  AP22 (Checkpoint) ──anchors──► AP3 ◄── AP36 (DigestChain) ──chains──► AP22   │
-│  AP23 (Justif.) ──traverses──► AP6 ◄── JustificationContract                   │
-│  AP24 (Derivation) ──identities──► AP0 ──validates──► AP2                      │
+│  AP22 (Chkpt) ──anchors──► AP3 ◄── AP36 (DigestChain) ──chains──► AP22        │
+│  AP23 (Justif.) ──traverses──► AP6                                              │
+│  AP24 (Deriv.) ──identities──► AP0 ──validates──► AP2                          │
 │                                                                                 │
 │  AP27 (TRP) ──journals──► AP3; AP16 ──snapshots──► AP27                        │
-│       │                                                                         │
 │  AP31 (SafeActivation) ◄── AP27; AP31 ──promotes──► AP16                       │
-│       │  ◄─── AP34 (SelfEvol) ──gates──► AP31; AP3 ──records──► AP34           │
+│       └─── AP34 (SelfEvol) ──gates──► AP31; AP3 ──records──► AP34              │
 │                                                                                 │
 │  AP37 (Compliance) ◄── AP28; AP37 ──appends──► AP3                             │
-│       │  ◄─── AuditTrailCompletenessContract                                    │
-│                                                                                 │
 │  AP38 (CSI) ◄── AP14; AP38 ──produces──► AP4 ──ingests──► AP3                 │
+│                                                                                 │
+│  RollbackVerificationContract ──governs──► AP27 rollback completeness          │
+│  SandboxExecutionContract ──governs──► AP31 execution isolation                │
+│  ExecutorTrustRecoveryProtocol ──governs──► AP10 recovery path                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  TIER 3 — §62l PROTOCOL LAYER  (names the wiring; enforces at runtime)          │
+│  TIER 3 — §62l PROTOCOL LAYER  (97 named constructs; LayerModel L3–L4)          │
 │                                                                                 │
-│  GapNormalizationContract ──standardizes──► AP7 (SRLC) input                   │
-│  MetricSemanticCoherenceContract ──governs──► gap() operands                    │
-│  BoundaryContract ──governs──► AP3 (every durable write)                        │
-│  StateFoldContract ──formalizes──► AP8 fixpoint                                 │
-│  ConvergenceOrderingContract ──bounds──► AP8 iteration count                    │
-│  EvidenceStabilizationContract ──anchors──► gap() Evidence inputs               │
-│  EvidenceSufficiencyContract ──gates──► AP4 (commit boundary)                   │
-│  CrossProductLifecycleOrderingContract ──sequences──► AP26 (LSM) across prods   │
+│  Evidence:                                                                      │
+│    GapNormalizationContract ──normalizes──► AP7 (SRLC) input                   │
+│    GapNormalizationGovernanceContract ──governs──► gap() formula chain          │
+│    MetricSemanticCoherenceContract ──governs──► gap() operand semantics         │
+│    EvidenceStabilizationContract ──anchors──► Evidence mid-cycle stability      │
+│    EvidenceSufficiencyContract ──gates──► AP4 commit boundary                  │
+│    EvidenceAgeRetirementContract ──retires──► stale Evidence records            │
+│                                                                                 │
+│  Convergence + Scope:                                                           │
+│    StateFoldContract ──formalizes──► AP8 fixpoint recursion                     │
+│    ConvergenceOrderingContract ──bounds──► AP8 iteration ceiling                │
+│    ObjectiveScopeIsolationContract ──governs──► AP14 scope boundaries          │
+│    ObjectiveOrphanRetirementContract ──retires──► orphaned objectives           │
+│    CrossProductLifecycleOrderingContract ──sequences──► AP26 cross-product      │
+│    CrossLifecycleInheritanceProtocol ──inherits──► AP26 state across phases     │
+│    PlanStepInvalidationCascadeContract ──cascades──► AP6 causal chain           │
+│    RecursiveGoalDecompositionContract ──decomposes──► AP14 goal hierarchy       │
+│                                                                                 │
+│  Trust + Safety:                                                                │
+│    BoundaryContract ──governs──► every durable AP3 write                        │
+│    JustificationContract ──gates──► every consequential lifecycle commit        │
+│    AuditTrailCompletenessContract ──governs──► AP37 audit completeness          │
+│    AutonomyBoundaryAuditContract ──audits──► AP33 autonomy scope                │
+│    PolicyConflictResolutionProtocol ──resolves──► AP33 policy conflicts         │
+│    RollbackVerificationContract ──gates──► AP27 rollback completeness           │
+│    SandboxExecutionContract ──isolates──► AP31 execution sandbox                │
+│    OperatorDecisionTimeoutEscalationContract ──escalates──► unresolved blocks   │
+│    OperatorIntentElicitationProtocol ──elicits──► AP14 intent ambiguity         │
+│                                                                                 │
+│  Executor + Cycle:                                                              │
+│    ExecutorTrustRecoveryProtocol ──recovers──► AP10 trust on success            │
+│    ResourceContentionArbitrationProtocol ──arbitrates──► AP10 credit contention│
+│    CycleTriggerQualificationProtocol ──qualifies──► AP18 trigger weight         │
+│    DirectiveMutationRevalidationProtocol ──revalidates──► AP26 on mutation      │
+│    MechanismFailureCausalAnalysisProtocol ──diagnoses──► AP27 failure root cause│
+│    ExternalEditConflictProtocol ──resolves──► AP22 digest conflicts             │
+│    IntentExpressivityBoundaryProtocol ──bounds──► AP14 intent expressiveness    │
+│                                                                                 │
+│  Observability + Audit:                                                         │
+│    InspectionContract ──governs──► all SD=True inspection commands              │
+│    ObservabilityContract ──governs──► all mutation TraceRecord emissions        │
+│    GapCalibrationProtocol ──calibrates──► IntegrityGapCatalog thresholds        │
+│    StateAuditProtocol ──audits──► AP22 checkpoint + State integrity             │
+│    AdaptiveConfigProposalProtocol ──proposes──► AP19 (Custom) config changes    │
+│                                                                                 │
+│  Governance + Lifecycle:                                                        │
+│    LayerModel ──maps──► L0–L4 layer boundaries and coupling rules (§62s)        │
+│    OutputSchemaRegistry ──catalogs──► all --json output schemas (§62t)          │
+│    OutcomeFeedbackContract ──governs──► feedback collection/processing (§62u)   │
+│    OutcomeLearningFeedbackContract ──governs──► learning signal application     │
+│    ResourceBudgetProtocol (RBP) ──gates──► per-product cost/ROI budget (§62v)   │
 └─────────────────────────────────────────────────────────────────────────────────┘
         │
         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  TIER 4 — LEARNING FEEDBACK LOOP  (closes "Universal Recursive" property)       │
 │                                                                                 │
-│  AP8 (Fixpt) ──S(n+1)=fold(S(n),Δ(n))──► State                                │
+│  AP8 (Fixpt) ──S(n+1)=fold(S(n),Δ(n))──► State ──► argmin re-entry            │
 │       │                                      │                                  │
-│  OutcomeFeedbackContract ──signal──► OutcomeLearningFeedbackContract            │
+│  FeedbackAccumulator (FAC) ──collects──► OutcomeFeedbackRecord                 │
+│  OutcomeFeedbackContract ──signals──► OutcomeLearningFeedbackContract           │
 │       │                                      │                                  │
 │  LearningWeightUpdateFormula ──adjusts──► ObjectiveUtilityFormula weights       │
+│  GapScalingFormula ──normalizes──► gap() inputs for updated argmin              │
+│  CycleTriggerWeightFormula ──weights──► AP18 (Sched) next-cycle priority        │
+│  ConvergenceBoundFormula ──bounds──► AP8 iteration ceiling                      │
+│  EvidenceSufficiencyFormula ──gates──► learning signal quality floor            │
 │       │                                      │                                  │
 │  LongitudinalEffectivenessRecord ──informs──► AdaptiveConfigProposalProtocol    │
-│       │                                      │                                  │
 │       └──────────────────────────────────────┘                                  │
 │                    (loop back to argmin with updated weights)                   │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -11809,20 +11863,38 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │  TIER 5 — MULTI-PRODUCT / FLEET COMPOSITION                                     │
 │                                                                                 │
+│  OnboardGate ──gates──► AP26 (LSM) fleet-member lifecycle entry                 │
+│  ProductSwitchProtocol (PSP) ──atomic-switch──► AP26 active product            │
 │  AP38 (CSI) ──ingests──► AP14 ──patches──► AP4 (per-product)                   │
-│  FleetOrchestrationProtocol ──isolates──► AP26 (per member)                     │
+│  FleetOrchestrationProtocol (FOP) ──isolates──► AP26 (per member)              │
 │  CrossProductLifecycleOrderingContract ──phases──► AP26 (dependency order)      │
 │  MultiProductCompactionProtocol ──compact──► AP21 (topo order)                  │
+│  ResourceBudgetProtocol (RBP) ──enforces──► per-product budget gate             │
+└─────────────────────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  TIER 6 — META-GOVERNANCE  (spec self-audit; LayerModel L4 + meta-level)        │
+│                                                                                 │
+│  NSS ──governs──► construct definition and classification rules (§62n)          │
+│  SCP ──gates──► every spec extension: Gate 1 ordering / Gate 2 refs /           │
+│                 Gate 3 atomic extension (§62n)                                  │
+│  QE ──audits──► post-change degradation — 6-step protocol (§62l)               │
+│  JOIN ──audits──► post-change wiring completeness — 6-step (§62l)              │
+│  CSIA ──runs──► QE + JOIN + NSS + SCP + IGC pre-release passes (§62l)          │
+│  FRVS ──extends──► CSIA + BFP + TCP + SFCP + CIP + CAP + CWP (§62l)           │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
 Pattern abbreviation key:
-  LSC=AP17  SRLC=AP7   Idem=AP5   Causal=AP6  Fixpt=AP8   Mono=AP9
-  Retry=AP10 Bridge=AP11 Orch=AP12 Obs=AP13 Inbox=AP14 Bcast=AP15
-  Snap=AP16  Sched=AP18 Custom=AP19 CB=AP20 Compact=AP21 Chkpt=AP22
-  Justif=AP23 Deriv=AP24 BEB=AP25 LSM=AP26 TRP=AP27 IVGate=AP28
-  Dormancy=AP29 PartBlk=AP30 SafeActivation=AP31 SWLock=AP32
-  PolGate=AP33 SelfEvol=AP34 GovLedger=AP35 DigestChain=AP36
-  Compliance=AP37 CSI=AP38
+  Citizen=AP0   Scalar=AP1    Schema=AP2    Log=AP3       Contract=AP4
+  Idem=AP5      Causal=AP6    SRLC=AP7     Fixpt=AP8     Mono=AP9
+  Retry=AP10    Bridge=AP11   Orch=AP12    Obs=AP13      Inbox=AP14
+  Bcast=AP15    Snap=AP16     LSC=AP17     Sched=AP18    Custom=AP19
+  CB=AP20 (Circuit Breaker)   Compact=AP21  Chkpt=AP22   Justif=AP23
+  Deriv=AP24    BEB=AP25      LSM=AP26     TRP=AP27      IVGate=AP28
+  Dormancy=AP29  PartBlk=AP30 (Partial Blocker Pattern)  SafeActivation=AP31
+  SWLock=AP32   PolGate=AP33  SelfEvol=AP34  GovLedger=AP35
+  DigestChain=AP36  Compliance=AP37  CSI=AP38
 ```
 
 ---
