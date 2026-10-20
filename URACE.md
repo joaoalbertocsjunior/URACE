@@ -1223,6 +1223,7 @@ Evidence {
   scope?
   credibility?
   relevance?
+  content_hash          REQUIRED  string; SHA-256 of the concatenation of kind + summary + (metric_value if present) + source at creation time; computed by the producing executor and verified by NormativeIntegrityContract on every Evidence read; mismatch emits IntegrityGap(kind="evidence-integrity-violated", severity=BLOCKING)
   limitations?
   contradictions?
 }
@@ -4280,6 +4281,7 @@ State {
                                   | BLOCKED | RECONCILING | WAITING_FOR_CAPACITY
                                   | WAITING_FOR_CONDITION | WAITING_FOR_SCHEDULE
                                   | WAITING_FOR_AUTHORITATIVE_DECISION | PAUSED | COMPLETED
+                                  | NORMATIVE_HALT
   intent                REQUIRED  copy of Config.intent (snapshot at init)
   authority             REQUIRED  copy of Config.authority (snapshot at init)
   constraints           REQUIRED  copy of Config.constraints (snapshot at init)
@@ -4388,12 +4390,17 @@ State {
   rollback_completeness_attestations            OPTIONAL  list[RollbackCompletenessAttestation]; append-only; non-compactable
   metric_registry                               OPTIONAL  dict[metric_key → MetricRegistry]; governing record; lifecycle-persistent
   adaptive_config_proposals                     OPTIONAL  list[AdaptiveConfigProposal]; append-only; non-compactable
+  last_self_modification_cycle  OPTIONAL  integer; cycle number of the last approved self-modification; used by RecursiveSelfModificationGate to enforce cooldown; default 0
+  bootstrap_file_hashes         OPTIONAL  object; map of {file_path → sha256_hex} computed at bootstrap for URACE.md and `urace/` entry points; checked by RecursiveSelfModificationGate pre-Phase-0a to detect tampering before lifecycle initializes; populated during `urace /onboard confirm`
+  value_calibration_factor      OPTIONAL  number; rolling geometric mean calibration factor for expected_value; default 1.0; updated by ValueAccountingProtocol on each realized_value back-fill
 }
 ```
 
 **Atomic write contract.** Every write to the State Document MUST be atomic from the perspective of recovery: after a crash, the state file MUST reflect either the pre-write state or the fully committed post-write state. Partial writes MUST NOT be possible.
 
 **schema_version contract.** If the `schema_version` in a loaded State Document does not match the running implementation's expected version, the implementation MUST surface this as a named migration-required condition and MUST NOT silently proceed with an incompatible schema.
+
+**NORMATIVE_HALT** — entered when NormativeIntegrityContract is unavailable or when a normative-invariant-violated BLOCKING gap is emitted and cannot be immediately cleared. In NORMATIVE_HALT: (a) all autonomous Operations are suspended; (b) SD=True commands (`/check`, `/vitals`, `/blocker`, `/help`) remain fully operational — the halt does not prevent read-only inspection; (c) the system accepts `urace /onboard confirm --restore-nic` to attempt NIC restoration; (d) no phase of the assessment cycle executes. Transition: NORMATIVE_HALT → ACTIVE when NIC restoration succeeds and all normative-invariant-violated gaps are cleared.
 ### State Document Field Retirement Contract
 
 A field MUST NOT be removed from the State Document schema without a transition period. To retire a State field:
@@ -7099,9 +7106,11 @@ GoalTreeNode {
 
 **Constraints:**
 - GoalTreeNode graph MUST be acyclic; a cycle emits IntegrityGap(kind="goal-tree-cycle-detected", severity=BLOCKING)
+- AND and OR nodes with children_ids = [] (empty list) or with children_ids absent emit IntegrityGap(kind="goal-tree-node-empty", severity=BLOCKING); a node with no children is structurally invalid regardless of node_type
 - satisfied MUST be recomputed on every child status change — it is NOT a stored snapshot. AND node: satisfied = (all children satisfied). OR node: satisfied = (any child satisfied). LEAF: satisfied = (underlying GoalRecord.status = completed).
 - A LEAF node where satisfied = false and no sibling OR-path covers it emits IntegrityGap(kind="goal-tree-leaf-uncovered", severity=BLOCKING) (not WARNING — uncovered leaves are a gap-blocking condition)
 - GoalTreeNode records MUST NOT be compacted
+- When a GoalRecord is deleted or its status transitions to `cancelled`, all LEAF GoalTreeNodes where goal_id references that GoalRecord MUST emit IntegrityGap(kind="goal-tree-orphan-detected", severity=BLOCKING); the orphaned LEAF node must be removed or re-assigned by the operator before the GoalRecord deletion is committed; GoalRecord deletion MUST be blocked (rejected) until all referencing LEAF GoalTreeNodes are resolved
 
 **Referenced from:** §62l GoalDecompositionProtocol, §62l GoalCoverageCompletenessProtocol (check 8 extended to evaluate tree satisfaction).
 
@@ -7121,7 +7130,8 @@ ObjectiveDependencyRecord {
 - The dependency DAG MUST be acyclic; a cycle emits IntegrityGap(kind="objective-dependency-cycle", severity=BLOCKING)
 - Status transitions from BLOCKING → SATISFIED are triggered automatically when the source Objective's status transitions to `completed`; ObjectiveDependencyContract monitors all Objective status mutations for this transition
 - Dispatching target when status = BLOCKING emits IntegrityGap(kind="objective-dependency-violated", severity=BLOCKING)
-- Rollback of source Objective reverts the dependency status from SATISFIED → BLOCKING
+- Rollback of source Objective (triggered by RollbackCompletenessAttestation, RollbackDecisionRecord with full_rollback=true, or Objective status mutation to `cancelled` or `rolled_back`) MUST revert the dependency status from SATISFIED → BLOCKING; emits IntegrityGap(kind="dependency-rollback-revert", severity=WARNING) to notify the fleet that a previously-dispatched downstream Objective may now be invalid; PortfolioExecutionProtocol re-evaluates the dependency gate on the next cycle
+- DATA dependency semantics: a DATA dependency means the source Objective MUST produce a named output artifact (referenced via Operation.output_artifact_id) before the target Objective may read or depend on that artifact; dependency status transitions BLOCKING → SATISFIED when the source Operation commits with a non-null output_artifact_id
 - ObjectiveDependencyRecord records MUST NOT be compacted
 
 **Referenced from:** §62l ObjectiveDependencyContract, §62l PortfolioExecutionProtocol (must respect dependency order before allocation).
@@ -7136,7 +7146,8 @@ IntentVersionRecord {
   cycle_id        REQUIRED  string; foreign key → Checkpoint.id at the mutation boundary
   directive_snapshot  REQUIRED  list[object]; serialized DIRECTIVE rule states at this version
   goal_snapshot   REQUIRED  list[object]; serialized GoalRecord states at this version
-  mutation_reason OPTIONAL  string; operator-provided rationale for the change
+  mutation_reason REQUIRED  string; operator-provided rationale for the change; automated system mutations (e.g., rollback, repair) MUST use a structured value: "intent-rollback-to-<version>", "intent-repair-<reason>", or "system-mutation-<context>"; unspecified user mutations MUST use "unspecified" (the empty string is not valid); absence emits IntegrityGap(kind="intent-version-missing", severity=WARNING)
+  goal_tree_node_ids_snapshot  OPTIONAL  list[string]; GoalTreeNode ids active at this version boundary; populated when GoalTreeNodes exist; rollback restores this set — nodes created after the snapshot are deleted (subject to goal-tree-orphan-detected gate) and nodes in the snapshot that were deleted are restored if still valid
   superseded_by   OPTIONAL  string; IntentVersionRecord id of the next version
 }
 
@@ -7204,7 +7215,8 @@ ValueLedgerEntry {
 }
 
 **Constraints:**
-- One ValueLedgerEntry MUST be created per committed Operation; absence emits IntegrityGap(kind="value-baseline-missing", severity=WARNING)
+- One ValueLedgerEntry MUST be created per committed Operation per active value_dimension; multiple ValueLedgerEntry records for the same operation_id with different value_dimension values are valid and expected for multi-metric Operations; absence of any ValueLedgerEntry for an Operation emits IntegrityGap(kind="value-baseline-missing", severity=WARNING)
+- For multi-dimensional Operations, resource_cost SHOULD be apportioned across dimensions proportional to each dimension's weight in ObjectiveUtilityFormula; aggregate_roi = Σ(realized_value_i − resource_cost_fraction_i) / Σ(resource_cost_fraction_i) across all dimensions for the same operation_id
 - Operations with no active MetricRegistry entry for value_dimension emit IntegrityGap(kind="expected-value-uncalibrated", severity=WARNING)
 - roi MUST be null when resource_cost = 0 (division-by-zero guard); implementations MUST NOT compute roi in this case
 - If OutcomeFeedbackRecord does not arrive within Config.value.feedback_timeout_cycles (default 30) cycles, realized_value is set to null and roi is set to null; emits IntegrityGap(kind="value-feedback-timeout", severity=WARNING)
@@ -7222,13 +7234,15 @@ AttentionBudgetRecord {
   pending_items         REQUIRED  list[{item_id: string, item_type: string, priority: integer, age_cycles: integer}]
   total_pending         REQUIRED  integer
   budget_threshold      REQUIRED  integer; Config.operator.attention_budget (default 10)
-  overloaded            REQUIRED  boolean; total_pending > budget_threshold
+  overloaded                  REQUIRED  boolean; total_pending > budget_threshold
+  consecutive_overload_cycles REQUIRED  integer; number of consecutive cycles where overloaded = true; reset to 0 when overloaded = false
 }
 
 **Constraints:**
 - One AttentionBudgetRecord MUST be produced per cycle; overloaded = true emits IntegrityGap(kind="operator-attention-overload", severity=WARNING)
 - Any pending item with age_cycles > Config.operator.review_stale_threshold (default 20) emits IntegrityGap(kind="review-queue-stale", severity=WARNING)
-- AttentionBudgetRecord records may be compacted after review queue clears
+- AttentionBudgetRecord records where overloaded = true MUST NOT be compacted; they constitute the audit trail of attention overload events and MUST be retained permanently
+- AttentionBudgetRecord records where overloaded = false AND consecutive_overload_cycles = 0 may be compacted after review queue clears
 
 **Referenced from:** §62l OperatorAttentionContract.
 
@@ -7262,6 +7276,7 @@ EventTriggerRecord {
   event_type      REQUIRED  enum: METRIC_THRESHOLD | WEBHOOK | EXTERNAL_STATE_CHANGE | MANUAL_TRIGGER
   trigger_condition REQUIRED  string; human-readable description of the triggering condition
   debounce_ms     OPTIONAL  integer; debounce window applied before trigger fired
+  status          REQUIRED  enum: FIRED | QUEUED | SUPPRESSED; FIRED = triggered a new cycle; QUEUED = arrived mid-cycle, deferred to next boundary; SUPPRESSED = blocked by debounce, rate limit, or storm threshold
 }
 
 **Constraints:**
@@ -7321,7 +7336,7 @@ Records the measured latency between an Operation commit and the arrival of its 
 FeedbackLatencyRecord {
   id                REQUIRED  string; prefix flr-
   operation_id      REQUIRED  string; foreign key → Operation.id
-  loop_id           REQUIRED  string; feedback loop identifier (e.g., "gap-calibration", "outcome-feedback", "weight-update")
+  loop_id           REQUIRED  enum: GAP_CALIBRATION | OUTCOME_FEEDBACK | WEIGHT_UPDATE | STATE_TRANSITION | DIRECTIVE_COVERAGE; feedback loop identifier; closed enumeration ensures cross-implementation consistency
   commit_cycle      REQUIRED  integer; cycle at which Operation was committed
   observation_cycle REQUIRED  integer; cycle at which outcome signal arrived
   latency_cycles    REQUIRED  integer; observation_cycle − commit_cycle
@@ -7331,7 +7346,8 @@ FeedbackLatencyRecord {
 }
 
 **Constraints:**
-- oscillation_flag = true emits IntegrityGap(kind="feedback-loop-oscillation-detected", severity=WARNING)
+- oscillation_flag = true emits IntegrityGap(kind="feedback-loop-oscillation-detected", severity=WARNING) AND triggers oscillation dampening: LearningWeightUpdateFormula MUST reduce the global learning rate α by Config.feedback.oscillation_damping_factor (default 0.5) for Config.feedback.oscillation_damping_cycles (default 3) cycles; produces IntegrityGap(kind="feedback-loop-oscillation-damped", severity=WARNING) each damped cycle
+- When oscillation_cycles_count < Config.feedback.latency_min_samples (default 5) for a given loop_id, w_adjusted = 1.0 (discount formula not applied — insufficient sample window)
 - Latency-adjusted discount weight for GapCalibrationProtocol: `w_adjusted = exp(−(age_cycles − median_latency_cycles) / Config.feedback.latency_decay_constant)` where median_latency_cycles is the rolling median of FeedbackLatencyRecord.latency_cycles for this loop over the last Config.feedback.latency_window_cycles (default 10) records; w_adjusted clipped to [0.01, 1.0]
 - No FeedbackLatencyRecord for a loop after Config.feedback.stale_threshold cycles emits IntegrityGap(kind="feedback-latency-stale", severity=WARNING)
 - FeedbackLatencyRecord records MUST NOT be compacted
@@ -7368,7 +7384,7 @@ SchemaMigrationRecord {
   id                  REQUIRED  string; prefix scmr-
   from_spec_version   REQUIRED  string; spec revision the State Document was persisted at
   to_spec_version     REQUIRED  string; target spec revision
-  transforms_applied  REQUIRED  list[string]; ordered list of transform identifiers applied
+  transforms_applied  REQUIRED  list[string]; ordered list of Transform.id values applied (each references a Transform §62b citizen)
   fields_added        REQUIRED  list[string]; new State Document fields initialized
   fields_retired      REQUIRED  list[string]; fields removed per §62e retirement contract
   verdict             REQUIRED  enum: SUCCESS | PARTIAL | FAILED
@@ -7380,6 +7396,28 @@ SchemaMigrationRecord {
 - SchemaMigrationRecord records MUST NOT be compacted
 
 **Referenced from:** §62l StateSchemaMigrationProtocol, §62e State Document field retirement contract.
+
+## Transform (citizen schema)
+
+Defines a single schema migration operation applied by StateSchemaMigrationProtocol when upgrading a State Document between spec versions.
+
+Transform {
+  id                REQUIRED  string; prefix tfm-; format "<from_version>-<to_version>-<operation_type>-<field_name>"
+  from_version      REQUIRED  string; spec revision the State Document is migrating FROM (e.g., "r110")
+  to_version        REQUIRED  string; spec revision the State Document is migrating TO (e.g., "r115")
+  operation_type    REQUIRED  enum: ADD_FIELD | REMOVE_FIELD | RENAME_FIELD | CHANGE_DEFAULT | CHANGE_TYPE
+  field_name        REQUIRED  string; State Document field being transformed
+  default_value     OPTIONAL  object; initial value for ADD_FIELD or new default for CHANGE_DEFAULT; REQUIRED for ADD_FIELD
+  renamed_to        OPTIONAL  string; target field name; REQUIRED for RENAME_FIELD
+  notes             OPTIONAL  string; human-readable description of the semantic change if any
+}
+
+**Constraints:**
+- A Transform is idempotent: applying it twice to the same State Document produces the same result as applying it once
+- Transforms are append-only in the spec; a Transform may not be removed once defined (only superseded by a later Transform)
+- Transform records MUST NOT be compacted
+
+**Referenced from:** §62l StateSchemaMigrationProtocol, §62b SchemaMigrationRecord (transforms_applied lists Transform.id values).
 
 ## RollbackRecord (citizen schema)
 
@@ -7415,6 +7453,8 @@ FleetResourceRegistry {
 
 **Constraints:**
 - One FleetResourceRegistry MUST exist per fleet run; absence causes CrossProductConflictProtocol to emit IntegrityGap(kind="cross-product-resource-conflict", severity=BLOCKING) on any write
+- Lock registration MUST be atomic compare-and-set: (fleet_run_id, resource_type, resource_identifier) is the composite key; insert succeeds only when no entry with this key exists; insert fails (conflict) when an entry exists regardless of lock_acquired_cycle
+- Lock release: entries are removed when the locking Product's Operation commits or is cancelled; auto-released after lock_timeout_cycles per existing constraint
 - FleetResourceRegistry records MUST NOT be compacted
 - Entries auto-released after lock_timeout_cycles; auto-release emits IntegrityGap(kind="fleet-resource-lock-timeout", severity=WARNING)
 
@@ -10228,6 +10268,8 @@ Weight bounds:
 - α = 1: full replacement (weights overwritten by signal); only valid when signal has high confidence (EvidenceSufficiencySnapshot.sufficiency_score ≥ 0.9)
 - Weight update MUST be applied only after OutcomeLearningFeedbackContract validates the signal quality
 - Historical weight values MUST be preserved in LongitudinalEffectivenessRecord for audit
+
+**Oscillation dampening:** when FeedbackLoopLatencyContract emits feedback-loop-oscillation-detected for any loop_id, the effective α used in this formula is multiplied by Config.feedback.oscillation_damping_factor for Config.feedback.oscillation_damping_cycles subsequent cycles. The damped α is `α_damped = α × oscillation_damping_factor`. After the damping window, α returns to its Config-specified value.
 
 **Used in:** §62l OutcomeLearningFeedbackContract, §62h TechniqueApplicabilityGate, §62b LongitudinalEffectivenessRecord.
 
@@ -13710,7 +13752,8 @@ GoverningRecord {
 Creates a versioned snapshot (IntentVersionRecord) on every DIRECTIVE_MUTATION or GoalRecord mutation. Maintains a linked list of versions enabling delta audit ("what changed from v2 to v3?") and rollback ("restore v2 directives and goals"). IntentDriftProtocol assesses drift relative to the current version. Phase 0b IntentAmbiguityAudit re-runs on every new version.
 Produces: IntentVersionRecord
 Consumes: DIRECTIVE mutations, GoalRecord mutations
-Phase: triggered on every Intent mutation (not cycle-gated)
+Phase: triggered on every Intent mutation (not cycle-gated); rollback via `urace intent rollback <version>` creates a new IntentVersionRecord with mutation_reason="intent-rollback-to-<version>"
+**GoalTreeNode rollback:** when goal_tree_node_ids_snapshot is present in the target version, rollback (a) deletes GoalTreeNodes created after that version (applying goal-tree-orphan-detected gate per deletion — operator must resolve each), and (b) emits a WARNING for each GoalTreeNode in the snapshot that no longer exists (requires operator re-creation). This ensures the goal tree structure matches the rolled-back Intent.
 IGC: intent-version-missing (WARNING), intent-version-rollback-failed (BLOCKING)
 
 **PolicyLayerContract** `contract` FOUNDATIONAL
@@ -13719,9 +13762,11 @@ Produces: PolicyOverrideRecord
 Consumes: Config Document (operator-provided overrides vs. construct defaults)
 **Config keys for r112–r115 constructs (PolicyLayerContract compliance):**
 `Config.causal.bootstrap_threshold` (default 3), `Config.planning.horizon` (default 3, min 1), `Config.planning.horizon_min` (default 1), `Config.feedback.oscillation_min_cycles` (default 3), `Config.feedback.oscillation_min_magnitude` (default 0.05), `Config.feedback.latency_decay_constant` (default 5), `Config.feedback.latency_window_cycles` (default 10), `Config.reactive.storm_threshold` (default 5), `Config.reactive.aggregate_storm_threshold` (default 20), `Config.reactive.inter_cycle_rate_limit` (default 10 per interval), `Config.fleet.lock_timeout_cycles` (default 5), `Config.fleet.max_requeue` (default 3), `Config.uncertainty.consecutive_threshold` (default 5), `Config.adversarial.suspected_threshold` (default 3), `Config.self_mod.cooldown_cycles` (default 10), `Config.value.feedback_timeout_cycles` (default 30), `Config.validation.neutral_accumulation_threshold` (default 5), `Config.degradation.max_cascade` (default 3), `Config.explanation.min_confidence` (default 0.5), `Config.intent.drift_retry_cap` (default 3)
-**Scanner:** PolicyLayerContract scanner runs at Phase 0a bootstrap. For each §62l construct, it verifies that every behavioral parameter mentioned in the construct description has a corresponding Config Document key. Violations emit IntegrityGap(kind="policy-mechanism-coupling-detected", severity=WARNING) per construct.
-Phase: bootstrap (Phase 0a scan); ongoing (record PolicyOverrideRecords when Config overrides construct defaults)
-IGC: policy-mechanism-coupling-detected (WARNING)
+**Scanner:** PolicyLayerContract scanner runs at Phase 0a bootstrap. For each §62l construct, it verifies that every behavioral parameter mentioned in the construct description has a corresponding Config Document key.
+**Severity tiers:** constructs added in r114 or later that have hardcoded behavioral parameters without Config keys emit IntegrityGap(kind="policy-scanner-blocking-violation", severity=BLOCKING) — new constructs MUST comply with PolicyLayerContract from inception. Constructs added before r114 (legacy) emit IntegrityGap(kind="policy-mechanism-coupling-detected", severity=WARNING) — they have a grace period until Config.policy.legacy_grace_until_version (default: "r120").
+**Config mutation gate:** Config Document updates (via operator or Executor) MUST pass through PolicyLayerContract validation before taking effect. Validation checks: (1) the proposed Config key exists as a registered behavioral parameter in some §62l construct; (2) the value type matches the construct's declared parameter type; (3) the value is within any documented bounds. Invalid Config updates are rejected and emit policy-mechanism-coupling-detected WARNING. This prevents configuration injection attacks where a malicious Executor sets a Config key that has no corresponding construct parameter.
+Phase: bootstrap (Phase 0a scan); ongoing (record PolicyOverrideRecords when Config overrides construct defaults; gate Config mutations before they take effect)
+IGC: policy-mechanism-coupling-detected (WARNING), policy-scanner-blocking-violation (BLOCKING)
 
 **CausalModelProtocol** `protocol` FOUNDATIONAL
 Maintains a causal graph over Product signals — hypothesizes directed edges from intervention/outcome pairs, promotes to CONFIRMED via StateTransitionValidationRecord regression labels, flags confounders. Produces CausalModelRecord per cycle post Phase 10b. GapImpactEstimationProtocol weights Δgap estimates by causal confidence, preferring interventions on CONFIRMED non-confounded causes.
@@ -14908,7 +14953,7 @@ Phase: triggered on GoalRecord creation or mutation; check 8 of Phase 0b
 IGC: goal-tree-cycle-detected (BLOCKING), goal-tree-leaf-uncovered (WARNING)
 
 **OperatorAttentionContract** `contract` COMPOSITIONAL
-Models the operator's pending review queue against a configured attention budget. Each cycle, aggregates all PENDING_REVIEW items (ConstraintCandidate, AuthorityConflictRecord ESCALATED, NormativeViolationRecord, SelfModificationRecord ESCALATED) into AttentionBudgetRecord. Items are prioritized by severity then age. When total_pending > Config.operator.attention_budget, auto-continuation is not suspended but a WARNING is emitted. Stale items (age > review_stale_threshold) surface as WARNING.
+Models the operator's pending review queue against a configured attention budget. Each cycle, aggregates all PENDING_REVIEW items (ConstraintCandidate, AuthorityConflictRecord ESCALATED, NormativeViolationRecord, SelfModificationRecord ESCALATED) into AttentionBudgetRecord. Items are prioritized by severity then age. When total_pending > Config.operator.attention_budget, a WARNING is emitted. **Tiered escalation:** if `overloaded = true` persists for ≥ Config.operator.overload_escalation_threshold (default 3) consecutive cycles, auto-continuation IS suspended and IntegrityGap(kind="operator-overload-escalated", severity=BLOCKING) is emitted. The escalated BLOCKING clears when the attention queue drops below Config.operator.attention_budget. This prevents the system from making consequential autonomous decisions while the operator is persistently unable to review results. Stale items (age > review_stale_threshold) surface as WARNING.
 Produces: AttentionBudgetRecord
 Consumes: ConstraintCandidate, AuthorityConflictRecord, NormativeViolationRecord, SelfModificationRecord
 Phase: Phase 12 (end of cycle, after all records committed)
@@ -14930,7 +14975,7 @@ Defines formal fallback chains for each FOUNDATIONAL construct. When a construct
 | IntentVersioningProtocol | Mutation recorded without snapshot; intent-version-missing WARNING |
 | PolicyLayerContract | Config key validation skipped; policy-mechanism-coupling-detected WARNING at next bootstrap |
 | NormativeIntegrityContract | NO FALLBACK — normative-enforcement-unavailable BLOCKING; system halts |
-| ObjectiveDependencyContract | Dependencies ignored; all Objectives treated as SATISFIED; objective-dependency-violated may fire post-hoc |
+| ObjectiveDependencyContract | SERIALIZED execution: Objectives dispatched strictly one at a time in ObjectiveRankRecord order; no dependency verification but ordering is preserved; DATA dependencies suspended (data-dependency-suspended WARNING per blocked DATA dep); objective-dependency-violated may fire post-hoc for violations that were not prevented |
 | ReactiveEventProtocol | Event triggers disabled; periodic cycle schedule only |
 | CrossProductConflictProtocol | Fleet serialized (one Product at a time) to prevent conflicts |
 | ValueAccountingProtocol | ValueLedgerEntry created with expected_value only; realized_value never back-filled |
@@ -14942,13 +14987,17 @@ Defines formal fallback chains for each FOUNDATIONAL construct. When a construct
 | GapImpactEstimationProtocol | Objective selected by ObjectiveRankRecord utility_score alone (argmin degrades to proxy ranking) |
 
 **Cascade depth:** DegradationRecord.cascade_level tracks how many fallbacks are active simultaneously. cascade_level > Config.degradation.max_cascade (default 3) emits fallback-chain-exhausted BLOCKING.
+**Mutual fallback detection:** before activating a fallback, check whether the fallback construct itself is also in a degraded state. If fallback construct B is degraded and its own fallback is construct A (the original degraded construct), the chain is circular — emit fallback-chain-exhausted BLOCKING immediately regardless of cascade_level. Example: CausalModelProtocol degrades (fallback: GapImpactEstimationProtocol) AND GapImpactEstimationProtocol also degrades (fallback: ObjectiveRankRecord proxy) — these are not mutually dependent, so cascade_level = 2 applies. But if two constructs' fallbacks genuinely reference each other in a cycle, the circular detection fires.
 Produces: DegradationRecord
 Consumes: construct availability signals (data-insufficient, initialization-incomplete)
 Phase: Phase 0a (bootstrap capability check); any cycle phase where primary construct fails
 IGC: capability-degraded (WARNING), fallback-chain-exhausted (BLOCKING)
 
 **StateSpaceAuditContract** `contract` FOUNDATIONAL
-Verifies the lifecycle FSM for completeness and determinism at bootstrap and on every lifecycle schema change. Checks: (1) every state × input pair has a defined transition; (2) all states are reachable from INITIALIZING; (3) no deadlock state exists (non-terminal state with no outgoing transitions). Produces StateSpaceAuditRecord. INCOMPLETE verdict with undefined transitions emits BLOCKING gap.
+Verifies the lifecycle FSM for completeness and determinism at bootstrap and on every lifecycle schema change. Checks: (1) every state × input pair has a defined transition (the input alphabet is the closed LifecycleTrigger enum below); (2) all states are reachable from INITIALIZING; (3) no deadlock state exists (non-terminal state with no outgoing transitions)
+**LifecycleTrigger enum (closed input alphabet for FSM completeness verification):**
+BOOTSTRAP_COMPLETE, PHASE_0A_SUCCESS, PHASE_0A_FAILURE, BLOCKING_GAP_EMITTED, BLOCKING_GAP_CLEARED, OPERATOR_PAUSE, OPERATOR_RESUME, EXECUTOR_FAILURE, EXECUTOR_RECOVERY, CAPACITY_AVAILABLE, CAPACITY_EXHAUSTED, SCHEDULE_TRIGGER, CONDITION_MET, AUTHORITATIVE_DECISION_RECEIVED, LIFECYCLE_COMPLETE, NORMATIVE_HALT_TRIGGERED, NORMATIVE_HALT_CLEARED, SPEC_UPDATE_APPLIED
+Any lifecycle state × LifecycleTrigger pair that has no defined transition emits fsm-transition-undefined BLOCKING. StateSpaceAuditContract verifies all (state × trigger) pairs against this closed alphabet at Phase 0a bootstrap. (non-terminal state with no outgoing transitions). Produces StateSpaceAuditRecord. INCOMPLETE verdict with undefined transitions emits BLOCKING gap.
 Produces: StateSpaceAuditRecord
 Consumes: lifecycle state definitions, transition table
 Phase: Phase 0a (bootstrap); triggered on lifecycle schema mutation
@@ -14959,10 +15008,12 @@ Manages State Document schema migration when a Product's stored State was persis
 Produces: SchemaMigrationRecord
 Consumes: State Document (stored spec_version), §62e field retirement records, Config (target spec_version)
 Phase: pre-Phase 0a (on State Document load, before any other protocol runs — if this protocol itself is unavailable, migration-transform-failed BLOCKING is emitted via the runtime output channel before any other output; there is no fallback for StateSchemaMigrationProtocol)
+**SchemaMigrationRecord destination:** during migration (pre-Phase-0a), the State Document may not yet be writable. SchemaMigrationRecord is written to a temporary bootstrap buffer. On SUCCESS or PARTIAL verdict, the record is moved from the bootstrap buffer into the State Document as the first write after migration completes. On FAILED verdict, the record is emitted to the operator-facing error output channel only (plain-text format, since structured State Document output is unavailable). For a fresh install with no prior State Document, no migration is run and no SchemaMigrationRecord is created (migration is only required when a prior State Document exists at a different spec version).
 **PARTIAL verdict:** when some transforms succeed and others fail, verdict = PARTIAL; surviving fields are preserved; failed fields are initialized to [] or null defaults; emits IntegrityGap(kind="schema-migration-partial", severity=WARNING); system proceeds with partial state; operator should run `urace /check` to audit field completeness
 **FAILED verdict:** all transforms failed or the State Document is unreadable; emits IntegrityGap(kind="migration-transform-failed", severity=BLOCKING) and halts before Phase 0a
 **Semantic change note:** when a field's semantic meaning changes across versions (not just its presence), the migrated field will contain a default value. This is an acknowledged architectural trade-off; operators SHOULD verify field values after major version migration
 **Pre-bootstrap error display:** migration failures are emitted to the operator-facing output channel before the lifecycle is initialized; they appear as plain-text error messages, not as structured IntegrityGap records, until the runtime is fully initialized
+**Dry-run mode:** `urace /check --migration-dry-run` simulates migration against the current State Document without writing any changes. Produces a dry-run SchemaMigrationRecord (not persisted) reporting which Transforms would be applied, which fields would be added/removed/renamed, and whether the result would be SUCCESS, PARTIAL, or FAILED. Use this before a spec version upgrade to verify migration safety. `urace /help migrate` provides step-by-step migration guidance.
 IGC: state-schema-incompatible (BLOCKING), migration-transform-failed (BLOCKING), schema-migration-partial (WARNING)
 
 **ConstraintDiscoveryProtocol** `protocol` COMPOSITIONAL
@@ -15170,8 +15221,10 @@ Phase: pre-Phase 1 (trigger detection); triggered outside normal cycle cadence
 **Storm protection:** single-source storm = > Config.reactive.storm_threshold (default 5) triggers per cycle from one source; aggregate storm = > Config.reactive.aggregate_storm_threshold (default 20) triggers across all sources per cycle; both emit event-trigger-storm WARNING and suppress further triggers that cycle.
 **Inter-cycle rate limiting:** source may not trigger more than Config.reactive.inter_cycle_rate_limit (default 10) cycles within any 20-cycle rolling window; excess triggers are suppressed (not queued).
 **event-trigger-missed definition:** fires when a METRIC_THRESHOLD or EXTERNAL_STATE_CHANGE condition was true for ≥ 2 consecutive assessment intervals but no cycle was triggered (e.g., suppressed by debounce or rate limiter). Signals potential under-reaction.
+**Concurrent cycle handling:** if a reactive trigger arrives while an assessment cycle is already running (any phase 1–12 in progress), the trigger is queued with EventTriggerRecord.status = QUEUED. Queued triggers are evaluated at the next cycle boundary (after Phase 12 completes). QUEUED status does not itself consume rate-limit quota; it is processed as if it arrived at cycle boundary time. If multiple triggers are queued by the next boundary, they are coalesced into a single new cycle start (not one cycle per trigger). Coalescing prevents a burst of mid-cycle events from spawning a burst of sequential cycles.
+
 **DIRECTIVE_MUTATION via webhook ordering:** when a DIRECTIVE_MUTATION event arrives via WEBHOOK, ReactiveEventProtocol fires pre-Phase-1; IntentVersioningProtocol processes the mutation after ReactiveEventProtocol EventTriggerRecord is committed; Phase 0b re-runs after IntentVersioningProtocol completes. Order: EventTriggerRecord → DIRECTIVE mutation processed → IntentVersionRecord created → Phase 0b.
-**WEBHOOK authentication:** WEBHOOK event type requires matching a webhook_secret from Config.reactive.webhook_secrets map; unauthenticated WEBHOOK emits IntegrityGap(kind="adversarial-signal-detected", severity=BLOCKING).
+**WEBHOOK authentication:** WEBHOOK event type requires HMAC-SHA256 request signing. The sender MUST include a signature header (e.g., `X-URACE-Signature: sha256=<hex>`) computed as `HMAC-SHA256(key=webhook_secret, msg=<full_request_body_bytes>)`. The receiving runtime verifies this signature using the matching webhook_secret from Config.reactive.webhook_secrets map (keyed by webhook source identifier). Additionally, the request MUST include a timestamp field within Config.reactive.webhook_timestamp_tolerance (default 300 seconds) of current time, providing replay attack protection. Signature mismatch or stale timestamp emits IntegrityGap(kind="adversarial-signal-detected", severity=BLOCKING). Plain secret-matching (without HMAC) is not a compliant implementation.
 IGC: event-trigger-missed (WARNING), event-trigger-storm (WARNING)
 
 **PlanningHorizonProtocol** `protocol` COMPOSITIONAL
@@ -15258,6 +15311,7 @@ The **PlanConvergenceContract** governs Plan acceptance (§41). Before any Plan 
 Creates a ValueLedgerEntry for each committed Operation capturing expected_value (from ObjectiveUtilityFormula) and resource_cost (from ExecutionBudget). When OutcomeFeedbackRecord arrives, back-fills realized_value and computes roi. Accumulated ValueLedgerEntry history calibrates the expected_value term in ObjectiveUtilityFormula, replacing unfounded estimates with empirical priors.
 Produces: ValueLedgerEntry
 Consumes: Operation (commit), ObjectiveUtilityFormula (expected_value), OutcomeFeedbackRecord (realized_value), ExecutionBudget (resource_cost)
+**Calibration formula:** after each realized_value back-fill, compute calibration_ratio = realized_value / expected_value for that ValueLedgerEntry (skip when expected_value = 0). Rolling geometric mean of the last Config.value.calibration_window (default 20) calibration_ratios: `calibration_factor = exp(mean(log(ratio_i)))`. ObjectiveUtilityFormula MUST apply this factor as: `calibrated_expected_value = expected_value × calibration_factor` when Config.value.calibration_window entries exist; otherwise calibrated_expected_value = expected_value (uncalibrated). calibration_factor is stored in State.value_calibration_factor (single float, updated on each back-fill).
 Phase: 10 (create on commit); post-OutcomeFeedback (back-fill realized_value)
 IGC: value-baseline-missing (WARNING), expected-value-uncalibrated (WARNING)
 
@@ -15309,7 +15363,8 @@ The **DirectiveCoverageContract** governs the completeness of IntentFulfillmentB
 ### Fleet & Multi-Product
 
 **CrossProductConflictProtocol** `protocol` FOUNDATIONAL
-Detects and arbitrates concurrent write conflicts between Products in a fleet run. Before dispatching each Product's Operation, checks the target resource identifier against an in-flight resource registry. On conflict, applies resolution strategy (FIRST_WRITER_WINS, SERIALIZED, ESCALATED) per Config.fleet.conflict_resolution. UNRESOLVED conflicts suspend the conflicting Products and emit BLOCKING gap. Extends IntentGapCoordinationGate (intra-product) to the cross-product dimension.
+Detects and arbitrates concurrent write conflicts between Products in a fleet run. **Pessimistic lock model:** before dispatching each Product's Operation, the Product MUST register a lock entry in FleetResourceRegistry for each target resource (reservation phase). Lock registration is treated as an atomic compare-and-set: the operation succeeds only if no entry with the same (fleet_run_id, resource_type, resource_identifier) already exists. If the atomic registration succeeds, dispatch proceeds. If it fails (another Product holds the lock), the Operation is queued for the next fleet cycle and emits IntegrityGap(kind="fleet-lock-reservation-conflict", severity=WARNING).
+**TOCTOU prevention:** the atomic compare-and-set semantic ensures that the check-and-reserve is a single indivisible operation at the FleetResourceRegistry level. Implementations MUST NOT implement this as two separate operations (read-then-write) — the comparison and insertion MUST be atomic. On distributed runtimes, this requires a distributed lock or compare-and-set primitive on the FleetResourceRegistry. On conflict, applies resolution strategy (FIRST_WRITER_WINS, SERIALIZED, ESCALATED) per Config.fleet.conflict_resolution. UNRESOLVED conflicts suspend the conflicting Products and emit BLOCKING gap. Extends IntentGapCoordinationGate (intra-product) to the cross-product dimension.
 Produces: ResourceConflictRecord
 Consumes: Operation (target resource), FleetMemberStatus, Config.fleet.conflict_resolution
 Phase: fleet Phase 9 pre-dispatch (before any fleet member dispatches)
@@ -15731,6 +15786,8 @@ A specialized gate applied to any proposed change targeting `urace/` system file
 **Cooldown:** minimum Config.self_mod.cooldown_cycles (default 10) cycles between consecutive system-file self-modifications; early attempt emits self-modification-evidence-insufficient BLOCKING.
 **System file boundary:** a file is a "system file" if its path begins with `urace/` or equals `URACE.md`; all other files are Product files and are exempt. The path boundary is evaluated before dispatch — an Executor may not redefine what constitutes a Product file.
 **Bootstrap protection:** URACE.md and `urace/` files loaded at bootstrap are immutable until Phase 0a completes successfully. A self-modification proposal during bootstrap (before Phase 0a completion) is rejected with self-modification-evidence-insufficient BLOCKING regardless of evidence.
+**Bootstrap hash-lock:** during `urace /onboard confirm`, SHA-256 hashes of URACE.md and all `urace/` Python entry-point files are computed and stored in `State.bootstrap_file_hashes`. Pre-Phase-0a on every subsequent startup, RecursiveSelfModificationGate re-computes these hashes and compares to stored values. A mismatch emits IntegrityGap(kind="normative-invariant-violated", severity=BLOCKING) via NIC N7 and halts before Phase 0a. This detects out-of-band file tampering that bypassed the gate entirely.
+**Cooldown tracking:** `State.last_self_modification_cycle` stores the cycle number of the last APPROVED SelfModificationRecord. Any new self-modification proposal in cycle C where C − State.last_self_modification_cycle < Config.self_mod.cooldown_cycles emits self-modification-evidence-insufficient BLOCKING.
 **LCG chain:** self-modification proposals are additionally subject to LifecycleChangeGate (§62l LCG) as a downstream gate.
 Any violation emits BLOCKING gap and sets SelfModificationRecord.verdict = REJECTED.
 Produces: SelfModificationRecord
@@ -15740,7 +15797,8 @@ IGC: self-modification-evidence-insufficient (BLOCKING), self-modification-princ
 
 **NormativeIntegrityContract** `contract` FOUNDATIONAL
 Defines invariants that hold regardless of operator BOUNDARY configuration. Normative invariants: (N1) IntegrityGap records MUST NOT be suppressed or deleted; (N2) audit log append-only invariant MUST NOT be disabled; (N3) Evidence records MUST NOT be forged or post-hoc modified; (N4) SelfModificationRecord MUST be created for every system-file change that is executed (rejected proposals are exempt); (N5) PrincipalRecord with precedence=0 MUST always exist (supersedes schema WARNING — BLOCKING takes precedence); (N6) NormativeIntegrityContract itself MUST NOT be removed, degraded, or bypassed; (N7) RecursiveSelfModificationGate MUST NOT be bypassed for any file under `urace/` or URACE.md.
-**Enforcement model:** N1–N7 are enforced at the runtime layer — below BOUNDARY rule evaluation and below the §62l contract layer. They are not enforced by NormativeIntegrityContract calling itself. The runtime implementation MUST treat these as inviolable pre-conditions checked before any state mutation is written, independent of whether NormativeIntegrityContract is listed as active in the mechanism_set. If NormativeIntegrityContract is unavailable (degraded), the runtime MUST emit IntegrityGap(kind="normative-enforcement-unavailable", severity=BLOCKING) and halt until restored — there is no fallback for NIC.
+**Enforcement model:** N1–N7 are enforced at the runtime layer — below BOUNDARY rule evaluation and below the §62l contract layer. **Formal ordering:** the runtime MUST evaluate N1–N7 checks BEFORE applying any BOUNDARY rule to a proposed mutation. If a BOUNDARY rule would permit an action that violates a normative invariant, the normative invariant takes precedence and the action is rejected. This ordering is not configurable and MUST be hardcoded in any compliant URACE runtime implementation. BOUNDARY rules that explicitly attempt to override normative invariants are themselves rejected as normative-invariant-violated. They are not enforced by NormativeIntegrityContract calling itself. The runtime implementation MUST treat these as inviolable pre-conditions checked before any state mutation is written, independent of whether NormativeIntegrityContract is listed as active in the mechanism_set. If NormativeIntegrityContract is unavailable (degraded), the runtime MUST emit IntegrityGap(kind="normative-enforcement-unavailable", severity=BLOCKING), transition to NORMATIVE_HALT lifecycle state, and suspend all autonomous Operations until NIC is restored. **Halt semantics:** SD=True commands (`/check`, `/vitals`, `/blocker`, `/help`, `/rules list`) remain fully operational during NORMATIVE_HALT — inspection is never blocked. Write operations (add, update, commit) are suspended. There is no fallback for NIC; restoration requires operator intervention via `urace /onboard confirm --restore-nic`.
+**Atomic mutation contract:** NIC evaluates mutations atomically. If a proposed mutation spans multiple fields and any field violates a normative invariant, the entire mutation is rejected and no fields are written. Partial mutations are never committed. This is enforced at the runtime layer before any field is written to the State Document.
 **N4 clarification:** applies to executed self-modifications only; a REJECTED SelfModificationRecord is itself the record of the attempt.
 **N5 / schema WARNING harmonization:** PrincipalRecord schema constraint WARNING is informational only; N5 BLOCKING from NormativeIntegrityContract is authoritative.
 Produces: NormativeViolationRecord
@@ -15911,6 +15969,10 @@ The **GapCalibrationProtocol** closes the accuracy feedback loop on the `gap()` 
 **Contract.** After every cycle fold, GapCalibrationFeedbackMechanism MUST run and produce a GapCalibrationRecord per active directive. When calibration_error_pct > Config.gap_calibration.drift_threshold_pct (default 20%), runtime MUST log the drift. When systematic drift (3+ consecutive cycles): runtime MUST update λ in ConfidenceDecayFormula per the adjustment formula and emit `gap-calibration-systematic-drift` BLOCKING IntegrityGap.
 
 **Recovery.** When calibration_error_pct recovers below Config.gap_calibration.recovery_threshold (default 5%) for 5 consecutive cycles, runtime MUST reduce λ back toward baseline.
+
+Produces: GapCalibrationRecord
+Consumes: Checkpoint (per-cycle), IntentFulfillmentBinding (gap_scores), OutcomeFeedbackRecord, FeedbackLatencyRecord (latency-adjusted discount weights per loop)
+**Latency-adjusted weighting:** for each GapCalibrationRecord residual, the weight applied in the rolling mean is `w_adjusted = exp(−(age_cycles − median_latency_cycles_for_loop) / Config.feedback.latency_decay_constant)` where `median_latency_cycles_for_loop` is the rolling median of FeedbackLatencyRecord.latency_cycles for loop_id="gap-calibration" over the last Config.feedback.latency_window_cycles records. When FeedbackLatencyRecord count for loop_id="gap-calibration" < Config.feedback.latency_min_samples (default 5), w_adjusted = 1.0 (no discount applied — insufficient sample window).
 
 **Referenced from:** §62b GapCalibrationRecord, §62c GapCalibrationFeedbackMechanism, §37 Assessment.
 
@@ -19552,6 +19614,7 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r116 | 2026-10-19 | spec | Full closure of all 14 gaps: 31 residual issues resolved across C1-C7, A1-A4, S1-S3. Closes every residual issue identified in the post-r115 audit. All 14 gaps now have zero known residual issues: **C4:** bootstrap hash-lock (`State.bootstrap_file_hashes`); `State.last_self_modification_cycle` for cooldown tracking; RollbackRecord verified before any self-mod approved. **C5:** Evidence.content_hash for N3 structural enforcement; NORMATIVE_HALT lifecycle state defined with SD=True commands remaining operational; NIC ordering before BOUNDARY formally hardcoded; atomic mutation contract (all-or-nothing); halt semantics fully specified. **S1:** GapCalibrationProtocol formally consumes FeedbackLatencyRecord with latency-adjusted discount formula; loop_id closed enum (5 values); minimum sample guard (Config.feedback.latency_min_samples); oscillation dampening wired to LearningWeightUpdateFormula (α × damping_factor for N cycles). **A3:** ObjectiveDependencyContract fallback changed from "all SATISFIED" (dangerous) to SERIALIZED execution; mutual fallback cycle detection. **C1:** Empty AND/OR node → goal-tree-node-empty BLOCKING; GoalRecord deletion blocked by orphaned LEAF GoalTreeNode gate → goal-tree-orphan-detected BLOCKING. **C3:** mutation_reason REQUIRED (not OPTIONAL); goal_tree_node_ids_snapshot field added to IntentVersionRecord; rollback GoalTreeNode reconciliation specified. **C2:** SATISFIED→BLOCKING reversion cross-referenced to RollbackCompletenessAttestation and Objective status mutations; DATA dependency semantics formally defined (output_artifact_id). **A1:** Scanner tiered: BLOCKING for new (≥r114) constructs, WARNING for legacy; Config mutation gate added (validation before Config update takes effect). **C6:** Calibration formula: rolling geometric mean of realized/expected ratios; `State.value_calibration_factor`; multi-dimensional value (multiple ValueLedgerEntry per Operation per dimension). **A2:** Concurrent cycle trigger queuing (EventTriggerRecord.status = QUEUED); HMAC-SHA256 WEBHOOK auth with timestamp anti-replay. **C7:** Tiered escalation (persistent overload → BLOCKING after N cycles); AttentionBudgetRecord.consecutive_overload_cycles; overloaded=true records non-compactable. **S2:** Pessimistic lock model (reserve-before-dispatch, atomic compare-and-set); TOCTOU prevention requirement; fleet-lock-reservation-conflict WARNING. **S3:** Transform §62b schema defined (tfm-); SchemaMigrationRecord bootstrap destination specified; dry-run mode (`urace /check --migration-dry-run`). **A4:** LifecycleTrigger enum (18 values) defines closed FSM input alphabet for StateSpaceAuditContract completeness verification. **New §62b schemas:** Transform (tfm-). **New State fields:** last_self_modification_cycle, bootstrap_file_hashes, value_calibration_factor. **New IGC kinds:** goal-tree-node-empty (BLOCKING), goal-tree-orphan-detected (BLOCKING), evidence-integrity-violated (BLOCKING), feedback-loop-oscillation-damped (WARNING), dependency-rollback-revert (WARNING), fleet-lock-reservation-conflict (WARNING), operator-overload-escalated (BLOCKING), policy-scanner-blocking-violation (BLOCKING). **New enum:** LifecycleTrigger (18 values), FeedbackLatencyRecord.loop_id closed enum (5 values). **New CLI:** `urace /check --migration-dry-run`. **New external references:** `Transform` → §62b; `last_self_modification_cycle` → §62b State Document; `bootstrap_file_hashes` → §62b State Document; `value_calibration_factor` → §62b State Document; `NORMATIVE_HALT` → §62b lifecycle_state enum; `LifecycleTrigger` enum (18 values) → §62l StateSpaceAuditContract; `FeedbackLatencyRecord.loop_id` closed enum → §62b; `EventTriggerRecord.status` enum → §62b; `AttentionBudgetRecord.consecutive_overload_cycles` → §62b; `IntentVersionRecord.goal_tree_node_ids_snapshot` → §62b; goal-tree-node-empty (BLOCKING) → §62l; goal-tree-orphan-detected (BLOCKING) → §62l; evidence-integrity-violated (BLOCKING) → §62l; feedback-loop-oscillation-damped (WARNING) → §62l; dependency-rollback-revert (WARNING) → §62l; fleet-lock-reservation-conflict (WARNING) → §62l; operator-overload-escalated (BLOCKING) → §62l; policy-scanner-blocking-violation (BLOCKING) → §62l. |
 | r115 | 2026-10-19 | spec | Hardening pass: 79-issue correctness, security, and architectural audit closure. **Critical architectural fixes:** Phase 8/8.5 circular dependency resolved (Phase 8.6 for PlanningHorizonProtocol, Phase 8.7 for PortfolioExecutionProtocol, after Phase 8.5 GapImpactEstimates); RollbackRecord §62b schema defined; FleetResourceRegistry §62b schema defined; NormativeIntegrityContract enforcement model clarified as runtime-layer (not self-referential); RecursiveSelfModificationGate strengthened with evidence independence, cooldown, LCG chain, bootstrap protection, and boundary definition. **Formula completeness:** IntentAggregationFormula zero-divisor guard + directive-count=0 case; UncertaintyPropagationFormula zero-divisor guard + horizon cap + consecutive escalation; ValueLedgerEntry ROI zero-guard + feedback timeout; FeedbackLatencyRecord oscillation formula formalized (≥3 reversals, magnitude threshold, discount formula); StateTransitionValidationProtocol exploit-only scope + NEUTRAL accumulation gate + portfolio baseline clarification. **Algorithm definitions:** IntentDriftProtocol semantic_distance now formally defined (Sørensen–Dice complement on lowercased tokenized text); DIVERGED timing (next cycle); retry cap preventing infinite Phase 0b loop. **Security hardening:** GoalTreeNode creation restricted to authorized principals (Executor-created OR nodes blocked); AdversarialRobustnessProtocol: self-provided CausalEdge exculpatory paths blocked, SUSPECTED accumulation escalation; NormativeIntegrityContract N6+N7 added; WEBHOOK authentication requirement. **Capability degradation:** complete fallback catalog for all 20 FOUNDATIONAL constructs; NormativeIntegrityContract and StateSchemaMigrationProtocol explicitly have NO fallback (system halts); DegradationRecord.cascade_level added; data-insufficient and initialization-incomplete defined as IGC kinds. **Schema completeness:** PrincipalRecord.is_active semantics + bootstrap creation path; ObjectiveDependencyRecord status update trigger; ConstraintCandidate ESCALATED status; FleetKnowledgeRecord payload_schema + applicable_domains default; ResourceConflictRecord requeue + ESCALATED path; StateSpaceAuditRecord.deadlock_states; SelfModificationRecord PENDING verdict + rollback_record_id + evidence_source_count; DegradationRecord.cascade_level + fallback_verified; GoalTreeNode.satisfied recomputation mandate + BLOCKING for uncovered leaves. **IGC bindings added:** fsm-deadlock-detected (BLOCKING), causal-graph-cycle-detected (BLOCKING), normative-enforcement-unavailable (BLOCKING), self-modification-rollback-missing (BLOCKING), goal-tree-unauthorized-mutation (BLOCKING), uncertainty-high-consecutive-cycles (BLOCKING), intent-drift-retry-cap-reached (BLOCKING), adversarial-pattern-accumulated (WARNING), schema-migration-partial (WARNING), neutral-operation-accumulation (WARNING), dependency-gate-blocked-all-objectives (WARNING), value-feedback-timeout (WARNING), lookahead-plan-cold-start (WARNING), intent-aggregation-no-directives (WARNING), data-insufficient (WARNING), initialization-incomplete (WARNING). **Cross-references wired:** IntentDriftProtocol Consumes → IntentVersionRecord; ExplanationProtocol Consumes → CausalModelRecord + CausalEdgeRecord + SD=True clarification; GapCalibrationProtocol Referenced-from → FeedbackLoopLatencyContract latency-adjusted weighting. **Config keys:** 20 new Config.X.Y keys registered under PolicyLayerContract for all r112–r115 behavioral parameters. **CLI:** `urace intent rollback <version>`, `urace add principal` added. New §62b schemas: RollbackRecord (rbr-), FleetResourceRegistry (frr-). New IGC kinds: 16. |
 | r114 | 2026-10-19 | spec | Concept, architectural, and structural gap closure: goal decomposition, objective dependencies, intent versioning, self-modification gate, normative constraints, value accounting, operator attention, policy/mechanism separation, reactive events, capability degradation, FSM completeness, feedback latency, cross-product conflicts, state schema migration. Closes fourteen gaps spanning concepts, architecture, and structural mechanisms: **C1 (GoalDecompositionProtocol):** AND/OR compositional goal tree (GoalTreeNode); check 8 of Phase 0b extended to evaluate tree satisfaction. **C2 (ObjectiveDependencyContract):** Formal Objective dependency DAG; PortfolioExecutionProtocol respects sequencing; cycle detection emits BLOCKING gap. **C3 (IntentVersioningProtocol):** Versioned Intent snapshots (IntentVersionRecord) on every mutation; delta audit and rollback. **C4 (RecursiveSelfModificationGate):** Elevated evidence (3 CONFIRMED) + all precedence ≤ 1 principal approvals + pre-committed rollback required for system-file changes. **C5 (NormativeIntegrityContract):** Five inviolable normative invariants (N1–N5) superseding operator BOUNDARY rules; NormativeViolationRecord + BLOCKING gap on breach. **C6 (ValueAccountingProtocol):** ValueLedgerEntry per committed Operation; expected_value back-filled with realized_value from OutcomeFeedback; ROI computed per cycle. **C7 (OperatorAttentionContract):** AttentionBudgetRecord aggregating pending review queue; WARNING on overload and stale items. **A1 (PolicyLayerContract):** All construct behavioral parameters have Config Document keys; PolicyOverrideRecord tracks operator deviations; reconfiguration without spec edits. **A2 (ReactiveEventProtocol):** Event-driven cycle triggers (METRIC_THRESHOLD, WEBHOOK, EXTERNAL_STATE_CHANGE); debounce + storm protection; EventTriggerRecord. **A3 (CapabilityDegradationContract):** Formal fallback chains for FOUNDATIONAL constructs; DegradationRecord; fallback-chain-exhausted BLOCKING when no fallback available. **A4 (StateSpaceAuditContract):** Lifecycle FSM completeness verification at bootstrap; undefined transitions → BLOCKING; unreachable states → WARNING. **S1 (FeedbackLoopLatencyContract):** Per-loop latency measurement (FeedbackLatencyRecord); oscillation detection; latency-adjusted GapCalibrationProtocol weighting. **S2 (CrossProductConflictProtocol):** Cross-product resource conflict detection and arbitration in fleet execution; ResourceConflictRecord; UNRESOLVED → BLOCKING + suspension. **S3 (StateSchemaMigrationProtocol):** Formal State Document schema migration on spec version mismatch; SchemaMigrationRecord; FAILED → BLOCKING halt. **New §62b schemas (14):** GoalTreeNode (gtn-), ObjectiveDependencyRecord (odr-), IntentVersionRecord (ivr-), SelfModificationRecord (smr-), NormativeViolationRecord (nvr-), ValueLedgerEntry (vle-), AttentionBudgetRecord (abr-), PolicyOverrideRecord (por-), EventTriggerRecord (etr-), DegradationRecord (dgr-), StateSpaceAuditRecord (ssar-), FeedbackLatencyRecord (flr-), ResourceConflictRecord (rcr-), SchemaMigrationRecord (scmr-). **New §62l constructs (14):** GoalDecompositionProtocol, IntentVersioningProtocol, PolicyLayerContract, RecursiveSelfModificationGate, NormativeIntegrityContract, ValueAccountingProtocol, FeedbackLoopLatencyContract, ObjectiveDependencyContract, ReactiveEventProtocol, CrossProductConflictProtocol, OperatorAttentionContract, CapabilityDegradationContract, StateSpaceAuditContract, StateSchemaMigrationProtocol. **New §37 phases:** Phase 0a/0b/8/9/10/12 extended; ordering contract extended. **New IGC kinds (28):** goal-tree-cycle-detected, goal-tree-leaf-uncovered, objective-dependency-violated, objective-dependency-cycle, intent-version-missing, intent-version-rollback-failed, self-modification-evidence-insufficient, self-modification-principal-insufficient, normative-invariant-violated, audit-log-suppression-attempted, value-baseline-missing, expected-value-uncalibrated, operator-attention-overload, review-queue-stale, policy-mechanism-coupling-detected, event-trigger-missed, event-trigger-storm, capability-degraded, fallback-chain-exhausted, fsm-transition-undefined, fsm-state-unreachable, feedback-loop-oscillation-detected, feedback-latency-stale, cross-product-resource-conflict, fleet-resource-lock-timeout, state-schema-incompatible, migration-transform-failed, normative-invariant-supersedes-boundary. **New external references:** `GoalTreeNode` → §62b; `ObjectiveDependencyRecord` → §62b; `IntentVersionRecord` → §62b; `SelfModificationRecord` → §62b; `NormativeViolationRecord` → §62b; `ValueLedgerEntry` → §62b; `AttentionBudgetRecord` → §62b; `PolicyOverrideRecord` → §62b; `EventTriggerRecord` → §62b; `DegradationRecord` → §62b; `StateSpaceAuditRecord` → §62b; `FeedbackLatencyRecord` → §62b; `ResourceConflictRecord` → §62b; `SchemaMigrationRecord` → §62b; `GoalDecompositionProtocol` → §62l; `IntentVersioningProtocol` → §62l; `PolicyLayerContract` → §62l; `RecursiveSelfModificationGate` → §62l; `NormativeIntegrityContract` → §62l; `ValueAccountingProtocol` → §62l; `FeedbackLoopLatencyContract` → §62l; `ObjectiveDependencyContract` → §62l; `ReactiveEventProtocol` → §62l; `CrossProductConflictProtocol` → §62l; `OperatorAttentionContract` → §62l; `CapabilityDegradationContract` → §62l; `StateSpaceAuditContract` → §62l; `StateSchemaMigrationProtocol` → §62l; 28 new IGC kinds → §62l. |
 | r113 | 2026-10-19 | spec | Gap 1–10 closure: CausalModelProtocol (§62l) + CausalEdgeRecord/CausalModelRecord (§62b) — directed causal graph over Product signals; PlanningHorizonProtocol (§62l) + LookaheadPlanRecord (§62b) — N-step lookahead extending argmin; PrincipalHierarchyProtocol (§62l) + PrincipalRecord/AuthorityConflictRecord (§62b) — multi-principal authority lattice with precedence+veto; AdversarialRobustnessProtocol (§62l) + AdversarialSignalRecord (§62b) — adversarial pattern detection (metric fabrication, evidence injection, gap gaming, boundary probing); UncertaintyPropagationFormula (§62l) + UncertaintyBand (§62b) — credibility uncertainty propagated to UncertaintyBand on IntentAggregateGapRecord; FleetKnowledgeProtocol (§62l) + FleetKnowledgeRecord (§62b) — cross-product learning transfer at fleet boundary sync; ConstraintDiscoveryProtocol (§62l) + ConstraintCandidate (§62b) — BOUNDARY rule candidate hypotheses from failure patterns; ExplanationProtocol (§62l) + ExplanationRecord (§62b) — on-demand DecisionRecord explanation via `urace explain <id>`; PortfolioExecutionProtocol (§62l) + PortfolioAllocationRecord (§62b) — budget split across parallel Objectives; DeadlineEnforcementContract (§62l) + DeadlineRecord (§62b) — hard deadlines on Goals/Objectives with BLOCKING breach and escalation_action. **New §62b schemas (12):** CausalEdgeRecord (cer-), CausalModelRecord (cmr-), LookaheadPlanRecord (lpr-), PrincipalRecord (pr-), AuthorityConflictRecord (acnr-), AdversarialSignalRecord (asr-), UncertaintyBand (ub-), FleetKnowledgeRecord (fkr-), ConstraintCandidate (ccan-), ExplanationRecord (exr-), PortfolioAllocationRecord (par-), DeadlineRecord (dlr-). **New §62l constructs (10):** CausalModelProtocol, PlanningHorizonProtocol, PrincipalHierarchyProtocol, AdversarialRobustnessProtocol, UncertaintyPropagationFormula, FleetKnowledgeProtocol, ConstraintDiscoveryProtocol, ExplanationProtocol, PortfolioExecutionProtocol, DeadlineEnforcementContract. **New IGC kinds (20):** causal-model-stale, causal-edge-confounded, causal-intervention-unverified, lookahead-plan-missing, lookahead-horizon-exceeded, authority-conflict-unresolved, principal-veto-active, principal-hierarchy-missing, adversarial-signal-detected, metric-fabrication-suspected, uncertainty-band-missing, high-uncertainty-action-taken, fleet-knowledge-sync-missing, constraint-candidate-pending-review, constraint-candidate-conflict, explanation-synthesis-failed, portfolio-allocation-missing, portfolio-budget-overallocated, deadline-breached, deadline-approaching. **New CLI:** `urace explain <id>`. **New external references:** `CausalEdgeRecord` → §62b; `CausalModelRecord` → §62b; `LookaheadPlanRecord` → §62b; `PrincipalRecord` → §62b; `AuthorityConflictRecord` → §62b; `AdversarialSignalRecord` → §62b; `UncertaintyBand` → §62b; `FleetKnowledgeRecord` → §62b; `ConstraintCandidate` → §62b; `ExplanationRecord` → §62b; `PortfolioAllocationRecord` → §62b; `DeadlineRecord` → §62b; `CausalModelProtocol` → §62l; `PlanningHorizonProtocol` → §62l; `PrincipalHierarchyProtocol` → §62l; `AdversarialRobustnessProtocol` → §62l; `UncertaintyPropagationFormula` → §62l; `FleetKnowledgeProtocol` → §62l; `ConstraintDiscoveryProtocol` → §62l; `ExplanationProtocol` → §62l; `PortfolioExecutionProtocol` → §62l; `DeadlineEnforcementContract` → §62l; 20 new IGC kinds → §62l. |
