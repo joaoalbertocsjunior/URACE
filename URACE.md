@@ -13134,70 +13134,71 @@ Options defined here apply across all commands that accept them. Per-command spe
 
 ## Command Reference
 
-All available `urace` commands, in priority order. SD=True means no Executor invocation required; the command is always available. `<freeform-text>` is any plain-language input quoted as `urace "<text>"`. Commands marked with `*` are suppressed in `urace /help` but are valid.
+All available `urace` commands, organized by category. SD=True means no Executor invocation required; the command is always available. `<freeform-text>` is any plain-language input quoted as `urace "<text>"`. Commands marked with `*` are suppressed in `urace /help` but are valid.
 
-| Command | Purpose | SD |
-|---|---|---|
-| `<freeform-text>` | classify and queue free text; MUST be quoted: `urace "<text>"` — Executor confirms each item | No |
-| `auto` | run persistent autonomous evolution lifecycle | No |
-| `pause` | suspend autonomous operation | Yes |
-| `resume` | resume a PAUSED lifecycle | Yes |
-| `check` | evaluate lifecycle health (IntegrityGaps, gates) | Yes |
-| `vitals` | show progress, credit usage, and lifecycle health | Yes |
-| `add` | directly queue a typed record (context/goal/source/metric/vital) without Executor | Yes |
-| `constraint` | add or manage PROHIBITION/PERMISSION rules | No |
-| `intent` | add or manage DIRECTIVE rules | No |
-| `goal` | inspect, forecast, or manage goals | Yes |
-| `context` | inspect queued authoritative context | Yes |
-| `change` | list accepted changes or explain one by change ID | Yes |
-| `evidence` | list or inspect EvidenceRecords | Yes |
-| `decision` | list or inspect DecisionRecords | Yes |
-| `blocker` | list and resolve BLOCKING IntegrityGaps | Yes |
-| `integrity-signal` | list or inspect IntegritySignals | Yes |
-| `rules` | inspect the Rule Ledger | Yes |
-| `plan` | inspect the current cycle plan | Yes |
-| `quality` | inspect quality streak and delta trajectory | Yes |
-| `compliance` | inspect compliance posture and trajectory | Yes |
-| `why` | explain the reasoning behind a decision or change | Yes |
-| `report` | generate a lifecycle progress report | Yes |
-| `onboard` | manage the Product Onboard Phase | Partial |
-| `product` | manage the Product Registry | Partial |
-| `fleet` | run and manage multiple products in parallel | Partial |
-| `compact` | queue compaction of an accumulating list field | Yes |
-| `decompact` | restore original records from a CompactionEvent | Yes |
-| `amend` | in-place amendment to an archived record without full decompaction | Yes |
-| `crc` | inspect the Cognitive Resume (CRC) | Yes |
-| `configuration` | inspect or change user-facing configuration | Yes |
-| `policy` | inspect or set lifecycle policies | Yes |
-| `budget` | inspect or set Executor call budgets | Yes |
-| `resource` | inspect per-product resource usage and ROI | Yes |
-| `evaluation` | inspect or configure evaluation weights | Yes |
-| `self-evolution` | inspect or configure self-evolution policy | Yes |
-| `executor` | inspect, attach, or detach the configured Executor | Yes |
-| `executor-capacity` * | defer or clear Executor capacity | No |
-| `declare` * | deprecated (r100); use `add context|goal|source|metric|vital` | Yes |
-| `add-context` * | deprecated alias for `add context` | Yes |
-| `add-goal` * | deprecated alias for `add goal` | Yes |
-| `add-source` * | deprecated alias for `add source` | Yes |
-| `add-metric` * | deprecated alias for `add metric` | Yes |
-| `add-vital` * | deprecated alias for `add vital` | Yes |
-| `api` | machine interface: call/batch/watch/version for external tools (EIP §62w) | Partial |
-| `feedback` | submit or list outcome feedback | Partial |
-| `schema` | inspect output schema registry | Yes |
-| `trace` | query the lifecycle trace log | Yes |
-| `update` | guided update sequence for spec revisions | Partial |
-| `derive` | extract and reuse URACE building blocks | Yes |
-| `govern` | inspect governance gates | Yes |
-| `inbox` | manage the operator inbox (community signals, patch proposals) | Partial |
-| `source` | list or control connector sources | Yes |
-| `metric` | list or queue removal of metric definitions | Yes |
-| `vital` | list or queue removal of vital definitions | Yes |
-| `milestone` | inspect or mark Product milestones and versions | Yes |
-| `commands` | list all commands with brief descriptions | Yes |
-| `help` | show operation catalog or contextual help | Yes |
-| `autonomous` | run persistent autonomous mode (alias for `auto`); `--dry-run` is SD=True | Partial |
-| `portfolio` * | run the optional isolated-worktree portfolio helper | No |
-| `repair-controller` * | repair controller fault recovery | No |
+| Command | Category | Subcategory | Purpose | SD |
+|---|---|---|---|---|
+| `<freeform-text>` | Universal | — | universal router: resolves to one or more commands dispatched in order; MUST be quoted: `urace "<text>"` | No |
+| `auto` | Lifecycle | — | run persistent autonomous evolution lifecycle | No |
+| `autonomous` | Lifecycle | — | run persistent autonomous mode (alias for `auto`); `--dry-run` is SD=True | Partial |
+| `onboard` | Lifecycle | — | manage the Product Onboard Phase | Partial |
+| `pause` | Lifecycle | — | suspend autonomous operation | Yes |
+| `resume` | Lifecycle | — | resume a PAUSED lifecycle | Yes |
+| `portfolio` * | Lifecycle | — | run the optional isolated-worktree portfolio helper | No |
+| `repair-controller` * | Lifecycle | — | repair controller fault recovery | No |
+| `blocker` | Inspection | — | list and resolve BLOCKING IntegrityGaps | Yes |
+| `change` | Inspection | — | list accepted changes or explain one by change ID | Yes |
+| `check` | Inspection | — | evaluate lifecycle health (IntegrityGaps, gates) | Yes |
+| `compliance` | Inspection | — | inspect compliance posture and trajectory | Yes |
+| `context` | Inspection | — | inspect queued authoritative context | Yes |
+| `crc` | Inspection | — | inspect the Cognitive Resume (CRC) | Yes |
+| `decision` | Inspection | — | list or inspect DecisionRecords | Yes |
+| `evidence` | Inspection | — | list or inspect EvidenceRecords | Yes |
+| `executor` | Inspection | — | inspect, attach, or detach the configured Executor | Yes |
+| `goal` | Inspection | — | inspect, forecast, or manage goals | Yes |
+| `integrity-signal` | Inspection | — | list or inspect IntegritySignals | Yes |
+| `plan` | Inspection | — | inspect the current cycle plan | Yes |
+| `quality` | Inspection | — | inspect quality streak and delta trajectory | Yes |
+| `report` | Inspection | — | generate a lifecycle progress report | Yes |
+| `trace` | Inspection | — | query the lifecycle trace log | Yes |
+| `vitals` | Inspection | — | show progress, credit usage, and lifecycle health | Yes |
+| `why` | Inspection | — | explain the reasoning behind a decision or change | Yes |
+| `constraint` | Governance | — | add or manage PROHIBITION/PERMISSION rules | No |
+| `govern` | Governance | — | inspect governance gates | Yes |
+| `inbox` | Governance | — | manage the operator inbox (community signals, patch proposals) | Partial |
+| `intent` | Governance | — | add or manage DIRECTIVE rules | No |
+| `policy` | Governance | — | inspect or set lifecycle policies | Yes |
+| `rules` | Governance | — | inspect the Rule Ledger | Yes |
+| `self-evolution` | Governance | — | inspect or configure self-evolution policy | Yes |
+| `update` | Governance | — | guided update sequence for spec revisions | Partial |
+| `add` | Records | — | directly queue a typed record (context/goal/source/metric/vital) without Executor | Yes |
+| `amend` | Records | — | in-place amendment to an archived record without full decompaction | Yes |
+| `metric` | Records | — | list or queue removal of metric definitions | Yes |
+| `milestone` | Records | — | inspect or mark Product milestones and versions | Yes |
+| `source` | Records | — | list or control connector sources | Yes |
+| `vital` | Records | — | list or queue removal of vital definitions | Yes |
+| `add-context` * | Records | — | deprecated alias for `add context` | Yes |
+| `add-goal` * | Records | — | deprecated alias for `add goal` | Yes |
+| `add-metric` * | Records | — | deprecated alias for `add metric` | Yes |
+| `add-source` * | Records | — | deprecated alias for `add source` | Yes |
+| `add-vital` * | Records | — | deprecated alias for `add vital` | Yes |
+| `declare` * | Records | — | deprecated (r100); use `add context\|goal\|source\|metric\|vital` | Yes |
+| `compact` | State | — | queue compaction of an accumulating list field | Yes |
+| `decompact` | State | — | restore original records from a CompactionEvent | Yes |
+| `budget` | Configuration | Resources | inspect or set Executor call budgets | Yes |
+| `configuration` | Configuration | — | inspect or change user-facing configuration | Yes |
+| `data` | Configuration | Data Sources | manage structural data sources (databases, files, cloud stores) | Partial |
+| `evaluation` | Configuration | — | inspect or configure evaluation weights | Yes |
+| `executor-capacity` * | Configuration | — | defer or clear Executor capacity | No |
+| `fleet` | Configuration | Fleet | run and manage multiple products in parallel | Partial |
+| `product` | Configuration | Product | manage the Product Registry | Partial |
+| `resource` | Configuration | Resources | inspect per-product resource usage and ROI | Yes |
+| `api` | Machine Interface | — | machine interface: call/batch/watch/version for external tools (EIP §62w) | Partial |
+| `feedback` | Machine Interface | — | submit or list outcome feedback | Partial |
+| `schema` | Machine Interface | — | inspect output schema registry | Yes |
+| `derive` | Derivation | — | extract and reuse URACE building blocks | Yes |
+| `commands` | Help | — | list all commands with brief descriptions | Yes |
+| `help` | Help | — | show operation catalog or contextual help | Yes |
 
 ## --json
 
