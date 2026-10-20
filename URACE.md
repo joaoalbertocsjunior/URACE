@@ -17510,11 +17510,7 @@ Every `--json` response body includes a top-level `schema_version` field. Consum
 | schema list | 1.0 | schema_version, schemas |
 | schema inspect | 1.0 | schema_version, command, output_schema_version, stable_since, fields |
 
-## Inspection Surface
-
-**`schema list`** — returns all registered OutputSchema entries. SD=True. Implements InspectionContract (§62l). `--json` emits array under key `schemas`.
-
-**`schema inspect <command>`** — returns the full OutputSchema for the named command. Exits 1 if command not found. SD=True. Implements InspectionContract (§62l). `--json` emits full schema object.
+**CLI surface:** `urace schema list|inspect` — see [Command Reference](URACE.md#command-reference).
 
 **Implements:** OutputSchemaRegistry (§62l), InspectionContract (§62l).
 **Uses:** OutputSchema (§62b), OutputSchemaRegistry (§62l).
@@ -17542,11 +17538,7 @@ The FeedbackAccumulator (§62c) runs at each ACTIVE/ASSESSING cycle entry. NEGAT
 
 If an accepted Objective has no OutcomeFeedbackRecord after `config.feedback.window_hours` (default 168h), the runtime surfaces `feedback-overdue` (INFO). This is advisory and MUST NOT block autonomous cycles.
 
-## Inspection Surface
-
-**`feedback list`** — returns OutcomeFeedbackRecords in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--target <id>` filters by target_id. `--signal POSITIVE|NEGATIVE|NEUTRAL` filters by signal. `--limit N` (default 20). `--offset M` (default 0). `--json` emits `{schema_version, records, total}`.
-
-**`feedback submit <target_id>`** — mutates state. Required: `--signal <type>`. Optional: `--evidence <ev-id>`, `--detail <text>`. Exits 1 if target_id is not obj- or dec-. `--json` emits the created OutcomeFeedbackRecord.
+**CLI surface:** `urace feedback list|submit` — see [Command Reference](URACE.md#command-reference).
 
 **Implements:** OutcomeFeedbackContract (§62l), InspectionContract (§62l), AuditRecord (§62l).
 **Uses:** OutcomeFeedbackRecord (§62b), FeedbackAccumulator (§62c), OutcomeFeedbackContract (§62l).
@@ -17757,13 +17749,7 @@ RAM detects two efficiency-degradation patterns:
 1. **ROI below floor** — ROI < `roi_floor` for 2+ consecutive periods → `product-roi-below-floor` (WARNING). Advisory; MUST NOT block cycles.
 2. **Cost trend without value trend** — cost is non-decreasing and value is flat or decreasing over 3 consecutive observations → `product-efficiency-degraded` (WARNING). Advisory.
 
-## Inspection Surface
-
-**`resource status`** — returns current period budget utilization: calls, time_hours, total_cost, ROI (if computable), and gap summary. SD=True. `--json` emits `{schema_version, period_start, executor_calls, time_hours, total_cost, roi, gaps}`.
-
-**`resource report`** — returns all ROISnapshots in reverse-chronological order. SD=True. Implements InspectionContract (§62l). `--since <ISO>`, `--until <ISO>`, `--limit N`, `--offset M`. `--json` emits `{schema_version, snapshots, total}`.
-
-**`resource help`** — step-by-step guide for configuring and interpreting resource budgets. SD=True. `--json` emits `{schema_version, guide}`.
+**CLI surface:** `urace resource status|report|help` — see [Command Reference](URACE.md#command-reference).
 
 **Implements:** ResourceBudgetProtocol (§62l), InspectionContract (§62l).
 **Uses:** ProductBudget (§62b), ResourceEntry (§62b), ROISnapshot (§62b), ResourceAllocationMechanism (§62c).
