@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-17-r86**
+**Specification version: 2026-10-20-r118**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -12793,7 +12793,7 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
         │
         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│  TIER 3 — §62l PROTOCOL LAYER  (97 named constructs; LayerModel L3–L4)          │
+│  TIER 3 — §62l PROTOCOL LAYER  (130+ named constructs; LayerModel L3–L4)        │
 │                                                                                 │
 │  Evidence:                                                                      │
 │    GapNormalizationContract ──normalizes──► AP7 (SRLC) input                   │
@@ -12802,6 +12802,7 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
 │    EvidenceStabilizationContract ──anchors──► Evidence mid-cycle stability      │
 │    EvidenceSufficiencyContract ──gates──► AP4 commit boundary                  │
 │    EvidenceAgeRetirementContract ──retires──► stale Evidence records            │
+│    EvidenceRequestProtocol ──directs──► explore phase (Phase 9) hypotheses      │
 │                                                                                 │
 │  Convergence + Scope:                                                           │
 │    StateFoldContract ──formalizes──► AP8 fixpoint recursion                     │
@@ -12812,6 +12813,71 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
 │    CrossLifecycleInheritanceProtocol ──inherits──► AP26 state across phases     │
 │    PlanStepInvalidationCascadeContract ──cascades──► AP6 causal chain           │
 │    RecursiveGoalDecompositionContract ──decomposes──► AP14 goal hierarchy       │
+│                                                                                 │
+│  Intent domain:                                                                 │
+│    IntentAggregationFormula ──aggregates──► gap() over vector Intent (r112)     │
+│    IntentDriftProtocol ──detects──► semantic drift → DIVERGED gate (r112)       │
+│    IntentVersioningProtocol ──snapshots──► Intent on every mutation (r114)      │
+│    GoalDecompositionProtocol ──decomposes──► AND/OR GoalTreeNode (r114)         │
+│    GoalCoverageCompletenessProtocol ──checks──► goal→objective→metric path (r111)│
+│    StrategicReviewProtocol ──assesses──► strategy_health 5-signal (r111)        │
+│    IntentAmbiguityAudit ──gates──► Phase 0b Intent pre-execution (r110)         │
+│                                                                                 │
+│  Planning domain:                                                               │
+│    GapImpactEstimationProtocol ──estimates──► Δgap per action (r112)            │
+│    DomainWeightCalibrationProtocol ──calibrates──► ObjectiveUtilityFormula (r111)│
+│    PlanningHorizonProtocol ──extends──► argmin N-step lookahead (r113)          │
+│    EvidenceRequestProtocol ──targets──► hypothesis-driven observation (r111)    │
+│                                                                                 │
+│  Causal domain:                                                                 │
+│    CausalModelProtocol ──builds──► directed causal graph over signals (r113)    │
+│    StateTransitionValidationProtocol ──verifies──► post-transition gap (r112)   │
+│                                                                                 │
+│  Authority/Safety domain:                                                       │
+│    PrincipalHierarchyProtocol ──governs──► authority lattice + veto (r113)      │
+│    AdversarialRobustnessProtocol ──detects──► metric fabrication/injection (r113)│
+│    RecursiveSelfModificationGate ──gates──► system-file changes (r114)          │
+│    NormativeIntegrityContract ──enforces──► N1–N7 invariants (r114/r115)        │
+│    IntentFormulaValidityProtocol ──detects──► Goodhart drift on gap() (r110)    │
+│    AuthorityCeilingSignal ──classifies──► AUTHORITY_BOUNDARY/EVIDENCE (r110)   │
+│                                                                                 │
+│  Uncertainty domain:                                                            │
+│    UncertaintyPropagationFormula ──propagates──► credibility → UncertaintyBand  │
+│    EpistemicEscalationProtocol ──escalates──► high-uncertainty actions (r113)   │
+│                                                                                 │
+│  Fleet/Portfolio domain:                                                        │
+│    FleetKnowledgeProtocol ──transfers──► cross-product learning at sync (r113)  │
+│    CrossProductConflictProtocol ──arbitrates──► resource conflicts (r114)       │
+│    PortfolioExecutionProtocol ──splits──► budget across Objectives (r113)       │
+│    DeadlineEnforcementContract ──enforces──► hard deadlines + BLOCKING (r113)   │
+│                                                                                 │
+│  Policy/Config domain:                                                          │
+│    PolicyLayerContract ──governs──► all Config behavioral parameters (r114)     │
+│    OperatorAttentionContract ──tracks──► pending review queue + overload (r114) │
+│    ReactiveEventProtocol ──triggers──► event-driven cycles (r114)               │
+│                                                                                 │
+│  Degradation domain:                                                            │
+│    CapabilityDegradationContract ──defines──► fallback chains (r114/r115)       │
+│    StateSchemaMigrationProtocol ──migrates──► State on version mismatch (r114)  │
+│                                                                                 │
+│  FSM domain:                                                                    │
+│    StateSpaceAuditContract ──verifies──► FSM completeness at bootstrap (r114)   │
+│                                                                                 │
+│  Feedback/Value domain:                                                         │
+│    FeedbackLoopLatencyContract ──measures──► per-loop latency + oscillation (r114)│
+│    ValueAccountingProtocol ──tracks──► ValueLedgerEntry + ROI per Op (r114)     │
+│    ConstraintDiscoveryProtocol ──hypothesizes──► BOUNDARY rule candidates (r113)│
+│    ExplanationProtocol ──explains──► DecisionRecord via causal chain (r113)     │
+│                                                                                 │
+│  Verification domain (PRVS hierarchy):                                          │
+│    PRVS ──suite──► DQP+RRP+CCP+OVP+RGG+LCG+MCP verification (§62l)            │
+│    DQP ──verifies──► design quality (§62l)                                      │
+│    RRP ──verifies──► resilience + recovery (§62l)                               │
+│    CCP ──verifies──► compatibility + continuity (§62l)                          │
+│    OVP ──verifies──► observability (§62l)                                       │
+│    RGG ──gates──► release governance (§62l)                                     │
+│    LCG ──gates──► lifecycle changes (§62l)                                      │
+│    MCP ──compacts──► multi-product state (§62l)                                 │
 │                                                                                 │
 │  Trust + Safety:                                                                │
 │    BoundaryContract ──governs──► every durable AP3 write                        │
@@ -12893,6 +12959,29 @@ Add B4 — State→Inspection bridge: translates the internal state snapshot int
 │  CSIA ──runs──► QE + JOIN + NSS + SCP + IGC pre-release passes (§62l)          │
 │  FRVS ──extends──► CSIA + BFP + TCP + SFCP + CIP + CAP + CWP (§62l)           │
 └─────────────────────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  TIER 7 — DATA I/O LAYER  (§62w/§62x/§62y; external data boundary)             │
+│                                                                                 │
+│  DataSourceRegistryProtocol (DSR, §62x)                                         │
+│    ──PULL──► external sources → Evidence / State ingest                         │
+│    ──PUSH──► State deltas → external sinks                                      │
+│    ──governs──► credential isolation, sync tracking, direction validation       │
+│    DataSourceRecord ──registered──► adapter catalog (13 adapter categories)    │
+│    CredentialRecord ──isolates──► per-source credentials                        │
+│    DataSyncRecord ──tracks──► PULL/PUSH sync cycles                             │
+│                                                                                 │
+│  UniversalEntryProtocol (UEP, §62y)                                             │
+│    ──routes──► multi-route DAG dispatch over inbound data                       │
+│    ──detects──► route conflicts + cycle detection (BLOCKING)                    │
+│    RouteGraphRecord ──models──► dispatch graph                                  │
+│    ──feeds──► AP14 (Inbox) and AP38 (CSI) at route endpoints                   │
+│                                                                                 │
+│  ExternalInterfaceProtocol (EIP, §62w)                                          │
+│    ──contracts──► machine I/O: --input-json, --output-json, API surface         │
+│    ──governs──► schema-validated external request/response envelope             │
+└─────────────────────────────────────────────────────────────────────────────────┘
 
 Pattern abbreviation key:
   Citizen=AP0   Scalar=AP1    Schema=AP2    Log=AP3       Contract=AP4
@@ -12904,6 +12993,12 @@ Pattern abbreviation key:
   Dormancy=AP29  PartBlk=AP30 (Partial Blocker Pattern)  SafeActivation=AP31
   SWLock=AP32   PolGate=AP33  SelfEvol=AP34  GovLedger=AP35
   DigestChain=AP36  Compliance=AP37  CSI=AP38
+  DSR=DataSourceRegistryProtocol (§62x)   UEP=UniversalEntryProtocol (§62y)
+  EIP=ExternalInterfaceProtocol (§62w)
+  PRVS=ProductionReleaseVerificationSuite  DQP=DesignQualityProtocol
+  RRP=ResilienceRecoveryProtocol  CCP=CompatibilityContinuityProtocol
+  OVP=ObservabilityVerificationProtocol   RGG=ReleaseGovernanceGate
+  LCG=LifecycleChangeGate  MCP=MultiProductCompactionProtocol
 ```
 
 ---
@@ -12985,6 +13080,28 @@ urace derive [<intent>]
 | `igc-vocabulary` | IntegrityGapCatalog | The complete IntegrityGapCatalog taxonomy as a standalone reusable vocabulary (all declared IGC kinds) |
 | `technique-library` | T1, T2, T3, T4, T5, T6, T7 | All §62h TechniqueApplicabilitySystem techniques — keyword, structural, semantic, evidence, scope, hybrid, boundary |
 | `nss-framework` | NSS | The Normative Specification Standard as a standalone meta-spec framework for construct governance |
+| `causal-attribution` | CausalModelProtocol, CausalEdgeRecord, CausalModelRecord, CausalAttributionContract | Directed causal graph over Product signals, attribution, and confounding detection |
+| `goal-decomposition` | GoalDecompositionProtocol, GoalTreeNode, GoalCoverageCompletenessProtocol, GoalCoverageCompletenessRecord, RecursiveGoalDecompositionContract | AND/OR compositional goal trees, coverage completeness, and recursive decomposition |
+| `intent-versioning` | IntentVersioningProtocol, IntentVersionRecord, IntentDriftProtocol, IntentDriftRecord, IntentAggregationFormula, IntentAggregateGapRecord | Intent mutation history, drift detection, and weighted gap aggregation |
+| `lookahead-planning` | PlanningHorizonProtocol, LookaheadPlanRecord, GapImpactEstimationProtocol, GapImpactEstimate, DomainWeightCalibrationProtocol, DomainWeightRecord | N-step lookahead, per-action Δgap estimation, and domain weight calibration |
+| `principal-hierarchy` | PrincipalHierarchyProtocol, PrincipalRecord, AuthorityConflictRecord | Multi-principal authority lattice with precedence and veto |
+| `adversarial-robustness` | AdversarialRobustnessProtocol, AdversarialSignalRecord | Adversarial pattern detection: metric fabrication, evidence injection, gap gaming, boundary probing |
+| `uncertainty-propagation` | UncertaintyPropagationFormula, UncertaintyBand, EpistemicEscalationProtocol | Credibility uncertainty propagation to UncertaintyBand and escalation on high-uncertainty actions |
+| `fleet-knowledge` | FleetKnowledgeProtocol, FleetKnowledgeRecord | Cross-product learning transfer at fleet boundary sync |
+| `constraint-discovery` | ConstraintDiscoveryProtocol, ConstraintCandidate | BOUNDARY rule candidate hypotheses from failure patterns |
+| `explanation` | ExplanationProtocol, ExplanationRecord | On-demand DecisionRecord explanation via causal chain |
+| `portfolio-execution` | PortfolioExecutionProtocol, PortfolioAllocationRecord, ObjectiveDependencyContract, ObjectiveDependencyRecord | Budget-split across parallel Objectives with dependency ordering |
+| `deadline-enforcement` | DeadlineEnforcementContract, DeadlineRecord | Hard deadlines on Goals/Objectives with BLOCKING breach and escalation |
+| `reactive-events` | ReactiveEventProtocol, EventTriggerRecord | Event-driven cycle triggers: METRIC_THRESHOLD, WEBHOOK, EXTERNAL_STATE_CHANGE |
+| `capability-degradation` | CapabilityDegradationContract, DegradationRecord | Formal fallback chains for FOUNDATIONAL constructs on degradation |
+| `fsm-audit` | StateSpaceAuditContract, StateSpaceAuditRecord | Lifecycle FSM completeness verification at bootstrap |
+| `feedback-latency` | FeedbackLoopLatencyContract, FeedbackLatencyRecord | Per-loop latency measurement and oscillation detection |
+| `value-accounting` | ValueAccountingProtocol, ValueLedgerEntry | Per-operation value ledger, ROI computation, expected-vs-realized tracking |
+| `self-modification-gate` | RecursiveSelfModificationGate, SelfModificationRecord, NormativeIntegrityContract, NormativeViolationRecord | Elevated-evidence gate for system-file changes with normative invariants |
+| `policy-layer` | PolicyLayerContract, PolicyOverrideRecord, OperatorAttentionContract, AttentionBudgetRecord | All Config-backed behavioral parameters, operator deviations, and attention budget |
+| `data-sources` | DataSourceRegistryProtocol, DataSourceRecord, CredentialRecord, DataSyncRecord | Bidirectional data source registry — PULL/PUSH adapters, credential isolation, sync tracking |
+| `universal-entry` | UniversalEntryProtocol, RouteGraphRecord | Multi-route DAG dispatch, conflict detection, cycle detection |
+| `intent-state-validation` | StateTransitionValidationProtocol, StateTransitionValidationRecord, IntentFormulaValidityProtocol, IntentFormulaValidityRecord, IntentAmbiguityAudit, AuthorityCeilingSignal, AuthorityCeilingRecord | Post-transition gap verification, Goodhart drift, ambiguity audit, and ceiling classification |
 
 **FeatureBundle stale-detection contract.** When `urace update download` or `urace update apply` runs and `state.feature_bundle_refs` is non-empty, the implementation MUST compare each ref's `spec_version` to the candidate spec version. Any mismatch MUST be surfaced as a `derived-construct-set-stale` warning (reusing existing gap kind). The warning MUST include the `bundle_name`, the stale `spec_version`, and the candidate version. This is a warning, not a blocker. A stale bundle MAY still be applied via `--bundle`; the staleness warning is informational. If the operator runs `urace derive --bundle <name> --save`, the saved FeatureBundleRef is refreshed to the current spec version.
 
@@ -14264,8 +14381,10 @@ The **FullReleaseVerificationSuite (FRVS)** is the complete eleven-pass release 
 
 **Scoped to both URACE.md and runtime.** FRVS findings are classified PASS or FINDING. FINDING blocks release unless accepted under DecisionRecord.
 
+**TIER 7 DATA I/O coverage.** FRVS passes BFP, TCP, SFCP, and CIP explicitly cover constructs added in TIER 7: DataSourceRegistryProtocol (§62x), UniversalEntryProtocol (§62y), and ExternalInterfaceProtocol (§62w). Any spec+runtime release touching §62w/§62x/§62y MUST include these three constructs in each applicable FRVS pass scope. Cross-reference: TIER 7 diagram entry (Architectural Composition §62i).
+
 **Citizens using FullReleaseVerificationSuite:** (none — governs release process, not schema fields).
-**Referenced from:** §62l CanonicalStructuralIntegrityAudit.
+**Referenced from:** §62l CanonicalStructuralIntegrityAudit; §62w ExternalInterfaceProtocol; §62x DataSourceRegistryProtocol; §62y UniversalEntryProtocol.
 
 ---
 
@@ -19824,6 +19943,36 @@ The stems below constitute the normative vocabulary of this specification. A ste
 | `rgg` | ReleaseGovernanceGate | §62l |
 | `lcg` | LifecycleChangeGate | §62l |
 | `mcp` | MultiProductCompactionProtocol | §62l |
+| `intentaggregat` | IntentAggregationFormula, intent aggregation, aggregate gap |
+| `intentdrift` | IntentDriftProtocol, intent drift, semantic drift, DIVERGED |
+| `intentversion` | IntentVersioningProtocol, IntentVersionRecord, intent version snapshot |
+| `goaldecompos` | GoalDecompositionProtocol, GoalTreeNode, AND/OR goal tree, tree satisfaction |
+| `lookahead` | PlanningHorizonProtocol, LookaheadPlanRecord, N-step lookahead, planning horizon |
+| `gapimpact` | GapImpactEstimationProtocol, GapImpactEstimate, Δgap estimation |
+| `causalmodel` | CausalModelProtocol, CausalEdgeRecord, CausalModelRecord, causal graph |
+| `principalhi` | PrincipalHierarchyProtocol, PrincipalRecord, authority lattice, precedence, veto |
+| `adversarial` | AdversarialRobustnessProtocol, AdversarialSignalRecord, adversarial pattern |
+| `uncertaintyband` | UncertaintyPropagationFormula, UncertaintyBand, credibility uncertainty |
+| `fleetknowledge` | FleetKnowledgeProtocol, FleetKnowledgeRecord, cross-product learning |
+| `constraintdiscov` | ConstraintDiscoveryProtocol, ConstraintCandidate, BOUNDARY rule candidate |
+| `explanat` | ExplanationProtocol, ExplanationRecord, urace explain |
+| `portfolioexec` | PortfolioExecutionProtocol, PortfolioAllocationRecord, portfolio budget split |
+| `deadlineenforce` | DeadlineEnforcementContract, DeadlineRecord, hard deadline, deadline breach |
+| `reactiveevt` | ReactiveEventProtocol, EventTriggerRecord, METRIC_THRESHOLD, WEBHOOK |
+| `capabledegrada` | CapabilityDegradationContract, DegradationRecord, fallback chain |
+| `statespaceau` | StateSpaceAuditContract, StateSpaceAuditRecord, FSM completeness |
+| `feedbacklatency` | FeedbackLoopLatencyContract, FeedbackLatencyRecord, loop latency, oscillation |
+| `valueaccount` | ValueAccountingProtocol, ValueLedgerEntry, ROI per operation |
+| `policyoverride` | PolicyLayerContract, PolicyOverrideRecord, Config behavioral parameter |
+| `selfmodgate` | RecursiveSelfModificationGate, SelfModificationRecord, self-modification cooldown |
+| `norminteg` | NormativeIntegrityContract, NormativeViolationRecord, normative invariant N1-N7 |
+| `datasourcereg` | DataSourceRegistryProtocol, DataSourceRecord, data source adapter |
+| `universalentry` | UniversalEntryProtocol, RouteGraphRecord, multi-route DAG |
+| `crossproductconf` | CrossProductConflictProtocol, ResourceConflictRecord, cross-product resource conflict |
+| `stratreview` | StrategicReviewProtocol, StrategicReviewRecord, strategy_health |
+| `evidrequest` | EvidenceRequestProtocol, EvidenceRequest, directed explore phase |
+| `intambig` | IntentAmbiguityAudit, ambiguity gate, intent pre-execution |
+| `authceil` | AuthorityCeilingSignal, AuthorityCeilingRecord, AUTHORITY_BOUNDARY, EVIDENCE_INSUFFICIENT |
 
 ## Audit Content
 
@@ -19881,46 +20030,65 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r118 | 2026-10-20 | spec+runtime | Architectural Composition diagram gap closure (TIER 3 +30 constructs from r109–r117 across 12 domains; new TIER 7 — Data I/O Layer with §62x/§62y/§62w); 22 new FeatureBundles (causal-attribution, goal-decomposition, intent-versioning, lookahead-planning, principal-hierarchy, adversarial-robustness, uncertainty-propagation, fleet-knowledge, constraint-discovery, explanation, portfolio-execution, deadline-enforcement, reactive-events, capability-degradation, fsm-audit, feedback-latency, value-accounting, self-modification-gate, policy-layer, data-sources, universal-entry, intent-state-validation); 30 new §80 stems; §82 major compression; DRY+KISS+PRVS pass. **New external references:** 22 new FeatureBundles → §62j; 30 new stems → §80. |
 | r117 | 2026-10-20 | spec | §62x DataSourceRegistry (DataSourceRegistryProtocol FOUNDATIONAL) + §62y UniversalEntryProtocol (COMPOSITIONAL); bidirectional data flow (PULL/PUSH); 4 new §62b schemas (DataSourceRecord dsr-, CredentialRecord cred-, DataSyncRecord dsync-, RouteGraphRecord rgr-); optional fields on Evidence (data_source_id), OutcomeFeedbackRecord (data_sink_id), TraceRecord (route_graph_record_id); 13 new IGC kinds (data-source-sync-failed, data-source-write-failed, data-source-credential-expired, data-source-credential-exposed, data-source-direction-violation, data-source-schema-mismatch, data-source-connectivity-lost, data-source-write-rejected, route-conflict-detected, route-graph-cycle-detected, route-dispatch-partial, universal-route-ambiguous, route-confidence-below-threshold); `urace data` CLI surface (add/update/remove/list/sync/push/inspect); full urace data coverage: --auto flag, verify, status, credential add/remove/inspect, list filters (--type/--direction/--status), --schema hint. |
 | r116 | 2026-10-19 | spec | Full closure of all 14 gaps: 31 residual issues resolved across C1-C7, A1-A4, S1-S3. Closes every residual issue identified in the post-r115 audit. All 14 gaps now have zero known residual issues: **C4:** bootstrap hash-lock (`State.bootstrap_file_hashes`); `State.last_self_modification_cycle` for cooldown tracking; RollbackRecord verified before any self-mod approved. **C5:** Evidence.content_hash for N3 structural enforcement; NORMATIVE_HALT lifecycle state defined with SD=True commands remaining operational; NIC ordering before BOUNDARY formally hardcoded; atomic mutation contract (all-or-nothing); halt semantics fully specified. **S1:** GapCalibrationProtocol formally consumes FeedbackLatencyRecord with latency-adjusted discount formula; loop_id closed enum (5 values); minimum sample guard (Config.feedback.latency_min_samples); oscillation dampening wired to LearningWeightUpdateFormula (α × damping_factor for N cycles). **A3:** ObjectiveDependencyContract fallback changed from "all SATISFIED" (dangerous) to SERIALIZED execution; mutual fallback cycle detection. **C1:** Empty AND/OR node → goal-tree-node-empty BLOCKING; GoalRecord deletion blocked by orphaned LEAF GoalTreeNode gate → goal-tree-orphan-detected BLOCKING. **C3:** mutation_reason REQUIRED (not OPTIONAL); goal_tree_node_ids_snapshot field added to IntentVersionRecord; rollback GoalTreeNode reconciliation specified. **C2:** SATISFIED→BLOCKING reversion cross-referenced to RollbackCompletenessAttestation and Objective status mutations; DATA dependency semantics formally defined (output_artifact_id). **A1:** Scanner tiered: BLOCKING for new (≥r114) constructs, WARNING for legacy; Config mutation gate added (validation before Config update takes effect). **C6:** Calibration formula: rolling geometric mean of realized/expected ratios; `State.value_calibration_factor`; multi-dimensional value (multiple ValueLedgerEntry per Operation per dimension). **A2:** Concurrent cycle trigger queuing (EventTriggerRecord.status = QUEUED); HMAC-SHA256 WEBHOOK auth with timestamp anti-replay. **C7:** Tiered escalation (persistent overload → BLOCKING after N cycles); AttentionBudgetRecord.consecutive_overload_cycles; overloaded=true records non-compactable. **S2:** Pessimistic lock model (reserve-before-dispatch, atomic compare-and-set); TOCTOU prevention requirement; fleet-lock-reservation-conflict WARNING. **S3:** Transform §62b schema defined (tfm-); SchemaMigrationRecord bootstrap destination specified; dry-run mode (`urace /check --migration-dry-run`). **A4:** LifecycleTrigger enum (18 values) defines closed FSM input alphabet for StateSpaceAuditContract completeness verification. **New §62b schemas:** Transform (tfm-). **New State fields:** last_self_modification_cycle, bootstrap_file_hashes, value_calibration_factor. **New IGC kinds:** goal-tree-node-empty (BLOCKING), goal-tree-orphan-detected (BLOCKING), evidence-integrity-violated (BLOCKING), feedback-loop-oscillation-damped (WARNING), dependency-rollback-revert (WARNING), fleet-lock-reservation-conflict (WARNING), operator-overload-escalated (BLOCKING), policy-scanner-blocking-violation (BLOCKING). **New enum:** LifecycleTrigger (18 values), FeedbackLatencyRecord.loop_id closed enum (5 values). **New CLI:** `urace /check --migration-dry-run`. **New external references:** `Transform` → §62b; `last_self_modification_cycle` → §62b State Document; `bootstrap_file_hashes` → §62b State Document; `value_calibration_factor` → §62b State Document; `NORMATIVE_HALT` → §62b lifecycle_state enum; `LifecycleTrigger` enum (18 values) → §62l StateSpaceAuditContract; `FeedbackLatencyRecord.loop_id` closed enum → §62b; `EventTriggerRecord.status` enum → §62b; `AttentionBudgetRecord.consecutive_overload_cycles` → §62b; `IntentVersionRecord.goal_tree_node_ids_snapshot` → §62b; goal-tree-node-empty (BLOCKING) → §62l; goal-tree-orphan-detected (BLOCKING) → §62l; evidence-integrity-violated (BLOCKING) → §62l; feedback-loop-oscillation-damped (WARNING) → §62l; dependency-rollback-revert (WARNING) → §62l; fleet-lock-reservation-conflict (WARNING) → §62l; operator-overload-escalated (BLOCKING) → §62l; policy-scanner-blocking-violation (BLOCKING) → §62l. |
 | r115 | 2026-10-19 | spec | Hardening pass: 79-issue correctness, security, and architectural audit closure. **Critical architectural fixes:** Phase 8/8.5 circular dependency resolved (Phase 8.6 for PlanningHorizonProtocol, Phase 8.7 for PortfolioExecutionProtocol, after Phase 8.5 GapImpactEstimates); RollbackRecord §62b schema defined; FleetResourceRegistry §62b schema defined; NormativeIntegrityContract enforcement model clarified as runtime-layer (not self-referential); RecursiveSelfModificationGate strengthened with evidence independence, cooldown, LCG chain, bootstrap protection, and boundary definition. **Formula completeness:** IntentAggregationFormula zero-divisor guard + directive-count=0 case; UncertaintyPropagationFormula zero-divisor guard + horizon cap + consecutive escalation; ValueLedgerEntry ROI zero-guard + feedback timeout; FeedbackLatencyRecord oscillation formula formalized (≥3 reversals, magnitude threshold, discount formula); StateTransitionValidationProtocol exploit-only scope + NEUTRAL accumulation gate + portfolio baseline clarification. **Algorithm definitions:** IntentDriftProtocol semantic_distance now formally defined (Sørensen–Dice complement on lowercased tokenized text); DIVERGED timing (next cycle); retry cap preventing infinite Phase 0b loop. **Security hardening:** GoalTreeNode creation restricted to authorized principals (Executor-created OR nodes blocked); AdversarialRobustnessProtocol: self-provided CausalEdge exculpatory paths blocked, SUSPECTED accumulation escalation; NormativeIntegrityContract N6+N7 added; WEBHOOK authentication requirement. **Capability degradation:** complete fallback catalog for all 20 FOUNDATIONAL constructs; NormativeIntegrityContract and StateSchemaMigrationProtocol explicitly have NO fallback (system halts); DegradationRecord.cascade_level added; data-insufficient and initialization-incomplete defined as IGC kinds. **Schema completeness:** PrincipalRecord.is_active semantics + bootstrap creation path; ObjectiveDependencyRecord status update trigger; ConstraintCandidate ESCALATED status; FleetKnowledgeRecord payload_schema + applicable_domains default; ResourceConflictRecord requeue + ESCALATED path; StateSpaceAuditRecord.deadlock_states; SelfModificationRecord PENDING verdict + rollback_record_id + evidence_source_count; DegradationRecord.cascade_level + fallback_verified; GoalTreeNode.satisfied recomputation mandate + BLOCKING for uncovered leaves. **IGC bindings added:** fsm-deadlock-detected (BLOCKING), causal-graph-cycle-detected (BLOCKING), normative-enforcement-unavailable (BLOCKING), self-modification-rollback-missing (BLOCKING), goal-tree-unauthorized-mutation (BLOCKING), uncertainty-high-consecutive-cycles (BLOCKING), intent-drift-retry-cap-reached (BLOCKING), adversarial-pattern-accumulated (WARNING), schema-migration-partial (WARNING), neutral-operation-accumulation (WARNING), dependency-gate-blocked-all-objectives (WARNING), value-feedback-timeout (WARNING), lookahead-plan-cold-start (WARNING), intent-aggregation-no-directives (WARNING), data-insufficient (WARNING), initialization-incomplete (WARNING). **Cross-references wired:** IntentDriftProtocol Consumes → IntentVersionRecord; ExplanationProtocol Consumes → CausalModelRecord + CausalEdgeRecord + SD=True clarification; GapCalibrationProtocol Referenced-from → FeedbackLoopLatencyContract latency-adjusted weighting. **Config keys:** 20 new Config.X.Y keys registered under PolicyLayerContract for all r112–r115 behavioral parameters. **CLI:** `urace intent rollback <version>`, `urace add principal` added. New §62b schemas: RollbackRecord (rbr-), FleetResourceRegistry (frr-). New IGC kinds: 16. |
 | r114 | 2026-10-19 | spec | Concept, architectural, and structural gap closure: goal decomposition, objective dependencies, intent versioning, self-modification gate, normative constraints, value accounting, operator attention, policy/mechanism separation, reactive events, capability degradation, FSM completeness, feedback latency, cross-product conflicts, state schema migration. Closes fourteen gaps spanning concepts, architecture, and structural mechanisms: **C1 (GoalDecompositionProtocol):** AND/OR compositional goal tree (GoalTreeNode); check 8 of Phase 0b extended to evaluate tree satisfaction. **C2 (ObjectiveDependencyContract):** Formal Objective dependency DAG; PortfolioExecutionProtocol respects sequencing; cycle detection emits BLOCKING gap. **C3 (IntentVersioningProtocol):** Versioned Intent snapshots (IntentVersionRecord) on every mutation; delta audit and rollback. **C4 (RecursiveSelfModificationGate):** Elevated evidence (3 CONFIRMED) + all precedence ≤ 1 principal approvals + pre-committed rollback required for system-file changes. **C5 (NormativeIntegrityContract):** Five inviolable normative invariants (N1–N5) superseding operator BOUNDARY rules; NormativeViolationRecord + BLOCKING gap on breach. **C6 (ValueAccountingProtocol):** ValueLedgerEntry per committed Operation; expected_value back-filled with realized_value from OutcomeFeedback; ROI computed per cycle. **C7 (OperatorAttentionContract):** AttentionBudgetRecord aggregating pending review queue; WARNING on overload and stale items. **A1 (PolicyLayerContract):** All construct behavioral parameters have Config Document keys; PolicyOverrideRecord tracks operator deviations; reconfiguration without spec edits. **A2 (ReactiveEventProtocol):** Event-driven cycle triggers (METRIC_THRESHOLD, WEBHOOK, EXTERNAL_STATE_CHANGE); debounce + storm protection; EventTriggerRecord. **A3 (CapabilityDegradationContract):** Formal fallback chains for FOUNDATIONAL constructs; DegradationRecord; fallback-chain-exhausted BLOCKING when no fallback available. **A4 (StateSpaceAuditContract):** Lifecycle FSM completeness verification at bootstrap; undefined transitions → BLOCKING; unreachable states → WARNING. **S1 (FeedbackLoopLatencyContract):** Per-loop latency measurement (FeedbackLatencyRecord); oscillation detection; latency-adjusted GapCalibrationProtocol weighting. **S2 (CrossProductConflictProtocol):** Cross-product resource conflict detection and arbitration in fleet execution; ResourceConflictRecord; UNRESOLVED → BLOCKING + suspension. **S3 (StateSchemaMigrationProtocol):** Formal State Document schema migration on spec version mismatch; SchemaMigrationRecord; FAILED → BLOCKING halt. **New §62b schemas (14):** GoalTreeNode (gtn-), ObjectiveDependencyRecord (odr-), IntentVersionRecord (ivr-), SelfModificationRecord (smr-), NormativeViolationRecord (nvr-), ValueLedgerEntry (vle-), AttentionBudgetRecord (abr-), PolicyOverrideRecord (por-), EventTriggerRecord (etr-), DegradationRecord (dgr-), StateSpaceAuditRecord (ssar-), FeedbackLatencyRecord (flr-), ResourceConflictRecord (rcr-), SchemaMigrationRecord (scmr-). **New §62l constructs (14):** GoalDecompositionProtocol, IntentVersioningProtocol, PolicyLayerContract, RecursiveSelfModificationGate, NormativeIntegrityContract, ValueAccountingProtocol, FeedbackLoopLatencyContract, ObjectiveDependencyContract, ReactiveEventProtocol, CrossProductConflictProtocol, OperatorAttentionContract, CapabilityDegradationContract, StateSpaceAuditContract, StateSchemaMigrationProtocol. **New §37 phases:** Phase 0a/0b/8/9/10/12 extended; ordering contract extended. **New IGC kinds (28):** goal-tree-cycle-detected, goal-tree-leaf-uncovered, objective-dependency-violated, objective-dependency-cycle, intent-version-missing, intent-version-rollback-failed, self-modification-evidence-insufficient, self-modification-principal-insufficient, normative-invariant-violated, audit-log-suppression-attempted, value-baseline-missing, expected-value-uncalibrated, operator-attention-overload, review-queue-stale, policy-mechanism-coupling-detected, event-trigger-missed, event-trigger-storm, capability-degraded, fallback-chain-exhausted, fsm-transition-undefined, fsm-state-unreachable, feedback-loop-oscillation-detected, feedback-latency-stale, cross-product-resource-conflict, fleet-resource-lock-timeout, state-schema-incompatible, migration-transform-failed, normative-invariant-supersedes-boundary. **New external references:** `GoalTreeNode` → §62b; `ObjectiveDependencyRecord` → §62b; `IntentVersionRecord` → §62b; `SelfModificationRecord` → §62b; `NormativeViolationRecord` → §62b; `ValueLedgerEntry` → §62b; `AttentionBudgetRecord` → §62b; `PolicyOverrideRecord` → §62b; `EventTriggerRecord` → §62b; `DegradationRecord` → §62b; `StateSpaceAuditRecord` → §62b; `FeedbackLatencyRecord` → §62b; `ResourceConflictRecord` → §62b; `SchemaMigrationRecord` → §62b; `GoalDecompositionProtocol` → §62l; `IntentVersioningProtocol` → §62l; `PolicyLayerContract` → §62l; `RecursiveSelfModificationGate` → §62l; `NormativeIntegrityContract` → §62l; `ValueAccountingProtocol` → §62l; `FeedbackLoopLatencyContract` → §62l; `ObjectiveDependencyContract` → §62l; `ReactiveEventProtocol` → §62l; `CrossProductConflictProtocol` → §62l; `OperatorAttentionContract` → §62l; `CapabilityDegradationContract` → §62l; `StateSpaceAuditContract` → §62l; `StateSchemaMigrationProtocol` → §62l; 28 new IGC kinds → §62l. |
 | r113 | 2026-10-19 | spec | Gap 1–10 closure: CausalModelProtocol (§62l) + CausalEdgeRecord/CausalModelRecord (§62b) — directed causal graph over Product signals; PlanningHorizonProtocol (§62l) + LookaheadPlanRecord (§62b) — N-step lookahead extending argmin; PrincipalHierarchyProtocol (§62l) + PrincipalRecord/AuthorityConflictRecord (§62b) — multi-principal authority lattice with precedence+veto; AdversarialRobustnessProtocol (§62l) + AdversarialSignalRecord (§62b) — adversarial pattern detection (metric fabrication, evidence injection, gap gaming, boundary probing); UncertaintyPropagationFormula (§62l) + UncertaintyBand (§62b) — credibility uncertainty propagated to UncertaintyBand on IntentAggregateGapRecord; FleetKnowledgeProtocol (§62l) + FleetKnowledgeRecord (§62b) — cross-product learning transfer at fleet boundary sync; ConstraintDiscoveryProtocol (§62l) + ConstraintCandidate (§62b) — BOUNDARY rule candidate hypotheses from failure patterns; ExplanationProtocol (§62l) + ExplanationRecord (§62b) — on-demand DecisionRecord explanation via `urace explain <id>`; PortfolioExecutionProtocol (§62l) + PortfolioAllocationRecord (§62b) — budget split across parallel Objectives; DeadlineEnforcementContract (§62l) + DeadlineRecord (§62b) — hard deadlines on Goals/Objectives with BLOCKING breach and escalation_action. **New §62b schemas (12):** CausalEdgeRecord (cer-), CausalModelRecord (cmr-), LookaheadPlanRecord (lpr-), PrincipalRecord (pr-), AuthorityConflictRecord (acnr-), AdversarialSignalRecord (asr-), UncertaintyBand (ub-), FleetKnowledgeRecord (fkr-), ConstraintCandidate (ccan-), ExplanationRecord (exr-), PortfolioAllocationRecord (par-), DeadlineRecord (dlr-). **New §62l constructs (10):** CausalModelProtocol, PlanningHorizonProtocol, PrincipalHierarchyProtocol, AdversarialRobustnessProtocol, UncertaintyPropagationFormula, FleetKnowledgeProtocol, ConstraintDiscoveryProtocol, ExplanationProtocol, PortfolioExecutionProtocol, DeadlineEnforcementContract. **New IGC kinds (20):** causal-model-stale, causal-edge-confounded, causal-intervention-unverified, lookahead-plan-missing, lookahead-horizon-exceeded, authority-conflict-unresolved, principal-veto-active, principal-hierarchy-missing, adversarial-signal-detected, metric-fabrication-suspected, uncertainty-band-missing, high-uncertainty-action-taken, fleet-knowledge-sync-missing, constraint-candidate-pending-review, constraint-candidate-conflict, explanation-synthesis-failed, portfolio-allocation-missing, portfolio-budget-overallocated, deadline-breached, deadline-approaching. **New CLI:** `urace explain <id>`. **New external references:** `CausalEdgeRecord` → §62b; `CausalModelRecord` → §62b; `LookaheadPlanRecord` → §62b; `PrincipalRecord` → §62b; `AuthorityConflictRecord` → §62b; `AdversarialSignalRecord` → §62b; `UncertaintyBand` → §62b; `FleetKnowledgeRecord` → §62b; `ConstraintCandidate` → §62b; `ExplanationRecord` → §62b; `PortfolioAllocationRecord` → §62b; `DeadlineRecord` → §62b; `CausalModelProtocol` → §62l; `PlanningHorizonProtocol` → §62l; `PrincipalHierarchyProtocol` → §62l; `AdversarialRobustnessProtocol` → §62l; `UncertaintyPropagationFormula` → §62l; `FleetKnowledgeProtocol` → §62l; `ConstraintDiscoveryProtocol` → §62l; `ExplanationProtocol` → §62l; `PortfolioExecutionProtocol` → §62l; `DeadlineEnforcementContract` → §62l; 20 new IGC kinds → §62l. |
-| r112 | 2026-10-19 | spec | Gap 1–4 closure: StateTransitionValidationProtocol (§62l) + StateTransitionValidationRecord (§62b) — post-transition gap verification (REGRESSION → BLOCKING + auto suspension); IntentDriftProtocol (§62l) + IntentDriftRecord (§62b) — periodic semantic drift detection between DIRECTIVE/GoalRecords and operator signals (DIVERGED gates auto + re-triggers IntentAmbiguityAudit); IntentAggregationFormula (§62l) + IntentAggregateGapRecord (§62b) — canonical weighted scalar gap over vector Intent for argmin (`gap_aggregate = Σ(w_i × directive_gap_i) / Σ(w_i)`); GapImpactEstimationProtocol (§62l) + GapImpactEstimate (§62b) — per-action Δgap estimation at Phase 8.5 using GapCalibrationRecord residuals as prior. **New §62b schemas:** IntentAggregateGapRecord (iagr-), GapImpactEstimate (gie-), StateTransitionValidationRecord (stvr-), IntentDriftRecord (idr-). **New §62l constructs:** IntentAggregationFormula, GapImpactEstimationProtocol, StateTransitionValidationProtocol, IntentDriftProtocol. **New §37 phases:** Phase 3 extended, Phase 8.5, Phase 10b, IntentDriftProtocol periodic. **New IGC kinds:** gap-regression-detected (BLOCKING), intent-semantic-drift (WARNING/BLOCKING), intent-aggregation-missing (BLOCKING), gap-impact-estimate-missing (WARNING), state-transition-validation-missing (WARNING), intent-drift-assessment-missing (WARNING). |
-| r111 | 2026-10-19 | spec | Gap 1–4 closure: GoalCoverageCompletenessProtocol (§62l) + GoalCoverageCompletenessRecord (§62b) — executable goal→objective→metric path check (check 8 of IntentAmbiguityAudit); StrategicReviewProtocol (§62l) + StrategicReviewRecord (§62b) — 5-signal periodic meta-assessment, strategy_health HEALTHY/DRIFTING/STALLED/DIVERGING, Phase 12b; DomainWeightCalibrationProtocol (§62l) + DomainWeightRecord (§62b) — per-domain ObjectiveUtilityFormula weight vectors; EvidenceRequestProtocol (§62l) + EvidenceRequest (§62b) — directed explore phase (Phase 9), hypothesis-targeted observation. **New external references:** `GoalCoverageCompletenessRecord` → §62b; `StrategicReviewRecord` → §62b; `DomainWeightRecord` → §62b; `EvidenceRequest` → §62b; `GoalCoverageCompletenessProtocol` → §62l; `StrategicReviewProtocol` → §62l; `DomainWeightCalibrationProtocol` → §62l; `EvidenceRequestProtocol` → §62l; 4 new IGC kinds → §62l. |
-| r110 | 2026-10-19 | spec | Gap A+B+C closure: IntentFormulaValidityProtocol (§62l) + IntentFormulaValidityRecord (§62b) — Goodhart drift detection on gap() formula; AuthorityCeilingRecord (§62b) + AuthorityCeilingSignal (§62l) — binding constraint classification (AUTHORITY_BOUNDARY/EVIDENCE_INSUFFICIENT/CAPABILITY_UNAVAILABLE/BUDGET_EXHAUSTED); IntentAmbiguityAudit (§62l) — Phase 0b exhaustive Intent pre-execution gate (7 checks); EligibleActionEnumerator extended with constraint classification; Phase 0a/0b split in §37. **New external references:** `IntentFormulaValidityRecord` → §62b; `AuthorityCeilingRecord` → §62b; `IntentFormulaValidityProtocol` → §62l; `AuthorityCeilingSignal` → §62l; `IntentAmbiguityAudit` → §62l; 6 new IGC kinds → §62l. |
-| r109 | 2026-10-19 | spec+runtime | Structural fixes S2–S11: §62l domain sub-headers (8 domains); IGC kind retirement contract (§62l); State Document field retirement contract (§62e); LayerModel→tier diagram mapping table (§62s); AP deprecated_since/superseded_by metadata fields (§62n); FEATURE_BUNDLE_REGISTRY (22 entries); RETIRED_IGC_KINDS + validate_igc_kind_entries(); schema_export.py module; urace schema export CLI; test_urace_r109.py domain split; R109IGCParityTests + R109DAGAcyclicityTests + R109SchemaExportTests; 1274 tests. **New external references:** `FEATURE_BUNDLE_REGISTRY` → primitives.py; `RETIRED_IGC_KINDS` → primitives.py; `validate_igc_kind_entries` → primitives.py; `schema_export` → §62t. |
-| r108 | 2026-10-19 | spec+runtime | Architectural Composition diagram gap closure (G1–G13): 7-tier diagram (TOPMOST CALCULUS + T0–T6) with FoldOperator, L0–L4 layer labels, learning-loop evidence path, AP0–AP38 placements; 21 FeatureBundle spec-defined entries in §62j; --kind enum extended; §82 compression; 1258 tests. **New external references:** see r108 inline §62j FeatureBundle table annotations. |
-| r107 | 2026-10-19 | spec+runtime | Rounds 6–8 gap closure: 20+ §62b citizens (GapCalibrationRecord, ExecutorTrustProfile, EvidenceSufficiencySnapshot, MetricRegistry, AdaptiveConfigProposal, etc.), 7 §62c mechanisms, 30+ §62l protocols/contracts (ConvergenceOrderingContract, EvidenceSufficiencyContract, RollbackVerificationContract, PolicyConflictResolutionProtocol, etc.), 30 IGC kinds, 15 State fields wired to runtime; 6-tier Architectural Composition diagram (AP0–AP38 + FoldOperator + learning loop); 28 cross-references; 21 FeatureBundles; --kind extended (formula\|gap-catalog\|technique); §82 compression. **New external references:** see rounds 6–8 inline §62b/§62c/§62l annotations. |
-| r106 | 2026-10-18 | spec+runtime | OutputFormatContract + ScopeTargetContract + --target + --product collapse; 2 IGC kinds; 1257 tests. **New external references:** `OutputFormatContract` → §62k; `ScopeTargetContract` → §62k; `multi-product-compact-cycle` → §62l; `scope-target-not-resolvable` → §62l. |
-| r105 | 2026-10-18 | spec+runtime | Compaction 8-gap closure (amendment digest, governance 6→14 fields, archive ceiling, 2-pass atomic); --format json\|xml; 2 IGC kinds; 1210 tests. **New external references:** `archive-count-ceiling` → §62l; `compaction-partial-failure` → §62l; `_print_fmt` → §62k; `compact --status` → §62k. |
+| r112 | 2026-10-19 | spec | 4 constructs: IntentAggregationFormula, IntentDriftProtocol (DIVERGED gate), GapImpactEstimationProtocol (Phase 8.5), StateTransitionValidationProtocol; 4 §62b schemas; 6 IGC kinds. |
+| r111 | 2026-10-19 | spec | 4 constructs: GoalCoverageCompletenessProtocol (check 8), StrategicReviewProtocol (Phase 12b, strategy_health), DomainWeightCalibrationProtocol, EvidenceRequestProtocol (Phase 9); 4 §62b schemas; 4 IGC kinds. |
+| r110 | 2026-10-19 | spec | 3 constructs: IntentFormulaValidityProtocol (Goodhart drift), AuthorityCeilingSignal (AUTHORITY_BOUNDARY/EVIDENCE_INSUFFICIENT), IntentAmbiguityAudit (Phase 0b gate); Phase 0a/0b split in §37; 6 IGC kinds. |
+| r109 | 2026-10-19 | spec+runtime | 8-domain §62l sub-headers; FEATURE_BUNDLE_REGISTRY (22 entries); RETIRED_IGC_KINDS; schema_export.py; IGC parity/DAG/schema-export tests; 1274 tests. |
+| r108 | 2026-10-19 | spec+runtime | Architectural Composition diagram (7-tier T0–T6, AP0–AP38); 21 FeatureBundles in §62j; §82 compression; 1258 tests. |
+| r107 | 2026-10-19 | spec+runtime | Rounds 6–8: 20+ §62b citizens, 7 mechanisms, 30+ §62l constructs, 30 IGC kinds, 15 State fields, 21 FeatureBundles; 1199 tests. |
+| r106 | 2026-10-18 | spec+runtime | OutputFormatContract + ScopeTargetContract + --target + --product collapse; 2 IGC kinds; 1257 tests. |
+| r105 | 2026-10-18 | spec+runtime | Compaction 8-gap closure (amendment digest, governance 6→14 fields, archive ceiling, 2-pass atomic); 2 IGC kinds; 1210 tests. |
+| r104 | 2026-10-18 | spec+runtime | MCP multi-product compaction; --no-verify default-on; ChunkingPolicy.product_scope; §62l 44; Catalog 39; 1199 tests. |
+| r103 | 2026-10-18 | spec+runtime | --hash/--verify normalization; semantic_kind; tier clarity; Protocol Catalog categories; Mechanism role column; 1192 tests. |
+| r102 | 2026-10-18 | spec+runtime | Evidence add; PRVS hierarchy (DQP/RRP/CCP/OVP/PRVS/RGG/LCG); product depends_on; fleet sync; LCG gate; §62l 36→43; 1187 tests. |
+| r101 | 2026-10-18 | spec+runtime | FRVS sub-passes as §62l FOUNDATIONAL; Protocol Catalog 29; lattice 33; stems +6; 1106 tests. |
+| r100 | 2026-10-18 | spec+runtime | CSIA+FRVS as §62l FOUNDATIONAL; Protocol Catalog 23; lattice 27; stems +csia +frvs; 1106 tests. |
+| r99 | 2026-10-18 | spec+runtime | FRVS pass — 7 findings closed (IGC count, stem ref, test count, OutcomeFeedbackRecord fields, feedback filters); 1106 tests. |
+| r98 | 2026-10-18 | spec+runtime | Closed-Loop Autonomy: LayerModel §62s, OutputSchemaRegistry §62t, OutcomeFeedbackContract §62u; FeedbackAccumulator mechanism; 5 IGC kinds; 1102 tests. |
+| r97 | 2026-10-17 | spec | JOIN+NSS+SCP+DEGRADATION audit — catalog drift fixes; lattice 17→22; 1086 tests. |
+| r96 | 2026-10-17 | spec+runtime | AuditRecord/InspectionContract/ObservabilityContract §62r; TraceRecord; urace trace; 2 IGC kinds; 1086 tests. |
+| r95 | 2026-10-17 | runtime | CLI alignment — 6 missing commands + 14 flags; 1076 tests. |
+| r94 | 2026-10-17 | spec+runtime | Fleet Orchestration §62q; FleetOrchestrationProtocol; urace fleet; 3 IGC kinds; 1063 tests. |
+| r93 | 2026-10-17 | spec+runtime | Product Registry §62p; ProductSwitchProtocol; urace product; 3 IGC kinds; 1055 tests. |
+| r92 | 2026-10-17 | spec+runtime | Product Onboard Phase §62o; OnboardGate; ONBOARDING state; urace onboard; IGC 94→100; 992 tests. |
+| r91 | 2026-10-16 | spec+runtime | r65–r69 runtime alignment — assessment_gaps/lifecycle_boundaries/integrity_signals bootstrap; 978 tests. |
+| r90 | 2026-10-16 | spec | JoinProtocol §62l; join stem; Protocol Catalog 13→14. |
+| r89 | 2026-10-16 | spec | QualityEnsuranceProtocol §62l; qualityensurance stem; Protocol Catalog 12→13. |
+| r88 | 2026-10-16 | spec | JOIN+NSS+SCP pass — State Document fields wired; DecisionRecord.justification_context_id; PMM wired. |
+| r87 | 2026-10-16 | spec | PMM→Protocol Catalog; BJ/BK mandatory tests; enforcement contract count/list fix. |
 | r86 | 2026-10-18 | spec+runtime | FRVS+DRY+KISS pass; §62k command headers; _SD_TRUE_EXACT completed; _help_action() DRY refactor (7 handlers); enforcement counts corrected; 1128 tests. **New external references:** `urace update help` → §62k; `urace schema help` → §62k. |
-| r85 | 2026-10-17 | spec+runtime | ResourceBudgetProtocol §62v; ProductBudget/ResourceEntry/ROISnapshot citizens; ResourceAllocationMechanism; urace resource; 4 IGC kinds; 1128 tests. **New external references:** `ResourceBudgetProtocol` → §62l; `ProductBudget`/`ResourceEntry`/`ROISnapshot` → §62b; `RAM` → §62c; `§62v` → §62v; 4 budget IGC kinds. |
-| r84 | 2026-10-17 | spec+runtime+readme | Onboard help subcommand + path-agnosticism contract + --scan heuristic detection; 1 IGC kind; 1118 tests. **New external references:** `urace onboard help` → §62k; `onboard-unregistered-product-hint` → §62l. |
-| r83 | 2026-10-17 | spec+runtime | FRVS pass — 35 missing IGC kinds synced to runtime catalog; agnosticism×2 fixes; R82ObservabilityTests (7 new tests); 1113 tests. **New external references:** none. |
-| r82 | 2026-10-17 | runtime | CSI lifecycle gate fix (exclusion→inclusion); 4 missing TraceRecord emissions; _mutate_command() DRY helper; 1106 tests. **New external references:** none. |
-| r81 | 2026-10-17 | spec+runtime | FRVS pass — SCP Gate 1 reorder; agnosticism×5; _inspect_list() DRY refactor (−60 lines); 1106 tests. **New external references:** none. |
-| r80 | 2026-10-17 | spec | BFP/TCP/SFCP/CIP/CAP/CWP as §62l FOUNDATIONAL constructs; Protocol Catalog 23→29; §62l 33→34; `behavioralfidelity` … `cyclewiring` stems; 1106 tests. **New external references:** `BFP`/`TCP`/`SFCP`/`CIP`/`CAP`/`CWP` → §62l; 6 stems → §80. |
-| r79 | 2026-10-17 | spec | CSIA + FRVS as §62l FOUNDATIONAL constructs; Protocol Catalog 21→23; `csia`+`frvs` stems; §62l 25→27; 1106 tests. **New external references:** `CSIA` → §62l; `FRVS` → §62l; `csia`/`frvs` → §80. |
-| r78 | 2026-10-17 | spec+runtime | FRVS pass — 7 findings closed (IGC count, stem ref, test count, OutcomeFeedbackRecord fields, feedback filters); 1106 tests. **New external references:** none. |
-| r77 | 2026-10-17 | spec+runtime | Closed-Loop Autonomy: LayerModel §62s, OutputSchemaRegistry §62t, OutcomeFeedbackContract §62u; FeedbackAccumulator mechanism; 5 IGC kinds; 1102 tests. **New external references:** `LayerModel`/`OutputSchemaRegistry`/`OutcomeFeedbackContract` → §62l; `OutcomeFeedbackRecord` → §62b; `§62s`/`§62t`/`§62u` new sections; 5 IGC kinds. |
-| r76 | 2026-10-17 | spec | JOIN+NSS+SCP+DEGRADATION audit — OnboardRecord, AuditRecord, InspectionContract, ObservabilityContract catalog drift fixes; lattice 17→22; 1086 tests. **New external references:** none. |
-| r75 | 2026-10-17 | spec+runtime | AuditRecord/InspectionContract/ObservabilityContract §62r; TraceRecord; urace trace; 2 IGC kinds; 1086 tests. **New external references:** `TraceRecord` → §62b; `AuditRecord`/`InspectionContract`/`ObservabilityContract` → §62l; `§62r` new section; `audit-record-compacted`/`trace-record-missing` → §62l. |
-| r74 | 2026-10-17 | runtime | CLI alignment — 6 missing commands + 14 flags; 1076 tests. **New external references:** none. |
-| r73 | 2026-10-17 | spec+runtime | Fleet Orchestration §62q; FleetOrchestrationProtocol; FleetRecord; urace fleet; 3 IGC kinds; 1063 tests. **New external references:** `FleetRecord` → §62b; `FOP` → §62l; `§62q` new section; 3 fleet IGC kinds; `fleet` stem. |
-| r72 | 2026-10-17 | spec+runtime | Product Registry §62p; ProductSwitchProtocol; ProductEntry/SwitchRecord; urace product; 3 IGC kinds; 1055 tests. **New external references:** `ProductEntry`/`SwitchRecord` → §62b; `PSP` → §62l; `§62p` new section; 3 product IGC kinds; `productregistry` stem. |
-| r71 | 2026-10-17 | spec+runtime | Product Onboard Phase §62o; OnboardGate; ONBOARDING lifecycle state; urace onboard; IGC 94→100; 992 tests. **New external references:** `OnboardRecord` → §62b; `OnboardGate` → §62c; `§62o` new section; 6 onboard IGC kinds. |
-| r70 | 2026-10-16 | spec+runtime | r65–r69 runtime alignment — assessment_gaps/lifecycle_boundaries/integrity_signals bootstrap; 978 tests. **New external references:** none. |
-| r69 | 2026-10-16 | spec | JoinProtocol §62l; join stem; Protocol Catalog 13→14. **New external references:** `JOIN` → §62l; `join` stem. |
-| r68 | 2026-10-16 | spec | QualityEnsuranceProtocol §62l; qualityensurance stem; Protocol Catalog 12→13. **New external references:** `QE` → §62l; `qualityensurance` stem. |
-| r67 | 2026-10-16 | spec | JOIN+NSS+SCP pass — State Document fields wired; DecisionRecord.justification_context_id; PMM Referenced-from annotation. **New external references:** `State.assessment_gaps`/`lifecycle_boundaries`/`integrity_signals` → §62e; `DecisionRecord.justification_context_id` → §62b. |
-| r66 | 2026-10-16 | spec | PMM→Protocol Catalog; BJ/BK mandatory tests; enforcement contract count/list fix. **New external references:** `BJ`/`BK` → §78; `PMM` Protocol Catalog → §62m. |
-| r65 | 2026-10-16 | spec+runtime | Comprehensive gap closure — AssessmentGap/LifecycleBoundary/IntegritySignal/JustificationContext citizens; §62k expansion; FSM table; IGC 88→94; 978 tests. **New external references:** 4 citizens → §62b; `JC`/`BC` → §62l; 6 IGC kinds; `--since`/`--until`/`--limit`/`--offset`/`--fail-on` → §62k. |
-| r64 | 2026-10-16 | spec+runtime | NSS+SCP compliance; @bundle-name in --opt-in-constructs; FeatureBundle stale detection; 954 tests. **New external references:** none. |
-| r63 | 2026-10-16 | spec | r61/r62 gap closure — CSI/PPP_M full contracts; DAI response; WRM COMMUNITY_INBOX; IGC 86→88; 934 tests. **New external references:** `CommunityFeed` fields → §62b; `community-inbox-evolution-blocked`/`feature-bundle-unknown-construct` → §62l; `COMMUNITY_INBOX` WRM signal. |
+| r85 | 2026-10-17 | spec+runtime | ResourceBudgetProtocol §62v; ProductBudget/ResourceEntry/ROISnapshot citizens; ResourceAllocationMechanism; urace resource; 4 IGC kinds; 1128 tests. |
+| r84 | 2026-10-17 | spec+runtime | Onboard help subcommand + path-agnosticism contract + --scan heuristic detection; 1 IGC kind; 1118 tests. |
+| r83 | 2026-10-17 | spec+runtime | FRVS pass — 35 missing IGC kinds synced to runtime catalog; agnosticism×2 fixes; R82ObservabilityTests; 1113 tests. |
+| r82 | 2026-10-17 | runtime | CSI lifecycle gate fix (exclusion→inclusion); 4 missing TraceRecord emissions; _mutate_command() DRY helper; 1106 tests. |
+| r81 | 2026-10-17 | spec+runtime | FRVS pass — SCP Gate 1 reorder; agnosticism×5; _inspect_list() DRY refactor (−60 lines); 1106 tests. |
+| r80 | 2026-10-17 | spec | BFP/TCP/SFCP/CIP/CAP/CWP as §62l FOUNDATIONAL constructs; Protocol Catalog 23→29; 1106 tests. |
+| r79 | 2026-10-17 | spec | CSIA + FRVS as §62l FOUNDATIONAL constructs; Protocol Catalog 21→23; `csia`+`frvs` stems; 1106 tests. |
+| r78 | 2026-10-17 | spec+runtime | FRVS pass — 7 findings closed; 1106 tests. |
+| r77 | 2026-10-17 | spec+runtime | Closed-Loop Autonomy: LayerModel §62s, OutputSchemaRegistry §62t, OutcomeFeedbackContract §62u; 5 IGC kinds; 1102 tests. |
+| r76 | 2026-10-17 | spec | JOIN+NSS+SCP+DEGRADATION audit — catalog drift fixes; lattice 17→22; 1086 tests. |
+| r75 | 2026-10-17 | spec+runtime | AuditRecord/InspectionContract/ObservabilityContract §62r; TraceRecord; urace trace; 2 IGC kinds; 1086 tests. |
+| r74 | 2026-10-17 | runtime | CLI alignment — 6 missing commands + 14 flags; 1076 tests. |
+| r73 | 2026-10-17 | spec+runtime | Fleet Orchestration §62q; FleetOrchestrationProtocol; urace fleet; 3 IGC kinds; 1063 tests. |
+| r72 | 2026-10-17 | spec+runtime | Product Registry §62p; ProductSwitchProtocol; urace product; 3 IGC kinds; 1055 tests. |
+| r71 | 2026-10-17 | spec+runtime | Product Onboard Phase §62o; OnboardGate; ONBOARDING state; urace onboard; IGC 94→100; 992 tests. |
+| r70 | 2026-10-16 | spec+runtime | r65–r69 runtime alignment — assessment_gaps/lifecycle_boundaries/integrity_signals bootstrap; 978 tests. |
+| r69 | 2026-10-16 | spec | JoinProtocol §62l; join stem; Protocol Catalog 13→14. |
+| r68 | 2026-10-16 | spec | QualityEnsuranceProtocol §62l; qualityensurance stem; Protocol Catalog 12→13. |
+| r67 | 2026-10-16 | spec | JOIN+NSS+SCP pass — State Document fields wired; DecisionRecord.justification_context_id. |
+| r66 | 2026-10-16 | spec | PMM→Protocol Catalog; BJ/BK mandatory tests; enforcement contract count/list fix. |
+| r65 | 2026-10-16 | spec+runtime | Comprehensive gap closure — AssessmentGap/LifecycleBoundary/IntegritySignal/JustificationContext citizens; §62k expansion; FSM table; IGC 88→94; 978 tests. |
+| r64 | 2026-10-16 | spec+runtime | NSS+SCP compliance; @bundle-name in --opt-in-constructs; FeatureBundle stale detection; 954 tests. |
+| r63 | 2026-10-16 | spec | r61/r62 gap closure — CSI/PPP_M full contracts; DAI response; WRM COMMUNITY_INBOX; IGC 86→88; 934 tests. |
 | r62 | 2026-10-16 | spec | realizes: field; DAI Protocol; FeatureBundle/--bundle/--list-bundles; IGC 84→86; 878 tests. **New external references:** `realizes:` → §62n; `DAI` → §62n; `FeatureBundle`/`FeatureBundleRef` → §62b; `State.feature_bundle_refs` → §62e; `featurebundle` stem. |
 | r61 | 2026-10-16 | spec | Community Signal Ingestion — AP38; CSI/PPP_M mechanisms; PPP; community schemas; IGC 79→84; 878 tests. **New external references:** `AP38` → §62i; `CommunityFeed`/`CommunitySignal`/`PatchProposal` → §62b; `CSI`/`PPP_M` → §62c; `PPP` → §62m. |
-| r60 | 2026-10-16 | spec | SCP §62n — Gate 1/2/3; IGC 76→79; Protocol Catalog 6→7; 878 tests. **New external references:** `SCP` → §62n; `scp-forward-reference`/`scp-incomplete-revision-declaration`/`scp-atomic-extension-violation` → §62l; `specconstruct` stem. |
+| r60 | 2026-10-16 | spec | SCP §62n — Gate 1/2/3; IGC 76→79; Protocol Catalog 6→7; 878 tests. **New external references:** `SCP` → §62n; 3 scp-* IGC kinds; `specconstruct` stem. |
 | r59 | 2026-10-16 | spec | r58 gap closure — 9 Config subschemas; schema fields (replaces, effect_type, Role column). **New external references:** (predates SCP — not declared) |
 | r58 | 2026-10-16 | spec | 20-gap reliability hardening — invocation/traversal/weighting/recovery/retention/discovery contracts; IGC 50→76. **New external references:** (predates SCP — not declared) |
 | r57 | 2026-10-16 | spec | §62m catalog alignment — Mechanism/Schema/Protocol/Contract Catalogs; Contract Catalog IGC 20→50; stem vocabulary. |
@@ -19939,4 +20107,4 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 | r44 | 2026-10-14 | spec+runtime | --from-constraints + --from-inspection; ConstraintDerivedSuggestion + GapDerivedSuggestion. |
 | r43 | 2026-10-14 | spec | Purge runtime fn names from spec; add §82 Revision Log; executor-agnostic contracts. |
 | r42 | 2026-10-14 | spec | --constructs canonical arg; --patterns alias; "Building Blocks" user-facing name. |
-| r22–r41 | 2026-10-14 | spec | Foundational build-out (see git log). r22: canonical terms; r23–r25: AP11–AP23; r26: §62j/derive; r27–r28: stale manifests; r29–r35: AP25/milestone/quality; r36: DerivedManifestRef; r37: PolicyRecord/HardConstraint/AssessmentRecord; r38: §62l/IGC 20 kinds; r39: §62l wiring; r40: intent-first derive; r41: §62m catalogs. |
+| r22–r41 | 2026-10-14 | spec/runtime | Foundational build-out (see git log). r22: canonical terms; r23–r25: AP11–AP23; r26: §62j/derive; r27–r28: stale manifests; r29–r35: AP25/milestone/quality; r36: DerivedManifestRef; r37: PolicyRecord/HardConstraint/AssessmentRecord; r38: §62l/IGC 20 kinds; r39: §62l wiring; r40: intent-first derive; r41: §62m catalogs. |
