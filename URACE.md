@@ -1698,21 +1698,23 @@ Phase 0a — Mechanism readiness   MechanismReadinessContract (§62l); first cyc
 Phase 0b — Intent ambiguity audit IntentAmbiguityAudit (§62l) + GoalCoverageCompletenessProtocol (§62l); first cycle only and on DIRECTIVE_MUTATION or GoalRecord mutation; eight-check gate (checks 1–7: binding/formula/metric/baseline/threshold validity; check 8: executable goal→objective→metric path existence); surfaces all BLOCKING Intent defects before Phase 1
 Phase 1 — Boundary open       LifecycleBoundary created; state_before snapshotted (§74)
 Phase 2 — Feedback            FeedbackAccumulator (§62c)
-Phase 3 — Intent gap          IntentFulfillmentMechanism (§62c) + DirectiveCoverageContract (§62l)
+Phase 3 — Intent gap          IntentFulfillmentMechanism (§62c) + IntentAggregationFormula (§62l) + DirectiveCoverageContract (§62l); IntentAggregationFormula produces IntentAggregateGapRecord (scalar gap for argmin)
 Phase 4 — Authority           AuthorityClosureOperator (§62c) → AuthoritySnapshot
 Phase 5 — Inference           EvidenceInferenceMechanism (§62c) for active hypotheses
 Phase 6 — Action candidates   EligibleActionEnumerator (§62c) → EligibleActionSet
 Phase 7 — Explore/exploit     ExploreExploitPolicy (§62l) → ExploreExploitDecision
 Phase 8 — Rank (if exploit)   ObjectiveUtilityFormula (§62d) applied → ObjectiveRankRecord
+Phase 8.5 — Gap-impact est.  GapImpactEstimationProtocol (§62l); estimates Δgap_expected per candidate; argmin selects min(Δgap_expected); produces GapImpactEstimate
 Phase 8.5 — Budget feasibility  BudgetFeasibilityGate (§62c); runs only when decision = exploit; filters infeasible candidates
 Phase 9 — Execute or discover  dispatch to Executor (exploit) or EvidenceRequestProtocol (§62l) → §38 discovery loop (explore); explore branch: EvidenceRequestProtocol computes directed observation target before §38 enumeration begins
 Phase 10 — Validate           independent validation gate (§60)
+Phase 10b — Transition valid.  StateTransitionValidationProtocol (§62l); recomputes aggregate gap post-commit; REGRESSION → gap-regression-detected BLOCKING gap + auto suspension
 Phase 11 — Completion fan-out  ObjectiveCompletionContract (§62l) if Objective completed
 Phase 12 — Boundary close     LifecycleBoundary closed; state_after snapshotted
 Phase 12b — Strategic review  StrategicReviewProtocol (§62l); conditional: runs every Config.strategy.review_interval_cycles (default 20) cycles; five-signal meta-assessment; DIVERGING verdict fires strategy-diverging BLOCKING review gate
 ```
 
-**Phase ordering contract.** Phase N MUST NOT begin before Phase N−1 produces its output citizen or emits a terminal IntegrityGap. A cycle that skips a phase or executes phases out of order is a `cycle-phase-ordering-violation` BLOCKING IntegrityGap. Phase 7 (ExploreExploitDecision) MUST be recorded before any Executor dispatch or discovery invocation. Phase 11 runs only when the current Objective's status transitions to completed during Phase 9–10; otherwise it is skipped. Phase 0a runs exactly once at first-cycle bootstrap and is skipped on all subsequent cycles unless mechanism_set_hash changes. Phase 0b runs at first-cycle bootstrap and re-runs on any DIRECTIVE_MUTATION Input or GoalRecord mutation; it includes GoalCoverageCompletenessProtocol (check 8) and MUST complete with no BLOCKING gaps before Phase 1 proceeds. Phase 12b runs conditionally after Phase 12 every Config.strategy.review_interval_cycles cycles; it does not block the next cycle. Phase 8.5 is conditional: it runs only when ExploreExploitDecision.decision = exploit.
+**Phase ordering contract.** Phase N MUST NOT begin before Phase N−1 produces its output citizen or emits a terminal IntegrityGap. A cycle that skips a phase or executes phases out of order is a `cycle-phase-ordering-violation` BLOCKING IntegrityGap. Phase 7 (ExploreExploitDecision) MUST be recorded before any Executor dispatch or discovery invocation. Phase 11 runs only when the current Objective's status transitions to completed during Phase 9–10; otherwise it is skipped. Phase 0a runs exactly once at first-cycle bootstrap and is skipped on all subsequent cycles unless mechanism_set_hash changes. Phase 0b runs at first-cycle bootstrap and re-runs on any DIRECTIVE_MUTATION Input or GoalRecord mutation; it includes GoalCoverageCompletenessProtocol (check 8) and MUST complete with no BLOCKING gaps before Phase 1 proceeds. Phase 12b runs conditionally after Phase 12 every Config.strategy.review_interval_cycles cycles; it does not block the next cycle. Phase 8.5 is conditional: it runs only when ExploreExploitDecision.decision = exploit. Phase 8.5 MUST run after Phase 8 produces ObjectiveRankRecord and before any Executor dispatch (Phase 9). Phase 10b runs after Phase 10 Operation commit and MUST complete before Phase 11. IntentDriftProtocol runs as a background periodic assessment every Config.intent.drift_assessment_interval cycles; it does not block cycle execution unless verdict is DIVERGED.
 
 ---
 
@@ -6758,6 +6760,98 @@ COMPOSITE             — multiple constraint kinds contributed equally; see evi
 Uses TemporalFields: created_at, updated_at. Used in: State.authority_ceiling_records.
 
 **Referenced from:** §62l AuthorityCeilingSignal, §62c EligibleActionEnumerator.
+
+## IntentAggregateGapRecord (citizen schema)
+
+Records the canonical scalar gap computed by IntentAggregationFormula over all active DIRECTIVE rules at each assessment cycle. This is the formal scalar input to argmin.
+
+IntentAggregateGapRecord {
+  id                    REQUIRED  string; prefix iagr-
+  cycle_id              REQUIRED  string; foreign key → Checkpoint.id
+  directive_gaps        REQUIRED  list[{directive_id: string, gap_score: number, weight: number}]; per-directive inputs
+  aggregate_gap         REQUIRED  number; Σ(weight_i × gap_score_i) / Σ(weight_i)
+  weight_source         REQUIRED  enum: DOMAIN_WEIGHT | UNIFORM; DOMAIN_WEIGHT when DomainWeightRecord active; UNIFORM otherwise
+  directive_count       REQUIRED  integer; number of active DIRECTIVE rules included
+}
+
+**Constraints:**
+- One IntentAggregateGapRecord MUST be produced per assessment cycle at Phase 3; a cycle without one emits IntegrityGap(kind="intent-aggregation-missing", severity=BLOCKING)
+- aggregate_gap MUST equal Σ(weight_i × gap_score_i) / Σ(weight_i); computed directly from active IntentFulfillmentBinding gap_scores
+- IntentAggregateGapRecord records MUST NOT be compacted
+
+**Referenced from:** §62l IntentAggregationFormula, §62c IntentFulfillmentMechanism, §62l GapImpactEstimationProtocol.
+
+## GapImpactEstimate (citizen schema)
+
+Records the estimated gap reduction (Δgap_expected) for each candidate action considered at Phase 8.5. Produced by GapImpactEstimationProtocol before action selection.
+
+GapImpactEstimate {
+  id                       REQUIRED  string; prefix gie-
+  cycle_id                 REQUIRED  string; foreign key → Checkpoint.id
+  objective_id             REQUIRED  string; candidate Objective being evaluated
+  delta_gap_expected       REQUIRED  number; estimated gap(next_state,Intent) − gap(State,Intent); negative = improvement
+  prior_residual_mean      REQUIRED  number; mean residual from recent GapCalibrationRecords used as prior
+  prior_residual_n         REQUIRED  integer; number of GapCalibrationRecords used
+  selected                 REQUIRED  boolean; true for the action selected by argmin
+}
+
+**Constraints:**
+- One GapImpactEstimate per candidate Objective MUST be produced at Phase 8.5; absence emits IntegrityGap(kind="gap-impact-estimate-missing", severity=WARNING)
+- The Objective with minimum delta_gap_expected MUST be selected (ties broken by ObjectiveRankRecord utility_score descending)
+- GapImpactEstimate records MUST NOT be compacted
+
+**Referenced from:** §62l GapImpactEstimationProtocol, §37 Phase 8.5, §62b ObjectiveRankRecord.
+
+## StateTransitionValidationRecord (citizen schema)
+
+Records the post-transition gap verification for each committed Operation. Produced by StateTransitionValidationProtocol at Phase 10 close.
+
+StateTransitionValidationRecord {
+  id                    REQUIRED  string; prefix stvr-
+  cycle_id              REQUIRED  string; foreign key → Checkpoint.id
+  operation_id          REQUIRED  string; foreign key → Operation.id
+  gap_before            REQUIRED  number; IntentAggregateGapRecord.aggregate_gap at cycle start
+  gap_after             REQUIRED  number; recomputed aggregate_gap after Operation commit
+  delta_gap_actual      REQUIRED  number; gap_after − gap_before; negative = improvement
+  verdict               REQUIRED  StateTransitionVerdict
+}
+
+**StateTransitionVerdict enum.**
+- IMPROVED — delta_gap_actual < 0; transition reduced gap
+- NEUTRAL — delta_gap_actual = 0; no measurable change
+- REGRESSION — delta_gap_actual > 0; transition increased gap; emits IntegrityGap(kind="gap-regression-detected", severity=BLOCKING)
+
+**Constraints:**
+- One StateTransitionValidationRecord MUST be produced per committed Operation; absence emits IntegrityGap(kind="state-transition-validation-missing", severity=WARNING)
+- REGRESSION verdict MUST emit IntegrityGap(kind="gap-regression-detected", severity=BLOCKING) and suspend auto-continuation pending operator review
+- StateTransitionValidationRecord records MUST NOT be compacted
+
+**Referenced from:** §62l StateTransitionValidationProtocol, §62l GapCalibrationProtocol (regression label feeds calibration), §62u OutcomeFeedbackContract.
+
+## IntentDriftRecord (citizen schema)
+
+Records the semantic drift assessment between stored Intent representation and incoming operator signals over a sliding window. Produced by IntentDriftProtocol.
+
+IntentDriftRecord {
+  id                    REQUIRED  string; prefix idr-
+  assessment_cycle_id   REQUIRED  string; foreign key → Checkpoint.id
+  window_cycles         REQUIRED  integer; number of cycles in assessment window
+  signal_count          REQUIRED  integer; number of operator signals assessed
+  semantic_distance     REQUIRED  number; [0.0, 1.0]; 0.0 = perfect alignment, 1.0 = complete divergence
+  contributing_signals  REQUIRED  list[string]; Input ids, GoalRecord ids, OutcomeFeedbackRecord ids assessed
+  verdict               REQUIRED  IntentDriftVerdict
+}
+
+**IntentDriftVerdict enum.**
+- ALIGNED — semantic_distance < Config.intent.drift_warning_threshold (default 0.3)
+- DRIFTING — semantic_distance ≥ warning_threshold and < blocking_threshold (default 0.6); emits IntegrityGap(kind="intent-semantic-drift", severity=WARNING)
+- DIVERGED — semantic_distance ≥ blocking_threshold; emits IntegrityGap(kind="intent-semantic-drift", severity=BLOCKING); gates auto-continuation pending DIRECTIVE review
+
+**Constraints:**
+- IntentDriftRecord MUST be produced every Config.intent.drift_assessment_interval cycles (default 10); absence emits IntegrityGap(kind="intent-drift-assessment-missing", severity=WARNING)
+- IntentDriftRecord records MUST NOT be compacted
+
+**Referenced from:** §62l IntentDriftProtocol, §62b DIRECTIVE (drift triggers re-run of IntentAmbiguityAudit Phase 0b).
 
 ---
 
@@ -13037,6 +13131,13 @@ GoverningRecord {
 
 ---
 
+**IntentDriftProtocol** `protocol` FOUNDATIONAL
+Detects when stored Intent (DIRECTIVE rules, GoalRecords) has semantically diverged from incoming operator signals over a sliding window. Computes semantic_distance [0,1] across contributing signals. DRIFTING verdict emits WARNING; DIVERGED verdict emits BLOCKING gap and gates auto-continuation pending DIRECTIVE review. On any DIVERGED verdict, IntentAmbiguityAudit Phase 0b is re-triggered.
+Produces: IntentDriftRecord
+Consumes: Input records, GoalRecord mutations, OutcomeFeedbackRecord
+Phase: periodic (every Config.intent.drift_assessment_interval cycles, default 10)
+IGC: intent-semantic-drift (WARNING/BLOCKING), intent-drift-assessment-missing (WARNING)
+
 ## IntentAmbiguityAudit
 
 **Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []` · `semantic_kind: Protocol`
@@ -14359,6 +14460,20 @@ ATTRIBUTED → VERIFIED:
 
 ---
 
+**GapImpactEstimationProtocol** `protocol` COMPOSITIONAL
+Estimates Δgap_expected for each candidate action at Phase 8.5 using GapCalibrationRecord residuals as a prior. argmin selects the action with minimum Δgap_expected (most negative = largest gap reduction). Actual vs. estimated residuals feed back into GapCalibrationProtocol, closing the estimation accuracy loop.
+Produces: GapImpactEstimate (one per candidate Objective)
+Consumes: IntentAggregateGapRecord, GapCalibrationRecord (residual prior), ObjectiveRankRecord
+Phase: 8.5
+IGC: gap-impact-estimate-missing (WARNING)
+
+**StateTransitionValidationProtocol** `protocol` FOUNDATIONAL
+Verifies that each accepted Operation actually reduced gap. Recomputes IntentAggregateGapRecord after Phase 10 commit and compares to pre-cycle baseline. REGRESSION verdict emits gap-regression-detected BLOCKING gap and suspends auto-continuation. Regression labels feed GapCalibrationProtocol, improving future GapImpactEstimate accuracy.
+Produces: StateTransitionValidationRecord
+Consumes: IntentAggregateGapRecord (before + after), Operation
+Phase: 10 (post-commit)
+IGC: gap-regression-detected (BLOCKING), state-transition-validation-missing (WARNING)
+
 ## ExploreExploitPolicy
 
 **Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [ExploreExploitDecision, ObjectiveUtilityFormula, EligibleActionSet]`
@@ -14405,6 +14520,13 @@ The **PlanConvergenceContract** governs Plan acceptance (§41). Before any Plan 
 **Referenced from:** §62b ConvergenceAssessment, §41 Planner, §40 Objective and Plan.
 
 ---
+
+**IntentAggregationFormula** `formula` FOUNDATIONAL
+Computes the canonical scalar gap over all active DIRECTIVE rules for input to argmin. `gap_aggregate = Σ(w_i × directive_gap_i) / Σ(w_i)` where `w_i` from DomainWeightRecord when active, uniform otherwise. Produces one IntentAggregateGapRecord per cycle at Phase 3. Without this scalar, argmin operates on an undefined function in multi-directive configurations.
+Produces: IntentAggregateGapRecord
+Consumes: IntentFulfillmentBinding (gap_scores), DomainWeightRecord (weights)
+Phase: 3
+IGC: intent-aggregation-missing (BLOCKING)
 
 ## DirectiveCoverageContract
 
@@ -18621,6 +18743,7 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r112 | 2026-10-19 | spec | Gap 1–4 closure: StateTransitionValidationProtocol (§62l) + StateTransitionValidationRecord (§62b) — post-transition gap verification (REGRESSION → BLOCKING + auto suspension); IntentDriftProtocol (§62l) + IntentDriftRecord (§62b) — periodic semantic drift detection between DIRECTIVE/GoalRecords and operator signals (DIVERGED gates auto + re-triggers IntentAmbiguityAudit); IntentAggregationFormula (§62l) + IntentAggregateGapRecord (§62b) — canonical weighted scalar gap over vector Intent for argmin (`gap_aggregate = Σ(w_i × directive_gap_i) / Σ(w_i)`); GapImpactEstimationProtocol (§62l) + GapImpactEstimate (§62b) — per-action Δgap estimation at Phase 8.5 using GapCalibrationRecord residuals as prior. **New §62b schemas:** IntentAggregateGapRecord (iagr-), GapImpactEstimate (gie-), StateTransitionValidationRecord (stvr-), IntentDriftRecord (idr-). **New §62l constructs:** IntentAggregationFormula, GapImpactEstimationProtocol, StateTransitionValidationProtocol, IntentDriftProtocol. **New §37 phases:** Phase 3 extended, Phase 8.5, Phase 10b, IntentDriftProtocol periodic. **New IGC kinds:** gap-regression-detected (BLOCKING), intent-semantic-drift (WARNING/BLOCKING), intent-aggregation-missing (BLOCKING), gap-impact-estimate-missing (WARNING), state-transition-validation-missing (WARNING), intent-drift-assessment-missing (WARNING). |
 | r111 | 2026-10-19 | spec | Gap 1–4 closure: GoalCoverageCompletenessProtocol (§62l) + GoalCoverageCompletenessRecord (§62b) — executable goal→objective→metric path check (check 8 of IntentAmbiguityAudit); StrategicReviewProtocol (§62l) + StrategicReviewRecord (§62b) — 5-signal periodic meta-assessment, strategy_health HEALTHY/DRIFTING/STALLED/DIVERGING, Phase 12b; DomainWeightCalibrationProtocol (§62l) + DomainWeightRecord (§62b) — per-domain ObjectiveUtilityFormula weight vectors; EvidenceRequestProtocol (§62l) + EvidenceRequest (§62b) — directed explore phase (Phase 9), hypothesis-targeted observation. **New external references:** `GoalCoverageCompletenessRecord` → §62b; `StrategicReviewRecord` → §62b; `DomainWeightRecord` → §62b; `EvidenceRequest` → §62b; `GoalCoverageCompletenessProtocol` → §62l; `StrategicReviewProtocol` → §62l; `DomainWeightCalibrationProtocol` → §62l; `EvidenceRequestProtocol` → §62l; 4 new IGC kinds → §62l. |
 | r110 | 2026-10-19 | spec | Gap A+B+C closure: IntentFormulaValidityProtocol (§62l) + IntentFormulaValidityRecord (§62b) — Goodhart drift detection on gap() formula; AuthorityCeilingRecord (§62b) + AuthorityCeilingSignal (§62l) — binding constraint classification (AUTHORITY_BOUNDARY/EVIDENCE_INSUFFICIENT/CAPABILITY_UNAVAILABLE/BUDGET_EXHAUSTED); IntentAmbiguityAudit (§62l) — Phase 0b exhaustive Intent pre-execution gate (7 checks); EligibleActionEnumerator extended with constraint classification; Phase 0a/0b split in §37. **New external references:** `IntentFormulaValidityRecord` → §62b; `AuthorityCeilingRecord` → §62b; `IntentFormulaValidityProtocol` → §62l; `AuthorityCeilingSignal` → §62l; `IntentAmbiguityAudit` → §62l; 6 new IGC kinds → §62l. |
 | r109 | 2026-10-19 | spec+runtime | Structural fixes S2–S11: §62l domain sub-headers (8 domains); IGC kind retirement contract (§62l); State Document field retirement contract (§62e); LayerModel→tier diagram mapping table (§62s); AP deprecated_since/superseded_by metadata fields (§62n); FEATURE_BUNDLE_REGISTRY (22 entries); RETIRED_IGC_KINDS + validate_igc_kind_entries(); schema_export.py module; urace schema export CLI; test_urace_r109.py domain split; R109IGCParityTests + R109DAGAcyclicityTests + R109SchemaExportTests; 1274 tests. **New external references:** `FEATURE_BUNDLE_REGISTRY` → primitives.py; `RETIRED_IGC_KINDS` → primitives.py; `validate_igc_kind_entries` → primitives.py; `schema_export` → §62t. |
