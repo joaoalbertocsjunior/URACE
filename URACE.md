@@ -1695,7 +1695,7 @@ Every assessment cycle MUST execute the following mechanism phases in the declar
 
 ```
 Phase 0a — Mechanism readiness   MechanismReadinessContract (§62l); first cycle only; skipped when mechanism_set_hash unchanged
-Phase 0b — Intent ambiguity audit IntentAmbiguityAudit (§62l); first cycle only and on DIRECTIVE_MUTATION; seven-check gate; surfaces all BLOCKING Intent defects before Phase 1
+Phase 0b — Intent ambiguity audit IntentAmbiguityAudit (§62l) + GoalCoverageCompletenessProtocol (§62l); first cycle only and on DIRECTIVE_MUTATION or GoalRecord mutation; eight-check gate (checks 1–7: binding/formula/metric/baseline/threshold validity; check 8: executable goal→objective→metric path existence); surfaces all BLOCKING Intent defects before Phase 1
 Phase 1 — Boundary open       LifecycleBoundary created; state_before snapshotted (§74)
 Phase 2 — Feedback            FeedbackAccumulator (§62c)
 Phase 3 — Intent gap          IntentFulfillmentMechanism (§62c) + DirectiveCoverageContract (§62l)
@@ -1705,13 +1705,14 @@ Phase 6 — Action candidates   EligibleActionEnumerator (§62c) → EligibleAct
 Phase 7 — Explore/exploit     ExploreExploitPolicy (§62l) → ExploreExploitDecision
 Phase 8 — Rank (if exploit)   ObjectiveUtilityFormula (§62d) applied → ObjectiveRankRecord
 Phase 8.5 — Budget feasibility  BudgetFeasibilityGate (§62c); runs only when decision = exploit; filters infeasible candidates
-Phase 9 — Execute or discover  dispatch to Executor (exploit) or §38 discovery loop (explore)
+Phase 9 — Execute or discover  dispatch to Executor (exploit) or EvidenceRequestProtocol (§62l) → §38 discovery loop (explore); explore branch: EvidenceRequestProtocol computes directed observation target before §38 enumeration begins
 Phase 10 — Validate           independent validation gate (§60)
 Phase 11 — Completion fan-out  ObjectiveCompletionContract (§62l) if Objective completed
 Phase 12 — Boundary close     LifecycleBoundary closed; state_after snapshotted
+Phase 12b — Strategic review  StrategicReviewProtocol (§62l); conditional: runs every Config.strategy.review_interval_cycles (default 20) cycles; five-signal meta-assessment; DIVERGING verdict fires strategy-diverging BLOCKING review gate
 ```
 
-**Phase ordering contract.** Phase N MUST NOT begin before Phase N−1 produces its output citizen or emits a terminal IntegrityGap. A cycle that skips a phase or executes phases out of order is a `cycle-phase-ordering-violation` BLOCKING IntegrityGap. Phase 7 (ExploreExploitDecision) MUST be recorded before any Executor dispatch or discovery invocation. Phase 11 runs only when the current Objective's status transitions to completed during Phase 9–10; otherwise it is skipped. Phase 0a runs exactly once at first-cycle bootstrap and is skipped on all subsequent cycles unless mechanism_set_hash changes. Phase 0b runs at first-cycle bootstrap and re-runs on any DIRECTIVE_MUTATION Input; it MUST complete with no BLOCKING gaps before Phase 1 proceeds. Phase 8.5 is conditional: it runs only when ExploreExploitDecision.decision = exploit.
+**Phase ordering contract.** Phase N MUST NOT begin before Phase N−1 produces its output citizen or emits a terminal IntegrityGap. A cycle that skips a phase or executes phases out of order is a `cycle-phase-ordering-violation` BLOCKING IntegrityGap. Phase 7 (ExploreExploitDecision) MUST be recorded before any Executor dispatch or discovery invocation. Phase 11 runs only when the current Objective's status transitions to completed during Phase 9–10; otherwise it is skipped. Phase 0a runs exactly once at first-cycle bootstrap and is skipped on all subsequent cycles unless mechanism_set_hash changes. Phase 0b runs at first-cycle bootstrap and re-runs on any DIRECTIVE_MUTATION Input or GoalRecord mutation; it includes GoalCoverageCompletenessProtocol (check 8) and MUST complete with no BLOCKING gaps before Phase 1 proceeds. Phase 12b runs conditionally after Phase 12 every Config.strategy.review_interval_cycles cycles; it does not block the next cycle. Phase 8.5 is conditional: it runs only when ExploreExploitDecision.decision = exploit.
 
 ---
 
@@ -6757,6 +6758,132 @@ COMPOSITE             — multiple constraint kinds contributed equally; see evi
 Uses TemporalFields: created_at, updated_at. Used in: State.authority_ceiling_records.
 
 **Referenced from:** §62l AuthorityCeilingSignal, §62c EligibleActionEnumerator.
+
+---
+
+## GoalCoverageCompletenessRecord (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+
+Records the result of the GoalCoverageCompletenessProtocol (§62l) audit for one coverage_dimension of one DIRECTIVE. Produced at Phase 0b and on GoalRecord mutation.
+
+```
+GoalCoverageCompletenessRecord {
+  id               REQUIRED  Identifier; prefix "gccr-"
+  created_at       REQUIRED  ISO-8601 timestamp
+  updated_at       REQUIRED  ISO-8601 timestamp
+  directive_id     REQUIRED  string; DIRECTIVE rule id being audited
+  dimension        REQUIRED  string; coverage_dimension name
+  metric_id        REQUIRED  string; metric_id from the bound IntentFulfillmentBinding for this dimension
+  reachable        REQUIRED  bool; true when ≥1 active Objective has targets_binding_ids pointing to a binding for this dimension
+  path_description OPTIONAL  string; human-readable description of the reachable Objective→binding path
+  missing_link     OPTIONAL  string; what is absent if reachable = false (e.g. "no active Objective targets binding ifb-001")
+}
+```
+
+Uses TemporalFields: created_at, updated_at. Used in: State.goal_coverage_completeness_records.
+
+**Referenced from:** §62l GoalCoverageCompletenessProtocol.
+
+---
+
+## StrategicReviewRecord (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: INTEGRATED · standalone: false
+
+Records the result of the StrategicReviewProtocol (§62l) periodic meta-assessment. Produced every Config.strategy.review_interval_cycles cycles at Phase 12b.
+
+```
+StrategicReviewRecord {
+  id                              REQUIRED  Identifier; prefix "srr-"
+  created_at                      REQUIRED  ISO-8601 timestamp
+  updated_at                      REQUIRED  ISO-8601 timestamp
+  review_cycle                    REQUIRED  int; lifecycle cycle number at which this review was triggered
+  window_cycles                   REQUIRED  int; number of cycles included in the assessment window
+  strategy_health                 REQUIRED  StrategyHealth
+  signal_negativity_rate          REQUIRED  float; aggregate IntentFormulaValidityRecord negativity_rate over window
+  calibration_drift_rate          REQUIRED  float; fraction of GapCalibrationRecord entries with drift_threshold_exceeded=true in window
+  gap_closure_velocity_trend      REQUIRED  string; ACCELERATING | STABLE | DECELERATING | STALLED
+  fit_hypothesis_rejection_rate   REQUIRED  float; rejected / (confirmed + rejected) FitHypothesis records in window; 0.0 if no FitHypothesis records
+  explore_ratio                   REQUIRED  float; fraction of ExploreExploitDecision records with decision=explore in window
+  evidence_summary                OPTIONAL  string; operator-facing explanation of the verdict
+}
+```
+
+**StrategyHealth enum.**
+```
+HEALTHY    — all five signals within acceptable ranges; strategy is working
+DRIFTING   — 1–2 signals outside acceptable range; recommend monitoring
+STALLED    — gap_closure_velocity_trend = STALLED AND explore_ratio > 0.7; no progress, exhausted exploration
+DIVERGING  — 3+ signals outside range, OR (calibration_drift_rate > 0.5 AND signal_negativity_rate > 0.5), OR (STALLED AND signal_negativity_rate > 0.4); BLOCKING review gate fires
+```
+
+Uses TemporalFields: created_at, updated_at. Used in: State.strategic_review_records.
+
+**Referenced from:** §62l StrategicReviewProtocol.
+
+---
+
+## DomainWeightRecord (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+
+Stores the per-domain weight vector for the ObjectiveUtilityFormula, maintained by DomainWeightCalibrationProtocol (§62l). One record per domain_tag; updated in-place (latest record supersedes prior for the same domain_tag).
+
+```
+DomainWeightRecord {
+  id                  REQUIRED  Identifier; prefix "dwr-"
+  created_at          REQUIRED  ISO-8601 timestamp
+  updated_at          REQUIRED  ISO-8601 timestamp
+  domain_tag          REQUIRED  string; from Objective.scope tags or executor domain_tags
+  W_intent            REQUIRED  float; domain-specific intent alignment weight
+  W_value             REQUIRED  float; domain-specific expected value weight
+  W_cost              REQUIRED  float; domain-specific cost weight
+  W_risk              REQUIRED  float; domain-specific risk weight
+  W_urgency           REQUIRED  float; domain-specific urgency weight
+  sample_count        REQUIRED  int; number of Objective outcomes that have informed this vector
+  last_updated_cycle  REQUIRED  int; lifecycle cycle number of last update
+}
+```
+
+Weight invariant: W_intent + W_value + W_cost + W_risk + W_urgency = 1.0 ± 0.01. Uses TemporalFields: created_at, updated_at. Used in: State.domain_weight_records.
+
+**Referenced from:** §62l DomainWeightCalibrationProtocol, §62d ObjectiveUtilityFormula.
+
+---
+
+## EvidenceRequest (citizen schema)
+
+**Construct metadata.** kind: Schema · tier: COMPOSITIONAL · standalone: false
+
+Records a directed observation request computed by EvidenceRequestProtocol (§62l) at the start of an explore phase. Directs §38 discovery toward the observation that would most improve the posterior_confidence of the highest-priority blocked decision.
+
+```
+EvidenceRequest {
+  id                        REQUIRED  Identifier; prefix "evreq-"
+  created_at                REQUIRED  ISO-8601 timestamp
+  updated_at                REQUIRED  ISO-8601 timestamp
+  created_at_cycle          REQUIRED  int; lifecycle cycle number when request was created
+  target_hypothesis_id      REQUIRED  string; InferenceResult.hypothesis_id to improve
+  target_metric_ids         REQUIRED  list[string]; metric ids whose observation would improve posterior_confidence
+  blocking_objective_id     OPTIONAL  string; id of the Objective most dependent on this inference
+  expected_confidence_gain  REQUIRED  float; estimated improvement in posterior_confidence if target_metric_ids are observed
+  estimated_collection_cost REQUIRED  float; resource units estimated to collect the target evidence
+  status                    REQUIRED  EvidenceRequestStatus
+  expiry_cycle              REQUIRED  int; cycle number at which this request expires if status remains ACTIVE
+}
+```
+
+**EvidenceRequestStatus enum.**
+```
+ACTIVE    — request is open; §38 discovery should prioritize target_metric_ids
+ADDRESSED — at least one Objective targeting target_metric_ids was surfaced this cycle
+EXPIRED   — expiry_cycle passed without an ADDRESSED transition
+```
+
+Uses TemporalFields: created_at, updated_at. Used in: State.evidence_requests.
+
+**Referenced from:** §62l EvidenceRequestProtocol, §37 Phase 9.
 
 ---
 
@@ -12940,6 +13067,32 @@ The **IntentAmbiguityAudit** is a Phase 0 pre-execution exhaustive check that su
 
 ---
 
+## GoalCoverageCompletenessProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [GoalCoverageCompletenessRecord, IntentAmbiguityAudit, RecursiveGoalDecompositionContract, IntentFulfillmentBinding]` · `semantic_kind: Contract`
+
+The **GoalCoverageCompletenessProtocol** closes the structural soundness gap in the goal-to-Intent chain: the `IntentAmbiguityAudit` verifies that bindings exist and have valid formulas, but does not verify that any active Goal→Objective chain will actually *produce* metric movement for each bound dimension. This protocol adds that executable-path check.
+
+**When it runs.** Extends Phase 0b as check 8 (after `IntentAmbiguityAudit`'s 7 checks complete with no BLOCKING result). Also triggered on every GoalRecord creation or status mutation.
+
+**Check 8 — Executable path existence.** For each active DIRECTIVE, for each declared `coverage_dimension` D:
+1. Find all active IntentFulfillmentBindings for D → collect their `metric_id` values (set M)
+2. For each metric_id m ∈ M: find all active Objectives O where `m ∈ {binding.metric_id for binding_id in (O.targets_binding_ids or [])}` — i.e., the Objective explicitly targets a binding covering metric m
+3. If at least one such Objective exists for at least one m ∈ M: dimension D is **reachable** → create GoalCoverageCompletenessRecord(reachable=true, path_description=...)
+4. If no active Objective targets any binding in M: dimension D is **unreachable** → create GoalCoverageCompletenessRecord(reachable=false, missing_link="no active Objective has targets_binding_ids covering metric(s) " + str(M)) → emit IntegrityGap(kind="coverage-dimension-unreachable", severity=BLOCKING) naming dimension and directive
+
+**Resolution path.** The operator MUST either: (a) create a GoalRecord with a linked Objective that targets a binding for the unreachable dimension, or (b) add `targets_binding_ids` to an existing Objective that advances the relevant metric, or (c) remove the coverage_dimension from the DIRECTIVE if it is no longer required. The gap clears when at least one active Objective targets a binding for the dimension.
+
+**Relationship to IntentAmbiguityAudit.** Check 8 MUST run only after checks 1–7 pass (binding exists, metric registered, threshold set). If any of checks 1–7 fire BLOCKING, check 8 is deferred — unreachable path detection on a broken binding is not meaningful.
+
+**Gap emissions.**
+- `coverage-dimension-unreachable` (BLOCKING) — no active Objective has targets_binding_ids covering any binding for this dimension; goal graph cannot close this dimension of Intent
+
+**Citizens using GoalCoverageCompletenessProtocol:** GoalCoverageCompletenessRecord (§62b).
+**Referenced from:** §62l IntentAmbiguityAudit (check 8), §62b GoalCoverageCompletenessRecord, §37 Phase 0b.
+
+---
+
 ### Audit & Observability
 
 ## AuditRecord Canonical Cluster
@@ -14030,6 +14183,57 @@ The **ReleaseGovernanceGate (RGG)** is the governance checkpoint that wraps PRVS
 
 ### Governance & Lifecycle
 
+## StrategicReviewProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: INTEGRATED` · `standalone: false` · `depends: [StrategicReviewRecord, IntentFormulaValidityRecord, GapCalibrationRecord, LongitudinalEffectivenessRecord, ExploreExploitDecision, OutcomeFeedbackContract]` · `semantic_kind: Protocol`
+
+The **StrategicReviewProtocol** provides periodic meta-assessment: every K cycles, it evaluates whether the current *strategy* (the combination of Intent, goals, directives, and approach) is working — distinct from the tactical assessment cycle's question of "what is the best next action?" A URACE lifecycle can execute excellently toward the wrong strategy; this protocol is the mechanism that detects strategic misalignment before it accumulates too many wasted cycles.
+
+**When it runs.** Phase 12b — conditional: runs every `Config.strategy.review_interval_cycles` (default 20) cycles, immediately after Phase 12 (Boundary close). Does not run on every cycle; the condition is `current_cycle_number % Config.strategy.review_interval_cycles == 0`.
+
+**Five-signal computation.** Uses the last `Config.strategy.review_interval_cycles` cycles as the window.
+1. **signal_negativity_rate**: average `negativity_rate` from all `IntentFormulaValidityRecord` records in window (or 0.0 if no records).
+2. **calibration_drift_rate**: `count(GapCalibrationRecord where drift_threshold_exceeded=true in window) / max(1, total GapCalibrationRecord in window)`.
+3. **gap_closure_velocity_trend**: compare `net_intent_gap_delta` of the most recent two `LongitudinalEffectivenessRecord` records; classify: ACCELERATING (delta2 > delta1 × 1.1), STABLE (delta2 ≥ delta1 × 0.9), DECELERATING (delta2 < delta1 × 0.9), STALLED (delta2 ≤ 0).
+4. **fit_hypothesis_rejection_rate**: among `FitHypothesis` records in window with terminal status: `rejected / (confirmed + rejected)`; 0.0 if none.
+5. **explore_ratio**: among `ExploreExploitDecision` records in window: `count(decision=explore) / max(1, total)`.
+
+**StrategyHealth assignment (evaluated in order; first match wins).**
+```
+DIVERGING if:
+  (calibration_drift_rate > 0.5 AND signal_negativity_rate > 0.5)
+  OR (gap_closure_velocity_trend = STALLED AND signal_negativity_rate > 0.4)
+  OR (count of signals outside range ≥ 3)
+
+STALLED if:
+  gap_closure_velocity_trend = STALLED AND explore_ratio > 0.7
+
+DRIFTING if:
+  signal_negativity_rate > 0.4
+  OR calibration_drift_rate > 0.3
+  OR fit_hypothesis_rejection_rate > 0.6
+
+HEALTHY otherwise
+```
+
+Signal acceptable ranges: signal_negativity_rate ≤ 0.4, calibration_drift_rate ≤ 0.3, gap_closure_velocity_trend ∈ {ACCELERATING, STABLE}, fit_hypothesis_rejection_rate ≤ 0.6, explore_ratio ≤ 0.6.
+
+**On DIVERGING verdict.**
+1. Create StrategicReviewRecord with strategy_health = DIVERGING and all signal values
+2. Emit IntegrityGap(kind="strategy-diverging", severity=BLOCKING) with detail = evidence_summary
+3. Surface in InspectionSurface `operator_gates` with the five signal values and a structured prompt: "URACE strategic review: {N} of 5 signals indicate strategy divergence. This does not block execution but requires operator review of strategic direction. Issue `urace strategy review` to see details or `urace strategy override` to continue with current strategy."
+4. IMPORTANT: `strategy-diverging` is BLOCKING in the gap catalog but the StrategicReviewProtocol gate is a REVIEW gate, not an execution halt — the operator may issue `urace strategy override` to acknowledge and continue. This preserves operator authority over destination.
+
+**On HEALTHY/DRIFTING/STALLED.** Create StrategicReviewRecord. Emit IntegrityGap(kind="strategy-diverging") only on DIVERGING. STALLED and DRIFTING are informational.
+
+**Gap emissions.**
+- `strategy-diverging` (BLOCKING) — 3+ strategic signals outside acceptable range; strategy review required
+
+**Citizens using StrategicReviewProtocol:** StrategicReviewRecord (§62b).
+**Referenced from:** §62b StrategicReviewRecord, §37 Phase 12b, §62l OutcomeFeedbackContract.
+
+---
+
 ## LifecycleChangeGate
 
 **Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [RGG]`
@@ -14594,6 +14798,37 @@ The **IntentFormulaValidityProtocol** defends against Goodhart's Law in the `gap
 
 ---
 
+## DomainWeightCalibrationProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [DomainWeightRecord, LearningWeightUpdateFormula, OutcomeLearningFeedbackContract, LongitudinalEffectivenessRecord]` · `semantic_kind: Contract`
+
+The **DomainWeightCalibrationProtocol** extends the `LearningWeightUpdateFormula` from a single global weight vector to per-domain weight vectors. The `ObjectiveUtilityFormula` is domain-agnostic: a W_cost calibrated on infrastructure Objectives is wrong for market-research Objectives. This protocol maintains a `DomainWeightRecord` per domain_tag, updated by `LearningWeightUpdateFormula` using only the outcomes of Objectives in that domain.
+
+**Domain tag extraction.** A domain_tag is extracted from an Objective as the first token of `Objective.scope` (e.g., scope "infrastructure/compute" → domain_tag "infrastructure"; scope "market/acquisition" → domain_tag "market"). If no scope is declared, the Objective belongs to domain_tag "default".
+
+**Update trigger.** After every cycle where OutcomeFeedbackRecord is written with verdict = VALIDATED or FAILED AND EvidenceSufficiencySnapshot.sufficiency_score ≥ Config.learning.min_signal_quality:
+1. Extract domain_tag from the outcome's Objective
+2. Find or create DomainWeightRecord for this domain_tag
+3. Apply `LearningWeightUpdateFormula` using only signal values from Objectives in this domain, updating the DomainWeightRecord's weight vector
+4. Increment sample_count; set last_updated_cycle
+
+**Minimum observations gate.** A DomainWeightRecord MUST NOT be used in ObjectiveUtilityFormula until `sample_count ≥ Config.domain_calibration.min_observations` (default 10). When sample_count < min_observations: the global `ObjectiveUtilityFormula` weights are used instead. When sample_count crosses min_observations for the first time: emit Evidence(kind="domain-weights-activated") with the domain_tag.
+
+**ObjectiveUtilityFormula extension.** When computing `U(O)`:
+1. Extract domain_tag from O.scope
+2. Look up DomainWeightRecord for domain_tag where sample_count ≥ min_observations
+3. If found: use domain weight vector (W_intent, W_value, W_cost, W_risk, W_urgency) from DomainWeightRecord
+4. If not found: use global Config.objective_utility weights
+This lookup is the ONLY change to the ObjectiveUtilityFormula computation; the formula itself (`U(o) = intent_alignment × W_intent + ...`) is unchanged.
+
+**Gap emissions.**
+- `domain-weight-insufficient-observations` (WARNING) — a domain_tag has been active for > Config.domain_calibration.min_observations_window (default 30) cycles but sample_count has not reached min_observations; weights may be miscalibrated for this domain
+
+**Citizens using DomainWeightCalibrationProtocol:** DomainWeightRecord (§62b).
+**Referenced from:** §62d ObjectiveUtilityFormula, §62l OutcomeLearningFeedbackContract, §62b DomainWeightRecord.
+
+---
+
 ### Trust & Safety
 
 ## RollbackDecisionContract
@@ -14783,6 +15018,36 @@ The **StateAuditProtocol** enforces causal completeness at every lifecycle bound
 ---
 
 ### Executor & Cycle
+
+## EvidenceRequestProtocol
+
+**Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [EvidenceRequest, EvidenceInferenceMechanism, ExploreExploitPolicy, ObjectiveUtilityFormula]` · `semantic_kind: Protocol`
+
+The **EvidenceRequestProtocol** transforms the explore phase from undirected enumeration into hypothesis-driven directed observation. When `ExploreExploitDecision.decision = explore`, this protocol computes which observation would most improve the posterior_confidence of the most consequential blocked decision — then directs §38 discovery to prioritize that observation.
+
+**When it runs.** Phase 9 explore branch: immediately before the §38 discovery loop begins, when ExploreExploitDecision.decision = explore.
+
+**Algorithm.**
+1. Collect all InferenceResults with status = ACTIVE and posterior_confidence < Config.inference.min_confidence_threshold (default 0.6)
+2. For each InferenceResult IR: compute `request_score(IR) = (1 − IR.posterior_confidence) × max_utility_depending_on_IR`, where max_utility_depending_on_IR = max(U(O)) over all active Objectives O whose DecisionRecord references IR.id or whose targets_binding_ids covers the same directive_id as IR.hypothesis_id
+3. Sort by request_score descending; select top InferenceResult IR* (the one whose improvement would most benefit the highest-utility Objective)
+4. Resolve target_metric_ids: the metric_ids from all IntentFulfillmentBindings for the directive covered by IR*.hypothesis_id
+5. Create EvidenceRequest citizen: target_hypothesis_id = IR*.hypothesis_id, target_metric_ids = resolved metric_ids, expected_confidence_gain = (Config.inference.min_confidence_threshold − IR*.posterior_confidence) × 0.5, expiry_cycle = current_cycle + Config.evidence_request.expiry_cycles (default 3)
+6. Pass EvidenceRequest to §38 discovery loop: any Objective discovered that advances at least one metric_id ∈ EvidenceRequest.target_metric_ids receives a `+Config.evidence_request.priority_boost` (default 0.3) added to its discovery score before ranking
+
+**No-op condition.** If all InferenceResults have posterior_confidence ≥ min_confidence_threshold (no stuck confidence), skip step 1–5; proceed directly to unmodified §38 discovery.
+
+**Expiry contract.** At Phase 2 (Feedback) of each subsequent cycle: scan State.evidence_requests for ACTIVE requests where expiry_cycle ≤ current_cycle_number. For each expired request: set status = EXPIRED; emit IntegrityGap(kind="evidence-request-expired", severity=WARNING) with detail = target_hypothesis_id. An expired request suggests the directed exploration did not yield a relevant Objective within the expected window; the operator MAY need to supply the evidence directly.
+
+**One request per explore cycle.** Only the highest request_score InferenceResult generates an EvidenceRequest per explore cycle. Creating multiple concurrent ACTIVE requests for different hypotheses is not permitted; only the prior ACTIVE request expires before a new one is created.
+
+**Gap emissions.**
+- `evidence-request-expired` (WARNING) — an EvidenceRequest's expiry_cycle was reached with no ADDRESSED transition; directed exploration did not surface a relevant Objective within the expected window
+
+**Citizens using EvidenceRequestProtocol:** EvidenceRequest (§62b).
+**Referenced from:** §62b EvidenceRequest, §37 Phase 9 (explore branch), §36 Open-Ended Discovery.
+
+---
 
 ## CycleTriggerQualificationProtocol
 
@@ -18356,6 +18621,7 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r111 | 2026-10-19 | spec | Gap 1–4 closure: GoalCoverageCompletenessProtocol (§62l) + GoalCoverageCompletenessRecord (§62b) — executable goal→objective→metric path check (check 8 of IntentAmbiguityAudit); StrategicReviewProtocol (§62l) + StrategicReviewRecord (§62b) — 5-signal periodic meta-assessment, strategy_health HEALTHY/DRIFTING/STALLED/DIVERGING, Phase 12b; DomainWeightCalibrationProtocol (§62l) + DomainWeightRecord (§62b) — per-domain ObjectiveUtilityFormula weight vectors; EvidenceRequestProtocol (§62l) + EvidenceRequest (§62b) — directed explore phase (Phase 9), hypothesis-targeted observation. **New external references:** `GoalCoverageCompletenessRecord` → §62b; `StrategicReviewRecord` → §62b; `DomainWeightRecord` → §62b; `EvidenceRequest` → §62b; `GoalCoverageCompletenessProtocol` → §62l; `StrategicReviewProtocol` → §62l; `DomainWeightCalibrationProtocol` → §62l; `EvidenceRequestProtocol` → §62l; 4 new IGC kinds → §62l. |
 | r110 | 2026-10-19 | spec | Gap A+B+C closure: IntentFormulaValidityProtocol (§62l) + IntentFormulaValidityRecord (§62b) — Goodhart drift detection on gap() formula; AuthorityCeilingRecord (§62b) + AuthorityCeilingSignal (§62l) — binding constraint classification (AUTHORITY_BOUNDARY/EVIDENCE_INSUFFICIENT/CAPABILITY_UNAVAILABLE/BUDGET_EXHAUSTED); IntentAmbiguityAudit (§62l) — Phase 0b exhaustive Intent pre-execution gate (7 checks); EligibleActionEnumerator extended with constraint classification; Phase 0a/0b split in §37. **New external references:** `IntentFormulaValidityRecord` → §62b; `AuthorityCeilingRecord` → §62b; `IntentFormulaValidityProtocol` → §62l; `AuthorityCeilingSignal` → §62l; `IntentAmbiguityAudit` → §62l; 6 new IGC kinds → §62l. |
 | r109 | 2026-10-19 | spec+runtime | Structural fixes S2–S11: §62l domain sub-headers (8 domains); IGC kind retirement contract (§62l); State Document field retirement contract (§62e); LayerModel→tier diagram mapping table (§62s); AP deprecated_since/superseded_by metadata fields (§62n); FEATURE_BUNDLE_REGISTRY (22 entries); RETIRED_IGC_KINDS + validate_igc_kind_entries(); schema_export.py module; urace schema export CLI; test_urace_r109.py domain split; R109IGCParityTests + R109DAGAcyclicityTests + R109SchemaExportTests; 1274 tests. **New external references:** `FEATURE_BUNDLE_REGISTRY` → primitives.py; `RETIRED_IGC_KINDS` → primitives.py; `validate_igc_kind_entries` → primitives.py; `schema_export` → §62t. |
 | r108 | 2026-10-19 | spec+runtime | Architectural Composition diagram gap closure (G1–G13): 7-tier diagram (TOPMOST CALCULUS + T0–T6) with FoldOperator, L0–L4 layer labels, learning-loop evidence path, AP0–AP38 placements; 21 FeatureBundle spec-defined entries in §62j; --kind enum extended; §82 compression; 1258 tests. **New external references:** see r108 inline §62j FeatureBundle table annotations. |
