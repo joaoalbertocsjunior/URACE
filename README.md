@@ -65,18 +65,6 @@ urace add evidence --kind test-pass --summary "CI green"
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
-## Connect Data Sources
-
-Register any database, file, or cloud store once; URACE automatically pulls evidence from it each cycle and pushes records back after cycle completion. `--direction read|write|both` controls flow. Credentials stored as pointers only — env var, vault path, or k8s secret ref; never raw values in state.
-
-```text
-urace data add mydb --type postgres --connect "postgresql://host/db" --direction both
-urace data list|inspect|update|remove
-urace data sync mydb    # on-demand PULL   urace data push mydb    # on-demand PUSH
-```
-
-Adapters: SQL (postgres, mysql, sqlite, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb), time-series (influxdb, timescaledb), search (elasticsearch), files (csv, excel, parquet, json, xml, yaml), cloud (s3, gcs, azure-blob). Extensible via `Config.data.registered_adapters`.
-
 ## Update Safely
 
 Run `urace /update` for the guided update sequence. Use `urace /help update` for options including `--opt-in-constructs` and `@bundle-name` scoping. Pass `--hash <sha256>` to verify the downloaded spec; pass `--verify` to re-verify the stored candidate before applying.
@@ -88,6 +76,19 @@ Inspect metrics, vitals, state, and resource usage with `urace /check`, `urace /
 ## Inspect and Modify Context
 
 URACE compresses lifecycle state gradually as it grows and decompresses on demand. Use `urace /compact`, `/decompact`, `/amend <id>`, and `/crc show` to manage it. See `urace /help compact`.
+
+## Connect Data Sources
+
+Register any database, file, or cloud store once; URACE automatically pulls evidence from it each cycle and pushes records back after cycle completion. `--direction read|write|both` controls flow. Credentials stored as pointers only — env var, vault path, or k8s secret ref; never raw values in state.
+
+```text
+urace data add mydb --type postgres --connect "postgresql://host/db" --direction both
+urace data list|inspect|update|remove
+urace data sync mydb   # on-demand PULL override
+urace data push mydb   # on-demand PUSH override
+```
+
+Adapters: SQL (postgres, mysql, sqlite, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb), time-series (influxdb, timescaledb), search (elasticsearch), files (csv, excel, parquet, json, xml, yaml), cloud (s3, gcs, azure-blob). Extensible via `Config.data.registered_adapters`.
 
 ## Machine Interface
 
