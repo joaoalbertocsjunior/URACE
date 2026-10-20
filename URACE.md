@@ -4387,6 +4387,13 @@ State {
 **Atomic write contract.** Every write to the State Document MUST be atomic from the perspective of recovery: after a crash, the state file MUST reflect either the pre-write state or the fully committed post-write state. Partial writes MUST NOT be possible.
 
 **schema_version contract.** If the `schema_version` in a loaded State Document does not match the running implementation's expected version, the implementation MUST surface this as a named migration-required condition and MUST NOT silently proceed with an incompatible schema.
+### State Document Field Retirement Contract
+
+A field MUST NOT be removed from the State Document schema without a transition period. To retire a State field:
+1. Mark the field DEPRECATED in the schema definition comment: `# DEPRECATED since <revision> — superseded by <new_field>`.
+2. Keep the field in `initial_state()` returning `[]` or `""` for ≥2 revisions.
+3. After the drain period, remove the field and emit a migration note in §82.
+4. Any existing State Document with the retired field MUST be loadable without error; the runtime MUST silently ignore the deprecated field rather than failing schema validation.
 
 ## Reasoning Memory Entry
 
@@ -12794,6 +12801,8 @@ This section defines ninety-seven named protocols, invariants, canonical cluster
 
 ---
 
+### Core Governance
+
 ## GoverningRecord Canonical Cluster
 
 **Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
@@ -12817,6 +12826,8 @@ GoverningRecord {
 **Schemas that implement GoverningRecord:** WakeRegistration, ExecutorProvider, RetentionPolicy. These schemas MUST declare `Implements: GoverningRecord` and MUST include all GoverningRecord fields (`id`, `authority_basis`, `scope`, `established_at`).
 
 ---
+
+### Audit & Observability
 
 ## AuditRecord Canonical Cluster
 
@@ -12845,6 +12856,8 @@ AuditRecord {
 **Referenced from:** §62b TraceRecord, SwitchRecord, FleetRecord, OnboardRecord; §62l ObservabilityContract; §62r Audit and Observability.
 
 ---
+
+### Inspection & Output
 
 ## InspectionContract
 
@@ -13658,6 +13671,15 @@ The complete set of named IntegrityGap kinds emitted by the URACE runtime. Each 
 **Used in:** (universal — all spec sections; any section that detects a normative violation MUST emit via this catalog)
 
 **Extension contract.** A derived system MAY define additional gap kinds by registering them in its own IntegrityGapCatalog extension. Extension kinds MUST use a scoped prefix (e.g., `myapp-`) to avoid collisions. **Severity contract.** BLOCKING gaps MUST halt the dependent operation before any effect is committed. WARNING gaps MUST be surfaced but MUST NOT block unrelated workstreams. INFO gaps MUST be surfaced in output but carry no operational obligation.
+### IGC Kind Retirement Contract
+
+A gap kind MUST NOT be removed from the IntegrityGapCatalog (§62l) without declaring retirement. To retire a gap kind, the operator MUST:
+1. Add `"deprecated_since": "<revision>"` to the kind's entry in INTEGRITY_GAP_CATALOG (runtime dict).
+2. Add `"superseded_by": "<new-kind>"` if a replacement kind exists.
+3. Keep the retired kind in the catalog for ≥2 revisions to allow existing State Documents to drain.
+4. After the drain period, move the kind to the `RETIRED_IGC_KINDS` set in primitives.py.
+
+A runtime encountering a State Document that contains a gap of a retired kind MUST emit `igc-kind-retired-active` (WARNING) rather than silently ignoring it.
 
 ---
 
@@ -13893,6 +13915,8 @@ The **ReleaseGovernanceGate (RGG)** is the governance checkpoint that wraps PRVS
 
 **Referenced from:** §62l LCG.
 
+### Governance & Lifecycle
+
 ## LifecycleChangeGate
 
 **Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [RGG]`
@@ -14083,6 +14107,8 @@ The **DirectiveCoverageContract** governs the completeness of IntentFulfillmentB
 **Referenced from:** §62b DirectiveCoverageRecord, §62b IntentFulfillmentBinding, §62c IntentFulfillmentMechanism.
 
 ---
+
+### Fleet & Multi-Product
 
 ## FleetAllocationPolicy
 
@@ -14385,6 +14411,8 @@ The **IntentClosureContract** governs the verification step that runs after ever
 
 ---
 
+### Evidence & Convergence
+
 ## EvidenceSupersessionContract
 
 **Construct metadata.** `kind: Protocol` · `tier: COMPOSITIONAL` · `standalone: false` · `depends: [EvidenceStatusRecord, EvidenceInferenceMechanism, HypothesisLifecycleContract]`
@@ -14410,6 +14438,8 @@ The **EvidenceSupersessionContract** governs the conditions under which an Evide
 **Referenced from:** §62b EvidenceStatusRecord, §62c EvidenceInferenceMechanism, §62l HypothesisLifecycleContract, §26–32 Evidence sections.
 
 ---
+
+### Trust & Safety
 
 ## RollbackDecisionContract
 
@@ -14567,6 +14597,8 @@ The **StateAuditProtocol** enforces causal completeness at every lifecycle bound
 **Referenced from:** §62b StateAuditRecord, §61 Checkpoint, §62l BoundaryContract, §62i AP6.
 
 ---
+
+### Executor & Cycle
 
 ## CycleTriggerQualificationProtocol
 
@@ -15475,8 +15507,8 @@ FOUNDATIONAL ──── COMPOSITIONAL ──── INTEGRATED
 
 Every construct MUST carry a metadata line immediately after its `##` heading. Format per kind:
 
-**AP:** `**Derivation metadata.** kind: AP · tier: X · standalone: X · requires: [...] · provides: [...] · realizes: [<ConstructID>, ...] (OPTIONAL)`
-*(kind: AP is implied by §62i section membership; the metadata line is already established. `realizes:` is OPTIONAL; when present, it lists the Mechanism and Protocol IDs that directly implement this AP. This makes the AP→implementation link machine-readable without requiring PMM table lookup.)*
+**AP:** `**Derivation metadata.** kind: AP · tier: X · standalone: X · requires: [...] · provides: [...] · realizes: [<ConstructID>, ...] (OPTIONAL) · deprecated_since: <revision> (OPTIONAL) · superseded_by: <AP_N> (OPTIONAL)`
+*(kind: AP is implied by §62i section membership; the metadata line is already established. `realizes:` is OPTIONAL; when present, it lists the Mechanism and Protocol IDs that directly implement this AP. `deprecated_since:` is OPTIONAL; when present, marks the AP as deprecated as of the given revision — the AP remains in §62i but MUST NOT be used in new `requires:` declarations. `superseded_by:` is OPTIONAL; when present, names the AP that replaces this one.)*
 
 **Protocol:** `**Construct metadata.** kind: Protocol · tier: X · standalone: X · depends: [...] · semantic_kind: X` (OPTIONAL; semantic_kind classifies the Protocol's role within the `kind: Protocol` category; closed enum: `Protocol` | `Contract` | `Invariant` | `Catalog` | `Suite` | `Gate` | `Mapping` | `Cluster`; omit when the construct is a plain Protocol)
 
@@ -15887,6 +15919,21 @@ URACE's state-bearing citizens, mechanisms, and runtime logic are organized into
 ## Canonical Feedback Path
 
 The canonical L3→L0 feedback path is: Observation (EvidenceRecord, AssessmentRecord, OutcomeFeedbackRecord) informs Intent (GoalRecord, ObjectiveRecord priority). This is the ONLY authorized upward write across layers. All other inter-layer writes are strictly downward (L0→L1→L2→L3) or append-to-L4.
+
+
+## LayerModel → Tier Diagram Mapping
+
+The five layers (L0–L4) map directly to the 7-tier architectural diagram (§62j Architectural Composition):
+
+| Layer | ID | Diagram Tier | AP constructs that operate at this layer |
+|---|---|---|---|
+| Authority-Intent | L0 | T0 (Authority Signal) + T1 (Intent Resolution) | AP0, AP6, AP26, AP33, AP35 |
+| Planning-Discovery | L1 | T2 (Planning & Discovery) | AP8, AP9, AP17, AP23, AP29, AP30 |
+| Execution | L2 | T3 (Execution) | AP4, AP5, AP10, AP11, AP12, AP20, AP31, AP32 |
+| Observation | L3 | T4 (Observation) + T5 (Adaptation) | AP13, AP15, AP37, AP38 |
+| Governance-Audit | L4 | T6 (Governance & Audit) | AP3, AP16, AP22, AP28, AP36 |
+
+**Cross-cutting patterns** (AP1, AP2, AP7, AP14, AP18, AP19, AP24, AP25, AP27, AP34) operate at multiple layers and are not bound to a single tier. The Topmost Calculus (`next_state = argmin(gap(State, Intent)) | Authority ∧ Evidence`) spans all layers.
 
 ## Layer Enforcement
 
