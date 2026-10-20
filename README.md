@@ -19,7 +19,7 @@ BEFORE BOOTSTRAP                         AFTER BOOTSTRAP
     EXECUTOR ── builds ───────► URACE SYSTEM ◄── RESULTS + EVIDENCE ◄── PRODUCTS
                                     │    │  ProductRegistry                  ▲
                                     │    └─ Fleet: run all products          │ accepted changes
-                                    │ assigns bounded work                   │
+               assigns bounded work │                                        │
                                     ▼                                        │
                                 EXECUTORS ── execute and return ──► URACE VALIDATES
 ```
@@ -61,9 +61,29 @@ urace add evidence --kind test-pass --summary "CI green"
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Plain text** — quote multi-word input: `urace "improve onboarding flow"`. The Executor maps your input to any task, goal, intent, constraint, or command — each confirmed individually. Contradictory inputs surface as alternatives. Use `urace add context|goal|source|metric|vital|evidence` to queue structured records directly, no Executor needed.
+**Plain text** — quote multi-word input: `urace "improve onboarding flow"`. The freeform entry point is a universal router: a single prompt may resolve to multiple commands dispatched in the correct order. `urace "add goal reduce churn and check status"` produces a route graph — two operations, sequenced, each confirmed. Contradictory sub-intents surface as conflicts before anything runs. Use `urace add context|goal|source|metric|vital|evidence` to queue structured records directly, no Executor needed.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
+
+## Connect Data Sources
+
+URACE can feed from and feed into any structural data source — databases, files, or cloud object stores — without coupling to a specific technology. Register a source once; URACE handles the rest.
+
+```text
+urace data add sales-db --type postgres --connect "postgresql://host/db" --direction both
+urace data add metrics  --type csv      --connect ./metrics.csv
+urace data add graph    --type neo4j    --connect "bolt://localhost:7687" --direction read
+urace data sync sales-db    # PULL latest rows → Evidence
+urace data push sales-db    # PUSH URACE records → database
+urace data list             # show all registered sources
+urace data inspect sales-db # connectivity status + metadata
+urace data update metrics --label "quarterly export"
+urace data remove metrics
+```
+
+**`--direction`** controls data flow: `read` (evidence ingestion only), `write` (record emission only), or `both` (bidirectional). Credentials are never stored in URACE state — only a pointer (env var name, vault path, or k8s secret ref).
+
+Supported adapter kinds include SQL (postgres, mysql, sqlite, mssql, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb, neptune), time-series (influxdb, timescaledb), search (elasticsearch), structured files (csv, excel, parquet, avro, arrow), semi-structured (json, xml, yaml), and cloud stores (s3, gcs, azure-blob). New adapters can be registered via `Config.data.registered_adapters` without a spec change.
 
 ## Update Safely
 
@@ -109,7 +129,7 @@ Feedback and lifecycle events can be submitted in machine-readable form via `ura
 
 ## Reuse URACE Building Blocks The Way You Want
 
-Take any of URACE's building blocks — patterns, mechanisms, schemas, protocols, and contracts — for your own project, no lifecycle required. Describe what you're building and URACE picks matching blocks automatically:
+Take any of URACE's building blocks — patterns, mechanisms, schemas, protocols, and contracts — for your own project, no lifecycle required. Describe what you're building and URACE picks matching blocks automatically. See the full [Derivation Framework and bundle catalog](URACE.md#62j-derivation-framework) for available building blocks.
 
 ```
 urace derive "resilient event log with compaction"
