@@ -71,11 +71,20 @@ Run `urace /update` for the guided update sequence. Use `urace /help update` for
 
 ## See Progress
 
-Inspect metrics, vitals, state, and resource usage with `urace /check`, `urace /vitals`, `urace /change list`, and `urace /resource status`. Use `urace /help <command>` for filtering and output options on any command.
+Inspect metrics, vitals, state, and resource usage with `urace /check`, `urace /vitals`, `urace /change list`, and `urace /resource status`.
 
 ## Inspect and Modify Context
 
-URACE compresses lifecycle state gradually as it grows and decompresses on demand. Use `urace /compact`, `/decompact`, `/amend <id>`, and `/crc show` to manage it. See `urace /help compact`.
+URACE automatically and gradually compresses its full lifecycle state — objectives, evidence, decisions, operations, and all user-added context — as it grows, to maintain reliability over long runs. It decompresses gradually too, restoring full human-readable form for inspection or modification.
+
+```text
+urace /compact      gradually compress lifecycle state for reliability
+urace /decompact    gradually restore full human-readable form
+urace /amend <id>   correct a record in place without full decompaction
+urace /crc show     inspect the current full-context Cognitive Resume
+```
+
+Use `urace /help compact` for details.
 
 ## Connect Data Sources
 
@@ -88,7 +97,7 @@ urace data sync mydb   # on-demand PULL override
 urace data push mydb   # on-demand PUSH override
 ```
 
-Adapters: SQL (postgres, mysql, sqlite, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb), time-series (influxdb, timescaledb), search (elasticsearch), files (csv, excel, parquet, json, xml, yaml), cloud (s3, gcs, azure-blob). Extensible via `Config.data.registered_adapters`.
+Adapters: SQL (postgres, mysql, sqlite, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb), time-series (influxdb, timescaledb), search (elasticsearch), files (csv, excel, parquet, json, xml, yaml), cloud (s3, gcs, azure-blob). Extensible via `Config.data.registered_adapters`. Full contract: [DataSourceRegistry](URACE.md#62x-datasourceregistry).
 
 ## Machine Interface
 
