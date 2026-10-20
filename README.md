@@ -63,11 +63,11 @@ urace add evidence --kind test-pass --summary "CI green"
 
 **Plain text** — `urace "improve onboarding flow"`. A universal router: one prompt resolves to one or more commands dispatched in the correct order. Contradictory sub-intents surface as conflicts before dispatch.
 
-`urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
+The full command list with category and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
 ## Update Safely
 
-Run `urace /update` for the guided update sequence. Use `urace /help update` for options including `--opt-in-constructs` and `@bundle-name` scoping. Pass `--hash <sha256>` to verify the downloaded spec; pass `--verify` to re-verify the stored candidate before applying.
+Run `urace /update` for the guided update sequence. Pass `--hash <sha256>` to verify the downloaded spec; `--verify` to re-verify the stored candidate before applying. Options `--opt-in-constructs` and `@bundle-name` scope the update.
 
 ## See Progress
 
@@ -84,7 +84,6 @@ urace /amend <id>   correct a record in place without full decompaction
 urace /crc show     inspect the current full-context Cognitive Resume
 ```
 
-Use `urace /help compact` for details.
 
 ## Connect Data Sources
 
@@ -129,7 +128,7 @@ urace derive "resilient event log with compaction"
 urace derive "quality tracking with regression gates" --kind mechanism,schema
 ```
 
-Run `urace derive` with no arguments to browse, or `urace /help derive` for filtering and bundle options. Use `--verify` to re-verify all saved manifest hashes; use `--hash <sha256>` to verify a specific manifest.
+Run `urace derive` with no arguments to browse. Use `--verify` to re-verify all saved manifest hashes; `--hash <sha256>` to verify a specific manifest.
 
 ## Consequential Use
 
