@@ -67,13 +67,12 @@ urace add evidence --kind test-pass --summary "CI green"
 
 ## Connect Data Sources
 
-Register any database, file, or cloud store once; URACE feeds from it as evidence and can write records back. `--direction read|write|both` controls flow. Credentials stored as pointers only — env var, vault path, or k8s secret ref; never raw values in state.
+Register any database, file, or cloud store once; URACE automatically pulls evidence from it each cycle and pushes records back after cycle completion. `--direction read|write|both` controls flow. Credentials stored as pointers only — env var, vault path, or k8s secret ref; never raw values in state.
 
 ```text
 urace data add mydb --type postgres --connect "postgresql://host/db" --direction both
-urace data sync mydb          # PULL → Evidence
-urace data push mydb          # PUSH URACE records → source
 urace data list|inspect|update|remove
+urace data sync mydb    # on-demand PULL   urace data push mydb    # on-demand PUSH
 ```
 
 Adapters: SQL (postgres, mysql, sqlite, bigquery, snowflake), NoSQL (mongodb, redis, dynamodb, firestore), graph (neo4j, arangodb), time-series (influxdb, timescaledb), search (elasticsearch), files (csv, excel, parquet, json, xml, yaml), cloud (s3, gcs, azure-blob). Extensible via `Config.data.registered_adapters`.
@@ -92,7 +91,7 @@ URACE compresses lifecycle state gradually as it grows and decompresses on deman
 
 ## Machine Interface
 
-Every command supports `--json` output. Use `--format xml` for XML consumers (elements-only `<urace>` root). Full I/O contract: [External Interface Protocol](URACE.md#62w-external-interface-protocol).
+URACE exposes a machine-readable interface for automation and external tools. Every command supports `--json` output. For XML consumers, use `--format xml` — converts to elements-only XML with a `<urace>` root. Structured commands and feedback can be issued programmatically. Full I/O contract: [External Interface Protocol](URACE.md#62w-external-interface-protocol).
 
 ```text
 urace api call --command <command> [--params <json>]
