@@ -61,7 +61,7 @@ urace add evidence --kind test-pass --summary "CI green"
 
 **`/command`** — instant, no Executor overhead, always works: `urace /check`, `urace /vitals`, `urace /rules list`, `urace /goal list`.
 
-**Plain text** — `urace "improve onboarding flow"`. A universal router: one prompt resolves to one or more commands dispatched in the correct order. Contradictory sub-intents surface as conflicts before dispatch. Use `urace add context|goal|source|metric|vital|evidence` to queue records directly, no Executor needed.
+**Plain text** — `urace "improve onboarding flow"`. A universal router: one prompt resolves to one or more commands dispatched in the correct order. Contradictory sub-intents surface as conflicts before dispatch.
 
 `urace /help` lists all commands. `urace /help <command>` gives per-command reference. The full command list with SD and purpose is in the [Command Reference](URACE.md#command-reference). Shared options including `--dry-run`, `--json`, `--format json|xml`, `--scope` and `--verbose` are defined in [Standard Command Options](URACE.md#62k-standard-command-options).
 
@@ -92,7 +92,14 @@ URACE compresses lifecycle state gradually as it grows and decompresses on deman
 
 ## Machine Interface
 
-Every command supports `--json` output. Use `--format xml` for XML consumers (elements-only `<urace>` root). Issue structured commands via `urace api call|batch|watch|version`. Submit feedback programmatically via `urace feedback submit --input-json`. Full I/O contract: [External Interface Protocol](URACE.md#62w-external-interface-protocol).
+Every command supports `--json` output. Use `--format xml` for XML consumers (elements-only `<urace>` root). Full I/O contract: [External Interface Protocol](URACE.md#62w-external-interface-protocol).
+
+```text
+urace api call --command <command> [--params <json>]
+urace api batch --input-json <path|->
+urace api watch [--follow]
+urace feedback submit --input-json <path|->
+```
 
 ## Reuse URACE Building Blocks The Way You Want
 
