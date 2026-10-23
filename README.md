@@ -139,5 +139,7 @@ URACE cannot guarantee revenue, legality or favorable results. Whoever deploys i
 Asset / Layer - Applicable License
 
 **Software Implementation Code** - [Apache License 2.0](LICENSES/Apache-2.0.txt)
+
 **Specification & Technical Docs** - [Community Specification License 1.0](LICENSES/CSL-1.0.txt)
+
 **Legal Provenance** - [Developer Certificate of Origin 1.1](LICENSES/DCO-1.1.txt)
