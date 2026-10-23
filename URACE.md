@@ -1,3 +1,12 @@
+<!--
+   URACE Specification
+   Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior <joaoalbertocsjunior@gmail.com>
+
+   This specification document is made available under the 
+   Community Specification License 1.0 (CSL 1.0). 
+   See the full license text in LICENSES/CSL-1.1.txt
+-->
+
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
 **Specification version: 2026-10-20-r119**
