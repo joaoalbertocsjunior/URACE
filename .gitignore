@@ -1,0 +1,48 @@
+# Canonical local runtime repository: code only, no deployment state or secrets.
+/*
+!/.gitignore
+!/LICENSE
+!/README.md
+!/CONSOLIDATION.md
+!/AGENTS.md
+!/runtime/
+!/trial/
+!/docs/
+!/products/
+!/exchange/
+/runtime/*
+!/runtime/README.md
+!/runtime/pyproject.toml
+!/runtime/urace/
+!/runtime/tests/
+/runtime/urace/*
+!/runtime/urace/*.py
+/runtime/tests/*
+!/runtime/tests/*.py
+
+# Runtime/operational data — gitignored
+generated/
+state/
+reports/
+dev/
+
+# Exchange: network ledger is runtime data; initial_ledger is committed reference
+exchange/*
+!exchange/initial_ledger/
+
+# Secrets and env
+secrets/
+.env*
+*.lock
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+
+# Products are user data — only README committed (see products/.gitignore)
+/products/*
+!/products/README.md
+!/products/versions/
+/products/versions/*
+!/products/versions/README.md

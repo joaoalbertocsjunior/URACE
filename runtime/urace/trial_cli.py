@@ -1,0 +1,53 @@
+"""Shared specification-trial grammar for CLI and typed API discovery."""
+import argparse
+
+def score_arguments(parser):
+    parser.add_argument('--version',type=int)
+    parser.add_argument('--compare',default='baseline',help='baseline, parent, previous, or a version number')
+    parser.add_argument('--executor',choices=('all','codex','claude'),default='all')
+    parser.add_argument('--history',action='store_true')
+    parser.add_argument('--limit',type=int,default=20)
+    parser.add_argument('--json',action='store_true')
+
+def work_arguments(parser):
+    parser.add_argument('--project',required=False)
+    parser.add_argument('--template',choices=('navigation','failover','recovery','receipts','requirements_change','interruption'),default='navigation')
+    parser.add_argument('--executor',choices=('auto','codex','claude'),default='auto',dest='work_executor')
+    parser.add_argument('--execution-mode',choices=('auto','lightweight','managed'),default='auto')
+    parser.add_argument('--max-seconds',type=int,default=480)
+    parser.add_argument('--run-id')
+    parser.add_argument('--adaptive',choices=('true','false'),default='true')
+
+def build_parser():
+    parser=argparse.ArgumentParser(prog='urace',description='Isolated URACE specification trial control and evidence')
+    groups=parser.add_subparsers(dest='group',required=True)
+    statuses=groups.add_parser('status').add_subparsers(dest='kind',required=True)
+    resources=statuses.add_parser('resources',help='Read product-scoped tokens, executor time and task outcomes')
+    selection=resources.add_mutually_exclusive_group()
+    selection.add_argument('--product');selection.add_argument('--all-products',action='store_true')
+    resources.add_argument('--executor',choices=('all','codex','claude'),default='all');resources.add_argument('--scope',choices=('trial','epoch','lifetime'),default='trial');resources.add_argument('--json',action='store_true')
+    scores=statuses.add_parser('scores',help='Functional quality, effectiveness, productivity and resource deltas');score_arguments(scores)
+    runtime=statuses.add_parser('runtime',help='Read current worker health and trial state');runtime.add_argument('--json',action='store_true')
+    analysis=statuses.add_parser('analysis',help='Inspect version, product or entire-runtime evidence and metadata')
+    analysis.add_argument('--kind',dest='analysis_scope',choices=('snapshot','product','runtime','packet'),default='product');analysis.add_argument('--version',type=int);analysis.add_argument('--json',action='store_true')
+    analysis.add_argument('--period',choices=('3h','day','week','month'))
+    study=groups.add_parser('study',help='Controlled comparisons, native effort and evidence').add_subparsers(dest='action',required=True)
+    show=study.add_parser('status');show.add_argument('--json',action='store_true')
+    run=study.add_parser('run');run.add_argument('--json',action='store_true')
+    configure=study.add_parser('configure');configure.add_argument('--enabled',choices=('true','false'));configure.add_argument('--repetitions',type=int);configure.add_argument('--efforts',nargs='+',choices=('low','medium','high'));configure.add_argument('--json',action='store_true')
+    benefit=study.add_parser('benefit',help='Matched native coding-agent repositories and user-benefit evidence').add_subparsers(dest='benefit_action',required=True)
+    bs=benefit.add_parser('status');bs.add_argument('--json',action='store_true')
+    br=benefit.add_parser('run');br.add_argument('--json',action='store_true')
+    bc=benefit.add_parser('configure');bc.add_argument('--enabled',choices=('true','false'));bc.add_argument('--repetitions',type=int);bc.add_argument('--efforts',nargs='+',choices=('low','medium','high'));bc.add_argument('--json',action='store_true')
+    work=groups.add_parser('work',help='Isolated executable product work; canonical product work');work.add_argument('work_action',choices=('init','run','status'));work_arguments(work);work.add_argument('--json',action='store_true')
+    configs=groups.add_parser('config').add_subparsers(dest='kind',required=True)
+    score=configs.add_parser('efficiency',help='Inspect or persist declarative score weights and targets')
+    score.add_argument('--product',default='*');score.add_argument('--executor',choices=('all','codex','claude'),default='all')
+    score.add_argument('--scope',choices=('trial','epoch','lifetime'),default='trial')
+    action=score.add_mutually_exclusive_group();action.add_argument('--file');action.add_argument('--show',action='store_true');action.add_argument('--disable',action='store_true');action.add_argument('--review',action='store_true')
+    data=groups.add_parser('data').add_subparsers(dest='kind',required=True)
+    metrics=data.add_parser('metrics',help='Record/inspect product metrics with explicit unverified provenance')
+    actions=metrics.add_subparsers(dest='action',required=True)
+    put=actions.add_parser('record');put.add_argument('--product',default='URACE.md');put.add_argument('--executor',choices=('all','codex','claude'),default='all');put.add_argument('--name',required=True);put.add_argument('--value',required=True,type=float);put.add_argument('--unit',default='');put.add_argument('--source',required=True)
+    get=actions.add_parser('show');get.add_argument('--product',default='URACE.md');get.add_argument('--executor',choices=('all','codex','claude'),default='all')
+    return parser

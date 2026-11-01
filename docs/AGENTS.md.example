@@ -1,0 +1,37 @@
+# Project execution instructions (template; not installed automatically)
+
+URACE pursues the owner's declared project goals autonomously within configured
+scope, authority, resource availability and acceptance criteria. Implement and
+verify useful work; preserve unrelated work and accepted product behavior.
+
+## Repository boundaries
+- Identify the repository root and nested repositories before editing or staging.
+- Keep runtime implementation, product specifications and runtime state distinct.
+- Read and modify runtime source when authorized for a runtime task. Ephemeral
+  state is not a blanket prohibition on the runtime source repository.
+- Never read or expose credentials, secret files, or private agent profiles.
+- Never stage local state, evidence containing secrets, or another repository.
+- More specific directory instructions refine scope; report actual conflicts.
+
+## Execution and validation
+- Use CLI help/API schemas to discover installed commands; do not invent commands.
+- Use MCP for scoped operations/resources; use configured A2A for independent
+  agent task coordination. Neither transport nor this file grants authority.
+- Honor owner pause, finite job deadlines, product scope and native resource guards.
+- Preserve job/request identities and account for elapsed time and native usage.
+- Validate outputs with acceptance/regression checks before claiming success.
+- Transport completion and executor self-reports do not establish product value.
+- Unknown tokens, missing samples and unmeasured quality remain explicitly unknown.
+- Keep durable state and configuration in their existing stores, not this file.
+
+## Project-specific instructions to fill in before adoption
+- Source roots and allowed edits: <paths>
+- Product goals and acceptance checks: <commands and expected outcomes>
+- Test and build commands: <commands>
+- Local/ignored state and prohibited paths: <explicit paths>
+- Deployment/commit policy: <owner policy>
+
+Keep this file concise and stable. Put specialized directory guidance in a
+scoped AGENTS.md, and share common policy with other agent instruction files by
+reference or the project's existing symlink convention. Do not duplicate dynamic
+configuration, task queues, secrets or model-specific settings here.
