@@ -512,11 +512,24 @@ def summary(root):
 
 # Decision 2: Complexity-weighted feature pricing floor
 
-def feature_complexity_score(loc: int = 0, dependency_count: int = 0, test_count: int = 0) -> float:
-    """Complexity score in [1.0, ∞).
-    Simple features ("button", 10 LOC, 0 deps) → ~1.1
-    Complex features (200 LOC, 5 deps, 10 tests) → ~3.5
+def feature_complexity_score(
+    loc: int = 0,
+    dependency_count: int = 0,
+    test_count: int = 0,
+    *,
+    complexity_metrics: dict | None = None,
+    domain: str = 'software',
+) -> float:
+    """Complexity score in [1.0, ∞). Domain-agnostic via complexity_metrics dict.
+
+    Software (default): loc, dependency_count, test_count.
+    Generic (any domain): pass complexity_metrics={'primary_size': N, 'integration_count': N,
+      'validation_count': N} — maps to loc/dependency_count/test_count respectively.
     """
+    if complexity_metrics is not None:
+        loc = int(complexity_metrics.get('primary_size', loc))
+        dependency_count = int(complexity_metrics.get('integration_count', dependency_count))
+        test_count = int(complexity_metrics.get('validation_count', test_count))
     return 1.0 + math.log2(1 + loc / 50 + dependency_count * 2 + test_count * 3)
 
 

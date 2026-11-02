@@ -53,15 +53,24 @@ def _p2p_free_features(config):
         from pathlib import Path as _P
         import json as _j
         _xroot=_P(config.get('exchange',{}).get('root') or str(_P(__file__).parent.parent.parent/'exchange'))
-        _ledger_path=_xroot/'initial_ledger'/'initial_ledger.json'
-        if _ledger_path.exists():
-            _data=_j.loads(_ledger_path.read_text())
-            for _r in _data.get('features',[]):
-                if _r.get('initial_ledger') and int(_r.get('borrow_price_units',0))==0 and _r.get('owner') is None:
-                    _fid=_r.get('feature_id','')
-                    if _fid and _fid not in _seen:
-                        _seen.add(_fid)
-                        _free.append({'feature_id':_fid,'description':_r.get('description',''),'tags':_r.get('tags',[])})
+        _ledger_dir=_xroot/'initial_ledger'
+        _ledger_jsonl=_ledger_dir/'initial_ledger.jsonl'
+        _ledger_json=_ledger_dir/'initial_ledger.json'
+        if _ledger_jsonl.exists():
+            # JSONL: line 1 = header, lines 2+ = one feature per line
+            _rows_iter=(_j.loads(ln) for ln in _ledger_jsonl.read_text().splitlines() if ln.strip())
+            next(_rows_iter,None)  # skip header
+            _feat_iter=_rows_iter
+        elif _ledger_json.exists():
+            _feat_iter=iter(_j.loads(_ledger_json.read_text()).get('features',[]))
+        else:
+            _feat_iter=iter([])
+        for _r in _feat_iter:
+            if _r.get('initial_ledger') and int(_r.get('borrow_price_units',0))==0 and _r.get('owner') is None:
+                _fid=_r.get('feature_id','')
+                if _fid and _fid not in _seen:
+                    _seen.add(_fid)
+                    _free.append({'feature_id':_fid,'description':_r.get('description',''),'tags':_r.get('tags',[])})
     except Exception:
         pass
     try:

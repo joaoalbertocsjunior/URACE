@@ -363,6 +363,7 @@ def p2p_optimal_supply(
     adoption_rate: float = 0.10,
     mint_per_adoption_units: int | None = None,
     baseline_per_peer_units: int | None = None,
+    revenue_feature_fraction: float = 1.0,  # fraction of features that generate earn events
     exchange=None,                          # when provided, consensus overrides manual inputs
 ) -> dict:
     """Derive P2P-optimal token supply limits from network physics.
@@ -377,6 +378,9 @@ def p2p_optimal_supply(
       adoption_rate            — fraction of network expected to adopt any feature
       mint_per_adoption_units  — base units minted per adoption (default UNIT/100)
       baseline_per_peer_units  — baseline grant per new peer (default 3×UNIT)
+      revenue_feature_fraction — fraction of ledger features with active earn potential
+                                 (0-cost/free features consume infra but contribute 0 to supply;
+                                  set < 1.0 when many features have borrow_price_units=0)
 
     Returns a dict with:
       max_features         — ledger capacity in features
@@ -420,9 +424,11 @@ def p2p_optimal_supply(
     max_rows        = int(effective_ledger_bytes / max(1, avg_row_bytes))
     max_features    = max_rows // max(1, rows_per_feature)
 
-    # Token supply: features × expected adoptions × mint + peers × baseline
+    # Token supply: revenue features × expected adoptions × mint + peers × baseline
+    # revenue_feature_fraction excludes 0-cost/free features (infra consumers, 0 earn events)
+    revenue_features = max(1, int(max_features * max(0.0, min(1.0, revenue_feature_fraction))))
     avg_adoptions_per_feature = max(1, int(max_network_peers * adoption_rate))
-    supply_from_features = max_features * avg_adoptions_per_feature * mint_per_adoption_units
+    supply_from_features = revenue_features * avg_adoptions_per_feature * mint_per_adoption_units
     supply_from_baseline = max_network_peers * baseline_per_peer_units
     global_supply        = supply_from_features + supply_from_baseline
 
@@ -456,6 +462,7 @@ def p2p_optimal_supply(
 
     return {
         'max_features': max_features,
+        'revenue_features': revenue_features,
         'max_rows': max_rows,
         'bandwidth_cap_mb': round(bandwidth_cap_mb, 2),
         'effective_ledger_mb': round(min(target_ledger_mb, bandwidth_cap_mb), 2),
@@ -476,5 +483,6 @@ def p2p_optimal_supply(
             'avg_row_bytes': avg_row_bytes,
             'rows_per_feature': rows_per_feature,
             'adoption_rate': adoption_rate,
+            'revenue_feature_fraction': revenue_feature_fraction,
         },
     }

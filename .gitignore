@@ -13,6 +13,7 @@
 /runtime/*
 !/runtime/README.md
 !/runtime/pyproject.toml
+!/runtime/build_initial_ledger.py
 !/runtime/urace/
 !/runtime/tests/
 /runtime/urace/*
