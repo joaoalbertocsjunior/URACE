@@ -14,6 +14,6 @@ jobs:
           fetch-depth: 0
 
       - name: Check DCO sign-off
-        uses: christophebedard/dco-check@v0.1.0
+        uses: christophebedard/dco-check@0.5.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
