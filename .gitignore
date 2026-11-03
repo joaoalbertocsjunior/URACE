@@ -4,6 +4,7 @@
 /.codex
 /.agents
 /.analysis
+/.ai-switch
 /.pytest_cache
 /CLAUDE.md
 /AGENTS.md

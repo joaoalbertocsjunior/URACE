@@ -1,6 +1,6 @@
 # URACE — Universal Recursive Autonomous Co-Founder Engine
 
-**Specification version: 2026-10-20-r119**
+**Specification version: 2026-10-20-r120**
 
 You are the Lead Systems Architect and Bootstrap Executor for this repository.
 
@@ -2701,6 +2701,19 @@ Each follow-up MUST compare the current observation with at least:
 It MUST then produce a lifecycle consequence: continue, adapt the route, revise the measure or target with preserved rationale, repair regression, replace the Objective, escalate a retained decision, or declare that no justified authorized action exists now.
 
 URACE MUST NOT silently rewrite a baseline or achieved result. Changes to measures, targets, cadence or observation methods MUST preserve prior values, provenance and justification so apparent progress cannot be manufactured by moving the measurement boundary.
+
+### Implemented outcome verification
+
+The runtime separates implementation acceptance from outcome achievement. An accepted implementation without qualifying independent outcome evidence leaves its Objective `awaiting_outcome`; it MUST NOT be represented as completed user value. Structural keyword counts and written test headings remain implementation diagnostics and earn no value credit.
+
+`outcome_verification.capture()` freezes an authoritative configured measurement contract and independently recorded baseline before executor invocation. The source MUST be a bounded local JSON file outside all executor-writable files. `outcome_verification.evaluate()` checks fresh, operation-linked, nonoverlapping observation windows against that frozen contract; configuration changes MUST NOT rewrite the accepted baseline or target.
+
+Engineering and synthetic task outcomes MAY satisfy `OUTCOME_VERIFIED` but MUST NOT satisfy `REAL_USER_VALUE_VERIFIED`. For real-user verification this implementation supports a prespecified binary-outcome randomized-control trial: at least 100 samples per group per window, at least three windows spanning a day, conservative 95% Wilson comparison bounds, minimum baseline improvement, target attainment, freshness, intact guardrails, explicit USD valuation, observed non-executor trial costs and reported executor cost. Positive conservative net trial benefit is required. Missing or invalid evidence remains unknown. Instrument authenticity, valid randomization, participant independence, consent and completeness of cost measurement require independent operator assurance; the runtime MUST NOT manufacture those facts or present synthetic fixtures as real-user proof.
+
+The lifecycle repeats independent follow-up without replaying accepted implementations. Stale evidence, observed regressions, changed source independence or negative outcome feedback withdraw the corresponding credit and completion claim. Signed trajectories retain losses and respect metric direction. Resource ROI remains unverified until independently verified real-user benefit and observed costs exist; external metric movement alone is insufficient.
+
+**Runtime:** `urace/runtime/urace/outcome_verification.py`, `validation.py`, `value_trajectory.py`, and `cli.py`. The runtime guide describes the configuration and read-only evidence-review command. These mechanisms establish bounded evidence claims for observed trials; they do not guarantee future value or autonomous discovery quality.
+
 
 Follow-up frequency MUST be proportionate to the rate at which meaningful change can occur, decision value, cost and risk. “Continuous” means that every material accepted increment retains a defined path to the next observation or decision; it does not require constant polling or prevent valid dormancy.
 
@@ -17939,6 +17952,64 @@ urace api help [--json]
 
 ---
 
+# 62z. Default Continuation Semantics
+
+The **DefaultContinuationSemantics** (DCS) provides the fallback handler `handle_unspecified()` for situations not covered by an explicit spec construct. It closes the gap-chasing loop: instead of requiring a new spec section for every unspecified edge case, the runtime applies DCS and continues.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: []`
+
+## Invariant
+
+> **Spec describes only what the runtime implements. Spec changes are gated on runtime changes.**
+
+No spec section MAY be added for a situation that has no corresponding runtime implementation. A spec gap that never surfaces in the runtime does not exist.
+
+## Default Continuation Contract
+
+When `handle_unspecified()` is invoked, it MUST:
+
+1. **Continue** — never halt the lifecycle cycle solely because a situation is unspecified.
+2. **Degrade confidence** — decrement `state.continuation_confidence` by 0.15 (floor 0.0).
+3. **Emit a DegradationEvent** into `state.degradation_events`.
+4. **Emit a DEGRADED TraceRecord** into `state.trace_records`.
+5. **Emit Evidence** of kind `unspecified-situation` recording the situation description.
+
+The cycle proceeds to DORMANT if no other justified authorized action exists. Degradation is recorded in state for review without introducing a real-time blocking signal.
+
+## DegradationEvent Schema
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | ID (prefix `deg-`) | YES | Stable identity |
+| `at` | ISO-8601 | YES | Event timestamp |
+| `reason` | string | YES | Human-readable reason for degradation |
+| `context` | string | NO | Additional context |
+| `confidence_reduction` | float | YES | Amount subtracted from continuation_confidence |
+| `cycle_id` | string | NO | Cycle that produced this event |
+
+## Confidence Reset
+
+`state.continuation_confidence` resets to 1.0 at the start of each cycle when no DegradationEvents were recorded in the prior cycle. This prevents confidence decay from accumulating across unrelated cycles.
+
+## Safety Exceptions
+
+DCS does NOT override the following hard safety invariants. These MAY still halt the cycle:
+
+1. **Effect-integrity invariant** — unresolved external effects require reconciliation before any new action.
+2. **Authority invariant** — governance anchor drift blocks the cycle until re-anchoring.
+3. **OnboardGate** — no autonomous cycle without a confirmed OnboardRecord (one-time bootstrap only).
+
+Unhandled discovery and execution RuntimeErrors apply DCS: degrade, log, and continue. An execution objective retains its blocked status for review; the lifecycle proceeds to DORMANT. Existing authority denials, operator decisions, capacity waits, and other explicitly specified preconditions retain their established behavior. DCS does not authorize effects or retry failed actions.
+
+## Spec Evolution Gate
+
+A spec change MUST be accompanied by a runtime change that implements or modifies the described behavior. Spec-only additions (no runtime counterpart) are a protocol violation under this contract.
+
+**Implements:** DefaultContinuationSemantics (§62l).
+**Runtime:** `urace/runtime/urace/continuation.py` — `degrade()`, `handle_unspecified()`, `reset_confidence()`.
+
+---
+
 # 63. Concurrency
 
 Where multiple runtimes MAY operate:
@@ -20030,6 +20101,7 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r120 | 2026-10-20 | spec+runtime | §62z DefaultContinuationSemantics (FOUNDATIONAL Protocol): degrade-log-continue contract for unspecified situations; DegradationEvent schema; `continuation_confidence` field; 3 safety exceptions (effect-integrity, authority, OnboardGate); Spec Evolution Gate invariant (spec changes gated on runtime changes). Runtime: `continuation.py` (`degrade`, `handle_unspecified`, `reset_confidence`); wired into `cycle()` (reset at boundary, confidence in outcome). Default continuation regression tests; independent outcome verification and signed value accounting (§60), scope/transition validation fixes, measured resource accounting. |
 | r119 | 2026-10-20 | spec+runtime | PRVS CAP pass: 4 missing CLI commands wired (`urace explain <id>`, `urace intent rollback`, `urace add principal`, `urace check --migration-dry-run`); data parser CAP fix (verify/status/credential + --auto/--schema/--direction/--status gaps); 19 new CAP tests (1480 total); spec version bump r118→r119; §82 major compression. **New external references:** `urace explain` → §62k; `urace intent rollback` → §62k; `urace add principal` → §62k; `urace check --migration-dry-run` → §62k. |
 | r118 | 2026-10-20 | spec+runtime | Architectural Composition diagram gap closure: TIER 3 +30 constructs from r109–r117 across 12 domains; TIER 7 — Data I/O Layer (§62x/§62y/§62w); 22 new FeatureBundles; 30 new §80 stems; DRY+KISS+PRVS pass. **New external references:** 22 FeatureBundles → §62j; 30 stems → §80. |
 | r117 | 2026-10-20 | spec | §62x DataSourceRegistryProtocol (FOUNDATIONAL) + §62y UniversalEntryProtocol (COMPOSITIONAL); 4 §62b schemas (dsr-, cred-, dsync-, rgr-); 13 IGC kinds; `urace data` CLI (add/update/remove/list/sync/push/inspect/verify/status/credential). **New external references:** DataSourceRecord/CredentialRecord/DataSyncRecord/RouteGraphRecord → §62b; DataSourceRegistryProtocol/UniversalEntryProtocol → §62l; 13 IGC kinds → §62l. |

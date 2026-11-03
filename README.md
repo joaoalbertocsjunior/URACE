@@ -28,6 +28,8 @@ BEFORE BOOTSTRAP                         AFTER BOOTSTRAP
 
 URACE automates replaceable Executors to improve the Product continuously, measurably and recoverably. It adapts its plans without changing what you control.
 
+An accepted implementation is not proof of user benefit. Objectives await independent outcome evidence against a preserved baseline and target. Engineering checks and synthetic trials remain distinct from real-user value; repeated observations, comparison evidence, guardrails and measured costs are required before claiming positive net value. See [continuous measurable follow-up](URACE.md#continuous-measurable-follow-up).
+
 Every accepted change is bound to a snapshot of the active rules at the moment it was made. You can inspect the full rule graph, trace which rules governed any past change, and surface conflicts at any time — via `urace /rules list`.
 
 ## What Is a Product?
@@ -83,7 +85,6 @@ urace /decompact    gradually restore full human-readable form
 urace /amend <id>   correct a record in place without full decompaction
 urace /crc show     inspect the current full-context Cognitive Resume
 ```
-
 
 ## Connect Data Sources
 
