@@ -1,10 +1,21 @@
 # Canonical local runtime repository: code only, no deployment state or secrets.
 /*
 !/.gitignore
+!/.envrc
 !/LICENSE
+!/LICENSES/
+!/NOTICE
 !/README.md
+!/URACE.md
 !/CONSOLIDATION.md
 !/AGENTS.md
+!/CONTRIBUTING.md
+!/GOVERNANCE.md
+!/MAINTAINERS
+!/OPERATORS.md
+!/SECURITY.md
+!/.github/
+!/packaging/
 !/runtime/
 !/trial/
 !/docs/
@@ -33,7 +44,8 @@ exchange/*
 
 # Secrets and env
 secrets/
-.env*
+.env
+.env.*
 *.lock
 
 # Python artifacts
@@ -47,3 +59,7 @@ __pycache__/
 !/products/versions/
 /products/versions/*
 !/products/versions/README.md
+!/URACE.md
+!/NOTICE
+!/LICENSES/
+/.ai-switch

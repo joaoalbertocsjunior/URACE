@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  publish-pypi:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install build
+      - run: python -m build runtime/
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.12.4
+        with:
+          packages-dir: runtime/dist/
+          password: ${{ secrets.PYPI_TOKEN }}
+          skip-existing: true
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Extract version
+        id: version
+        run: echo "VERSION=$(grep '^version' runtime/pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
+      - name: Sync npm version and publish
+        run: |
+          cd packaging/npm
+          npm version ${{ steps.version.outputs.VERSION }} --allow-same-version --no-git-tag-version
+          npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  update-packaging:
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract version
+        id: version
+        run: echo "VERSION=$(grep '^version' runtime/pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
+      - name: Get PyPI tarball SHA-256
+        id: sha
+        run: |
+          sleep 30
+          VER="${{ steps.version.outputs.VERSION }}"
+          SHA=$(curl -s "https://pypi.org/pypi/urace/${VER}/json" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); [print('SHA256='+f['digests']['sha256']) for f in d['urls'] if f['packagetype']=='sdist']" \
+            | head -1)
+          echo "$SHA" >> $GITHUB_OUTPUT
+      - name: Report packaging info
+        run: |
+          echo "Homebrew url: https://files.pythonhosted.org/packages/source/u/urace/urace-${{ steps.version.outputs.VERSION }}.tar.gz"
+          echo "Homebrew sha256: ${{ steps.sha.outputs.SHA256 }}"
+          echo "conda version: ${{ steps.version.outputs.VERSION }}"
+
+  create-github-release:
+    runs-on: ubuntu-latest
+    needs: publish-pypi
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract version
+        id: version
+        run: echo "VERSION=$(grep '^version' runtime/pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.2.1
+        with:
+          generate_release_notes: true
+          name: "URACE v${{ steps.version.outputs.VERSION }}"
+          tag_name: ${{ github.ref_name }}

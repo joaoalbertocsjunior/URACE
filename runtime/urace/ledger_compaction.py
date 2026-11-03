@@ -363,7 +363,7 @@ def p2p_optimal_supply(
     adoption_rate: float = 0.10,
     mint_per_adoption_units: int | None = None,
     baseline_per_peer_units: int | None = None,
-    revenue_feature_fraction: float = 1.0,  # fraction of features that generate earn events
+    revenue_feature_fraction: float = 0.65,  # fraction of features that generate earn events
     exchange=None,                          # when provided, consensus overrides manual inputs
 ) -> dict:
     """Derive P2P-optimal token supply limits from network physics.
@@ -380,7 +380,9 @@ def p2p_optimal_supply(
       baseline_per_peer_units  — baseline grant per new peer (default 3×UNIT)
       revenue_feature_fraction — fraction of ledger features with active earn potential
                                  (0-cost/free features consume infra but contribute 0 to supply;
-                                  set < 1.0 when many features have borrow_price_units=0)
+                                  default 0.65: conservative 35% free/decayed assumption.
+                                  NOTE: initial_ledger features only count toward sync budget
+                                  AFTER equity-grant; pre-grant they don't enter live audit.)
 
     Returns a dict with:
       max_features         — ledger capacity in features
@@ -460,9 +462,13 @@ def p2p_optimal_supply(
             f'within 20% of current cap ({current_cap/_cl.UNIT:.0f} tokens/peer).'
         )
 
+    free_features = max_features - revenue_features
+    free_sync_cost_bytes = free_features * max(1, rows_per_feature) * max(1, avg_row_bytes)
     return {
         'max_features': max_features,
         'revenue_features': revenue_features,
+        'free_features': free_features,
+        'free_feature_sync_cost_bytes': free_sync_cost_bytes,
         'max_rows': max_rows,
         'bandwidth_cap_mb': round(bandwidth_cap_mb, 2),
         'effective_ledger_mb': round(min(target_ledger_mb, bandwidth_cap_mb), 2),

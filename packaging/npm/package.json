@@ -1,0 +1,16 @@
+{
+  "name": "urace-cli",
+  "version": "0.3.0",
+  "description": "URACE — AI-powered product improvement runtime with P2P feature exchange",
+  "bin": {
+    "urace": "./bin/urace.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "keywords": ["urace", "ai", "improvement", "p2p", "executor"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16"
+  }
+}

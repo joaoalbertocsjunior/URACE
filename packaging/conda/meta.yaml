@@ -1,0 +1,28 @@
+package:
+  name: urace
+  version: "0.3.0"
+
+source:
+  url: https://pypi.io/packages/source/u/urace/urace-{{ version }}.tar.gz
+
+build:
+  number: 0
+  script: "{{ PYTHON }} -m pip install . -vv"
+  entry_points:
+    - urace = urace.cli:main
+
+requirements:
+  host:
+    - python >=3.11
+    - pip
+  run:
+    - python >=3.11
+
+test:
+  commands:
+    - urace --help
+
+about:
+  home: https://github.com/joaoalbertocsjunior/URACE
+  license: MIT
+  summary: AI-powered product improvement runtime with P2P feature exchange

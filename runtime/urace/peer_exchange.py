@@ -32,7 +32,7 @@ class Exchange:
  def __init__(self,root):self.root=Path(root)
  def load(self):
   p=self.root/'policy.json'
-  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':False,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':True,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION}
+  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':False,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':True,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[]}
  @contextmanager
  def lock(self):
   self.root.mkdir(parents=True,exist_ok=True,mode=0o700)

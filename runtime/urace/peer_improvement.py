@@ -146,7 +146,25 @@ def promote(root: Path, bundle_id: str, config: dict[str, Any], state: dict[str,
     payload = bundle["payload"]
     artifact = payload.get("artifact", "")
     feature = payload.get("feature", "unknown")
-    sender_prefix = payload.get("sender", "unknown")[:16]
+    sender = payload.get("sender", "unknown")
+    sender_prefix = sender[:16]
+
+    # Per-peer promotion rate limit: max 10 promotions per peer per 24h.
+    _MAX_PROMOTES_PER_PEER_PER_DAY = 10
+    _day_ago = time.time() - 86400
+    _recent_promotes = [
+        r for r in state.get("rollback_records", [])
+        if r.get("kind") == "peer-artifact-promoted"
+        and r.get("peer_sender") == sender
+        and isinstance(r.get("promoted_at_unix"), (int, float))
+        and r["promoted_at_unix"] > _day_ago
+    ]
+    if len(_recent_promotes) >= _MAX_PROMOTES_PER_PEER_PER_DAY:
+        raise ValueError(
+            f"Peer {sender_prefix}… has exceeded the daily promotion limit "
+            f"({_MAX_PROMOTES_PER_PEER_PER_DAY} promotions per 24h); "
+            f"rate limit prevents promotion abuse"
+        )
 
     # Boost priority when multiple independent peers have already qualified this artifact.
     boost = 0
@@ -182,11 +200,13 @@ def promote(root: Path, bundle_id: str, config: dict[str, Any], state: dict[str,
     state.setdefault("rollback_records", []).append({
         "id": identifier("peer-promo"),
         "at": now(),
+        "promoted_at_unix": time.time(),
         "kind": "peer-artifact-promoted",
         "bundle_id": bundle_id,
         "feature": feature,
         "verdict": report["verdict"],
         "queued_input_id": entry["id"],
+        "peer_sender": sender,
     })
 
     return {
@@ -249,6 +269,8 @@ def mark_qualified(
     affected_files: dict[str, str],
     baseline_sha256: str,
     qualification_id: str | None = None,
+    executor_result: dict[str, Any] | None = None,
+    external_metric_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Emit APPLIED_AFTER_LOCAL_QUALIFICATION after a peer artifact passes the quality gate.
 
@@ -259,10 +281,28 @@ def mark_qualified(
       When absent, score_delta is taken from the caller (unverified; receipt_verified=False).
       With token_settlement=True, only receipt_verified=True events earn tokens.
 
+    executor_result: optional dict returned by the executor.  When it contains
+      ``score_source == "external"`` and ``external_metric_state`` is provided,
+      score_delta is derived from the latest external metric observations instead
+      of being taken from the caller or a qualification receipt.
+
     affected_files: {filename: new_source_text} of files changed by the applied patch.
     baseline_sha256: engine_identity() hash before the patch was applied.
     """
     from .tokenomics import canonical_fingerprint, outcome_fingerprint
+
+    # External quality gate wiring: when the executor signals score_source=="external",
+    # derive score_delta from the most recent external metric observations.
+    if (
+        executor_result is not None
+        and executor_result.get("score_source") == "external"
+        and external_metric_state is not None
+        and qualification_id is None  # qualification receipt remains authoritative when present
+    ):
+        from . import external_metrics as _em
+        _ext_delta = _em.score_delta_from_external(external_metric_state)
+        if _ext_delta is not None:
+            score_delta = _ext_delta
 
     record = exchange.inspect(bundle_id)
     payload = record["bundle"]["payload"]
@@ -286,6 +326,17 @@ def mark_qualified(
     affected_keys = sorted(affected_files.keys()) if affected_files else []
 
     with exchange.lock():
+        # Duplicate-qualification guard: one bundle may only earn tokens once.
+        _existing = [
+            r for r in exchange.audit_rows()
+            if r.get('kind') == 'APPLIED_AFTER_LOCAL_QUALIFICATION'
+            and r.get('bundle') == bundle_id
+        ]
+        if _existing:
+            raise ValueError(
+                f'Bundle {bundle_id[:12]}… already has an APPLIED_AFTER_LOCAL_QUALIFICATION '
+                f'event; duplicate qualification is not allowed'
+            )
         exchange.event(
             "APPLIED_AFTER_LOCAL_QUALIFICATION",
             peer=payload.get("sender", "unknown"),

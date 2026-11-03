@@ -2398,6 +2398,16 @@ def _validate_authority_basis_binding(state: dict[str, Any], objective: dict) ->
             f"authority_basis {authority_basis!r} references no active Rule Ledger entry")
 
 
+def _ledger_size_warning(state_path_val: Path) -> dict | None:
+    ledger = state_path_val.parent / "context_ledger.jsonl"
+    if not ledger.exists():
+        return None
+    size_mb = ledger.stat().st_size / (1024 * 1024)
+    if size_mb >= 50:
+        return {"warning": "ledger_large", "size_mb": round(size_mb, 1), "action": "run 'urace compact' to archive old entries"}
+    return None
+
+
 def _build_inspection_surface(state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
     """Build InspectionSurface-compliant output for urace check (§62l r39)."""
     gaps = state.get("integrity_gaps", [])
@@ -4481,6 +4491,26 @@ _KNOWN_TOP_COMMANDS = {
     "controls", "search",
     # system health
     "doctor",
+    # qualification audit
+    "qualification",
+    # crypto wallet
+    "crypto",
+    # freeform text routing
+    "freeform-text",
+    # rollback
+    "rollback",
+    # features
+    "features",
+    # config show-all
+    "config",
+    # security audit
+    "security",
+    # top-level exchange shorthand
+    "exchange",
+    # binary content references
+    "content",
+    # usage analytics
+    "usage",
 }
 
 _KNOWN_TOP_COMMANDS -= command_surface.PHANTOMS
@@ -4991,6 +5021,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("trial", parents=[trial_parser()], add_help=False, help="inspect specification-trial resources, versions and evidence")
     init_command=sub.add_parser("init",help="initialize state; --ready completes validated operator bootstrap")
     init_command.add_argument("--ready",action="store_true",help="discover installed clients and complete real onboarding; then urace auto is ready")
+    init_command.add_argument("--auto",action="store_true",help="zero-config init: detect API keys, configure exchange, verify health — no manual steps")
+    init_command.add_argument("--type", action="append", choices=["software", "content", "media", "model", "data"], dest="product_type", metavar="TYPE", help="Product type (can specify multiple times or comma-separated: software,media,model,data,content). Auto-detected if omitted.")
     check = sub.add_parser("check")
     check.add_argument("--format", choices=["json", "xml"], default=None, dest="format", help="output format: json or xml")
     check.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
@@ -5034,12 +5066,14 @@ def build_parser() -> argparse.ArgumentParser:
     onboard_cmd.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
     command_surface.product(sub)
     fleet_cmd = sub.add_parser("fleet", help="run multiple products in parallel (§62q)")
-    fleet_cmd.add_argument("action", choices=["run", "status", "stop", "broadcast", "help"])
+    fleet_cmd.add_argument("action", choices=["run", "status", "stop", "broadcast", "help", "capacity", "config-push"])
     fleet_cmd.add_argument("name", nargs="?", default=None, help="product name (stop)")
     fleet_cmd.add_argument("--dry-run", dest="dry_run", action="store_true")
     fleet_cmd.add_argument("--verbose", action="store_true")
     fleet_cmd.add_argument("--format", choices=["json", "xml"], default=None, dest="format", help="output format: json or xml")
     fleet_cmd.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
+    fleet_cmd.add_argument("--config-key", dest="config_key", default=None, help="config key path (dot-separated) to push to fleet")
+    fleet_cmd.add_argument("--config-value", dest="config_value", default=None, help="config value (JSON-encoded)")
 
     # urace data — DataSourceRegistry (r117 §62v)
     data_parser = sub.add_parser("data", help="Manage structural data sources")
@@ -5194,6 +5228,7 @@ def build_parser() -> argparse.ArgumentParser:
     classify_cmd.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
     classify_cmd.add_argument("--file", default=None, help="load freeform input from a file path instead of inline text")
     classify_cmd.add_argument("--path", default=None, help="load file content from path into freeform context")
+    classify_cmd.add_argument("--ledger-context", choices=["auto", "always", "never"], default="auto", dest="ledger_context", help="control ledger context injection: auto=inject if similarity>0.6, always=always inject, never=skip (default: auto)")
     add_goal = sub.add_parser("add-goal", help="durably queue a Product or URACE goal")
     add_goal.add_argument("title")
     add_goal.add_argument("--success-measure", required=True)
@@ -5276,6 +5311,8 @@ def build_parser() -> argparse.ArgumentParser:
     dc = add_sub.add_parser("context", help="queue authoritative context text")
     dc.add_argument("text", help="context text (max 20,000 chars)")
     dc.add_argument("--source", default="repository owner")
+    dc.add_argument("--scope", choices=["pipeline", "quality_gate", "exchange", "runtime", "output"], default=None, help="Which aspect of the pipeline this context relates to")
+    dc.add_argument("--relates-to", dest="relates_to", default=None, help="Comma-separated IDs of related context entries")
     dc.add_argument("--format", choices=["json", "xml"], default=None, dest="format", help="output format: json or xml")
     dc.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
     # add goal
@@ -5300,6 +5337,8 @@ def build_parser() -> argparse.ArgumentParser:
     dg.add_argument("--priority-floor", type=int, default=None)
     dg.add_argument("--priority-ceiling", type=int, default=None)
     dg.add_argument("--pin", action="store_true")
+    dg.add_argument("--scope", choices=["pipeline", "quality_gate", "exchange", "runtime", "output"], default=None, help="Which aspect of the pipeline this goal relates to")
+    dg.add_argument("--relates-to", dest="relates_to", default=None, help="Comma-separated IDs of related context entries")
     dg.add_argument("--format", choices=["json", "xml"], default=None, dest="format", help="output format: json or xml")
     dg.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
     # add source
@@ -5445,7 +5484,7 @@ def build_parser() -> argparse.ArgumentParser:
     auto_cmd.add_argument("--quiet", action="store_true", help="suppress human per-cycle feedback; with --json, JSON Lines remain on stdout")
     auto_cmd.add_argument("--verbose", action="store_true", help="show detailed deterministic cycle diagnostics without an extra Executor call")
     executor_command = sub.add_parser("executor", help="inspect, attach, or detach the configured Executor")
-    executor_command.add_argument("action", choices=["status", "attach", "detach", "retry-policy"])
+    executor_command.add_argument("action", choices=["status", "attach", "detach", "retry-policy", "circuit-breaker"])
     executor_command.add_argument("--command", dest="executor_binary", help="adapter executable name or path used by attach")
     executor_command.add_argument("--id", dest="executor_id", default="codex-primary", help="stable Executor identity")
     executor_command.add_argument("--adapter", choices=["codex-cli", "claude-cli"], default="codex-cli")
@@ -5457,6 +5496,8 @@ def build_parser() -> argparse.ArgumentParser:
     executor_command.add_argument("--retry-mode", choices=["automatic", "dynamic", "fixed"], default="automatic")
     executor_command.add_argument("--retry-delay-ms", type=int, default=60000)
     executor_command.add_argument("--retry-fallback-seconds", type=int, default=18000)
+    executor_command.add_argument("--cb-action", dest="cb_action", choices=["status","reset"], default="status", help="circuit-breaker subcommand: status (default) or reset")
+    executor_command.add_argument("--cb-provider", dest="cb_provider", default=None, help="provider_id for circuit-breaker reset")
     executor_command.add_argument("--format", choices=["json", "xml"], default=None, dest="format", help="output format: json or xml")
     executor_command.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
     reset_command = sub.add_parser("reset", help="reset URACE state to clean defaults")
@@ -5469,7 +5510,7 @@ def build_parser() -> argparse.ArgumentParser:
     command_surface.output_options(ctrl_show)
     ctrl_set = controls_sub.add_parser("set", help="enable or disable system capabilities")
     command_surface.output_options(ctrl_set)
-    for _ctrl_flag in ("executor-enabled", "freeform-enabled", "machine-interface-enabled", "compress-enabled", "decompress-enabled", "p2p-mint-enabled", "p2p-sell-enabled", "p2p-borrow-enabled", "context-mint-enabled", "context-mint-objectives", "context-mint-evidence", "context-mint-decisions", "context-mint-operations", "context-mint-checkpoints"):
+    for _ctrl_flag in ("executor-enabled", "freeform-enabled", "machine-interface-enabled", "compress-enabled", "decompress-enabled", "p2p-mint-enabled", "p2p-sell-enabled", "p2p-borrow-enabled", "context-mint-enabled", "context-mint-objectives", "context-mint-evidence", "context-mint-decisions", "context-mint-operations", "context-mint-checkpoints", "compliance-mode"):
         ctrl_set.add_argument(f"--{_ctrl_flag}", type=command_surface.boolean, default=None)
     ctrl_set.add_argument("--executor-id", default=None, dest="executor_id", help="target specific executor by id (all executors if omitted)")
     ctrl_set.add_argument("--data-source-id", default=None, dest="data_source_id", help="target specific data source by id")
@@ -5478,6 +5519,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_command = sub.add_parser("search", help="search or query the URACE context ledger and P2P audit ledger")
     search_command.add_argument("query", nargs="?", default=None, help="freeform text query or field=value filter; omit for all")
     search_command.add_argument("--kind", default=None, help="filter by entry kind: objective, operation, evidence, decision, checkpoint, blocker, or p2p (P2P audit ledger)")
+    search_command.add_argument("--scope", choices=["pipeline", "quality_gate", "exchange", "runtime", "output"], default=None, dest="search_scope", help="filter by pipeline scope")
     search_command.add_argument("--since", default=None, dest="since_date", help="ISO date lower bound (YYYY-MM-DD)")
     search_command.add_argument("--limit", type=int, default=50)
     command_surface.output_options(search_command)
@@ -5626,6 +5668,12 @@ def build_parser() -> argparse.ArgumentParser:
     autonomous_cmd = sub.add_parser("autonomous", parents=[auto_cmd], add_help=False, help=argparse.SUPPRESS)
     command_surface.watch(sub)
     command_surface.status(sub)
+    command_surface.crypto(sub)
+    command_surface.qualification(sub)
+    command_surface.config_showall(sub)
+    command_surface.security_audit(sub)
+    from .exchange_cli import grammar as _exchange_grammar
+    _exchange_grammar(sub)  # top-level `urace exchange ...` shorthand
     p_features = sub.add_parser("features", help="inspect runtime feature status registry")
     sp_feat = p_features.add_subparsers(dest="action")
     sp_feat.add_parser("list", help="list all features")
@@ -5668,6 +5716,22 @@ def build_parser() -> argparse.ArgumentParser:
     similarity_cmd.add_argument("--max-peer-age", type=float, default=86400.0, dest="max_peer_age_seconds", metavar="SECONDS", help="exclude peers last seen older than this many seconds (default: 86400)")
     similarity_cmd.add_argument("--timeout", type=float, default=5.0, dest="timeout_seconds", metavar="SECONDS", help="return partial results after this many seconds (default: 5.0)")
     similarity_cmd.add_argument("--min-score", type=float, default=0.0, dest="min_score", metavar="FLOAT", help="omit results below this score threshold (default: 0.0)")
+    content_p = sub.add_parser("content", help="Binary content references")
+    content_sub = content_p.add_subparsers(dest="action")
+    content_ref_p = content_sub.add_parser("ref", help="Register a content reference by path")
+    content_ref_p.add_argument("--path", required=True, help="Path to the binary file")
+    content_ref_p.add_argument("--json", action="store_true")
+    content_list_p = content_sub.add_parser("list", help="List content references")
+    content_list_p.add_argument("--json", action="store_true")
+    content_show_p = content_sub.add_parser("show", help="Show a content reference")
+    content_show_p.add_argument("ref_id", help="Reference ID or SHA256 prefix")
+    content_show_p.add_argument("--json", action="store_true")
+    # usage analytics command (Phase 3a)
+    usage_p = sub.add_parser("usage", help="Usage analytics")
+    usage_sub = usage_p.add_subparsers(dest="usage_action", required=True)
+    patterns_p = usage_sub.add_parser("patterns", help="Show aggregated usage patterns, top commands, and goal outcomes")
+    patterns_p.add_argument("--json", action="store_true")
+    patterns_p.add_argument("--limit", type=int, default=20)
     command_surface.finalize(parser)
     return parser
 
@@ -6026,6 +6090,11 @@ def main(argv: list[str] | None = None) -> int:
         from .exchange_cli import run as run_exchange
         try:return run_exchange(args,load_config())
         except (ValueError,OSError) as error:parser.error(str(error))
+    if args.command=='exchange':
+        if _unknown:parser.error('Unrecognized exchange arguments: '+' '.join(_unknown))
+        from .exchange_cli import run as run_exchange
+        try:return run_exchange(args,load_config())
+        except (ValueError,OSError) as error:parser.error(str(error))
     if args.command in {'executor-skills-config','context-guard-config'}:
         from . import executor_capabilities as ec
         if _unknown:parser.error('Unknown capability configuration arguments: '+' '.join(_unknown))
@@ -6049,6 +6118,240 @@ def main(argv: list[str] | None = None) -> int:
             with state_lock(CONFIG_PATH) if changes else nullcontext():
                 config=load_config();merged={**config.get('runtime_workflow',{}),**changes};updated=runtime_settings({'runtime_workflow':merged})
                 if changes:config['runtime_workflow']=merged;save_config(config)
+            print(json.dumps(updated,indent=2,sort_keys=True));return 0
+        except (OSError,ValueError,TypeError) as error:parser.error(str(error))
+    if args.command=='crypto':
+        from . import crypto_wallet as _cw
+        command_surface.validate(args,raw_args,parser)
+        if _unknown:parser.error('Unrecognized crypto arguments: '+' '.join(_unknown))
+        try:
+            verb=getattr(args,'wallet_verb',None)
+            if verb=='init':
+                result=_cw.wallet_init(wallet_dir=args.wallet_dir,overwrite=args.overwrite)
+            elif verb=='show':
+                result=_cw.wallet_show(wallet_dir=args.wallet_dir)
+            elif verb=='sign':
+                result=_cw.wallet_sign(payload=args.payload,wallet_dir=args.wallet_dir)
+            elif verb=='rotate':
+                _backup=getattr(args,'backup_dir',None)
+                _bdir=Path(_backup) if _backup else None
+                result=_cw.wallet_rotate(wallet_dir=args.wallet_dir,backup_dir=_bdir)
+            else:
+                parser.error('Unknown crypto wallet verb: '+str(verb))
+            print(json.dumps(result,indent=2,sort_keys=True));return 0
+        except FileExistsError as e:
+            print(json.dumps({'status':'error','error':str(e)},indent=2));return 1
+        except FileNotFoundError as e:
+            print(json.dumps({'status':'error','error':str(e)},indent=2));return 1
+        except (OSError,ValueError) as error:parser.error(str(error))
+    if args.command=='qualification':
+        command_surface.validate(args,raw_args,parser)
+        if _unknown:parser.error('Unrecognized qualification arguments: '+' '.join(_unknown))
+        try:
+            action=getattr(args,'qualification_action',None)
+            try:
+                config=load_config();state=load_state(config)
+            except RuntimeError as _e:
+                if action=='list':
+                    print(json.dumps({'status':'ok','evidence':[]},indent=2));return 0
+                print(json.dumps({'status':'error','error':str(_e)},indent=2));return 1
+            if action=='list':
+                kind_filter=getattr(args,'evidence_kind',None)
+                limit=getattr(args,'limit',20)
+                evidence=state.get('evidence',[])
+                if kind_filter:evidence=[e for e in evidence if e.get('kind')==kind_filter]
+                result={'status':'ok','evidence':[{'id':e['id'],'kind':e.get('kind','unknown'),'at':e.get('at',''),'has_proposal':bool(e.get('proposal'))} for e in evidence[-limit:]]}
+            elif action=='replay':
+                eid=args.evidence_id
+                evidence=state.get('evidence',[])
+                record=next((e for e in evidence if e.get('id')==eid),None)
+                if not record:
+                    print(json.dumps({'status':'error','error':f'Evidence not found: {eid}'},indent=2));return 1
+                # Find associated decisions
+                decisions=state.get('decisions',[])
+                linked_decisions=[d for d in decisions if d.get('evidence_id')==eid or eid in d.get('provenance_ids',[])]
+                # Hash-verify proposal integrity
+                import hashlib as _hl
+                proposal=record.get('proposal',{})
+                proposal_str=json.dumps(proposal,sort_keys=True)
+                replay_hash=_hl.sha256(proposal_str.encode()).hexdigest()
+                stored_hash=record.get('content_hash')
+                # Re-assess score from stored evidence fields
+                stored_score=None
+                replayed_score=None
+                for d in linked_decisions:
+                    if d.get('score_delta') is not None:
+                        stored_score=d['score_delta']
+                        break
+                # Re-compute score
+                replay_mode=getattr(args,'replay_mode','estimate')
+                criteria_drift=None
+                evaluation_weights_current=None
+                evaluation_weights_at_qualification=None
+                if proposal:
+                    import math as _math
+                    desc_len=len(str(proposal.get('description',''))+str(proposal.get('changes','')))
+                    replayed_score=round(min(1.0,_math.log2(1+desc_len/200)),4)
+                if replay_mode=='full':
+                    # Full mode: use evaluation_system weights to detect criteria drift
+                    ev_sys=config.get('evaluation_system',{})
+                    evaluation_weights_current=ev_sys.get('weights',{})
+                    # Find stored weights from the linked decision (if it recorded them)
+                    stored_weights=next((d.get('evaluation_weights') for d in linked_decisions if d.get('evaluation_weights')),None)
+                    evaluation_weights_at_qualification=stored_weights
+                    if stored_weights is not None:
+                        criteria_drift=evaluation_weights_current!=stored_weights
+                        if not criteria_drift and stored_score is not None:
+                            replayed_score=stored_score  # deterministically reproducible
+                        else:
+                            criteria_drift=True
+                    else:
+                        criteria_drift=None  # unknown — weights not stored in original decision
+                    # Weighted re-score from proposal assessment fields
+                    if evaluation_weights_current:
+                        assessment=str(proposal.get('evaluation_assessment',''))
+                        weights=list(evaluation_weights_current.values())
+                        total_weight=sum(weights)
+                        if total_weight>0 and assessment:
+                            # Heuristic: each component contributes proportionally if mentioned in assessment
+                            component_scores=[]
+                            for component,w in evaluation_weights_current.items():
+                                mentioned=component.lower() in assessment.lower()
+                                component_scores.append(w*(1.0 if mentioned else 0.5))
+                            replayed_score=round(sum(component_scores)/total_weight,4)
+                integrity='verified' if (stored_hash and stored_hash==replay_hash) else ('no_stored_hash' if not stored_hash else 'mismatch')
+                result={
+                    'status':'ok',
+                    'evidence_id':eid,
+                    'kind':record.get('kind','unknown'),
+                    'at':record.get('at',''),
+                    'replay_mode':replay_mode,
+                    'integrity':integrity,
+                    'replay_hash':replay_hash,
+                    'linked_decisions':len(linked_decisions),
+                    'stored_score_delta':stored_score,
+                    'replayed_score_estimate':replayed_score,
+                    'score_match': stored_score is not None and replayed_score is not None and abs(stored_score-replayed_score)<0.5,
+                    'decision_outcomes':[d.get('outcome') for d in linked_decisions],
+                    'proposal_summary':{
+                        'has_description':bool(proposal.get('description')),
+                        'has_changes':bool(proposal.get('changes')),
+                        'field_count':len(proposal),
+                    },
+                }
+                if replay_mode=='full':
+                    result['evaluation_weights_current']=evaluation_weights_current
+                    result['evaluation_weights_at_qualification']=evaluation_weights_at_qualification
+                    result['criteria_drift']=criteria_drift
+            else:
+                parser.error('Unknown qualification action: '+str(action))
+            print(json.dumps(result,indent=2,sort_keys=True));return 0
+        except FileNotFoundError:
+            print(json.dumps({'status':'error','error':'State not found — run urace init first'},indent=2));return 1
+        except (OSError,ValueError,KeyError) as error:parser.error(str(error))
+    if args.command == 'config':
+        if args.config_verb == 'show-all':
+            import json as _jm
+            _base = _jm.loads(CONFIG_PATH.read_text())
+            caps = _base.get('capability_flags', {})
+            executor_cfg = _base.get('executor', {})
+            exchange_cfg = _base.get('exchange', {})
+            fleet_cfg = _base.get('fleet', {})
+            resources_cfg = _base.get('resources', {})
+            result = {
+                'status': 'ok',
+                'capability_flags': caps,
+                'executor': {k: v for k, v in executor_cfg.items() if k != 'providers'},
+                'exchange': {k: v for k, v in exchange_cfg.items() if k not in ('peers', 'certs')},
+                'fleet': fleet_cfg,
+                'resources': resources_cfg,
+            }
+            print(json.dumps(result, indent=2))
+            return 0
+    if args.command == 'security':
+        if args.security_verb == 'audit':
+            config = load_config()
+            checks = []
+            def _sec_check(name, status, detail=""):
+                checks.append({"check": name, "status": status, "detail": detail})
+            # 1. Wallet
+            _wallet_dir = Path.home() / ".urace" / "wallet"
+            _key_path = _wallet_dir / "key.json"
+            if _key_path.exists():
+                try:
+                    _wdata = json.loads(_key_path.read_text())
+                    _sec_check("wallet_present", "OK", f"address={_wdata.get('address','?')[:12]}...")
+                except Exception as _e:
+                    _sec_check("wallet_present", "WARN", str(_e))
+            else:
+                _sec_check("wallet_present", "WARN", "no wallet — run: urace crypto wallet init")
+            # 2. Consensus threshold
+            _exch_cfg = config.get("exchange", {})
+            _min_thresh = _exch_cfg.get("p2p", {}).get("consensus_trigger_min_peers", 2)
+            if _min_thresh >= 3:
+                _sec_check("consensus_threshold", "OK", f"min_threshold={_min_thresh}")
+            else:
+                _sec_check("consensus_threshold", "WARN", f"min_threshold={_min_thresh} (<3) — raise with: urace exchange settings set --consensus-min-threshold 3")
+            # 3. Compliance mode
+            _caps = config.get("capability_flags", {})
+            _comp_mode = _caps.get("compliance_mode", False)
+            _sec_check("compliance_mode", "OK" if _comp_mode else "INFO", "enabled" if _comp_mode else "disabled — enable with: urace controls set --compliance-mode true")
+            # 4. Circuit breaker
+            try:
+                from . import circuit_breaker as _cb
+                _exec_settings = config.get("executor", {})
+                _pool_state = load_state_for_read(config) or {}
+                _pool = _pool_state.get("executor_state", {}).get("provider_pool", {})
+                _cb_status = _cb.status(_exec_settings, _pool)
+                _tripped = _cb_status.get("tripped_count", 0)
+                if _tripped == 0:
+                    _sec_check("circuit_breaker", "OK", f"all {_cb_status.get('healthy_count',0)} providers healthy")
+                else:
+                    _sec_check("circuit_breaker", "WARN", f"{_tripped} provider(s) tripped — run: urace executor circuit-breaker --json")
+            except Exception as _e:
+                _sec_check("circuit_breaker", "INFO", str(_e))
+            # 5. Exchange certificate
+            from . import peer_exchange as _pe_sec
+            _exch_root_path = _exch_cfg.get("root") or str(ROOT / "exchange")
+            _cert_path = Path(_exch_root_path) / "identity-cert.pem"
+            if _cert_path.exists():
+                _sec_check("peer_certificate", "OK", f"certificate present at {_cert_path}")
+            else:
+                _sec_check("peer_certificate", "INFO", "no certificate — run: urace exchange peer identity")
+            _overall = "PASS" if all(c["status"] in ("OK", "INFO") for c in checks) else "WARN"
+            result = {"status": _overall, "checks": checks, "pass_count": sum(1 for c in checks if c["status"] == "OK"), "warn_count": sum(1 for c in checks if c["status"] == "WARN")}
+            if getattr(args, 'format', None) == 'json':
+                print(json.dumps(result, indent=2))
+            else:
+                print(f"Security Audit: {_overall}")
+                for c in checks:
+                    icon = "v" if c["status"] == "OK" else ("!" if c["status"] == "WARN" else ".")
+                    print(f"  [{icon}] {c['check']:30s} {c['status']:6s}  {c['detail']}")
+            return 0
+    if args.command == "content":
+        from . import content_store as _cs
+        verb = getattr(args, "action", None)
+        if verb == "ref":
+            result = _cs.content_ref(ROOT, args.path)
+        elif verb == "list":
+            result = {"refs": _cs.content_list(ROOT)}
+        elif verb == "show":
+            result = _cs.content_show(ROOT, args.ref_id) or {"error": f"ref not found: {args.ref_id}"}
+        else:
+            result = {"error": f"unknown content verb: {verb}"}
+        print(json.dumps(result, indent=2))
+        return 0
+    if args.command=='github-workflow-config':
+        from . import portfolio_github as _pgh
+        command_surface.validate(args,raw_args,parser)
+        if _unknown:parser.error('Unrecognized github-workflow arguments: '+' '.join(_unknown))
+        try:
+            _keys=('auto_pull','auto_commit','auto_push','commit_message_template','branch_strategy')
+            changes={k:getattr(args,k) for k in _keys if getattr(args,k,None) is not None}
+            with state_lock(CONFIG_PATH) if changes else nullcontext():
+                config=load_config()
+                if changes:config['github_workflow']={**_pgh.workflow_settings(config),**changes};save_config(config)
+                updated=_pgh.workflow_settings(config)
             print(json.dumps(updated,indent=2,sort_keys=True));return 0
         except (OSError,ValueError,TypeError) as error:parser.error(str(error))
     if args.command=='auto-milestones-config':
@@ -6269,6 +6572,56 @@ def main(argv: list[str] | None = None) -> int:
                         print(_watch_render(entry, args.json), flush=True)
                         seen.add(key)
         return 0
+    if args.command == "usage":
+        command_surface.validate(args, raw_args, parser)
+        if _unknown: parser.error('Unrecognized usage arguments: ' + ' '.join(_unknown))
+        config = load_config(); state = load_state(config)
+        action = getattr(args, 'usage_action', None)
+        if action == 'patterns':
+            limit = getattr(args, 'limit', 20)
+            # Top commands by frequency
+            executor_calls = state.get('executor_state', {}).get('executor_calls', [])
+            kind_counts: dict[str, int] = {}
+            freeform_tokens = 0; executor_tokens = 0
+            for call in executor_calls:
+                k = call.get('kind', call.get('scope', 'unknown'))
+                kind_counts[k] = kind_counts.get(k, 0) + 1
+                usage_data = call.get('usage', {})
+                if isinstance(usage_data, dict):
+                    toks = usage_data.get('total_tokens', 0) or 0
+                    if call.get('kind') == 'freeform':
+                        freeform_tokens += int(toks)
+                    else:
+                        executor_tokens += int(toks)
+            top_commands = sorted(kind_counts.items(), key=lambda x: x[1], reverse=True)[:limit]
+            # Goal outcomes
+            operations = state.get('operations', [])
+            goal_success: dict[str, int] = {}; goal_total: dict[str, int] = {}
+            for op in operations:
+                ref = op.get('objective_reference', op.get('decision', 'unknown'))
+                goal_total[ref] = goal_total.get(ref, 0) + 1
+                if op.get('outcome', {}).get('status') in ('VERIFIED', 'ACCEPTED', 'verified', 'accepted'):
+                    goal_success[ref] = goal_success.get(ref, 0) + 1
+            goal_outcomes = [{'goal': g, 'success_rate': round(goal_success.get(g, 0) / t, 3), 'total': t}
+                             for g, t in sorted(goal_total.items(), key=lambda x: x[1], reverse=True)[:limit]]
+            freeform_calls = [c for c in executor_calls if c.get("kind") == "freeform-routing"]
+            # Cache hits are calls with 0 tokens (served from cache)
+            freeform_cache_hits = sum(1 for c in freeform_calls if int(c.get("tokens", 0) or 0) == 0)
+            freeform_total = len(freeform_calls)
+            payload = {
+                'status': 'ok',
+                'top_commands': [{'kind': k, 'count': c} for k, c in top_commands],
+                'token_breakdown': {'freeform_tokens': freeform_tokens, 'executor_tokens': executor_tokens},
+                'goal_outcomes': goal_outcomes,
+                'freeform_stats': {
+                    'total_calls': freeform_total,
+                    'cache_hits': freeform_cache_hits,
+                    'cache_hit_rate': round(freeform_cache_hits / freeform_total, 3) if freeform_total > 0 else None,
+                },
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return 0
+        parser.error(f'Unknown usage action: {action}')
     if args.command == "help":
         if not args.operation:
             if args.json:
@@ -6637,6 +6990,9 @@ Key options:
         from .trial import run_workflow
         explicit_interval = any(a == "--interval" or a.startswith("--interval=") for a in raw_args)
         return run_workflow(args.cycles, dry_run=args.dry_run, interval=args.interval if explicit_interval else 5, json_mode=args.json, quiet=args.quiet)
+    if args.command=="init" and getattr(args,'auto',False):
+        from . import bootstrap
+        return bootstrap.auto_complete(sys.modules[__name__],config)
     if args.command=="init" and args.ready:
         from . import bootstrap
         return bootstrap.complete(sys.modules[__name__],config)
@@ -7279,42 +7635,159 @@ Register and manage multiple Products in a single URACE installation.
         if args.action == "register":
             if not args.name:
                 parser.error("product register requires a <name>")
-            if not args.product_state_path:
-                parser.error("product register requires --state-path")
+            github_repo = getattr(args, 'product_github', None)
+            clone_to = getattr(args, 'product_clone_to', None)
+            if not github_repo and not args.product_state_path:
+                parser.error("product register requires --state-path or --github OWNER/REPO")
+            if github_repo and (github_repo.count('/') != 1 or github_repo.startswith('/')):
+                result = {"status": "error", "error": "invalid --github format; use 'owner/repo'"}
+                print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                return 1
             name = args.name
             registry = config.setdefault("product_registry", [])
             if any(e.get("name") == name for e in registry):
                 result = {"status": "error", "error": f"product '{name}' already in registry"}
                 print(json.dumps(result, indent=2) if args.json else f"error: '{name}' already registered")
                 return 1
+            # Clone GitHub repo if --clone-to provided
+            cloned_path = None
+            if github_repo and clone_to:
+                from . import portfolio_github as _pgh
+                _rc, _out, _err = _pgh.clone_repo(github_repo, clone_to)
+                if _rc != 0:
+                    result = {"status": "error", "error": f"git clone failed: {_err or _out}"}
+                    print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                    return 1
+                cloned_path = str(Path(clone_to).resolve())
+            # Derive entry_state_path
+            if args.product_state_path:
+                entry_state_path = args.product_state_path
+            elif cloned_path:
+                entry_state_path = str(Path(cloned_path) / 'urace_state.json')
+            else:
+                entry_state_path = None
             # §62p State Isolation Contract: duplicate state_path MUST be rejected
-            if any(e.get("state_path") == args.product_state_path for e in registry):
+            if entry_state_path and any(e.get("state_path") == entry_state_path for e in registry):
                 try:
                     _dup_state = load_state(config)
                 except RuntimeError:
                     _dup_state = None
                 if _dup_state is not None:
                     _emit_gap(_dup_state, "product-registry-duplicate-state-path", "WARNING",
-                              f"state_path '{args.product_state_path}' is already used by another product entry")
+                              f"state_path '{entry_state_path}' is already used by another product entry")
                     save_state(config, _dup_state)
-                result = {"status": "error", "error": f"state_path '{args.product_state_path}' already in use"}
+                result = {"status": "error", "error": f"state_path '{entry_state_path}' already in use"}
                 print(json.dumps(result, indent=2) if args.json else f"error: state_path already used by another product")
                 return 1
             entry = {
                 "id": identifier("prod-"),
                 "name": name,
-                "state_path": args.product_state_path,
+                "state_path": entry_state_path,
                 "product_files": args.product_files,
                 "intent_purpose": args.intent_purpose,
                 "registered_at": now(),
                 "last_active_at": None,
                 "status": "ACTIVE",
+                "product_type": getattr(args, "product_type", "software") or "software",
             }
+            if github_repo:
+                entry["kind"] = "github"
+                entry["github_repo"] = github_repo
+                if cloned_path:
+                    entry["clone_path"] = cloned_path
             registry.append(entry)
             save_config(config)
             result = {"status": "registered", "name": name, "id": entry["id"]}
-            print(json.dumps(result, indent=2) if args.json else f"Registered product '{name}' (id={entry['id']})")
+            if github_repo:
+                result["github_repo"] = github_repo
+                if cloned_path:
+                    result["clone_path"] = cloned_path
+            print(json.dumps(result, indent=2) if args.json else
+                  f"Registered product '{name}' (id={entry['id']})" + (f" github={github_repo}" if github_repo else ""))
             return 0
+
+        if args.action == "git":
+            from . import portfolio_github as _pgh
+            name = args.name
+            git_args = list(getattr(args, 'git_args', []))
+            if git_args and git_args[0] == '--':
+                git_args = git_args[1:]
+            # Strip URACE output flags that REMAINDER may have captured before git args
+            _urace_flags = {'--json', '--format'}
+            _clean = []
+            _i = 0
+            while _i < len(git_args):
+                if git_args[_i] in _urace_flags:
+                    if git_args[_i] == '--format' and _i + 1 < len(git_args):
+                        _i += 2
+                    else:
+                        if git_args[_i] == '--json':
+                            args.json = True
+                        _i += 1
+                else:
+                    _clean.append(git_args[_i])
+                    _i += 1
+            git_args = _clean
+            registry = config.get("product_registry", [])
+            entry = next((e for e in registry if e.get("name") == name), None)
+            if entry is None:
+                result = {"status": "error", "error": f"product '{name}' not found in registry"}
+                print(json.dumps(result, indent=2) if args.json else f"error: '{name}' not found in registry")
+                return 1
+            if entry.get("kind") != "github":
+                result = {"status": "error", "error": f"'product git' requires a GitHub product; '{name}' is kind={entry.get('kind', 'local')}"}
+                print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                return 1
+            github_repo = entry.get("github_repo", "")
+            clone_path = entry.get("clone_path")
+            # Special subcommand: clone
+            if git_args and git_args[0] == "clone":
+                target = git_args[1] if len(git_args) > 1 else clone_path
+                if not target:
+                    result = {"status": "error", "error": "clone requires a path argument or register with --clone-to"}
+                    print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                    return 1
+                if Path(target).is_dir() and list(Path(target).iterdir()):
+                    result = {"status": "error", "error": f"target path '{target}' already exists and is not empty"}
+                    print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                    return 1
+                _rc, _out, _err = _pgh.clone_repo(github_repo, target)
+                if _rc != 0:
+                    result = {"status": "error", "error": f"git clone failed: {_err or _out}"}
+                    print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                    return _rc
+                resolved = str(Path(target).resolve())
+                entry["clone_path"] = resolved
+                if not entry.get("state_path"):
+                    entry["state_path"] = str(Path(resolved) / 'urace_state.json')
+                save_config(config)
+                result = {"status": "cloned", "product": name, "clone_path": resolved, "github_repo": github_repo}
+                print(json.dumps(result, indent=2) if args.json else f"Cloned {github_repo} → {resolved}")
+                return 0
+            # All other subcommands require an existing clone_path
+            if not clone_path:
+                result = {"status": "error", "error": f"'{name}' has no clone_path; run: urace product git {name} clone <path>"}
+                print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                return 1
+            if not Path(clone_path).is_dir():
+                result = {"status": "error", "error": f"clone_path '{clone_path}' not found; run: urace product git {name} clone"}
+                print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                return 1
+            err_msg = _pgh.validate_subcommand(git_args)
+            if err_msg:
+                result = {"status": "error", "error": err_msg}
+                print(json.dumps(result, indent=2) if args.json else f"error: {result['error']}")
+                return 1
+            rc, out, git_stderr = _pgh.run_git(clone_path, git_args)
+            if args.json:
+                result = {"status": "ok" if rc == 0 else "error", "exit_code": rc, "stdout": out, "stderr": git_stderr, "product": name, "clone_path": clone_path}
+                print(json.dumps(result, indent=2))
+            else:
+                if out:
+                    print(out)
+                if git_stderr:
+                    print(git_stderr, file=sys.stderr)
+            return rc
 
         if args.action == "remove":
             if not args.name:
@@ -7556,6 +8029,68 @@ Run all registered Products in parallel.
                 (inbox_dir / f"{stop_input['id']}.json").write_text(json.dumps(stop_input), encoding="utf-8")
             result = {"stopped": target_members}
             print(json.dumps(result, indent=2) if args.json else f"Stop signal sent to: {', '.join(target_members)}")
+            return 0
+
+        if args.action == "capacity":
+            executor_settings = config.get("executor", {})
+            pool_state = config.get("executor_pool_state", {})
+            per_member = []
+            for mname in members:
+                entry = next((e for e in registry if e.get("name") == mname), None)
+                member_exec = dict(executor_settings)
+                if entry and entry.get("executor"):
+                    member_exec.update(entry["executor"])
+                avail = intelligent_executor.pool_availability(member_exec, pool_state, "execution")
+                providers = avail.get("providers", [])
+                available_count = sum(1 for p in providers if p.get("available"))
+                calls_remaining = sum(
+                    max(0, (p.get("limit_24h") or 999) - (p.get("calls_24h") or 0))
+                    for p in providers if p.get("available")
+                )
+                per_member.append({
+                    "name": mname,
+                    "available": avail.get("available"),
+                    "selected_provider": avail.get("selected_provider"),
+                    "provider_count": len(providers),
+                    "available_providers": available_count,
+                    "calls_remaining_24h": calls_remaining,
+                    "bottleneck": not avail.get("available"),
+                })
+            fleet_available = sum(1 for m in per_member if m["available"])
+            total_calls = sum(m["calls_remaining_24h"] for m in per_member)
+            parallel_capacity = fleet_available
+            result = {
+                "status": "ok",
+                "fleet_size": len(members),
+                "fleet_available": fleet_available,
+                "parallel_capacity": parallel_capacity,
+                "total_calls_remaining_24h": total_calls,
+                "bottleneck_members": [m["name"] for m in per_member if m["bottleneck"]],
+                "members": per_member,
+            }
+            print(json.dumps(result, indent=2, sort_keys=True))
+            return 0
+
+        if args.action == "config-push":
+            key = getattr(args, 'config_key', None)
+            value_raw = getattr(args, 'config_value', None)
+            if not key or value_raw is None:
+                print(json.dumps({"status": "error", "error": "--config-key and --config-value are required"}))
+                return 1
+            try:
+                value = json.loads(value_raw)
+            except Exception:
+                value = value_raw
+            import json as _jm
+            _base = _jm.loads(CONFIG_PATH.read_text())
+            parts = key.split('.')
+            node = _base
+            for part in parts[:-1]:
+                node = node.setdefault(part, {})
+            node[parts[-1]] = value
+            CONFIG_PATH.write_text(_jm.dumps(_base, indent=2, sort_keys=True) + "\n")
+            result = {"status": "ok", "key": key, "value": value, "affected_members": members}
+            print(json.dumps(result, indent=2) if args.json else f"Config pushed: {key}={value!r} to {len(members)} fleet members")
             return 0
 
     if args.command == "data":
@@ -8614,6 +9149,9 @@ Commands:
         if args.command == "check":
             surface = _build_inspection_surface(state, config)
             surface['preflight_hints'] = _preflight_hints
+            _lw = _ledger_size_warning(state_path(config))
+            if _lw is not None:
+                surface['ledger_health'] = _lw
             _check_query = getattr(args, 'query', None)
             if _check_query:
                 _q = _check_query.lower()
@@ -8959,6 +9497,25 @@ Commands:
         queued = queue_input(config, "evaluation_control", payload)
         print(f"Queued evaluation change {queued['id']}; it will be applied at the next cycle boundary or restart")
         return 0
+    if args.command == "executor" and args.action == "circuit-breaker":
+        from . import circuit_breaker as _cb
+        verb = getattr(args, 'cb_action', 'status')
+        executor_settings = config.get("executor", {})
+        pool_state = config.get("executor_pool_state", {})
+        try:
+            if verb == 'status':
+                result = _cb.status(executor_settings, pool_state)
+            elif verb == 'reset':
+                pid = getattr(args, 'cb_provider', None)
+                if not pid: parser.error("circuit-breaker reset requires --cb-provider <provider_id>")
+                result = _cb.reset(pid, executor_settings, pool_state)
+                with state_lock(CONFIG_PATH):
+                    cfg = load_config()
+                    cfg.setdefault("executor_pool_state", {}).update({pid: pool_state.get(pid, {})})
+                    save_config(cfg)
+            print(json.dumps(result, indent=2, sort_keys=True)); return 0
+        except ValueError as e:
+            print(json.dumps({'status':'error','error':str(e)},indent=2)); return 1
     if args.command == "executor" and args.action in {"attach", "detach", "retry-policy"}:
         if args.action == "attach" and ((args.max_calls_24h is not None and args.max_calls_24h < 1) or (args.max_calls_30d is not None and args.max_calls_30d < 1) or (args.max_calls_24h is not None and args.max_calls_30d is not None and args.max_calls_30d < args.max_calls_24h)):
             parser.error("Executor transport ceilings require max-calls-24h >= 1 and max-calls-30d >= max-calls-24h")
@@ -9092,6 +9649,10 @@ Commands:
         elif sub == "evidence":
             payload = {"kind": args.kind, "summary": args.summary, "source": args.source, "detail": args.detail}
             kind = "evidence"
+        if getattr(args, "scope", None):
+            payload["scope"] = args.scope
+        if getattr(args, "relates_to", None):
+            payload["related_ids"] = [r.strip() for r in args.relates_to.split(",") if r.strip()]
         queued = queue_input(config, kind, payload)
         if args.json:
             if kind == "context":
@@ -9765,10 +10326,34 @@ Commands:
                     print("URACE already initialized")
                     return 0
                 state = initial_state(config)
+                from .product_type_detector import detect_product_types, normalize_types
+                raw_types = getattr(args, "product_type", None)
+                if raw_types:
+                    product_types = normalize_types(raw_types)
+                else:
+                    product_types = detect_product_types(Path.cwd())
+                # backward-compat: also set product_type as first element for old readers
+                product_type = product_types[0] if product_types else "software"
+                _ptype = product_type
+                if product_types != ["software"] or True:
+                    import json as _jm
+                    _base = _jm.loads(CONFIG_PATH.read_text())
+                    _base["product_type"] = _ptype
+                    _base["product_types"] = product_types
+                    if _ptype in ("content", "media"):
+                        _base.setdefault("default_metrics", ["engagement_rate", "quality_score", "reach"])
+                        _base.setdefault("executor", {}).setdefault("context_hints", [])
+                        _base["executor"]["context_hints"] = list({*_base["executor"].get("context_hints", []), f"product_type:{_ptype}", "quality_gate:score_delta>0", "content_pipeline:true"})
+                    elif _ptype == "model":
+                        _base.setdefault("default_metrics", ["accuracy", "latency_ms", "memory_mb"])
+                    elif _ptype == "data":
+                        _base.setdefault("default_metrics", ["completeness", "accuracy", "freshness"])
+                    CONFIG_PATH.write_text(_jm.dumps(_base, indent=2, sort_keys=True) + "\n")
                 save_state(config, state)
                 write_stable_snapshot(config)
                 write_runtime_snapshot(config)
-                print(f"Initialized {config['product']} at {path}")
+                _types_label = ", ".join(product_types)
+                print(f"Initialized {config['product']} at {path}" + (f" (types: {_types_label})" if product_types != ["software"] else ""))
                 return 0
             state = load_state(config)
             if recovery:
@@ -9831,7 +10416,7 @@ Commands:
                 _ctrl_verb = getattr(args, "controls_verb", None)
                 _ctrl_cfg = load_config()
                 _ctrl_caps = _ctrl_cfg.get("capability_flags", {})
-                _ALL_CAP_KEYS = ("executor_enabled", "freeform_enabled", "machine_interface_enabled", "compress_enabled", "decompress_enabled", "p2p_mint_enabled", "p2p_sell_enabled", "p2p_borrow_enabled", "context_mint_enabled", "context_mint_objectives", "context_mint_evidence", "context_mint_decisions", "context_mint_operations", "context_mint_checkpoints")
+                _ALL_CAP_KEYS = ("executor_enabled", "freeform_enabled", "machine_interface_enabled", "compress_enabled", "decompress_enabled", "p2p_mint_enabled", "p2p_sell_enabled", "p2p_borrow_enabled", "context_mint_enabled", "context_mint_objectives", "context_mint_evidence", "context_mint_decisions", "context_mint_operations", "context_mint_checkpoints", "compliance_mode")
                 if _ctrl_verb == "show":
                     _show = {
                         "executor_enabled": _ctrl_cfg.get("executor", {}).get("enabled", False),
@@ -9939,6 +10524,15 @@ Commands:
                         _dr_check("exchange_root_accessible", "WARN", str(_e))
                 else:
                     _dr_check("exchange_root_accessible", "WARN", "exchange disabled")
+                # 7. Ledger size
+                try:
+                    _dr_lw = _ledger_size_warning(state_path(_dr_cfg))
+                    if _dr_lw is not None:
+                        _dr_check("ledger_size", "WARN", f"{_dr_lw['size_mb']} MB — {_dr_lw['action']}")
+                    else:
+                        _dr_check("ledger_size", "OK")
+                except Exception as _e:
+                    _dr_check("ledger_size", "INFO", str(_e))
                 _dr_overall = "ERROR" if any(c["status"] == "ERROR" for c in _dr_checks) else ("WARN" if any(c["status"] == "WARN" for c in _dr_checks) else "OK")
                 _dr_result = {"overall": _dr_overall, "checks": _dr_checks}
                 if getattr(args, "doctor_json", False):
@@ -10029,6 +10623,9 @@ Commands:
                 _since = getattr(args, "since_date", None)
                 if _since:
                     _entries = [e for e in _entries if str(e.get("at", e.get("created_at", ""))) >= _since]
+                _search_scope = getattr(args, "search_scope", None)
+                if _search_scope:
+                    _entries = [e for e in _entries if e.get("scope") == _search_scope]
                 _entries = _entries[-args.limit:]
                 _qhash2 = hashlib.sha256(_q.encode()).hexdigest() if _q else None
                 _out({"query": _q, "kind_searched": _kind_searched, "entries": _entries, "count": len(_entries), "searched_at": _searched_at, "traceable": True, "auditable": True})
