@@ -44,6 +44,7 @@ urace controls set [flags]
 | `--context-mint-decisions` | bool | false | Allow decision records to be minted as context |
 | `--context-mint-operations` | bool | false | Allow operation records to be minted as context |
 | `--context-mint-checkpoints` | bool | false | Allow checkpoints to be minted as context |
+| `--compliance-mode` | bool | false | Enable stricter audit logging and governance enforcement |
 
 **Note:** Every `controls set` invocation writes a `config-capability-change` evidence record to the audit trail.
 
@@ -94,6 +95,47 @@ urace status --json
 ```sh
 urace controls set --freeform-enabled false
 ```
+
+---
+
+## Compliance Mode
+
+When compliance mode is on, every state-modifying command requires an evidence record and peer role checks are enforced on exchange operations. Use this for regulated environments or audit-sensitive deployments.
+
+```sh
+# Enable compliance mode
+urace controls set --compliance-mode true
+
+# Disable compliance mode
+urace controls set --compliance-mode false
+```
+
+### Compliance Posture Inspection
+
+Inspect per-domain compliance status and history:
+
+```sh
+urace compliance --json                        # all domains + recent records
+urace compliance --domain authority --json     # single domain
+urace compliance --history 20 --json           # last 20 records
+urace compliance --export /tmp/audit.json      # export all records as JSON
+urace compliance --export /tmp/audit.jsonl     # export as JSONL (one record per line)
+urace compliance --since 2025-01-01 --json     # filter by date range
+urace compliance --strict --json               # exit 1 if any domain NON_COMPLIANT
+```
+
+The `--strict` flag is designed for CI pipelines: exit code 1 means non-compliant, 0 means pass. JSON output includes `strict_pass: bool` for scripting.
+
+### Security Audit
+
+Run a full security audit at any time (includes optional GitHub release integrity check):
+
+```sh
+urace security audit --json                    # full audit including GitHub release check
+urace security audit --no-network --json       # offline mode: skip GitHub release check
+```
+
+Checks: wallet key present, consensus threshold ≥ 3, compliance mode status, circuit breaker health, exchange certificate, GitHub release asset match. Overall `PASS` only if no `WARN` checks.
 
 ---
 

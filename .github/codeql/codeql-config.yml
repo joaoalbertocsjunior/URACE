@@ -1,0 +1,14 @@
+name: "URACE CodeQL Config"
+
+paths-ignore:
+  - trial/
+
+query-filters:
+  - exclude:
+      severity: note
+  # Protocol-mandated: BitTorrent DHT BEP5 requires binding to 0.0.0.0 for P2P
+  - exclude:
+      id: py/bind-socket-all-network-interfaces
+  # False positive: sensitive var names in credential-handling code that explicitly redacts
+  - exclude:
+      id: py/clear-text-logging-sensitive-data

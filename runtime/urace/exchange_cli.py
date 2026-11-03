@@ -15,6 +15,54 @@ CRYPTO_PENDING_FEATURES = frozenset({
 })
 
 
+def _check_auto_delist(feature_id: str, exchange) -> dict:
+    """Check if a feature should be auto-delisted due to sustained negative outcomes.
+
+    Rule: negative_count >= 3 AND (negative_count - positive_count) >= 3.
+    If triggered, writes FEATURE_AUTO_DELISTED to ledger and returns auto_delisted=True.
+    """
+    try:
+        rows = exchange.audit_rows()
+    except Exception:
+        return {"auto_delisted": False, "reason": "audit_unavailable"}
+    positive = 0
+    negative = 0
+    for r in rows:
+        if r.get("kind") == "FEATURE_RATING" and r.get("feature_id") == feature_id:
+            outcome = r.get("outcome", "")
+            if outcome == "positive":
+                positive += 1
+            elif outcome == "negative":
+                negative += 1
+    if negative >= 3 and (negative - positive) >= 3:
+        import time as _t
+        exchange.append_audit_row({
+            "kind": "FEATURE_AUTO_DELISTED",
+            "feature_id": feature_id,
+            "reason": "sustained_negative_outcomes",
+            "negative_count": negative,
+            "positive_count": positive,
+            "at_unix": _t.time(),
+        })
+        return {"auto_delisted": True, "reason": "sustained_negative_outcomes",
+                "negative_count": negative, "positive_count": positive}
+    return {"auto_delisted": False, "negative_count": negative, "positive_count": positive}
+
+
+def _listing_expired(listing: dict, settings: dict) -> bool:
+    """Return True if a listing's listed_at age exceeds listing_ttl_days (default 90)."""
+    ttl_days = int(settings.get("listing_ttl_days", 90))
+    listed_at = listing.get("listed_at", "")
+    if not listed_at:
+        return False
+    try:
+        from datetime import datetime, timezone, timedelta
+        age = datetime.now(timezone.utc) - datetime.fromisoformat(listed_at)
+        return age > timedelta(days=ttl_days)
+    except (ValueError, TypeError):
+        return False
+
+
 def _validate_freeform_query(q, max_bytes=4096):
     """Validate a freeform search/query string.
 
@@ -44,21 +92,34 @@ def grammar(children):
  for name in ('max-transfers-per-day','max-transfers-per-peer-per-day','max-bytes-per-day','max-rpc-per-day','max-rpc-per-peer-per-day'):p.add_argument('--'+name,type=int)
  p.add_argument('--min-peer-version',type=int)
  # Granular P2P capability controls
- for name in ('feature-borrow-enabled','p2p-mint-enabled','p2p-sell-enabled','compress-enabled','decompress-enabled'):p.add_argument('--'+name,type=boolean,default=None)
+ for name in ('feature-borrow-enabled','p2p-mint-enabled','p2p-sell-enabled','compress-enabled','decompress-enabled','compress-wire'):p.add_argument('--'+name,type=boolean,default=None)
  p.add_argument('--bundle-max-age-seconds',type=int,default=None,dest='bundle_max_age_seconds',help='max age in seconds for accepted bundles (default 604800)')
+ p.add_argument('--bandwidth-profile',choices=('auto','low','high'),default=None,dest='bandwidth_profile',help='wire transfer profile: low=1KB chunks+compress, high=64KB chunks, auto=default (default: auto)')
+ p.add_argument('--transfer-chunk-size',type=int,default=None,dest='transfer_chunk_size',help='override wire read chunk size in bytes (512–131072; overrides bandwidth-profile default)')
  p.add_argument('--relay-only',type=boolean,default=None,dest='relay_only',help='hide IP from peers by routing all traffic through relays')
  p.add_argument('--crypto-network',default=None,dest='crypto_network',help='blockchain network id for future token settlement (informational; activates CRYPTO_PENDING features)')
+ p.add_argument('--consensus-min-threshold',type=int,default=None,dest='consensus_min_threshold',help='minimum consensus peer threshold for corpus updates (default 2)')
+ p.add_argument('--baseline-grant-tokens',type=int,default=None,dest='baseline_grant_tokens',help='baseline token grant for new peers (default 3)')
+ p.add_argument('--network-mode',choices=('intranet','internet','hybrid'),default=None,dest='network_mode',help='network scope: intranet=LAN-only, internet=standard, hybrid=LAN+internet (default: hybrid)')
+ p.add_argument('--internet-gateway',default=None,dest='internet_gateway',help='peer-id of the internet bridge peer for intranet→internet upgrade')
  peers=groups.add_parser('peer');peers_v=peers.add_subparsers(dest='exchange_verb',required=True)
  for name in ('list','identity','add','block','unblock'):
   p=peers_v.add_parser(name);output_options(p)
   if name=='add':p.add_argument('--certificate',required=True);p.add_argument('--endpoint');p.add_argument('--post-quantum-identity')
   elif name not in ('list','identity'):p.add_argument('peer_id')
  p=peers_v.add_parser('rotate',help='rotate peer identity (block old, pin new cert, migrate rules)');output_options(p);p.add_argument('old_peer_id');p.add_argument('--new-certificate',required=True,dest='new_certificate')
+ p=peers_v.add_parser('role',help='set or show peer role (admin|operator|readonly)');output_options(p);p.add_argument('peer_id',nargs='?',default=None);p.add_argument('--set',dest='role_value',choices=('admin','operator','readonly'),default=None)
+ bootstrap=groups.add_parser('bootstrap',help='manage bootstrap peers for zero-config P2P discovery');bootstrap_v=bootstrap.add_subparsers(dest='exchange_verb',required=True)
+ for name in ('list','add','remove'):
+  p=bootstrap_v.add_parser(name,help=name+' bootstrap peer endpoints');output_options(p)
+  if name in ('add','remove'):p.add_argument('endpoint',help='HTTPS endpoint of bootstrap peer (e.g. https://peer.example.com:8443)')
  f=groups.add_parser('feature');verbs=f.add_subparsers(dest='exchange_verb',required=True);p=verbs.add_parser('define');p.add_argument('feature_id');p.add_argument('--depends-on',action='append',default=[]);p.add_argument('--wanted',type=boolean,default=False);p.add_argument('--offered',type=boolean,default=False);p.add_argument('--wants',action='append',default=[]);output_options(p)
  p=verbs.add_parser('policy');p.add_argument('feature_id');p.add_argument('--access',choices=('reviewed-direct','open'));p.add_argument('--license-id');p.add_argument('--essential',type=boolean);p.add_argument('--open-after-unix',type=float);p.add_argument('--resale',type=boolean);output_options(p)
  p=verbs.add_parser('catalog');output_options(p)
  p=verbs.add_parser('declare');p.add_argument('feature_id');p.add_argument('--manifest',required=True);output_options(p)
  p=verbs.add_parser('lifecycle');p.add_argument('atom_id');p.add_argument('status',choices=('active','deprecated','obsolete'));p.add_argument('--replacement');output_options(p)
+ p=verbs.add_parser('rate',help='record borrower outcome for a feature');p.add_argument('feature_id');p.add_argument('--outcome',choices=('positive','negative','neutral'),required=True);p.add_argument('--score',type=float,default=None,help='optional quality delta observed');output_options(p)
+ p=verbs.add_parser('recommend',help='recommend top ledger features for current project context');p.add_argument('--limit',type=int,default=5);output_options(p)
  rules=groups.add_parser('rule');rules_v=rules.add_subparsers(dest='exchange_verb',required=True)
  p=rules_v.add_parser('set');p.add_argument('peer_id');p.add_argument('feature_id');p.add_argument('direction',choices=('send','receive'));p.add_argument('--allow',type=boolean,required=True);output_options(p)
  p=rules_v.add_parser('export',help='export all rules to JSON for backup or migration');output_options(p);p.add_argument('--file',default=None,dest='export_file')
@@ -86,6 +147,8 @@ def grammar(children):
   elif name=='manifest':p.add_argument('peer_id');p.add_argument('--baseline-evaluation-id',required=True);p.add_argument('--failures',action='append',default=[])
   else:p.add_argument('bundle_id')
   if name=='review':p.add_argument('review_status',choices=('approved-for-evaluation','rejected','blocked'));p.add_argument('--note',default='')
+ market=groups.add_parser('market',help='live token velocity, supply ratio and network health snapshot');market_v=market.add_subparsers(dest='exchange_verb',required=True)
+ p=market_v.add_parser('stats',help='mint/burn velocity, supply ratio, peer count, feature stats');output_options(p);p.add_argument('--window-hours',type=int,default=24,dest='window_hours',help='velocity window in hours (default 24)')
  network=groups.add_parser('network');verbs=network.add_subparsers(dest='exchange_verb',required=True)
  for name in ('discover','probe','refresh','serve'):
   p=verbs.add_parser(name);output_options(p)
@@ -94,9 +157,11 @@ def grammar(children):
   if name=='probe':p.add_argument('peer_id')
   if name=='serve':p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=0)
  p=verbs.add_parser('consensus-status',help='show P2P consensus threshold and mismatch state');output_options(p)
+ p=verbs.add_parser('public-address',help='probe STUN to discover public IP:port for intranet→internet bridge');output_options(p);p.add_argument('--stun-host',default='stun.l.google.com',dest='stun_host',help='STUN server hostname (default: stun.l.google.com)');p.add_argument('--stun-port',type=int,default=19302,dest='stun_port',help='STUN server port (default: 19302)')
  p=verbs.add_parser('disconnect',help='temporarily pause P2P networking (reconnects on next serve)');output_options(p);p.add_argument('--duration-minutes',type=int,default=60,dest='duration_minutes')
  p=verbs.add_parser('peers',help='show connected peer count and anonymized peer IDs (no raw IPs or endpoints)');output_options(p);p.add_argument('--detail',action='store_true',help='show hashed peer IDs (still anonymized)')
  p=verbs.add_parser('size',help='show estimated network size from peer discovery gossip (heuristic, not exact)');output_options(p)
+ p=verbs.add_parser('port-to-internet',help='analyze intranet features/reputation and guide migration to hybrid/internet mode');output_options(p);p.add_argument('--auto',action='store_true',help='use smart defaults, no prompts');p.add_argument('--dry-run',action='store_true',dest='dry_run',help='analyze and report, no changes made');p.add_argument('--features',default=None,dest='features',help='comma-separated feature IDs to port (overrides auto-selection)');p.add_argument('--min-kpi-score',type=float,default=0.5,dest='min_kpi_score',help='minimum KPI score for auto-selection (default 0.5)');p.add_argument('--min-ratings',type=int,default=2,dest='min_ratings',help='minimum ratings needed for auto-selection (default 2)')
  # ── Work market ──────────────────────────────────────────────────────────────
  wm=groups.add_parser('work',help='P2P work request market and escrow');wm_v=wm.add_subparsers(dest='exchange_verb',required=True)
  p=wm_v.add_parser('list',help='list work requests');output_options(p);p.add_argument('--state',default=None)
@@ -178,9 +243,83 @@ def bounded_file(name,limit,artifact=False):
  if not path.is_file() or path.stat().st_size>limit:raise ValueError('Bounded regular file required')
  return path.read_text()
 
+def _port_to_internet_analysis(exchange, settings):
+    """Analyze intranet state and return what's worth porting."""
+    from . import stun_client as _stun
+    result = {
+        "public_address": None,
+        "stun_available": False,
+        "features": [],
+        "network_mode": settings.get("network_mode", "intranet"),
+        "already_internet": False,
+    }
+    if result["network_mode"] in ("internet", "hybrid"):
+        result["already_internet"] = True
+        return result
+    addr = _stun.get_public_address()
+    if addr:
+        result["public_address"] = addr
+        result["stun_available"] = True
+    try:
+        rows = exchange.audit_rows()
+    except Exception:
+        rows = []
+    minted = {}
+    for row in rows:
+        if row.get("kind") == "FEATURE_MINTED" or row.get("kind") == "EQUITY_GRANT":
+            fid = row.get("feature_id") or row.get("id", "")
+            if fid and fid not in minted:
+                minted[fid] = {"feature_id": fid, "description": row.get("description", ""), "positive": 0, "negative": 0, "neutral": 0}
+        if row.get("kind") == "FEATURE_RATING":
+            fid = row.get("feature_id", "")
+            if fid in minted:
+                outcome = row.get("outcome", "neutral")
+                minted[fid][outcome] = minted[fid].get(outcome, 0) + 1
+    for fid, info in minted.items():
+        total = info["positive"] + info["negative"] + info["neutral"]
+        kpi_score = (info["positive"] - info["negative"]) / max(total, 1)
+        result["features"].append({
+            "feature_id": fid,
+            "description": info["description"][:80],
+            "kpi_score": round(kpi_score, 3),
+            "total_ratings": total,
+            "positive": info["positive"],
+            "negative": info["negative"],
+        })
+    result["features"].sort(key=lambda f: f["kpi_score"], reverse=True)
+    return result
+
+
+def _select_features_for_port(analysis, args):
+    """Select which features to port based on args."""
+    if getattr(args, "features", None):
+        ids = {f.strip() for f in args.features.split(",") if f.strip()}
+        return [f for f in analysis["features"] if f["feature_id"] in ids]
+    min_kpi = float(getattr(args, "min_kpi_score", 0.5))
+    min_ratings = int(getattr(args, "min_ratings", 2))
+    return [
+        f for f in analysis["features"]
+        if f["kpi_score"] >= min_kpi and f["total_ratings"] >= min_ratings
+    ]
+
+
+def _format_port_report(report):
+    addr = report.get("public_address", {}) or {}
+    print("\nPort-to-internet analysis:")
+    print(f"  Public address : {addr.get('ip')}:{addr.get('port')}")
+    print(f"  Recommended mode: {report.get('recommended_mode', 'hybrid')}")
+    print(f"\n  Features to port ({len(report['features_to_port'])}):")
+    for f in report["features_to_port"]:
+        print(f"    \u2022 {f['feature_id'][:16]} \u2014 kpi={f['kpi_score']:+.2f} ({f['positive']}\u2191/{f['negative']}\u2193) \u2014 {f['description'][:50]}")
+    if report["features_skipped"]:
+        print(f"\n  Features skipped ({len(report['features_skipped'])}) \u2014 below quality threshold:")
+        for f in report["features_skipped"]:
+            print(f"    \u25cb {f['feature_id'][:16]} \u2014 kpi={f['kpi_score']:+.2f} ({f['total_ratings']} ratings)")
+
+
 def run(args,config):
  from . import peer_exchange as pe
- exchange=pe.Exchange(pe.directory(config));group=args.exchange_group;verb=getattr(args,'exchange_verb',None)
+ exchange=pe.Exchange(pe.directory(config));group=args.exchange_group;verb=getattr(args,'exchange_verb',None);result=None
  if group in ('status','audit'):
   result=exchange.summary(getattr(args,'detail',False),getattr(args,'limit',50),getattr(args,'offset',0),getattr(args,'peer_id',None),getattr(args,'feature_id',None))
   if group=='status':
@@ -191,8 +330,21 @@ def run(args,config):
   from .peer_selection import rank
   result=rank(exchange,args.want)
  elif group=='settings':
-  SETTINGS_KEYS=('enabled','network','advertise','auto_select','max_transfers_per_day','max_transfers_per_peer_per_day','max_bytes_per_day','max_rpc_per_day','max_rpc_per_peer_per_day','min_peer_version','feature_borrow_enabled','p2p_mint_enabled','p2p_sell_enabled','compress_enabled','decompress_enabled','bundle_max_age_seconds','relay_only','crypto_network')
+  SETTINGS_KEYS=('enabled','network','advertise','auto_select','max_transfers_per_day','max_transfers_per_peer_per_day','max_bytes_per_day','max_rpc_per_day','max_rpc_per_peer_per_day','min_peer_version','feature_borrow_enabled','p2p_mint_enabled','p2p_sell_enabled','compress_enabled','decompress_enabled','bundle_max_age_seconds','relay_only','crypto_network','compress_wire','bandwidth_profile','transfer_chunk_size')
   changes={k:getattr(args,k) for k in SETTINGS_KEYS if getattr(args,k,None) is not None}
+  if verb=='set':
+   if getattr(args,'consensus_min_threshold',None) is not None:
+    cfg2=exchange.load();cfg2.setdefault('p2p',{})['consensus_trigger_min_peers']=args.consensus_min_threshold
+    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+   if getattr(args,'baseline_grant_tokens',None) is not None:
+    cfg2=exchange.load();cfg2.setdefault('p2p',{})['baseline_grant_tokens']=args.baseline_grant_tokens
+    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+   if getattr(args,'network_mode',None) is not None:
+    cfg2=exchange.load();cfg2['network_mode']=args.network_mode
+    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+   if getattr(args,'internet_gateway',None) is not None:
+    cfg2=exchange.load();cfg2['internet_gateway']=args.internet_gateway
+    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
   result=exchange.configure(**changes) if verb=='set' else exchange.summary()
  elif group=='peer':
   if verb=='list':result=exchange.summary()['peers']
@@ -213,6 +365,18 @@ def run(args,config):
      exchange.rule(new_peer_id,parts[2],parts[1],allow)
    exchange.block(args.old_peer_id,True)
    result={'status':'rotated','old_peer_id':args.old_peer_id,'new_peer_id':new_peer_id,'rules_migrated':len(old_rules)}
+  elif verb=='role':
+   pid=getattr(args,'peer_id',None);role_val=getattr(args,'role_value',None)
+   p2p_cfg=exchange.load();peers_map=p2p_cfg.get('peers',{})
+   if role_val is not None:
+    if pid not in peers_map:result={'status':'error','error':f'Unknown peer: {pid!r}'}
+    else:
+     peers_map[pid]['role']=role_val
+     from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',p2p_cfg)
+     result={'status':'ok','peer_id':pid,'role':role_val}
+   else:
+    if pid:result={'peer_id':pid,'role':peers_map.get(pid,{}).get('role','operator')}
+    else:result={'peers':{p:peers_map[p].get('role','operator') for p in peers_map}}
   else:result=exchange.block(args.peer_id,verb=='block')
  elif group=='feature':
   if verb in ('catalog','declare','lifecycle'):
@@ -222,6 +386,58 @@ def run(args,config):
    elif verb=='declare':result=catalog.declare(args.feature_id,json.loads(bounded_file(args.manifest,16384)))
    else:result=catalog.lifecycle(args.atom_id,args.status,args.replacement)
   elif verb=='policy':result=exchange.feature_policy(args.feature_id,{k:getattr(args,k) for k in ('access','license_id','essential','open_after_unix','resale') if getattr(args,k,None) is not None})
+  elif verb=='rate':
+   import time as _t
+   local_id=config.get('peer_id',exchange.identity().get('peer_id','local'))
+   outcome_row={'kind':'FEATURE_RATING','feature_id':args.feature_id,'outcome':args.outcome,'score':getattr(args,'score',None),'at_unix':_t.time(),'at':str(_t.time()),'peer':local_id}
+   exchange.append_audit_row(outcome_row)
+   # Phase 2a: check auto-delist after every rating write
+   _delist_result=_check_auto_delist(args.feature_id,exchange)
+   # Phase 2c: reputation decay/boost on feature ratings
+   try:
+    from .credit_ledger import feature_creator_id as _fcid
+    _creator=_fcid(args.feature_id,exchange) if hasattr(__import__('urace.credit_ledger',fromlist=['feature_creator_id']),'feature_creator_id') else None
+   except Exception:_creator=None
+   if _creator:
+    _rep_delta=0.3 if args.outcome=='positive' else (-0.5 if args.outcome=='negative' else 0.0)
+    if _rep_delta!=0.0:
+     exchange.append_audit_row({'kind':'REPUTATION_DELTA','peer':_creator,'delta':_rep_delta,'reason':f'feature_rating_{args.outcome}','feature_id':args.feature_id,'at_unix':_t.time()})
+   result={'status':'ok','feature_id':args.feature_id,'outcome':args.outcome,'recorded':True,'auto_delist':_delist_result}
+  elif verb=='recommend':
+   from ._common import SYSTEM_ROOT
+   import json as _json
+   _ledger_jsonl=SYSTEM_ROOT/'exchange'/'initial_ledger'/'initial_ledger.jsonl'
+   # Build KPI scores from FEATURE_RATING audit rows
+   _rating_pos: dict[str,int]={}
+   _rating_neg: dict[str,int]={}
+   _rating_tot: dict[str,int]={}
+   try:
+    for _rr in exchange.audit_rows():
+     if _rr.get('kind')=='FEATURE_RATING':
+      _fid=_rr.get('feature_id','')
+      _oc=_rr.get('outcome','')
+      _rating_tot[_fid]=_rating_tot.get(_fid,0)+1
+      if _oc=='positive':_rating_pos[_fid]=_rating_pos.get(_fid,0)+1
+      elif _oc=='negative':_rating_neg[_fid]=_rating_neg.get(_fid,0)+1
+   except Exception:pass
+   features=[]
+   if _ledger_jsonl.exists():
+    lines=[l for l in _ledger_jsonl.read_text().splitlines() if l.strip()][1:]
+    _candidates=[]
+    for line in lines[:getattr(args,'limit',5)*10]:
+     try:
+      f=_json.loads(line)
+      if f.get('borrow_price_units',0)==0:
+       _fid2=f.get('feature_id','')
+       _pos=_rating_pos.get(_fid2,0);_neg=_rating_neg.get(_fid2,0);_tot=_rating_tot.get(_fid2,1)
+       kpi_score=(_pos-_neg)/max(_tot,1)
+       _kpi_mult=0.5 if kpi_score<-0.3 else 1.0
+       _entry={'feature_id':_fid2,'kind':f.get('kind_label',''),'tags':f.get('tags',[]),'borrow_price_units':0,'kpi_score':round(kpi_score,3)}
+       _candidates.append((_kpi_mult*kpi_score,_entry))
+     except Exception:continue
+    _candidates.sort(key=lambda x:x[0],reverse=True)
+    features=[e for _,e in _candidates[:getattr(args,'limit',5)]]
+   result={'status':'ok','recommended':features,'count':len(features)}
   else:result=exchange.feature(args.feature_id,args.depends_on,wanted=args.wanted,offered=args.offered,wants=args.wants)
  elif group=='rule':
   if verb=='set':result=exchange.rule(args.peer_id,args.feature_id,args.direction,args.allow)
@@ -285,6 +501,115 @@ def run(args,config):
    receipt=_ev.load_receipt(SYSTEM_ROOT/'trial',args.baseline_evaluation_id,public=True)
    result=pe.request(exchange,args.peer_id,'exchange.manifest',{'baseline_engine_sha256':receipt['engine_sha256'],'observed_failures':[c for c,p in receipt['case_results'].items() if not p]+args.failures,'session_start_unix':__import__('time').time()})
   else:result=exchange.review(args.bundle_id,args.review_status,args.note)
+ elif group=='market':
+  if verb=='stats':
+   def _escrow_stats(exchange, rows, window_sec, now_unix):
+    import time as _te
+    from . import peer_work_market as _pwm
+    try:
+     all_reqs = _pwm.list_requests(exchange)
+    except Exception:
+     all_reqs = []
+    active = [r for r in all_reqs if r.get('state') in ('OPEN','ACCEPTED')]
+    pending_units = sum(int(r.get('budget_units',0)) for r in active if r.get('state')=='ACCEPTED')
+    completed_window = [r for r in all_reqs if r.get('state')=='COMPLETED' and r.get('completed_at_unix',0)>now_unix-window_sec]
+    p2p_cfg = exchange.load()
+    peers_map = p2p_cfg.get('peers',{})
+    # Peers capable of escrow: pinned, unblocked, with evidence of work activity
+    workers = {r.get('assigned_peer') for r in all_reqs if r.get('assigned_peer')}
+    known_unblocked = [pid for pid,v in peers_map.items() if not v.get('blocked')]
+    escrow_capable_estimate = max(len(workers), len(known_unblocked))
+    return {
+     'active_escrows': len(active),
+     'pending_settlement_units': pending_units,
+     'completed_in_window': len(completed_window),
+     'escrow_capable_peers_estimate': escrow_capable_estimate,
+     'note': 'escrow_capable_peers_estimate counts unblocked pinned peers; actual escrow capability requires token balance and mutual rules',
+    }
+   import time as _t
+   from . import ledger_compaction as _lc
+   from .credit_ledger import summary as cl_summary
+   window_hours = getattr(args, 'window_hours', 24)
+   window_sec = window_hours * 3600
+   now_unix = _t.time()
+   rows = exchange.audit_rows()
+   # Velocity: events in window
+   recent = [r for r in rows if r.get('at_unix', 0) > now_unix - window_sec]
+   mint_events = [r for r in recent if r.get('kind') == 'QUALIFY_RECEIPT']
+   # Trend: compare current window vs prior window
+   prior_start = now_unix - 2 * window_sec
+   prior = [r for r in rows if prior_start < r.get('at_unix', 0) <= now_unix - window_sec]
+   prior_mints = len([r for r in prior if r.get('kind') == 'QUALIFY_RECEIPT'])
+   curr_mints = len(mint_events)
+   if prior_mints == 0:
+    trend = 'accelerating' if curr_mints > 0 else 'stable'
+    trend_delta = 100.0 if curr_mints > 0 else 0.0
+   else:
+    delta_pct = (curr_mints - prior_mints) / prior_mints * 100
+    trend = 'accelerating' if delta_pct > 10 else ('decelerating' if delta_pct < -10 else 'stable')
+    trend_delta = round(delta_pct, 1)
+   burn_events = [r for r in recent if r.get('kind') == 'CREDIT_DELTA' and r.get('direction') in ('spend', 'burn', 'send') or (r.get('kind') == 'CREDIT_DELTA' and int(r.get('amount_units', 0)) < 0)]
+   equity_sells = [r for r in recent if r.get('kind') == 'EQUITY_SELL']
+   work_released = [r for r in recent if r.get('kind') == 'WORK_RELEASED']
+   # Supply stats
+   supply_summary = cl_summary(exchange.root)
+   total_peers = len(supply_summary.get('peers', {}))
+   # Feature counts from initial ledger
+   from ._common import SYSTEM_ROOT
+   import json as _json
+   _ledger_jsonl = SYSTEM_ROOT / 'exchange' / 'initial_ledger' / 'initial_ledger.jsonl'
+   _ledger_json = SYSTEM_ROOT / 'exchange' / 'initial_ledger' / 'initial_ledger.json'
+   total_features = 0
+   if _ledger_jsonl.exists():
+    lines = [l for l in _ledger_jsonl.read_text().splitlines() if l.strip()]
+    if lines:
+     try:
+      header = _json.loads(lines[0])
+      total_features = header.get('feature_count', len(lines) - 1)
+     except Exception:
+      total_features = len(lines) - 1
+   elif _ledger_json.exists():
+    try:
+     total_features = len(_json.loads(_ledger_json.read_text()).get('features', []))
+    except Exception:
+     pass
+   from . import ledger_compaction as _lc2
+   revenue_fraction = 0.65
+   revenue_features = max(1, int(total_features * revenue_fraction))
+   free_features = total_features - revenue_features
+   # Network size
+   p2p_cfg = exchange.load()
+   network_peer_count = len(p2p_cfg.get('peers', {}))
+   result = {
+    'status': 'ok',
+    'window_hours': window_hours,
+    'velocity': {
+     'mint_events': len(mint_events),
+     'burn_events': len(burn_events),
+     'equity_sells': len(equity_sells),
+     'work_released': len(work_released),
+     'total_recent_events': len(recent),
+     'trend': trend,
+     'trend_delta_pct': trend_delta,
+    },
+    'supply': {
+     'total_peers_with_balance': total_peers,
+     'total_ledger_events': supply_summary.get('total_events', 0),
+     'baseline_grant_units': supply_summary.get('baseline_grant_units', 0),
+    },
+    'features': {
+     'total': total_features,
+     'revenue_generating': revenue_features,
+     'free_no_token_flow': free_features,
+     'revenue_fraction': revenue_fraction,
+    },
+    'network': {
+     'pinned_peers': network_peer_count,
+     'exchange_enabled': p2p_cfg.get('enabled', False),
+     'network_mode': p2p_cfg.get('network', False),
+    },
+    'escrow': _escrow_stats(exchange, rows, window_sec, now_unix),
+   }
  elif group=='network':
   if verb=='refresh':
    from .peer_selection import refresh
@@ -302,6 +627,11 @@ def run(args,config):
    except Exception:rows=[]
    mismatches=[r for r in rows if r.get('kind')=='P2P_CORPUS_MISMATCH']
    result={'consensus_threshold':threshold,'network_estimate':network_est,'persistent_max_observed':persistent_max,'total_mismatch_events':len(mismatches),'unique_remote_fingerprints':len({r.get('remote_fingerprint') for r in mismatches if r.get('remote_fingerprint')})}
+  elif verb=='public-address':
+   from . import stun_client as _stun
+   _addr=_stun.get_public_address(getattr(args,'stun_host','stun.l.google.com'),getattr(args,'stun_port',19302))
+   if _addr:result={**_addr,'status':'ok','note':'Register this address as a bootstrap peer endpoint to expose your node to the internet: urace exchange bootstrap add --address https://<ip>:<port>'}
+   else:result={'status':'error','error':'STUN probe failed — check network connectivity or try a different STUN server'}
   elif verb=='disconnect':
    import time as _t
    cfg=exchange.load();until=_t.time()+args.duration_minutes*60
@@ -323,6 +653,45 @@ def run(args,config):
    cfg=exchange.load()
    est=cfg.get('estimated_network_size',cfg.get('max_observed_network_size',1))
    result={'estimated_network_size':est,'all_time_max_observed':cfg.get('max_observed_network_size',1),'note':'heuristic estimate from DHT gossip — not cryptographically precise','security_note':'exact network topology is never exposed; this is a statistical estimate','use_for':'supply-calc calibration and epoch adjustment'}
+  elif verb=='port-to-internet':
+   _use_json=getattr(args,'json',False)
+   _settings=exchange.load()
+   analysis=_port_to_internet_analysis(exchange,_settings)
+   if analysis['already_internet']:
+    msg={'status':'already_internet','network_mode':analysis['network_mode']}
+    print(json.dumps(msg) if _use_json else f"Already on {analysis['network_mode']} network. No action needed.")
+    return 0
+   if not analysis['stun_available']:
+    msg={'status':'stun_unavailable','reason':'Could not resolve public address via STUN. Check network connectivity or configure manually.'}
+    print(json.dumps(msg) if _use_json else f"Cannot port to internet: {msg['reason']}")
+    return 1
+   selected=_select_features_for_port(analysis,args)
+   _pub=analysis['public_address'] or {}
+   report={
+    'public_address':analysis['public_address'],
+    'features_to_port':selected,
+    'features_skipped':[f for f in analysis['features'] if f not in selected],
+    'recommended_mode':'hybrid',
+    'steps':['Switch network mode to hybrid',f"Register bootstrap address: {_pub.get('ip')}:{_pub.get('port')}"]+[f"Mint feature {f['feature_id']} to public network" for f in selected],
+   }
+   if getattr(args,'dry_run',False):
+    report['status']='dry_run'
+    if _use_json:print(json.dumps(report,indent=2))
+    else:_format_port_report(report)
+    return 0
+   if not getattr(args,'auto',False) and not _use_json:
+    _format_port_report(report)
+    try:confirm=input('\nProceed with porting to internet? [y/N] ').strip().lower()
+    except(EOFError,KeyboardInterrupt):confirm='n'
+    if confirm not in('y','yes'):print('Aborted. No changes made.');return 0
+   # Execute: switch network mode to hybrid via policy.json
+   from ._common import atomic_write_json
+   _cfg2=exchange.load();_cfg2['network_mode']='hybrid'
+   atomic_write_json(exchange.root/'policy.json',_cfg2)
+   report['status']='applied'
+   report['network_mode_set']='hybrid'
+   print(json.dumps(report,indent=2) if _use_json else f"Ported to hybrid network.\nPublic address: {_pub.get('ip')}:{_pub.get('port')}\nFeatures queued for minting: {len(selected)}")
+   return 0
   else:
    if not 0<=args.port<=65535:raise ValueError('Port must be 0–65535')
    with pe.server(exchange,args.host,args.port) as server:
@@ -428,7 +797,10 @@ def run(args,config):
    grants=[r for r in rows if r.get('kind')=='EQUITY_GRANT' and r.get('feature_id')==args.feature_id]
    result={'feature_id':args.feature_id,'grants':grants,'transfers':transfers,'total_transfers':len(transfers)}
   elif verb=='list-for-sale':result={'listing_id':_eat.list_for_sale(exchange,args.feature_id,local_id,args.basis_points,args.ask_price)}
-  elif verb=='listings':result={'listings':_eat.open_listings(exchange,getattr(args,'feature_id',None))}
+  elif verb=='listings':
+   _all_listings=_eat.open_listings(exchange,getattr(args,'feature_id',None))
+   _active_listings=[lst for lst in _all_listings if not _listing_expired(lst,config)]
+   result={'listings':_active_listings}
   elif verb=='cancel-listing':_eat.cancel_listing(exchange,args.listing_id,local_id);result={'status':'cancelled','listing_id':args.listing_id}
   elif verb=='fill-listing':
    import sys as _sys3
@@ -538,7 +910,7 @@ def run(args,config):
    if not getattr(args,'yes',False):
     try:confirm=input('Delete ALL exchange data (balances, listings, work history)? [y/N] ').strip().lower()
     except(EOFError,KeyboardInterrupt):confirm='n'
-    if confirm not in('y','yes'):_out({'status':'aborted'});return 0
+    if confirm not in('y','yes'):print(json.dumps({'status':'aborted'},indent=2,sort_keys=True));return 0
    import datetime as _dt
    try:
     rows=exchange.audit_rows()
@@ -548,7 +920,7 @@ def run(args,config):
     if hasattr(exchange,'_rows'):exchange._rows.clear()
     exchange.append_audit_row({'kind':'EXCHANGE_RESET','reason':'release_clean','reset_at':_dt.datetime.now(_dt.timezone.utc).isoformat()})
     result={'status':'reset','rows_cleared':row_count,'note':'fresh exchange state ready for release build'}
-   except Exception as _e:_out({'error':str(_e)});return 2
+   except Exception as _e:print(json.dumps({'error':str(_e)},indent=2,sort_keys=True));return 2
   else:raise ValueError(f'Unknown reset verb: {verb!r}')
  elif group=='compact':
   from . import ledger_compaction as _lc
@@ -641,6 +1013,32 @@ def run(args,config):
     _rows=_jdd.loads(_zd.decompress(_bd.b64decode(_arch['payload'])))
     result={'archive_id':args.archive_id,'compressed_at':_arch.get('compressed_at'),'rows':_rows[-args.limit:],'count':len(_rows)}
   else:raise ValueError(f'Unknown compact verb: {verb!r}')
+ elif group=='bootstrap':
+  cfg=exchange.load()
+  peers_list=cfg.get('bootstrap_peers',[])
+  if verb=='list':result={'bootstrap_peers':peers_list,'count':len(peers_list)}
+  elif verb=='add':
+   endpoint=args.endpoint.strip()
+   if not endpoint.startswith('https://'):raise ValueError('Bootstrap peer endpoint must start with https://')
+   if endpoint in peers_list:result={'status':'already_present','endpoint':endpoint}
+   else:
+    peers_list=peers_list+[endpoint]
+    with exchange.lock():
+     cfg=exchange.load();cfg['bootstrap_peers']=peers_list
+     import json as _jsn
+     (exchange.root/'policy.json').write_text(_jsn.dumps(cfg,indent=2))
+    result={'status':'added','endpoint':endpoint,'total':len(peers_list)}
+  elif verb=='remove':
+   endpoint=args.endpoint.strip()
+   if endpoint not in peers_list:result={'status':'not_found','endpoint':endpoint}
+   else:
+    peers_list=[p for p in peers_list if p!=endpoint]
+    with exchange.lock():
+     cfg=exchange.load();cfg['bootstrap_peers']=peers_list
+     import json as _jsn
+     (exchange.root/'policy.json').write_text(_jsn.dumps(cfg,indent=2))
+    result={'status':'removed','endpoint':endpoint,'total':len(peers_list)}
+  else:raise ValueError(f'Unknown bootstrap verb: {verb!r}')
  else:raise ValueError('Unknown exchange action')
  print(json.dumps(result,indent=2,sort_keys=True,default=str));return 0
 

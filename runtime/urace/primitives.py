@@ -754,7 +754,7 @@ def validate_compaction_index(value: dict) -> None:
         raise ValueError("CompactionIndex.kind_to_ids must be dict")
     for k, ids in value["kind_to_ids"].items():
         if not isinstance(k, str):
-            raise ValueError(f"CompactionIndex.kind_to_ids key must be str")
+            raise ValueError("CompactionIndex.kind_to_ids key must be str")
         if not isinstance(ids, list):
             raise ValueError(f"CompactionIndex.kind_to_ids[{k!r}] must be list")
         for i, rid in enumerate(ids):
@@ -1019,7 +1019,7 @@ def validate_classification_result(record: dict) -> None:
     if record["type"] == "response" and "text" not in record.get("parameters", {}):
         raise ValueError("ClassificationResult.parameters.text required when type='response'")
     if not isinstance(record["confidence"], (int, float)) or not (0.0 <= record["confidence"] <= 1.0):
-        raise ValueError(f"ClassificationResult.confidence must be probability in [0,1]")
+        raise ValueError("ClassificationResult.confidence must be probability in [0,1]")
 
 
 def validate_classification_batch(record: dict) -> None:
@@ -1579,7 +1579,7 @@ def validate_policy_record(value: dict) -> None:
     if value["status"] not in _POLICY_STATUSES:
         raise ValueError(f"PolicyRecord.status must be one of {sorted(_POLICY_STATUSES)}")
     if value["enforcement"] not in _CONSTRAINT_ENFORCEMENTS:
-        raise ValueError(f"PolicyRecord.enforcement must be HARD or SOFT")
+        raise ValueError("PolicyRecord.enforcement must be HARD or SOFT")
     if not isinstance(value["description"], str) or not value["description"].strip():
         raise ValueError("PolicyRecord.description must be non-empty string")
 

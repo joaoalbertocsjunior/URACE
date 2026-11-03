@@ -6,6 +6,70 @@ Here's how URACE's peer-to-peer network works: discovery, connection, consensus,
 
 ---
 
+## Network Mode {#network-mode}
+
+Network mode controls how far your node reaches on the exchange. Set it once during setup; change it as your deployment grows.
+
+| Mode | Description |
+|------|-------------|
+| `intranet` | LAN-only — no internet peers, no DHT bootstrap |
+| `hybrid` | LAN-first with an optional internet-facing gateway (default) |
+| `internet` | Full public deployment — DHT discovery and bootstrap peers |
+
+```sh
+urace exchange settings set --network-mode intranet
+urace exchange settings set --network-mode hybrid
+urace exchange settings set --network-mode internet
+```
+
+**Upgrading from intranet to internet**: resolve your public address first, then switch mode:
+
+```sh
+urace exchange network public-address
+urace exchange settings set --network-mode internet
+```
+
+**Hybrid mode with a gateway**: keep most peers on the LAN while one designated peer bridges to the internet:
+
+```sh
+urace exchange settings set --network-mode hybrid --internet-gateway <peer-id>
+```
+
+---
+
+## Resolve Your Public Address
+
+When moving to internet or hybrid mode, find your external IP and port via STUN:
+
+```sh
+urace exchange network public-address
+urace exchange network public-address --stun-host stun.example.com --stun-port 3478
+```
+
+---
+
+## Peer Roles
+
+Control what each connected peer may do on your node. Roles apply on top of certificate pinning.
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | Full access — manage rules, settings, and peers |
+| `operator` | Run operations and transfer features; cannot change settings |
+| `readonly` | Query only — no state-modifying commands |
+
+```sh
+# Show a peer's current role
+urace exchange peer role <peer_id>
+
+# Set a role
+urace exchange peer role <peer_id> --set admin
+urace exchange peer role <peer_id> --set operator
+urace exchange peer role <peer_id> --set readonly
+```
+
+---
+
 ## Discover Peers
 
 Find peers on your local network (LAN/DNS-SD) or via DHT bootstrap:

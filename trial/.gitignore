@@ -70,6 +70,12 @@
 !/runtime_snapshot.py
 !/test_runtime_snapshot.py
 
+!/runtime_cycle.py
+!/runtime_dashboard.py
+!/runtime_evaluation.py
+!/runtime_proposal.py
+!/runtime_qualification.py
+!/runtime_regression_guard.py
 !/runtime_trial.py
 !/test_runtime_trial.py
 

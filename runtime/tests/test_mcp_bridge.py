@@ -142,10 +142,13 @@ class JobTests(Fixture):
   for _ in range(100):
    if j.status(r['job_id'])['status']=='RUNNING':break
    time.sleep(.01)
-  descriptor=os.open(j.path(r['job_id']).with_suffix('.lock.guard'),os.O_RDWR);fcntl.flock(descriptor,fcntl.LOCK_EX)
-  release=threading.Thread(target=lambda:(time.sleep(.05),os.close(descriptor)));release.start()
-  try:j.cancel(r['job_id']);self.assertEqual(j.wait(r['job_id'])['status'],'CANCELLED')
-  finally:release.join()
+  descriptor=os.open(j.path(r['job_id']).with_suffix('.lock.guard'),os.O_RDWR)
+  try:
+   fcntl.flock(descriptor,fcntl.LOCK_EX)
+   release=threading.Thread(target=lambda:(time.sleep(.05),os.close(descriptor)));release.start()
+   try:j.cancel(r['job_id']);self.assertEqual(j.wait(r['job_id'])['status'],'CANCELLED')
+   finally:release.join()
+  except:os.close(descriptor);raise
  def test_simultaneous_managers_cannot_duplicate_a_request(self):
   from concurrent.futures import ThreadPoolExecutor
   counter=self.root/'calls';code="from pathlib import Path;import json,time;p=Path("+repr(str(counter))+");p.open('a').write('one\\n');time.sleep(.1);print(json.dumps({'status':'ok'}))";a=self.jobs(code=code);b=self.jobs(code=code)

@@ -75,7 +75,7 @@ Supply scales with bandwidth, not peers. The constraint is always "can new peers
 
 ## Initial Ledger
 
-URACE ships with a pre-built initial ledger of **1,343 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. All initial ledger features are:
+URACE ships with a pre-built initial ledger of **1,356 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. All initial ledger features are:
 
 - **Free-use**: borrow cost = 0 tokens
 - **No owner**: minted without a creator, available to all peers
@@ -84,13 +84,20 @@ URACE ships with a pre-built initial ledger of **1,343 built-in features** — e
 
 | Metric | Value |
 |--------|-------|
-| Initial features minted | 1,343 |
-| Breakdown | 1,110 mechanism · 119 schema · 106 contract · 7 integration · 1 protocol |
+| Initial features minted | 1,356 |
+| Format | JSONL (`runtime/initial_ledger.jsonl`) — line 1 is a header, each subsequent line is one feature |
+| Breakdown | mechanism · schema · contract · integration · protocol features |
+| Revenue features | 65% (882 features with active token flow) |
+| Free/decayed features | 35% (474 features — consume infra but generate no token flow) |
 | Max features at 1 Mbps / 1,000 peers | 3,840 |
 | Utilization at baseline infra | 35% |
-| Room for user features at baseline | 2,497 additional features |
+| Room for user features at baseline | 2,484 additional features |
 | Max features at 10 Mbps / 10,000 peers | 65,536 |
 | Utilization at 10 Mbps | 2% |
+
+### Revenue Feature Fraction
+
+`revenue_feature_fraction = 0.65` — 35% of features are "free/decayed": they are available to all peers but generate no token flow. This models real-world feature churn (deprecated capabilities, infra-only helpers, transitional scaffolding). Supply calculations account for this fraction; the effective token-generating supply is 65% of the feature count.
 
 Rebuild the ledger after adding modules:
 

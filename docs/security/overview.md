@@ -59,6 +59,27 @@ URACE does not rely on a single security mechanism. Multiple independent defense
 
 ---
 
+## Run a Security Audit
+
+Check your local deployment posture at any time — no external connections required:
+
+```sh
+urace security audit
+urace security audit --json
+```
+
+The audit checks:
+- Wallet key file permissions (`~/.urace/wallet/key.json` should be chmod 600)
+- Peer certificate pinning hygiene
+- Authority boundary integrity
+- Compliance mode status
+- Capability flag anomalies (e.g., minting enabled without an identity)
+- Audit trail completeness for state-modifying commands
+
+Each finding includes a severity (`info`, `warning`, or `critical`) and a remediation hint. Any `critical` finding returns a non-zero exit code so CI/CD pipelines can catch it automatically.
+
+---
+
 ## Detailed Topics
 
 - [Authority Boundary](authority-boundary.md) — self-evolve governance, protected files

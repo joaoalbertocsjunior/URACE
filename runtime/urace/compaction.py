@@ -1055,6 +1055,6 @@ class CompactionEngine:
         if mode == "ARCHIVE" and to_compact:
             subpath = policy.get("archive_subpath", "archives")
             report["archive_path"] = str(
-                Path(subpath) / f"<event-id>.json"
+                Path(subpath) / "<event-id>.json"
             )
         return report

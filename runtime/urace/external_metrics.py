@@ -74,6 +74,28 @@ def _lookup(value: Any, path: str) -> Any:
     return value
 
 
+def score_delta_from_external(external_state: dict[str, Any]) -> float | None:
+    """Return a score delta derived from the latest external metric observations.
+
+    Aggregates all numeric scalar values across the most recent observation set
+    and returns their mean as a score delta.  Returns None when no numeric
+    observations are available so the caller can fall back to the inline path.
+    """
+    observations = external_state.get("latest", [])
+    if not observations:
+        return None
+    scalars: list[float] = []
+    for obs in observations:
+        values = obs.get("values", {})
+        if isinstance(values, dict):
+            for v in values.values():
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v):
+                    scalars.append(float(v))
+    if not scalars:
+        return None
+    return sum(scalars) / len(scalars)
+
+
 def collect(root: Path, settings: dict[str, Any], last_known_good: dict[str, Any] | None = None) -> dict[str, Any]:
     mode = settings.get("mode", "DISABLED").upper()
     observed_at = datetime.now(timezone.utc).isoformat()

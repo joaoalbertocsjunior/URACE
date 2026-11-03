@@ -313,7 +313,7 @@ class Jobs:
         try:child.wait(timeout=3)
         except subprocess.TimeoutExpired:child.kill();child.wait(timeout=3)
     def run(self,row,argv,event):
-        started=time.monotonic();child=None;status='FAILED';output=bytearray();error=bytearray();reason=None;tracked={};next_scan=0
+        started=time.monotonic();child=None;status='FAILED';output=bytearray();error=bytearray();reason=None;tracked={};next_scan=0;result=None
         try:
             if event.is_set():status='CANCELLED';return
             if not row['read_only'] and self.pause_check():status='CANCELLED';reason='URACE paused before dispatch';return
@@ -345,7 +345,7 @@ class Jobs:
                 if child.poll() is None or any(pid_ticks(pid)==ticks for pid,ticks in tracked.items()):self.stop(child,tracked)
                 for pipe in (child.stdout,child.stderr):pipe.close()
             fields={'status':status,'finished_unix':stamp(),'elapsed_seconds':time.monotonic()-started,'reason':reason,'exit_code':child.returncode if child is not None else None,'stderr':error[:4096].decode(errors='replace')}
-            if 'result' in locals():fields['result']=result
+            if result is not None:fields['result']=result
             self.update(row['job_id'],**fields)
             with self.lock:self.events.pop(row['job_id'],None);self.futures.pop(row['job_id'],None)
     def close(self):

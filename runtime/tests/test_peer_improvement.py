@@ -173,6 +173,63 @@ class MarkQualifiedTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pi.mark_qualified(b, "a" * 64, 5.0, {}, "b" * 64)
 
+    def test_mark_qualified_duplicate_raises(self):
+        """A bundle may only be qualified once — second call must raise ValueError."""
+        import hashlib, time
+        from urace import peer_improvement as pi
+        a, b, aid, bid = self._make_exchange_pair()
+        artifact = "urace runtime improvement patch duplicate check"
+        result = a.prepare(bid, "feat", artifact, True)
+        bundle = a.inspect(result["bundle_id"])["bundle"]
+        recv = b.receive(bundle)
+        bundle_id = recv["bundle_id"]
+        # First qualification succeeds
+        pi.mark_qualified(b, bundle_id, score_delta=3.0, affected_files={}, baseline_sha256="a" * 64)
+        # Second qualification on same bundle must be rejected
+        with self.assertRaises(ValueError):
+            pi.mark_qualified(b, bundle_id, score_delta=3.0, affected_files={}, baseline_sha256="a" * 64)
+
+
+class PromoteRateLimitTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.qdir = self.root / "quarantine"
+        self.qdir.mkdir(parents=True)
+
+    def _patch_qdir(self):
+        from urace import peer_improvement as pi
+        return patch.object(pi, "quarantine_dir", return_value=self.qdir)
+
+    def test_promote_rate_limit_exceeded_raises(self):
+        """Exceed 10 promotions per peer per 24h — 11th call must raise ValueError."""
+        import time as _t
+        from urace import peer_improvement as pi
+        config = {}
+        state = {}
+        sender = "a" * 64
+        # Pre-fill rollback_records with 10 recent promotions from same sender
+        state["rollback_records"] = [
+            {
+                "kind": "peer-artifact-promoted",
+                "peer_sender": sender,
+                "promoted_at_unix": _t.time() - 60 * i,  # within last 24h
+            }
+            for i in range(10)
+        ]
+        # Write a valid bundle for the promote call
+        _write_bundle(self.qdir, "rate-test-bundle", artifact="urace runtime improvement")
+        # Patch sender in bundle to match our sender
+        bundle_path = self.qdir / "rate-test-bundle.json"
+        bundle = json.loads(bundle_path.read_text())
+        bundle["payload"]["sender"] = sender
+        bundle_path.write_text(json.dumps(bundle))
+        with self._patch_qdir():
+            with self.assertRaises(ValueError) as ctx:
+                pi.promote(self.root, "rate-test-bundle", config, state)
+        self.assertIn("daily promotion limit", str(ctx.exception))
+
 
 class MultiPeerAmplificationTests(unittest.TestCase):
     def setUp(self):

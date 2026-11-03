@@ -2420,7 +2420,7 @@ if __name__ == "__main__":
         operation_descriptor = os.open(OPERATION_LOCK, os.O_CREAT | os.O_RDWR, 0o600)
         try:
             try:
-                fcntl.flock(operation_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _flock_ex(operation_descriptor)
             except BlockingIOError as error:
                 if arguments.action in LIVE_CONTROL_ACTIONS:
                     control_id = queue_portfolio_control(sys.argv[1:])
@@ -2429,4 +2429,4 @@ if __name__ == "__main__":
                 raise SystemExit("another portfolio mutation controller is active; use read-only feedback/status, queue a supported live control, or retry later") from error
             arguments.function(arguments)
         finally:
-            fcntl.flock(operation_descriptor, fcntl.LOCK_UN); os.close(operation_descriptor)
+            _flock_un(operation_descriptor); os.close(operation_descriptor)

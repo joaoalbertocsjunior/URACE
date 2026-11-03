@@ -446,13 +446,13 @@ def render(state: dict[str, Any]) -> str:
         f"Next follow-up: {profile['next_follow_up']}",
         f"Executor: {load_config().get('executor', {}).get('kind', 'deterministic')} ({'enabled' if load_config().get('executor', {}).get('enabled') else 'disabled'})",
         f"Executor available: {executor_state.get('available')}",
-        f"Executor pool:" + ("".join(f" {pid}(available={ps.get('available')} authenticated={ps.get('authenticated')})" for pid, ps in executor_state.get("provider_pool", {}).items() if isinstance(ps, dict)) or " none"),
+        "Executor pool:" + ("".join(f" {pid}(available={ps.get('available')} authenticated={ps.get('authenticated')})" for pid, ps in executor_state.get("provider_pool", {}).items() if isinstance(ps, dict)) or " none"),
         f"Last availability check: {executor_state.get('last_availability_check') or 'never'}",
         f"Executor failures: {len(executor_state.get('failures', []))}",
         f"Executor calls retained (30d): {len(executor_state.get('executor_calls', []))}/{load_config().get('executor', {}).get('max_executor_calls_per_30d', 12)}",
         f"Executor budget: {executor_state.get('discovery_budget_status', 'WITHIN_BUDGET')}",
         f"Unproductive discovery streak: {executor_state.get('unproductive_discovery_streak', 0)}/{load_config().get('executor', {}).get('discovery_yield_exhausted_threshold', 5)} (exhausted at threshold)",
-        *([f"DISCOVERY_YIELD_EXHAUSTED: streak reached threshold; next discovery requires a qualifying reset event (new goal, new evidence, intent change, or force-discovery)"] if int(executor_state.get("unproductive_discovery_streak", 0)) >= int(load_config().get("executor", {}).get("discovery_yield_exhausted_threshold", 5)) else []),
+        *(["DISCOVERY_YIELD_EXHAUSTED: streak reached threshold; next discovery requires a qualifying reset event (new goal, new evidence, intent change, or force-discovery)"] if int(executor_state.get("unproductive_discovery_streak", 0)) >= int(load_config().get("executor", {}).get("discovery_yield_exhausted_threshold", 5)) else []),
         *([ f"Discovery defer reason: {executor_state['discovery_defer_reason']}"] if executor_state.get("discovery_defer_reason") else []),
         f"Self-evolution policy: {state.get('self_evolution_policy', {}).get('mode', 'DISABLED')}",
         f"External metrics: {state.get('external_metric_state', {}).get('mode', 'DISABLED')} ({len(state.get('external_metric_state', {}).get('latest', []))} sources observed)",
@@ -474,9 +474,9 @@ def render(state: dict[str, Any]) -> str:
         _shortfall = max(0, _min_units - _evidence_count)
         lines.extend([
             "Evidence-blocked: True",
-            f"  missing-dimension: evidence_quality",
+            "  missing-dimension: evidence_quality",
             f"  shortfall: {_shortfall} evidence units below minimum ({_min_units})",
-            f"  advancement-blocked: True",
+            "  advancement-blocked: True",
             f"  earliest-qualifying-condition: accumulate {_shortfall} additional evidence units or lower evaluation minimum",
         ])
     return "\n".join(lines)

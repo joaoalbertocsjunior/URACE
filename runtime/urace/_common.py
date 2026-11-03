@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
-import datetime
 import hashlib
 import json
 import os

@@ -99,6 +99,33 @@ urace exchange equity trade-config set
 
 ---
 
+## Rate a Feature
+
+After using a borrowed feature, rate it to improve recommendations across the network. Your ratings are combined with your improvement history to surface better suggestions over time.
+
+```sh
+# Rate by outcome
+urace exchange feature rate --feature-id <feature-id> --outcome positive
+urace exchange feature rate --feature-id <feature-id> --outcome negative
+urace exchange feature rate --feature-id <feature-id> --outcome neutral
+
+# Rate with an explicit quality score (0.0–1.0)
+urace exchange feature rate --feature-id <feature-id> --outcome positive --score 0.85
+```
+
+---
+
+## Get Feature Recommendations
+
+Get a personalized list of features likely to improve your product, based on your ratings and past improvement history:
+
+```sh
+urace exchange feature recommend
+urace exchange feature recommend --limit 10
+```
+
+---
+
 ## Feature Saturation
 
 Check whether a feature has reached market saturation (most peers already have it):

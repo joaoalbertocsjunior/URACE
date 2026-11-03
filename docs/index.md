@@ -65,7 +65,7 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 | | |
 |---|---|
 | [CLI Reference](reference/cli.md) | All CLI commands in one table |
-| [Config Reference](reference/config.md) | All config options with defaults |
+| [Config Reference](reference/config.md) | All config options with defaults; `urace config show-all` |
 | [Spec](reference/spec.md) | URACE system spec: guarantees, invariants, lifecycle |
 
 ---

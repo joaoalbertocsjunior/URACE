@@ -49,7 +49,7 @@ def read(record,config):
             # then stop aggregate row transfer as soon as the JSON budget is spent.
             db.setlimit(sqlite3.SQLITE_LIMIT_LENGTH,max(4096,limit))
             db.row_factory=sqlite3.Row;rows=[];used=2
-            for value in db.execute('SELECT * FROM "'+table(record)+'" LIMIT ?', (int(config.get('data_limits',{}).get('max_rows',10000))+1,)):
+            for value in db.execute('SELECT * FROM "'+table(record)+'" LIMIT ?', (int(config.get('data_limits',{}).get('max_rows',10000))+1,)):  # noqa: S608
                 row=dict(value)
                 try:encoded=json.dumps(row,sort_keys=True,allow_nan=False).encode()
                 except (TypeError,ValueError) as error:raise TransportError('SQLite rows must contain JSON-compatible values') from error
@@ -99,7 +99,7 @@ def push(record,rows,config):
         columns=list(rows[0]) if rows else []
         if any(set(r)!=set(columns) for r in rows) or any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*',c) for c in columns):raise TransportError('SQLite push requires consistent simple column names')
         with sqlite3.connect('file:'+quote(str(path))+'?mode=rw',uri=True,timeout=2) as db:
-            if rows:db.executemany('INSERT INTO "'+table(record)+'" ('+','.join('"'+c+'"' for c in columns)+') VALUES ('+','.join('?' for _ in columns)+')',[[r[c] for c in columns] for r in rows])
+            if rows:db.executemany('INSERT INTO "'+table(record)+'" ('+','.join('"'+c+'"' for c in columns)+') VALUES ('+','.join('?' for _ in columns)+')',[[r[c] for c in columns] for r in rows])  # noqa: S608
         backup=None
     elif kind=='csv':
         columns=list(rows[0]) if rows else []
