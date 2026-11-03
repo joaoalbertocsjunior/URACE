@@ -21,16 +21,17 @@ def output_options(parser):
 
 def product(sub):
     root=sub.add_parser('product',help='manage products, isolated work, value evidence and improvement controls')
-    root.set_defaults(command='product',name=None,improvement_product_id=None,all_products=False,product_state_path=None,product_files=[],intent_purpose=None,reason=None,force=False,value_id=None,value_data=None,project=None,template='navigation',work_executor='auto',execution_mode='auto',max_seconds=480,run_id=None,adaptive='true')
+    root.set_defaults(command='product',name=None,improvement_product_id=None,all_products=False,product_state_path=None,product_files=[],intent_purpose=None,reason=None,force=False,value_id=None,value_data=None,project=None,template='navigation',work_executor='auto',execution_mode='auto',max_seconds=480,run_id=None,adaptive='true',product_github=None,product_clone_to=None,git_args=[])
     output_options(root);children=root.add_subparsers(dest='action',required=True)
     for action in ('list','status','help','switch','register','remove','deactivate','activate','enable','disable'):
         p=children.add_parser(action,help=('compatibility alias for product improvements '+action if action in ('enable','disable') else action+' product'))
         output_options(p)
         if action not in ('list','status','help'):p.add_argument('name')
         if action=='register':
-            p.add_argument('--state-path',dest='product_state_path',required=True);p.add_argument('--product-files',dest='product_files',nargs='+',default=[]);p.add_argument('--intent-purpose',dest='intent_purpose')
+            p.add_argument('--state-path',dest='product_state_path');p.add_argument('--product-files',dest='product_files',nargs='+',default=[]);p.add_argument('--intent-purpose',dest='intent_purpose');p.add_argument('--github',dest='product_github',metavar='OWNER/REPO',help='attach a GitHub-hosted product (owner/repo)');p.add_argument('--clone-to',dest='product_clone_to',metavar='PATH',help='clone the GitHub repo to this local path during registration');p.add_argument('--type', action='append', choices=['software','content','media','model','data'], dest='product_type', metavar='TYPE', help='product type (can specify multiple times or comma-separated: software,media,model,data,content). Auto-detected if omitted.')
         if action in ('switch','register','remove','deactivate','activate'):p.add_argument('--reason')
         if action=='remove':p.add_argument('--force',action='store_true')
+    git_p=children.add_parser('git',help='run git operations on a registered GitHub product clone');git_p.set_defaults(action='git',git_args=[]);git_p.add_argument('name',help='registered product name');git_p.add_argument('git_args',nargs=argparse.REMAINDER,help='git subcommand and arguments');output_options(git_p)
     create=children.add_parser('create',help='bootstrap a registered draft product directly from a description');create.add_argument('description');create.add_argument('--name',dest='creation_name');output_options(create)
     work=children.add_parser('work',help='isolated executable product work');output_options(work);verbs=work.add_subparsers(dest='name',required=True)
     for action in ('init','run','status','clarify'):
@@ -51,6 +52,23 @@ def product(sub):
         else:p.add_argument('improvement_product_id')
     from .exchange_cli import grammar
     grammar(children)
+    return root
+
+def config_showall(sub):
+    root=sub.add_parser('config',help='show or manage all configuration')
+    root.set_defaults(command='config')
+    verbs=root.add_subparsers(dest='config_verb',required=True)
+    p=verbs.add_parser('show-all',help='show complete configuration: controls, executor, exchange, fleet')
+    output_options(p)
+    return root
+
+def security_audit(sub):
+    root=sub.add_parser('security',help='security posture audit and key management')
+    root.set_defaults(command='security')
+    verbs=root.add_subparsers(dest='security_verb',required=True)
+    p=verbs.add_parser('audit',help='check security posture: wallet, consensus, compliance, circuit breaker, GitHub release integrity')
+    p.add_argument('--no-network', action='store_true', dest='no_network', help='skip GitHub release check (offline mode)')
+    output_options(p)
     return root
 
 def watch(sub):
@@ -89,6 +107,13 @@ def configuration(sub):
     p=children.add_parser('context-guard',help='source-bound requirement retrieval and owner clarification loop');p.set_defaults(command='context-guard-config');p.add_argument('--enabled',type=boolean);output_options(p)
     p=children.add_parser('runtime-improvement',help='bounded runtime cycle controls; independent acceptance remains required');p.set_defaults(command='runtime-improvement-config')
     p.add_argument('--enabled',type=boolean);p.add_argument('--auto-deploy',type=boolean);p.add_argument('--interval-seconds',type=int);output_options(p)
+    p=children.add_parser('github-workflow',help='automatic git operations for GitHub-attached products (auto-pull, auto-commit, auto-push)');p.set_defaults(command='github-workflow-config')
+    p.add_argument('--auto-pull',dest='auto_pull',type=boolean,help='pull latest before improvement cycles (default: true)')
+    p.add_argument('--auto-commit',dest='auto_commit',type=boolean,help='commit after improvement cycles (default: false — mutations require intent)')
+    p.add_argument('--auto-push',dest='auto_push',type=boolean,help='push after commit (default: false — publish requires explicit action)')
+    p.add_argument('--commit-message-template',dest='commit_message_template',help='template for auto-commit messages; {cycle_id} is substituted')
+    p.add_argument('--branch-strategy',dest='branch_strategy',choices=['current','new_branch'],help='work on current branch or create per-cycle branch (default: current)')
+    output_options(p)
     p=children.add_parser('auto-milestones',help='local milestone drafts; never automatically activates gates');p.set_defaults(command='auto-milestones-config')
     p.add_argument('--enabled',type=boolean);output_options(p)
     p=children.add_parser('auto-goals',help='toggle automatic project goals and replenishment');p.set_defaults(command='auto-goals')
@@ -99,6 +124,32 @@ def configuration(sub):
     p=children.add_parser('executor',help='persistent native model/reasoning overrides; use executor attach for registration');p.set_defaults(command='executor-options')
     p.add_argument('executor_id');g=p.add_mutually_exclusive_group();g.add_argument('--model');g.add_argument('--inherit-model',action='store_true')
     p.add_argument('--native-effort',choices=['low','medium','high','inherit']);output_options(p)
+    return root
+
+def crypto(sub):
+    root=sub.add_parser('crypto',help='local wallet and signing primitives (gas-free; no on-chain broadcast)')
+    root.set_defaults(command='crypto',crypto_action=None,wallet_dir=None,payload=None,overwrite=False)
+    output_options(root);children=root.add_subparsers(dest='crypto_action',required=True)
+    wallet=children.add_parser('wallet',help='secp256k1 keypair management');wallet.set_defaults(crypto_action='wallet',wallet_verb=None)
+    output_options(wallet);wverbs=wallet.add_subparsers(dest='wallet_verb',required=True)
+    p=wverbs.add_parser('init',help='generate a new keypair and persist it locally');p.add_argument('--wallet-dir',dest='wallet_dir');p.add_argument('--overwrite',action='store_true',default=False);output_options(p)
+    p=wverbs.add_parser('show',help='show public address and public key (never shows private key)');p.add_argument('--wallet-dir',dest='wallet_dir');output_options(p)
+    p=wverbs.add_parser('sign',help='sign a payload with the wallet private key');p.add_argument('payload',help='string payload to sign');p.add_argument('--wallet-dir',dest='wallet_dir');output_options(p)
+    rotate_p=wverbs.add_parser('rotate',help='rotate keypair (backs up old key with chain-of-custody signature)');rotate_p.add_argument('--backup-dir',dest='backup_dir',default=None,help='directory for retired key backup (default: ~/.urace/wallet/archive/)');rotate_p.add_argument('--wallet-dir',dest='wallet_dir');output_options(rotate_p)
+    return root
+
+def qualification(sub):
+    root=sub.add_parser('qualification',help='qualification audit: replay and verify past evidence/decision pairs')
+    root.set_defaults(command='qualification',qualification_action=None,evidence_id=None)
+    output_options(root);children=root.add_subparsers(dest='qualification_action',required=True)
+    p=children.add_parser('replay',help='replay a qualification: verify evidence integrity and reproduce decision logic from stored inputs')
+    p.add_argument('--evidence-id',dest='evidence_id',required=True,help='evidence record ID to replay')
+    p.add_argument('--mode',dest='replay_mode',choices=['estimate','full'],default='estimate',help='estimate: heuristic score; full: use stored evaluation_system weights to detect criteria drift (default: estimate)')
+    output_options(p)
+    p=children.add_parser('list',help='list all evidence records eligible for replay')
+    p.add_argument('--kind',dest='evidence_kind',default=None,help='filter by evidence kind')
+    p.add_argument('--limit',type=int,default=20)
+    output_options(p)
     return root
 
 def child_parsers(parser):
@@ -194,12 +245,13 @@ GROUPS={
  'Observe':{'status','watch'},
  'Lifecycle':{'init','auto','plan','pause','resume','onboard'},
  'Work and input':{'add','context','goal','source','metric','vital','feedback'},
- 'Inspection and evidence':{'check','vitals','change','why','explain','decision','trace','evidence','quality','compliance','milestone','integrity-signal','resource'},
+ 'Inspection and evidence':{'check','vitals','change','why','explain','decision','trace','evidence','quality','compliance','milestone','integrity-signal','resource','qualification'},
  'Persistent settings':{'configuration','evaluation'},
  'Execution and products':{'executor','product','fleet','portfolio','data','trial'},
  'Governance':{'rules','intent','constraint','blocker','govern'},
  'Maintenance and design':{'update','derive','compact','decompact','amend','crc'},
  'Help and integration':{'help','commands','schema','api','report'},
+ 'Crypto and keys':{'crypto'},
 }
 def catalog(parser):
     # Generated grammar supplements the stable effect contract instead of guessing effects.

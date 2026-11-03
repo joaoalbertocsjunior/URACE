@@ -48,6 +48,75 @@ The token economy is self-contained: tokens only enter circulation via verified 
 
 ---
 
+## Market Stats
+
+See live token velocity and network health at any time:
+
+```sh
+urace exchange market stats --json
+```
+
+Returns:
+- **mints_24h** / **burns_24h**: qualification receipts and credit deltas in the last 24 hours
+- **net_velocity**: mints minus burns (positive = net token creation)
+- **velocity.trend**: direction of velocity change (`up`, `down`, `stable`)
+- **velocity.trend_delta_pct**: percentage change in velocity vs. the previous equivalent window
+- **total_features**: feature count from the initial ledger header
+- **network_peers**: estimated peer count
+- **window_hours**: configurable via `--window-hours`
+
+---
+
+## Bootstrap Peers
+
+Bootstrap peers are fixed entry points that help new peers join the network without prior discovery. Add known peers before enabling networking:
+
+```sh
+urace exchange bootstrap add --address <peer-addr>
+urace exchange bootstrap list
+urace exchange bootstrap remove --address <peer-addr>
+```
+
+Bootstrap addresses can be shared out-of-band (e.g., in your team's README or a private channel).
+
+---
+
+## Network Mode
+
+URACE supports three network modes for different deployment scenarios:
+
+| Mode | Description | Use case |
+|------|-------------|----------|
+| `intranet` | LAN-only — no internet peers contacted | Air-gapped or private team networks |
+| `internet` | Standard — bootstrap peers + DHT discovery | Public internet deployment |
+| `hybrid` | LAN + optional internet gateway (default) | Teams that want LAN efficiency with internet reach |
+
+Configure the mode:
+
+```sh
+urace exchange settings set --network-mode intranet
+urace exchange settings set --network-mode hybrid
+```
+
+### Intranet → Internet Upgrade
+
+When your team is ready to connect to the wider network:
+
+1. Discover your public address via STUN:
+   ```sh
+   urace exchange network public-address --json
+   ```
+2. Register it as a bootstrap peer endpoint so other internet peers can find you:
+   ```sh
+   urace exchange bootstrap add --address https://<your-public-ip>:<port>
+   ```
+3. Switch network mode to hybrid:
+   ```sh
+   urace exchange settings set --network-mode hybrid
+   ```
+
+---
+
 ## Get Started
 
 - [Setup](setup.md) — enable, create identity, configure

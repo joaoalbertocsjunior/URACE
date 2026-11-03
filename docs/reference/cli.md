@@ -11,10 +11,13 @@ All URACE commands in one place.
 | Command | Description |
 |---------|-------------|
 | `urace init` | Initialize a product in the current directory |
+| `urace init --auto` | Zero-conf init: detect API keys, configure executor, create P2P identity, run health check |
+| `urace init --ready` | Discover installed CLI clients and complete onboarding |
+| `urace init --type software\|content\|media\|model\|data` | Initialize with a specific product type (sets metric suggestions and executor context hints) |
 | `urace run` | Run one improvement cycle |
 | `urace status` | Show product status |
 | `urace status --json` | Status as JSON |
-| `urace add "goal"` | Add an objective |
+| `urace add "goal" [--scope pipeline\|quality_gate\|exchange\|runtime\|output] [--relates-to ID,ID]` | Add an objective with optional scope and cross-references |
 
 ---
 
@@ -47,6 +50,7 @@ All URACE commands in one place.
 | `urace search "query"` | Full-text search of context ledger |
 | `urace search "q" --kind objectives\|operations\|evidence\|decisions` | Filter by kind |
 | `urace search "q" --kind p2p` | Search P2P audit ledger (features, credits, peers) |
+| `urace search "q" --scope pipeline\|quality_gate\|exchange\|runtime\|output` | Filter by pipeline scope |
 | `urace search "q" --since ISO` | Filter by date (ISO 8601) |
 | `urace search "q" --limit N` | Limit results |
 
@@ -66,6 +70,16 @@ All URACE commands in one place.
 | `urace exchange compact compress` | Compress context ledger to archive |
 | `urace exchange compact decompress` | Restore from compressed archive |
 | `urace exchange compact search "q"` | Search live + compressed archives |
+
+---
+
+## Content
+
+| Command | Description |
+|---------|-------------|
+| `urace content ref --path FILE` | Register a binary asset by SHA-256 hash (video, model weights, data files) |
+| `urace content list` | List all registered content references |
+| `urace content show <id>` | Show a content reference by ID or SHA-256 prefix |
 
 ---
 
@@ -89,6 +103,7 @@ All URACE commands in one place.
 | `urace controls set --context-mint-decisions bool` | Allow minting decisions as context |
 | `urace controls set --context-mint-operations bool` | Allow minting operations as context |
 | `urace controls set --context-mint-checkpoints bool` | Allow minting checkpoints as context |
+| `urace controls set --compliance-mode true\|false` | Enable/disable compliance mode (enforces stricter audit and governance rules) |
 
 ---
 
@@ -113,9 +128,18 @@ All URACE commands in one place.
 | `urace exchange settings set --network bool` | Enable/disable P2P networking |
 | `urace exchange settings set --advertise bool` | Enable/disable LAN advertising |
 | `urace exchange settings set --token-settlement bool` | Enable/disable token transfers |
+| `urace exchange settings set --network-mode intranet\|internet\|hybrid` | Set network reach mode (see [Network Mode](../exchange/overview.md#network-mode)) |
+| `urace exchange settings set --internet-gateway <peer-id>` | Set the internet-gateway peer for hybrid mode |
+| `urace exchange settings set --consensus-min-threshold N` | Minimum peers required for consensus decisions |
+| `urace exchange settings set --baseline-grant-tokens N` | Override baseline token grant per new peer |
+| `urace exchange settings set --compress-wire bool` | Enable gzip compression on P2P wire transfers |
+| `urace exchange settings set --bandwidth-profile auto\|low\|high` | Set bandwidth profile (auto=4 KB chunks, low=1 KB, high=64 KB) |
+| `urace exchange settings set --transfer-chunk-size N` | Override transfer chunk size in bytes (512–131072; 0=use profile) |
 | `urace exchange peer identity` | Create or show peer identity |
 | `urace exchange peer add --certificate FILE` | Pin a peer by certificate |
 | `urace exchange peer list` | List all peers |
+| `urace exchange peer role <peer_id>` | Show the role assigned to a peer |
+| `urace exchange peer role <peer_id> --set admin\|operator\|readonly` | Assign a role to a peer |
 | `urace exchange peer block <id>` | Block a peer |
 | `urace exchange peer unblock <id>` | Unblock a peer |
 | `urace exchange peer rotate <old_id> --new-certificate FILE` | Rotate identity |
@@ -134,6 +158,13 @@ All URACE commands in one place.
 | `urace exchange network disconnect [--duration-minutes N]` | Pause networking |
 | `urace exchange network peers [--limit N]` | List anonymized peer hashes (SHA-256 prefix) |
 | `urace exchange network size` | Heuristic network size estimate (DHT gossip) |
+| `urace exchange network public-address` | Resolve your public IP and port via STUN |
+| `urace exchange network public-address --stun-host HOST --stun-port PORT` | Use a custom STUN server |
+| `urace exchange network port-to-internet` | Analyze intranet features/reputation and guide migration to hybrid/internet mode |
+| `urace exchange network port-to-internet --auto` | Auto-select high-quality features and switch to hybrid mode (smart defaults) |
+| `urace exchange network port-to-internet --dry-run` | Analysis only — show what would be ported, no changes |
+| `urace exchange network port-to-internet --features F1,F2` | Port specific features by ID |
+| `urace exchange network port-to-internet --min-kpi-score 0.7` | Raise quality threshold for auto-selection |
 | `urace exchange network-audit list [--kind K] [--peer P]` | View network audit events |
 
 ---
@@ -156,6 +187,9 @@ All URACE commands in one place.
 | `urace exchange compact depletion <feature_id>` | Check feature saturation |
 | `urace exchange feature define <name> --wanted bool` | Define a wanted feature |
 | `urace exchange feature borrow <feature_id> --peer <peer_id>` | Borrow a feature |
+| `urace exchange feature rate --feature-id ID --outcome positive\|negative\|neutral` | Rate a borrowed or built feature by outcome |
+| `urace exchange feature rate --feature-id ID --outcome positive --score F` | Rate with an explicit quality score (0.0–1.0) |
+| `urace exchange feature recommend [--limit N]` | Get personalized feature recommendations based on your ratings and history |
 
 ---
 
@@ -196,6 +230,182 @@ All URACE commands in one place.
 
 ---
 
+## Products
+
+| Command | Description |
+|---------|-------------|
+| `urace product list` | List registered products |
+| `urace product register --github URL` | Register a GitHub repo as a product (clones locally) |
+| `urace product register --github URL --clone-to DIR` | Clone to a specific directory |
+| `urace product register --type software\|content\|media\|model\|data <name>` | Register a non-GitHub product with an explicit type |
+| `urace product git status` | Git status of a registered product |
+| `urace product git log` | Git log for a registered product |
+| `urace product git diff` | Git diff for a registered product |
+| `urace configuration github-workflow --repo owner/repo --output PATH` | Generate a GitHub Actions workflow for CI |
+
+---
+
+## Exchange: Bootstrap Peers
+
+| Command | Description |
+|---------|-------------|
+| `urace exchange bootstrap add --address ADDR` | Add a bootstrap peer address |
+| `urace exchange bootstrap list` | List configured bootstrap peers |
+| `urace exchange bootstrap remove --address ADDR` | Remove a bootstrap peer |
+
+---
+
+## Exchange: Market Stats
+
+| Command | Description |
+|---------|-------------|
+| `urace exchange market stats` | Live token velocity, mints/burns, supply, network health |
+| `urace exchange market stats --window-hours N` | Set lookback window (default: 24h) |
+| `urace exchange market stats --json` | Output as JSON (includes `velocity.trend` and `velocity.trend_delta_pct`) |
+| `urace exchange market stats --json` (escrow fields) | Includes `escrow.active_escrows`, `escrow.pending_settlement_units`, `escrow.escrow_capable_peers_estimate` |
+
+---
+
+## Qualification
+
+| Command | Description |
+|---------|-------------|
+| `urace qualification list` | List all qualification records |
+| `urace qualification list --kind K` | Filter by kind |
+| `urace qualification list --limit N` | Limit results |
+| `urace qualification replay --evidence-id ID` | Replay qualification (heuristic estimate) |
+| `urace qualification replay --evidence-id ID --mode full` | Full replay: uses stored evaluation weights, detects criteria drift |
+
+---
+
+## Crypto Wallet
+
+| Command | Description |
+|---------|-------------|
+| `urace crypto wallet init` | Generate a new local secp256k1 keypair (gas-free, no RPC) |
+| `urace crypto wallet init --overwrite` | Overwrite existing wallet |
+| `urace crypto wallet show` | Show wallet address and public key |
+| `urace crypto wallet sign "payload"` | Sign a payload with your private key |
+| `urace crypto wallet rotate [--backup-dir DIR]` | Generate a new keypair, re-sign pending records, back up the old key |
+
+The wallet is stored at `~/.urace/wallet/key.json` (chmod 600). Private key is never returned in command output.
+
+---
+
+## Fleet
+
+| Command | Description |
+|---------|-------------|
+| `urace fleet status` | Show fleet status |
+| `urace fleet list` | List fleet members |
+| `urace fleet capacity` | Show per-member executor pool availability and aggregate capacity |
+| `urace fleet config-push --config-key KEY --config-value VALUE` | Push a config key/value to all fleet members |
+| `urace fleet config-push --config-key KEY --config-value VALUE --json` | Push with JSON output |
+
+---
+
+## Executor
+
+| Command | Description |
+|---------|-------------|
+| `urace executor status` | Show executor health |
+| `urace executor circuit-breaker` | Show circuit breaker status for all providers |
+| `urace executor circuit-breaker --cb-action reset --cb-provider ID` | Reset circuit breaker for a provider |
+| `adapter: script` | Arbitrary CLI tool — stdin prompt, JSON stdout |
+| `adapter: http` | POST to REST endpoint, JSON response (supports Retry-After) |
+| `adapter: mcp` | MCP stdio JSONRPC 2024-11-05 (initialize + tools/call) |
+
+---
+
+## Config
+
+| Command | Description |
+|---------|-------------|
+| `urace config show-all` | Show all resolved configuration values across all scopes |
+| `urace config show-all --json` | Output as JSON |
+
+---
+
+## Security
+
+| Command | Description |
+|---------|-------------|
+| `urace security audit` | Run a full security audit: wallet, consensus threshold, compliance mode, circuit breaker, exchange certificate, GitHub release integrity |
+| `urace security audit --json` | Audit output as JSON |
+| `urace security audit --no-network` | Skip GitHub release check (offline mode) |
+
+---
+
+## Compliance
+
+| Command | Description |
+|---------|-------------|
+| `urace compliance` | Show compliance posture per domain (authority, intent, schema, constraint, governance) |
+| `urace compliance --domain DOMAIN` | Filter to a single domain |
+| `urace compliance --history N` | Show last N records (default 10) |
+| `urace compliance --export FILE` | Export all compliance records to FILE (.json or .jsonl) |
+| `urace compliance --since ISO_DATE` | Filter records at or after date (ISO 8601) |
+| `urace compliance --until ISO_DATE` | Filter records up to date |
+| `urace compliance --strict` | Exit non-zero if any domain is NON_COMPLIANT (CI enforcement) |
+| `urace compliance --json` | Output as JSON |
+
+---
+
+## Daemon
+
+| Command | Description |
+|---------|-------------|
+| `urace daemon start` | Start foreground improvement daemon (loops `urace auto`; Ctrl+C to stop) |
+| `urace daemon start --interval-minutes N` | Set cycle interval in minutes (default 30; minimum 1) |
+| `urace daemon start --max-cycles N` | Stop after N cycles (0 = run forever) |
+| `urace daemon status` | Check if a daemon is running for this product |
+| `urace daemon stop` | Send stop signal to a running daemon |
+
+---
+
+## M2M Interface
+
+| Command | Description |
+|---------|-------------|
+| `urace m2m '{"command":"exchange settings set","params":{"enabled":true}}'` | Dispatch any command via structured JSON body |
+| `urace m2m --stdin` | Read JSON body from stdin |
+
+All commands support `--json` for M2M-friendly output. The M2M interface passes through to the standard command surface with `--json` appended automatically.
+
+---
+
+## GitHub Integration
+
+| Command | Description |
+|---------|-------------|
+| `urace github status` | Show GitHub connection status and repo info |
+| `urace github connect owner/repo` | Connect URACE to a GitHub repository |
+| `urace github connect owner/repo --token-env ENV` | Specify env var holding GitHub token (default: `URACE_GITHUB_TOKEN`) |
+| `urace github push-goals` | Push current objectives as GitHub issues |
+| `urace github push-goals --dry-run` | Preview without creating issues |
+| `urace github trigger-workflow ci.yml` | Trigger a GitHub Actions workflow dispatch |
+| `urace github trigger-workflow ci.yml --ref branch` | Trigger on a specific branch |
+| `urace github trigger-workflow ci.yml --inputs '{"key":"val"}'` | Pass workflow inputs |
+
+Set `URACE_GITHUB_TOKEN` to a GitHub personal access token with `repo` + `workflow` scopes.
+
+---
+
+## Git and GitHub CLI Pass-through
+
+| Command | Description |
+|---------|-------------|
+| `urace git <args>` | Run any `git` command scoped to the current product root |
+| `urace git status` | Git status of product root |
+| `urace git log --oneline -10` | Git log for product |
+| `urace gh <args>` | Run any `gh` CLI command (requires `gh` installed) |
+| `urace gh pr list` | List open pull requests via GitHub CLI |
+| `urace gh issue create --title "..."` | Create GitHub issue via `gh` |
+
+---
+
+---
+
 ## System Health
 
 | Command | Description |
@@ -203,6 +413,33 @@ All URACE commands in one place.
 | `urace doctor` | Check config, state, executor, exchange, capability flags |
 | `urace doctor --verbose` | Full diagnostic output |
 | `urace doctor --json` | Diagnostics as JSON |
+
+---
+
+## Usage Analytics
+
+| Command | Description |
+|---------|-------------|
+| `urace usage patterns` | Show top commands by frequency, token breakdown, goal success rates, and freeform cache hit rate |
+| `urace usage patterns --json` | Output as JSON (includes `freeform_stats.cache_hit_rate`) |
+| `urace usage patterns --limit N` | Limit result rows (default 20) |
+
+---
+
+## Always-Mandatory URACE Concerns
+
+These apply to every change in every session:
+
+| # | Concern | Rule |
+|---|---------|------|
+| 1–12 | Core runtime | Derive, M2M, freeform, docs, spec, ledger, version, P2P economics, abuse prevention, tests, OS agnosticism, command surface |
+| 13–20 | Governance | AGENTS.md, authority boundaries, zero-conf path, config schema, backward compat, security, quality gate invariants, self-evolution |
+| 21 | KPIs | Every quality/economic decision enforces a measurable threshold |
+| 22 | ROI signal | Users see estimated value before committing to major actions |
+| 23 | Automation | Everything automatable is automated with the best default; `--auto` available |
+| 24 | Power-user config | Every auto-behavior has a fine-grained override flag |
+| 25 | Industry standards | Protocols and formats from established standards bodies |
+| 26 | Battle-proven techniques | No experimental patterns in production code paths |
 
 ---
 

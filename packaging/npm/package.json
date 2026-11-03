@@ -1,0 +1,29 @@
+{
+  "name": "urace-cli",
+  "version": "0.3.1",
+  "description": "URACE — AI-powered product improvement runtime with P2P feature exchange",
+  "bin": {
+    "urace": "./bin/urace.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "keywords": ["urace", "ai", "improvement", "p2p", "executor"],
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/joaoalbertocsjunior/URACE"
+  },
+  "homepage": "https://github.com/joaoalbertocsjunior/URACE#readme",
+  "bugs": {
+    "url": "https://github.com/joaoalbertocsjunior/URACE/issues"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "files": [
+    "bin/",
+    "install.js",
+    "README.md"
+  ]
+}

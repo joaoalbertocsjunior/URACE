@@ -2,6 +2,8 @@
 
 [← Documentation](../index.md)
 
+URACE runs inside your existing project directory. There is no server to manage, no daemon to run, and no data leaves your machine unless you explicitly enable the P2P exchange. Install takes under a minute.
+
 ---
 
 ## Requirements

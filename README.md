@@ -12,10 +12,25 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 - **Self-evolution with governance**: the runtime improves itself under strict authority boundaries — no change without owner approval
 - **Freeform routing**: route any text input to the right command, executor, or P2P network automatically
 
+## Install
+
+```sh
+# pip (recommended)
+pip install urace
+
+# npm
+npm install -g urace-cli
+
+# Homebrew
+brew install urace
+
+# conda
+conda install -c conda-forge urace
+```
+
 ## Quick Start
 
 ```sh
-# Install
 pip install urace
 
 # Initialize a product
@@ -313,6 +328,6 @@ urace/
 
 ## License
 
-Apache License 2.0 — see [LICENSE](../LICENSE).
+Code: [Apache 2.0](LICENSES/Apache-2.0.txt) — Specification (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt)
 
 Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

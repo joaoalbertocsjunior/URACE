@@ -1,7 +1,7 @@
 """Opt-in, product-scoped signed artifact exchange. Incoming artifacts are quarantined, never executed."""
 from pathlib import Path
 from contextlib import contextmanager
-import base64, fcntl, hashlib, http.client, http.server, ipaddress, json, os, re, ssl, subprocess, tempfile, time, urllib.parse, datetime
+import base64, fcntl, gzip, hashlib, http.client, http.server, ipaddress, json, os, re, ssl, subprocess, tempfile, time, urllib.parse, datetime
 
 SCHEMA='urace-exchange-v2'
 PROTOCOL_VERSION=2
@@ -32,7 +32,7 @@ class Exchange:
  def __init__(self,root):self.root=Path(root)
  def load(self):
   p=self.root/'policy.json'
-  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':False,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':True,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION}
+  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':False,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':True,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[],'compress_wire':False,'bandwidth_profile':'auto','transfer_chunk_size':0}
  @contextmanager
  def lock(self):
   self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -95,12 +95,15 @@ class Exchange:
   with self.lock():
    p=self.load()
    for k,v in changes.items():
-    if k in ('enabled','network','advertise','auto_select','auto_relay','token_settlement','relay_enabled','auto_trust_first_contact','relay_only','feature_borrow_enabled','p2p_mint_enabled','p2p_sell_enabled','compress_enabled','decompress_enabled'):
+    if k in ('enabled','network','advertise','auto_select','auto_relay','token_settlement','relay_enabled','auto_trust_first_contact','relay_only','feature_borrow_enabled','p2p_mint_enabled','p2p_sell_enabled','compress_enabled','decompress_enabled','compress_wire'):
      if type(v) is not bool:raise ValueError('Boolean exchange settings required')
     elif k=='default_feature_rules':
      if not isinstance(v,dict):raise ValueError('default_feature_rules must be a dict')
-    elif k in ('max_transfers_per_day','max_transfers_per_peer_per_day','max_bytes_per_day','max_rpc_per_day','max_rpc_per_peer_per_day','bundle_max_age_seconds'):
+    elif k in ('max_transfers_per_day','max_transfers_per_peer_per_day','max_bytes_per_day','max_rpc_per_day','max_rpc_per_peer_per_day','bundle_max_age_seconds','transfer_chunk_size'):
      if type(v) is not int or not 1<=v<=1073741824:raise ValueError('Positive bounded exchange allowance required')
+     if k=='transfer_chunk_size' and not 512<=v<=131072:raise ValueError('transfer_chunk_size must be 512–131072')
+    elif k=='bandwidth_profile':
+     if v not in ('auto','low','high'):raise ValueError('bandwidth_profile must be auto, low, or high')
     elif k=='min_peer_version':
      if type(v) is not int or not 1<=v<=PROTOCOL_VERSION:raise ValueError('min_peer_version must be a positive integer not exceeding current protocol version')
     else:raise ValueError('Unknown exchange setting')
@@ -287,7 +290,7 @@ class Exchange:
   if type(limit) is not int or not 0<=limit<=200 or type(offset) is not int or offset<0:raise ValueError('Audit limit must be 0–200 and offset nonnegative')
   rows=self.audit_rows();p=self.load();counts={}
   for r in rows:counts[r['kind']]=counts.get(r['kind'],0)+1
-  result={'schema':SCHEMA,'settings':{k:p[k] for k in ('enabled','network','advertise')}|{'auto_select':p.get('auto_select',True)},'peers':[{'peer_id':k,'blocked':v['blocked']} for k,v in p['peers'].items()],'features':p['features'],'rules':p['rules'],'budgets':{k:p.get(k,v) for k,v in {'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50}.items()},'events':len(rows),'counts':counts,'audit_chain_valid':True,'visible_audit_rows_hybrid_authenticated':bool(rows),'post_quantum_sidecar':'PRESENT_NOT_FULLY_AUDITED' if (self.root/'signed-audit/head.json').exists() else 'NOT_INITIALIZED','copy_prevention_guaranteed':False,'mainnet_settlement_enabled':False,'applied':counts.get('APPLIED_AFTER_LOCAL_QUALIFICATION',0),'usage_verified':False,'fairness':'Explicit opt-in budgets and permissions; no claim of equal utility, anonymity or Sybil resistance'}
+  result={'schema':SCHEMA,'settings':{k:p[k] for k in ('enabled','network','advertise')}|{'auto_select':p.get('auto_select',True),'compress_wire':p.get('compress_wire',False),'bandwidth_profile':p.get('bandwidth_profile','auto'),'transfer_chunk_size':_wire_chunk_size(p)},'peers':[{'peer_id':k,'blocked':v['blocked']} for k,v in p['peers'].items()],'features':p['features'],'rules':p['rules'],'budgets':{k:p.get(k,v) for k,v in {'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50}.items()},'events':len(rows),'counts':counts,'audit_chain_valid':True,'visible_audit_rows_hybrid_authenticated':bool(rows),'post_quantum_sidecar':'PRESENT_NOT_FULLY_AUDITED' if (self.root/'signed-audit/head.json').exists() else 'NOT_INITIALIZED','copy_prevention_guaranteed':False,'mainnet_settlement_enabled':False,'applied':counts.get('APPLIED_AFTER_LOCAL_QUALIFICATION',0),'usage_verified':False,'fairness':'Explicit opt-in budgets and permissions; no claim of equal utility, anonymity or Sybil resistance'}
   if detail:
    selected=[r for r in rows if (peer is None or r.get('peer')==peer) and (feature is None or r.get('feature')==feature)];result.update(audit=selected[offset:offset+limit],matching_events=len(selected),next_offset=offset+limit if offset+limit<len(selected) and limit else None)
   return result
@@ -418,6 +421,11 @@ def _consensus_min(exchange) -> int:
     dynamic = max(int(cfg_floor), min(10, _math.ceil(0.10 * effective)))
     return max(2, dynamic)
 
+def _wire_chunk_size(p):
+ explicit=p.get('transfer_chunk_size',0)
+ if explicit:return explicit
+ return {'low':1024,'high':65536}.get(p.get('bandwidth_profile','auto'),4096)
+
 def request(exchange,peer,method,params):
  p=exchange.load()
  if peer not in p['peers'] or p['peers'][peer]['blocked']:raise ValueError('Unknown or blocked peer')
@@ -427,17 +435,25 @@ def request(exchange,peer,method,params):
  rpc={'jsonrpc':'2.0','id':nonce,'method':method,'params':params};signed={'rpc':rpc,'signature':exchange.crypto_identity().sign(rpc,'peer-rpc-request')}
  body=encoded({'context':context,'encrypted':encrypt(exchange.trusted_crypto(p,peer),encoded(signed),context)})
  if len(body)>LIMIT:raise ValueError('Request size exceeded')
+ _compress=p.get('compress_wire',False)
+ _chunk=_wire_chunk_size(p)
+ headers={'Content-Type':'application/json','Accept-Encoding':'gzip'}
+ if _compress:
+  body=gzip.compress(body,compresslevel=6);headers['Content-Encoding']='gzip'
  c=http.client.HTTPSConnection(u.hostname,u.port or 443,context=ctx,timeout=10)
  try:
   c.connect()
   if hashlib.sha256(c.sock.getpeercert(binary_form=True)).hexdigest()!=peer:raise ValueError('Peer certificate fingerprint differs')
-  c.request('POST','/rpc',body,{'Content-Type':'application/json'});r=c.getresponse()
-  data=b'';_chunk=4096
+  c.request('POST','/rpc',body,headers);r=c.getresponse()
+  data=b''
   while True:
    _part=r.read(_chunk)
    if not _part:break
    data+=_part
-   if len(data)>LIMIT:raise ValueError(f'Peer response exceeds {LIMIT} bytes — possible DoS')
+   if len(data)>LIMIT*2:raise ValueError(f'Peer response exceeds limit — possible DoS')
+  if r.getheader('Content-Encoding')=='gzip':
+   data=gzip.decompress(data)
+   if len(data)>LIMIT:raise ValueError(f'Peer response exceeds {LIMIT} bytes after decompression — possible DoS')
   if r.status!=200:raise ValueError('Peer response failed/oversized')
   envelope=json.loads(data);response_context={**context,'direction':'response'}
   if set(envelope)!={'encrypted'}:raise ValueError('Encrypted response required')
@@ -503,9 +519,10 @@ def server(exchange,host='127.0.0.1',port=0):
   def do_POST(self):
    self.connection.settimeout(5)
    try:
-    if self.path!='/rpc' or self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json':raise ValueError('Invalid RPC envelope')
+    _req_enc=self.headers.get('Content-Encoding','')
+    if self.path!='/rpc' or self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or (_req_enc and _req_enc!='gzip'):raise ValueError('Invalid RPC envelope')
     size=int(self.headers.get('Content-Length','0'))
-    if not 0<size<=LIMIT:raise ValueError('Invalid request size')
+    if not 0<size<=LIMIT*2:raise ValueError('Invalid request size')
     peer=hashlib.sha256(self.connection.getpeercert(binary_form=True)).hexdigest();p=exchange.load()
     if not p['network'] or not p['enabled'] or peer not in p['peers'] or p['peers'][peer]['blocked']:raise ValueError('Peer admission denied')
     with exchange.lock():
@@ -518,6 +535,9 @@ def server(exchange,host='127.0.0.1',port=0):
      exchange.event('RPC_ADMITTED',peer=peer,bytes=size)
     data=self.rfile.read(size)
     if len(data)!=size:raise ValueError('Incomplete request')
+    if _req_enc=='gzip':
+     data=gzip.decompress(data)
+     if len(data)>LIMIT:raise ValueError('Decompressed request exceeds limit — possible DoS')
     envelope=json.loads(data)
     if set(envelope)!={'context','encrypted'}:raise ValueError('Encrypted request required')
     context=envelope['context']
@@ -528,7 +548,7 @@ def server(exchange,host='127.0.0.1',port=0):
     except Exception as exc:raise ValueError('Invalid hybrid RPC signature') from exc
     if rpc.get('id')!=context['request_nonce']:raise ValueError('RPC request nonce mismatch')
     if set(rpc)!={'jsonrpc','id','method','params'} or rpc['jsonrpc']!='2.0' or type(rpc['id']) not in (str,int):raise ValueError('Invalid RPC request')
-    if rpc['method']=='exchange.info' and rpc['params']=={}:result={'schema':SCHEMA,'protocol_version':PROTOCOL_VERSION,'peer_id':exchange.identity()['peer_id'],'patterns':['request-response'],'incorporation':'quarantine-only','p2p_corpus_fingerprint':_local_corpus_fingerprint()}
+    if rpc['method']=='exchange.info' and rpc['params']=={}:result={'schema':SCHEMA,'protocol_version':PROTOCOL_VERSION,'peer_id':exchange.identity()['peer_id'],'patterns':['request-response'],'incorporation':'quarantine-only','p2p_corpus_fingerprint':_local_corpus_fingerprint(),'compress_wire_supported':True,'bandwidth_profile':p.get('bandwidth_profile','auto')}
     elif rpc['method']=='exchange.offers' and rpc['params']=={}:
      from .peer_selection import offers
      result=offers(exchange,peer)
@@ -544,7 +564,14 @@ def server(exchange,host='127.0.0.1',port=0):
     rpc_result={'jsonrpc':'2.0','id':rpc['id'],'result':result};signed={'rpc':rpc_result,'signature':exchange.crypto_identity().sign(rpc_result,'peer-rpc-response')}
     body=encoded({'encrypted':encrypt(exchange.trusted_crypto(p,peer),encoded(signed),{**context,'direction':'response'})})
     if len(body)>LIMIT:raise ValueError('Response size exceeded')
-    self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+    _accept=self.headers.get('Accept-Encoding','')
+    _resp_headers={'Content-Type':'application/json'}
+    if 'gzip' in _accept and p.get('compress_wire',False):
+     body=gzip.compress(body,compresslevel=6);_resp_headers['Content-Encoding']='gzip'
+    _resp_headers['Content-Length']=str(len(body))
+    self.send_response(200)
+    for _h,_v in _resp_headers.items():self.send_header(_h,_v)
+    self.end_headers();self.wfile.write(body)
    except (ValueError,TypeError,KeyError,OSError) as _rpc_err:
     try:
      _rpc_peer=hashlib.sha256(self.connection.getpeercert(binary_form=True)).hexdigest() if self.connection else None

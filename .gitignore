@@ -1,10 +1,21 @@
 # Canonical local runtime repository: code only, no deployment state or secrets.
 /*
 !/.gitignore
+!/.envrc
 !/LICENSE
+!/LICENSES/
+!/NOTICE
 !/README.md
+!/URACE.md
 !/CONSOLIDATION.md
 !/AGENTS.md
+!/CONTRIBUTING.md
+!/GOVERNANCE.md
+!/MAINTAINERS
+!/OPERATORS.md
+!/SECURITY.md
+!/.github/
+!/packaging/
 !/runtime/
 !/trial/
 !/docs/
@@ -33,7 +44,8 @@ exchange/*
 
 # Secrets and env
 secrets/
-.env*
+.env
+.env.*
 *.lock
 
 # Python artifacts
@@ -47,3 +59,40 @@ __pycache__/
 !/products/versions/
 /products/versions/*
 !/products/versions/README.md
+!/URACE.md
+!/NOTICE
+!/LICENSES/
+/.ai-switch
+
+
+# Trial runtime state (large, generated)
+/trial/*.json
+/trial/*.jsonl
+/trial/*.log
+/trial/*.guard
+/trial/before-*
+/trial/.before-*
+/trial/benchmarks/
+/trial/core-state/
+/trial/downstream-studies/
+/trial/engine-versions/
+/trial/executable-evaluations/
+/trial/history/
+/trial/qualification-wheels/
+/trial/reports/
+/trial/repository-studies/
+/trial/runs/
+/trial/runtime-cycles/
+/trial/runtime-evaluations/
+/trial/snapshots/
+/trial/transport/
+/trial/transport-probes/
+/trial/versions/
+/trial/work/
+/trial/workflow-studies/
+/trial/urace/
+
+# Products runtime state
+/products/*/state.json
+/products/*/ledger.jsonl
+/products/*/ledger.jsonl.pq

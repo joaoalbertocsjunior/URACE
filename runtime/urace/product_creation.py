@@ -39,7 +39,7 @@ def validate_entry(entry,root):
 
 def create(cli,description,name=None,activate=False):
  if not isinstance(description,str) or not description.strip() or len(description.encode())>65536:raise ValueError('A complete bounded product description is required')
- base=json.loads(cli.CONFIG_PATH.read_text());name=name or 'New product '+uuid.uuid4().hex[:8]
+ name=name or 'New product '+uuid.uuid4().hex[:8]
  if not isinstance(name,str) or not 1<=len(name.strip())<=100 or any(ord(c)<32 for c in name):raise ValueError('Bounded product name required')
  with cli.state_lock(cli.CONFIG_PATH):
   base=json.loads(cli.CONFIG_PATH.read_text());registry=base.setdefault('product_registry',[])

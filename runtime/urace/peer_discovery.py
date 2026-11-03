@@ -43,7 +43,7 @@ from typing import Any
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 _LAN_SERVICE = "_urace-exchange._tcp.local."
-_DHT_TOPIC   = hashlib.sha1(b"urace-exchange-v1").digest()   # 20-byte infohash
+_DHT_TOPIC   = hashlib.sha1(b"urace-exchange-v1").digest()   # noqa: S324 — BEP5 DHT requires SHA-1 20-byte infohash
 _DHT_BOOTSTRAP = [
     ("router.bittorrent.com",   6881),
     ("router.utorrent.com",     6881),
@@ -183,7 +183,7 @@ def discover_lan(exchange, seconds: float = 3.0) -> list[dict[str, Any]]:
 def _dht_node_id(exchange) -> bytes:
     """Derive a stable 20-byte DHT node ID from the exchange's peer identity."""
     peer_id = exchange.identity()["peer_id"]
-    return hashlib.sha1(peer_id.encode()).digest()
+    return hashlib.sha1(peer_id.encode()).digest()  # noqa: S324 — DHT node ID per BEP5
 
 
 # ── BEP 44: mutable DHT items (cert publishing / lookup) ──────────────────────
@@ -248,7 +248,7 @@ def bep44_put(
     try:
         value_bencoded = _be(value)
         sig = _bep44_sign(priv_bytes, seq, value_bencoded)
-        target = hashlib.sha1(pub_bytes).digest()
+        target = hashlib.sha1(pub_bytes).digest()  # noqa: S324 — DHT target per BEP5
         # Walk DHT to collect write tokens.
         try:
             client.get_peers(target, timeout / 2)
@@ -282,7 +282,7 @@ def bep44_get(
 ) -> "dict | None":
     """Retrieve a BEP 44 mutable item by public key. Returns None if not found."""
     try:
-        target = hashlib.sha1(pub_bytes).digest()
+        target = hashlib.sha1(pub_bytes).digest()  # noqa: S324 — DHT target per BEP5
         queried: set[tuple[str, int]] = set()
         candidates: list[tuple[str, int]] = []
 
@@ -1140,7 +1140,7 @@ def discover_public_endpoint(exchange, timeout: float = 5.0) -> dict[str, Any]:
 
 def _rdv_infohash(peer_id: str) -> bytes:
     """Return the 20-byte rendezvous infohash for a given peer_id."""
-    return hashlib.sha1(b"urace-rdv-" + peer_id[:16].encode()).digest()
+    return hashlib.sha1(b"urace-rdv-" + peer_id[:16].encode()).digest()  # noqa: S324 — DHT rendezvous per BEP5
 
 
 def rdv_announce(exchange, target_peer_id: str, https_port: int) -> dict[str, Any]:

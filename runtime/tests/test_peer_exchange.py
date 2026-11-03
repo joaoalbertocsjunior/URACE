@@ -156,3 +156,65 @@ class HybridProtocolBoundaryTests(unittest.TestCase):
  def test_changed_derived_distribution_claims_rejected(self):
   self.pair();bundle=self.bundle();bundle['payload']['distribution_terms']['payment_enabled']=True;bundle['signature']=self.a.sign(bundle['payload'])
   with self.assertRaises(ValueError):self.b.receive(bundle)
+
+class BandwidthProfileTests(unittest.TestCase):
+ def setUp(self):
+  self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);root=Path(self.tmp.name);self.a=pe.Exchange(root/'a');self.b=pe.Exchange(root/'b')
+ def pair(self,network=False):
+  for e in (self.a,self.b):e.configure(enabled=True,network=network);e.feature('featureA',[])
+  self.aid=self.a.identity()['peer_id'];self.bid=self.b.identity()['peer_id'];self.a.peer(self.b.identity()['certificate'],post_quantum=self.b.identity()['post_quantum']);self.b.peer(self.a.identity()['certificate'],post_quantum=self.a.identity()['post_quantum']);self.a.rule(self.bid,'featureA','send',True);self.b.rule(self.aid,'featureA','receive',True)
+ def test_default_settings_are_conservative(self):
+  p=self.a.load()
+  self.assertFalse(p['compress_wire'])
+  self.assertEqual(p['bandwidth_profile'],'auto')
+  self.assertEqual(p['transfer_chunk_size'],0)
+  self.assertEqual(pe._wire_chunk_size(p),4096)
+ def test_bandwidth_profile_low_yields_1kb_chunk(self):
+  self.a.configure(bandwidth_profile='low')
+  self.assertEqual(pe._wire_chunk_size(self.a.load()),1024)
+ def test_bandwidth_profile_high_yields_64kb_chunk(self):
+  self.a.configure(bandwidth_profile='high')
+  self.assertEqual(pe._wire_chunk_size(self.a.load()),65536)
+ def test_transfer_chunk_size_overrides_profile(self):
+  self.a.configure(bandwidth_profile='low',transfer_chunk_size=8192)
+  self.assertEqual(pe._wire_chunk_size(self.a.load()),8192)
+ def test_compress_wire_toggle(self):
+  self.a.configure(compress_wire=True)
+  self.assertTrue(self.a.load()['compress_wire'])
+  self.a.configure(compress_wire=False)
+  self.assertFalse(self.a.load()['compress_wire'])
+ def test_invalid_bandwidth_profile_rejected(self):
+  with self.assertRaises(ValueError):self.a.configure(bandwidth_profile='turbo')
+ def test_invalid_chunk_size_rejected(self):
+  with self.assertRaises(ValueError):self.a.configure(transfer_chunk_size=100)
+  with self.assertRaises(ValueError):self.a.configure(transfer_chunk_size=200000)
+ def test_summary_exposes_bandwidth_settings(self):
+  self.pair();s=self.a.summary()['settings']
+  self.assertIn('compress_wire',s)
+  self.assertIn('bandwidth_profile',s)
+  self.assertIn('transfer_chunk_size',s)
+ def test_compress_wire_live_transfer(self):
+  self.pair(True)
+  for e in (self.a,self.b):e.configure(compress_wire=True)
+  with pe.server(self.b) as server:
+   thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+   try:
+    self.a.peer(self.b.identity()['certificate'],'https://127.0.0.1:'+str(server.server_port))
+    info=pe.request(self.a,self.bid,'exchange.info',{})
+    self.assertEqual(info['peer_id'],self.bid)
+    self.assertTrue(info.get('compress_wire_supported'))
+    bid=self.a.prepare(self.bid,'featureA','compressed fixture',True)['bundle_id']
+    result=pe.send(self.a,bid)
+    self.assertEqual(result['status'],'QUARANTINED')
+   finally:server.shutdown();thread.join(timeout=5)
+ def test_low_bandwidth_profile_live_transfer(self):
+  self.pair(True)
+  for e in (self.a,self.b):e.configure(bandwidth_profile='low',compress_wire=True)
+  with pe.server(self.b) as server:
+   thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+   try:
+    self.a.peer(self.b.identity()['certificate'],'https://127.0.0.1:'+str(server.server_port))
+    bid=self.a.prepare(self.bid,'featureA','low-bw fixture',True)['bundle_id']
+    result=pe.send(self.a,bid)
+    self.assertEqual(result['status'],'QUARANTINED')
+   finally:server.shutdown();thread.join(timeout=5)
