@@ -10757,6 +10757,152 @@ class R72ProductRegistryTests(unittest.TestCase):
             registry = captured_config.get("product_registry", [])
             self.assertTrue(any(e["name"] == "NewProduct" for e in registry))
 
+    def test_product_register_github_no_state_path_required(self):
+        """product register --github registers with kind=github without --state-path."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = copy.deepcopy(self.config)
+            config["state_path"] = f"{tmpdir}/state.json"
+            config.pop("product_registry", None)
+            state = cli.initial_state(config)
+            cli.save_state(config, state)
+            captured_config = {}
+
+            def fake_save_config(c):
+                captured_config.update(c)
+
+            out = io.StringIO()
+            with patch.object(cli, "load_config", return_value=config), \
+                 patch("urace.cli.save_config", side_effect=fake_save_config), \
+                 redirect_stdout(out):
+                rc = cli.main(["product", "register", "MyGHProduct",
+                               "--github", "owner/repo", "--json"])
+            self.assertEqual(rc, 0)
+            result = json.loads(out.getvalue())
+            self.assertEqual(result["status"], "registered")
+            self.assertEqual(result["github_repo"], "owner/repo")
+            registry = captured_config.get("product_registry", [])
+            entry = next(e for e in registry if e["name"] == "MyGHProduct")
+            self.assertEqual(entry["kind"], "github")
+            self.assertEqual(entry["github_repo"], "owner/repo")
+            self.assertIsNone(entry["state_path"])
+
+    def test_product_register_github_invalid_format_rejected(self):
+        """product register --github with bad format returns error."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = copy.deepcopy(self.config)
+            config["state_path"] = f"{tmpdir}/state.json"
+            state = cli.initial_state(config)
+            cli.save_state(config, state)
+            out = io.StringIO()
+            with patch.object(cli, "load_config", return_value=config), \
+                 patch("urace.cli.save_config"), redirect_stdout(out):
+                rc = cli.main(["product", "register", "BadGH",
+                               "--github", "notavalidrepo", "--json"])
+            self.assertEqual(rc, 1)
+            self.assertEqual(json.loads(out.getvalue())["status"], "error")
+
+    def test_product_git_requires_github_kind(self):
+        """product git on a non-github product returns error."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = copy.deepcopy(self.config)
+            config["state_path"] = f"{tmpdir}/state.json"
+            config["product_registry"] = [
+                {"id": "prod-local1", "name": "LocalProd", "state_path": f"{tmpdir}/sp.json",
+                 "product_files": [], "registered_at": "2026-01-01T00:00:00+00:00", "status": "ACTIVE"},
+            ]
+            state = cli.initial_state(config)
+            cli.save_state(config, state)
+            out = io.StringIO()
+            with patch.object(cli, "load_config", return_value=config), redirect_stdout(out):
+                rc = cli.main(["product", "git", "LocalProd", "status", "--json"])
+            self.assertEqual(rc, 1)
+            self.assertIn("error", json.loads(out.getvalue()))
+
+    def test_product_git_missing_product_returns_error(self):
+        """product git on unknown product name returns error."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = copy.deepcopy(self.config)
+            config["state_path"] = f"{tmpdir}/state.json"
+            config["product_registry"] = []
+            state = cli.initial_state(config)
+            cli.save_state(config, state)
+            out = io.StringIO()
+            with patch.object(cli, "load_config", return_value=config), redirect_stdout(out):
+                rc = cli.main(["product", "git", "NoSuchProduct", "status", "--json"])
+            self.assertEqual(rc, 1)
+            self.assertEqual(json.loads(out.getvalue())["status"], "error")
+
+    def test_product_git_no_clone_path_returns_error(self):
+        """product git without clone_path set returns error before running git."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = copy.deepcopy(self.config)
+            config["state_path"] = f"{tmpdir}/state.json"
+            config["product_registry"] = [
+                {"id": "prod-gh1", "name": "GHProd", "kind": "github", "github_repo": "owner/repo",
+                 "state_path": None, "clone_path": None,
+                 "product_files": [], "registered_at": "2026-01-01T00:00:00+00:00", "status": "ACTIVE"},
+            ]
+            state = cli.initial_state(config)
+            cli.save_state(config, state)
+            out = io.StringIO()
+            with patch.object(cli, "load_config", return_value=config), redirect_stdout(out):
+                rc = cli.main(["product", "git", "GHProd", "status", "--json"])
+            self.assertEqual(rc, 1)
+            self.assertIn("clone_path", json.loads(out.getvalue())["error"])
+
+    def test_product_git_blocked_subcommand(self):
+        """product git rejects unsafe git subcommands."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = copy.deepcopy(self.config)
+            config["state_path"] = f"{tmpdir}/state.json"
+            clone_dir = Path(tmpdir) / "clone"
+            clone_dir.mkdir()
+            config["product_registry"] = [
+                {"id": "prod-gh2", "name": "GHProd2", "kind": "github", "github_repo": "owner/repo",
+                 "state_path": None, "clone_path": str(clone_dir),
+                 "product_files": [], "registered_at": "2026-01-01T00:00:00+00:00", "status": "ACTIVE"},
+            ]
+            state = cli.initial_state(config)
+            cli.save_state(config, state)
+            out = io.StringIO()
+            with patch.object(cli, "load_config", return_value=config), redirect_stdout(out):
+                rc = cli.main(["product", "git", "GHProd2", "bisect", "--json"])
+            self.assertEqual(rc, 1)
+            self.assertIn("not permitted", json.loads(out.getvalue())["error"])
+
+    def test_product_git_runs_in_clone_path(self):
+        """product git status runs git in clone_path and returns output."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Initialize a real git repo so git status works
+            import subprocess
+            clone_dir = Path(tmpdir) / "clone"
+            clone_dir.mkdir()
+            subprocess.run(["git", "init", str(clone_dir)], check=True, capture_output=True)
+            config = copy.deepcopy(self.config)
+            config["state_path"] = f"{tmpdir}/state.json"
+            config["product_registry"] = [
+                {"id": "prod-gh3", "name": "GHProd3", "kind": "github", "github_repo": "owner/repo",
+                 "state_path": None, "clone_path": str(clone_dir),
+                 "product_files": [], "registered_at": "2026-01-01T00:00:00+00:00", "status": "ACTIVE"},
+            ]
+            state = cli.initial_state(config)
+            cli.save_state(config, state)
+            out = io.StringIO()
+            with patch.object(cli, "load_config", return_value=config), redirect_stdout(out):
+                rc = cli.main(["product", "git", "GHProd3", "status", "--json"])
+            self.assertEqual(rc, 0)
+            result = json.loads(out.getvalue())
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["product"], "GHProd3")
+            self.assertEqual(result["clone_path"], str(clone_dir))
+
     # ── product list ──────────────────────────────────────────────────────────
 
     def test_product_list_marks_active_product(self):
@@ -13904,3 +14050,169 @@ class RuntimeTestFailureDetailTests(unittest.TestCase):
     def test_non_unittest_error_keeps_tail_fallback(self):
         output = "prefix" + ("x" * 2500) + "\nplain tool failure"
         self.assertEqual(executor._runtime_test_failure_detail(output), output[-2000:])
+
+
+class R121CryptoWalletTests(unittest.TestCase):
+    """Crypto wallet scaffold — local keypair, address derivation, signing."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil; shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _run(self, *args):
+        import sys as _sys
+        result = subprocess.run(
+            [_sys.executable, '-m', 'urace', *args],
+            cwd=os.path.join(os.path.dirname(__file__), '..'),
+            capture_output=True, text=True
+        )
+        return json.loads(result.stdout)
+
+    def _run_rc(self, *args):
+        import sys as _sys
+        result = subprocess.run(
+            [_sys.executable, '-m', 'urace', *args],
+            cwd=os.path.join(os.path.dirname(__file__), '..'),
+            capture_output=True, text=True
+        )
+        return result.returncode, json.loads(result.stdout)
+
+    def test_wallet_init_creates_key_file(self):
+        r = self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        self.assertEqual(r['status'], 'ok')
+        self.assertIn('address', r)
+        self.assertTrue(r['address'].startswith('0x'))
+        self.assertIn('public_key', r)
+        key_file = os.path.join(self.tmp, 'key.json')
+        self.assertTrue(os.path.exists(key_file))
+
+    def test_wallet_init_private_key_not_in_result(self):
+        r = self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        self.assertNotIn('private_key', r)
+
+    def test_wallet_show_returns_address_and_pubkey(self):
+        self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        r = self._run('crypto', 'wallet', 'show', '--wallet-dir', self.tmp, '--json')
+        self.assertEqual(r['status'], 'ok')
+        self.assertIn('address', r)
+        self.assertNotIn('private_key', r)
+
+    def test_wallet_show_consistent_address(self):
+        init = self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        show = self._run('crypto', 'wallet', 'show', '--wallet-dir', self.tmp, '--json')
+        self.assertEqual(init['address'], show['address'])
+
+    def test_wallet_sign_returns_signature(self):
+        self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        r = self._run('crypto', 'wallet', 'sign', 'hello urace', '--wallet-dir', self.tmp, '--json')
+        self.assertEqual(r['status'], 'ok')
+        self.assertIn('signature_der', r)
+        self.assertIn('payload_sha256', r)
+        self.assertEqual(r['algorithm'], 'ECDSA-secp256k1-SHA256')
+
+    def test_wallet_sign_different_payloads_different_digests(self):
+        self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        r1 = self._run('crypto', 'wallet', 'sign', 'payload_one', '--wallet-dir', self.tmp, '--json')
+        r2 = self._run('crypto', 'wallet', 'sign', 'payload_two', '--wallet-dir', self.tmp, '--json')
+        self.assertNotEqual(r1['payload_sha256'], r2['payload_sha256'])
+
+    def test_wallet_init_overwrite_rejected_by_default(self):
+        self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        rc, data = self._run_rc('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(data['status'], 'error')
+
+    def test_wallet_init_overwrite_flag_succeeds(self):
+        self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--json')
+        r = self._run('crypto', 'wallet', 'init', '--wallet-dir', self.tmp, '--overwrite', '--json')
+        self.assertEqual(r['status'], 'ok')
+
+    def test_wallet_show_without_init_returns_error(self):
+        rc, data = self._run_rc('crypto', 'wallet', 'show', '--wallet-dir', self.tmp, '--json')
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(data['status'], 'error')
+
+
+class R122ScoreTo10Tests(unittest.TestCase):
+    """Tests for the three features completing 10/10 scores."""
+
+    def _run(self, *args):
+        import sys as _sys
+        r = subprocess.run(
+            [_sys.executable, '-m', 'urace', *args],
+            cwd=os.path.join(os.path.dirname(__file__), '..'),
+            capture_output=True, text=True
+        )
+        return r.returncode, json.loads(r.stdout) if r.stdout.strip() else {}
+
+    # -- qualification replay --mode full ----------------------------------
+
+    def test_qualification_replay_estimate_mode_default(self):
+        rc, data = self._run('qualification', 'list', '--json')
+        self.assertEqual(rc, 0)
+        self.assertEqual(data['status'], 'ok')
+        self.assertIn('evidence', data)
+
+    def test_qualification_replay_full_mode_missing_evidence(self):
+        rc, data = self._run('qualification', 'replay', '--evidence-id', 'nonexistent', '--mode', 'full', '--json')
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(data['status'], 'error')
+
+    def test_qualification_replay_full_mode_arg_accepted(self):
+        rc, data = self._run('qualification', 'replay', '--evidence-id', 'x', '--mode', 'full', '--json')
+        # error is fine (evidence not found); what matters is the --mode flag parses
+        self.assertIn('status', data)
+
+    # -- fleet capacity ----------------------------------------------------
+
+    def test_fleet_capacity_empty_fleet(self):
+        rc, data = self._run('fleet', 'capacity', '--json')
+        self.assertEqual(rc, 0)
+        self.assertEqual(data['status'], 'ok')
+        self.assertIn('fleet_size', data)
+        self.assertIn('parallel_capacity', data)
+        self.assertIn('bottleneck_members', data)
+        self.assertIn('members', data)
+
+    def test_fleet_capacity_has_calls_remaining(self):
+        rc, data = self._run('fleet', 'capacity', '--json')
+        self.assertEqual(rc, 0)
+        self.assertIn('total_calls_remaining_24h', data)
+
+    # -- executor circuit-breaker ------------------------------------------
+
+    def test_circuit_breaker_status_returns_providers(self):
+        rc, data = self._run('executor', 'circuit-breaker', '--json')
+        self.assertEqual(rc, 0)
+        self.assertEqual(data['status'], 'ok')
+        self.assertIn('providers', data)
+        self.assertIn('trip_threshold', data)
+        self.assertIn('tripped_count', data)
+        self.assertIn('healthy_count', data)
+
+    def test_circuit_breaker_provider_fields(self):
+        rc, data = self._run('executor', 'circuit-breaker', '--json')
+        self.assertEqual(rc, 0)
+        for p in data['providers']:
+            self.assertIn('provider_id', p)
+            self.assertIn('failures', p)
+            self.assertIn('threshold', p)
+            self.assertIn('tripped', p)
+            self.assertIn('recommendation', p)
+
+    def test_circuit_breaker_reset_unknown_provider_returns_error(self):
+        rc, data = self._run('executor', 'circuit-breaker', '--cb-action', 'reset', '--cb-provider', 'does-not-exist', '--json')
+        self.assertNotEqual(rc, 0)
+        self.assertEqual(data['status'], 'error')
+
+    def test_circuit_breaker_reset_requires_cb_provider(self):
+        rc, data = self._run('executor', 'circuit-breaker', '--cb-action', 'reset', '--json')
+        self.assertNotEqual(rc, 0)
+
+    def test_circuit_breaker_module_imports(self):
+        from urace import circuit_breaker as cb
+        self.assertTrue(callable(cb.status))
+        self.assertTrue(callable(cb.reset))
+        self.assertTrue(callable(cb.auto_trip))

@@ -118,6 +118,81 @@ See [Controls Guide](controls.md) for all options.
 
 ---
 
+## Products Beyond Software
+
+URACE's improvement model is not limited to code. Any product with measurable quality metrics can be registered — including content pipelines, AI-generated media, ML models, and data pipelines.
+
+**Any pipeline qualifies** — URACE is product-agnostic at its boundary: it improves the *pipeline* that produces the output, not the output itself.
+
+| Product | Types | Example metrics | Executor path |
+|---------|-------|-----------------|---------------|
+| Game | `software`, `media` | FPS, retention, bug count | Build/test pipeline via `script` adapter |
+| Book | `content` | Readability score, chapter completion, editor rating | Style checker or writing API via `http` adapter |
+| Scientific paper | `data`, `model` | Accuracy, reproducibility, citation score | Experiment runner via `script` adapter |
+| Mobile app | `software` | Crash rate, load time, store rating | CI pipeline via `script` adapter |
+
+URACE's scope is the **production pipeline**, not the output files themselves:
+- For AI-generated video: URACE improves the prompt engineering, generation parameters, and post-processing pipeline that produces the video
+- For ML models: URACE improves training scripts, hyperparameters, and evaluation pipelines
+- For data products: URACE improves ingestion, transformation, and quality validation pipelines
+
+Quality is measured by **score_delta** — any metric the user defines. For content products, useful metrics include: engagement rate, technical quality scores (SSIM, PSNR), A/B test results, or any pipeline-level KPI.
+
+To register a non-software product:
+
+```sh
+urace init --type media
+urace product register --type content MyContentPipeline
+urace product register --type model MyModelTrainer
+urace product register --type data MyDataPipeline
+```
+
+Available types: `software` (default), `content`, `media`, `model`, `data`
+
+The `--type` flag sets default metric suggestions and provides executor context hints so improvement cycles are better targeted.
+
+---
+
+## Attach a GitHub Repository as a Product
+
+Any public or private GitHub repo can be registered as a URACE product. URACE clones it locally, tracks it like any other product, and can run improvement cycles on it.
+
+### Register
+
+```sh
+# Register a GitHub repo (clones into ./products/<repo-name>)
+urace product register --github https://github.com/owner/repo
+
+# Clone to a specific directory
+urace product register --github https://github.com/owner/repo --clone-to ./my-dir
+```
+
+URACE does not modify the remote repository. All operations are local.
+
+### Browse and Inspect
+
+```sh
+# List registered products
+urace product list
+
+# Show git status and recent changes
+urace product git status
+urace product git log
+urace product git diff
+```
+
+### GitHub Workflow Integration
+
+You can configure URACE to emit a GitHub Actions workflow file that runs improvement cycles in CI:
+
+```sh
+urace configuration github-workflow --repo owner/repo --output .github/workflows/urace.yml
+```
+
+The generated workflow calls `urace run` on each push and reports quality deltas back to the PR.
+
+---
+
 ## Related
 
 - [Controls](controls.md) — enable/disable capabilities

@@ -44,6 +44,7 @@ urace controls set [flags]
 | `--context-mint-decisions` | bool | false | Allow decision records to be minted as context |
 | `--context-mint-operations` | bool | false | Allow operation records to be minted as context |
 | `--context-mint-checkpoints` | bool | false | Allow checkpoints to be minted as context |
+| `--compliance-mode` | bool | false | Enable stricter audit logging and governance enforcement |
 
 **Note:** Every `controls set` invocation writes a `config-capability-change` evidence record to the audit trail.
 
@@ -94,6 +95,29 @@ urace status --json
 ```sh
 urace controls set --freeform-enabled false
 ```
+
+---
+
+## Compliance Mode
+
+When compliance mode is on, every state-modifying command requires an evidence record and peer role checks are enforced on exchange operations. Use this for regulated environments or audit-sensitive deployments.
+
+```sh
+# Enable compliance mode
+urace controls set --compliance-mode true
+
+# Disable compliance mode
+urace controls set --compliance-mode false
+```
+
+Run a full local security audit to check your posture at any time:
+
+```sh
+urace security audit
+urace security audit --json
+```
+
+The audit checks wallet key permissions, certificate pinning hygiene, authority boundary integrity, capability flag anomalies, and audit trail completeness. It returns a findings list with severity levels (`info`, `warning`, `critical`).
 
 ---
 

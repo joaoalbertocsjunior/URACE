@@ -19,10 +19,49 @@ pip install urace
 Run this inside your project directory:
 
 ```sh
-urace init
+urace init --auto
 ```
 
-This creates a local state directory and registers the product. URACE does not modify your source code.
+`--auto` detects your API keys (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`), configures the executor, ensures a P2P identity exists, and runs a health check — all in one step. If it finds everything it needs, the output ends with `"next_command": "urace auto"`.
+
+If you prefer to configure manually:
+
+```sh
+urace init          # create state only
+urace init --ready  # discover installed CLI clients and complete onboarding
+```
+
+**Product type is auto-detected** from your directory contents. You can also set it explicitly — including multiple types for mixed pipelines:
+
+```sh
+urace init --type media              # AI-generated media pipeline
+urace init --type model              # ML training/evaluation pipeline
+urace init --type data               # data ingestion or transformation pipeline
+urace init --type content            # content production pipeline
+urace init --type software --type media   # mixed: code + media generation
+```
+
+Types: `software` (default, auto-detected), `content`, `media`, `model`, `data`. Multiple `--type` flags or comma-separated values are accepted.
+
+**Attaching any executor**: URACE supports three adapter types for connecting external tools, agent frameworks (LangChain, AutoGen, CrewAI), or REST APIs:
+
+```yaml
+# In executor.providers config:
+- id: my-agent
+  adapter: script   # any CLI tool: stdin=prompt, stdout=JSON
+  command: ./run_agent.sh
+
+- id: my-api
+  adapter: http     # any REST endpoint (retries on 429/503)
+  endpoint: http://localhost:8080/improve
+
+- id: my-mcp
+  adapter: mcp      # MCP stdio JSONRPC 2024-11-05
+  command: npx my-mcp-server
+  tool: improve
+```
+
+URACE does not modify your source code.
 
 ---
 
@@ -98,6 +137,27 @@ Create your peer identity:
 urace exchange peer identity
 ```
 
+**Choose a network mode** that matches your deployment. The default (`hybrid`) works for most teams:
+
+| Mode | When to use |
+|------|-------------|
+| `intranet` | Air-gapped or fully private LAN — no internet peers |
+| `hybrid` | LAN-first with optional internet gateway (default) |
+| `internet` | Fully public deployment with DHT discovery |
+
+```sh
+# Default — no action needed. Or set explicitly:
+urace exchange settings set --network-mode hybrid
+
+# Private/air-gapped team:
+urace exchange settings set --network-mode intranet
+
+# Ready to connect to the wider public network:
+urace exchange settings set --network-mode internet
+```
+
+See [Network Mode](../exchange/overview.md#network-mode) for upgrade steps when moving from intranet to internet.
+
 ---
 
 ## 7. Mint Your Improvement to the Network
@@ -122,11 +182,17 @@ When another peer borrows your feature, you earn tokens automatically.
 urace exchange ledger summary
 ```
 
+See live token velocity and network health:
+
+```sh
+urace exchange market stats --json
+```
+
 ---
 
 ## What's Next
 
-- [Product Lifecycle Guide](../guides/products.md) — goals, plans, operations in depth
+- [Product Lifecycle Guide](../guides/products.md) — goals, plans, operations, GitHub products
 - [Exchange Setup](../exchange/setup.md) — full exchange configuration
 - [Features Guide](../exchange/features.md) — mint, borrow, and trade features
 - [Concepts](concepts.md) — understand the core model

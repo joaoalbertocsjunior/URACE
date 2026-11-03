@@ -175,6 +175,21 @@ add("rt-cmd-status-group", "status subcommand group", "'status' command tree.", 
 add("rt-cmd-match-quoted", "Quoted command matcher", "Match quoted command strings.", ["command_surface"], "mechanism")
 add("rt-cmd-forward", "Command forwarder", "Forward CLI command to cwd.", ["command_surface"], "mechanism")
 add("rt-cmd-read-only", "Read-only argv predicate", "Classify argv as read-only.", ["command_surface"], "mechanism")
+add("rt-cmd-product-git-group", "product git subcommand", "'product git' GitHub operation tree.", ["command_surface", "cli", "github"], "mechanism")
+add("rt-cmd-github-workflow-config", "github-workflow config subcommand", "'configuration github-workflow' auto git policy.", ["command_surface", "cli", "github"], "mechanism")
+add("rt-cmd-exchange-bootstrap-group", "exchange bootstrap subcommand", "'exchange bootstrap' P2P rendezvous peer management.", ["command_surface", "cli", "p2p"], "mechanism")
+
+# ===================== portfolio_github.py =====================
+add("rt-pgh-workflow-defaults", "GitHub workflow defaults", "Default auto-pull/commit/push policy constants.", ["portfolio_github", "github"], "schema")
+add("rt-pgh-workflow-settings", "GitHub workflow settings", "Effective github_workflow config merged with defaults.", ["portfolio_github", "github"], "mechanism")
+add("rt-pgh-clone-repo", "Clone GitHub repo", "git clone owner/repo to local path.", ["portfolio_github", "github"], "mechanism")
+add("rt-pgh-head-commit", "GitHub head commit", "Read HEAD commit SHA from clone.", ["portfolio_github", "github"], "mechanism")
+add("rt-pgh-validate-subcommand", "Validate git subcommand", "Block unsafe git subcommands; allowlist enforced.", ["portfolio_github", "github", "security"], "mechanism")
+add("rt-pgh-run-git", "Run git in clone", "Execute validated git command in product clone_path.", ["portfolio_github", "github"], "mechanism")
+add("rt-pgh-auto-pull", "Auto-pull hook", "Pull latest from origin if auto_pull enabled.", ["portfolio_github", "github"], "mechanism")
+add("rt-pgh-auto-commit", "Auto-commit hook", "Commit after improvement cycle if auto_commit enabled.", ["portfolio_github", "github"], "mechanism")
+add("rt-pgh-auto-push", "Auto-push hook", "Push to origin if auto_push enabled.", ["portfolio_github", "github"], "mechanism")
+add("rt-pgh-env-auto-providers", "Executor env-var auto providers", "Synthesize executor providers from ANTHROPIC_API_KEY / OPENAI_API_KEY.", ["executor", "github", "zero_config"], "mechanism")
 
 # ===================== _common.py =====================
 add("rt-common-path-roots", "Runtime path roots", "RUNTIME_ROOT/SYSTEM_ROOT/ROOT/CONFIG_PATH.", ["_common"], "schema")
@@ -1694,19 +1709,47 @@ for _mod, _desc in _trial_tests:
 def main() -> None:
     output = Path(__file__).resolve().parent.parent / "exchange" / "initial_ledger" / "initial_ledger.jsonl"
     output.parent.mkdir(parents=True, exist_ok=True)
-    lines = []
-    # Line 1: header
-    lines.append(json.dumps({"schema": "urace-initial-ledger-v1", "feature_count": len(features)}, sort_keys=False))
-    # Lines 2+: one feature per line
-    for feat in features:
-        lines.append(json.dumps(feat, sort_keys=False))
-    output.write_text("\n".join(lines) + "\n")
+
+    # Load existing ledger to find already-present feature IDs (append-only semantics).
+    # Existing entries are never removed or rewritten — only new IDs are appended.
+    existing_ids: set[str] = set()
+    existing_lines: list[str] = []
+    if output.exists():
+        for raw in output.read_text(encoding="utf-8").splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            # Skip the header line(s)
+            if obj.get("schema") == "urace-initial-ledger-v1":
+                existing_lines.append(raw)
+                continue
+            fid = obj.get("feature_id")
+            if fid:
+                existing_ids.add(fid)
+                existing_lines.append(raw)
+
+    # Determine which features are new (not already in the ledger)
+    new_features = [f for f in features if f["feature_id"] not in existing_ids]
+    all_features_count = len(existing_ids) + len(new_features)
+
+    # Rewrite: updated header + all existing lines (preserving order) + new entries
+    header = json.dumps({"schema": "urace-initial-ledger-v1", "feature_count": all_features_count}, sort_keys=False)
+    # Replace or prepend header line
+    body_lines = [l for l in existing_lines if json.loads(l).get("schema") != "urace-initial-ledger-v1"]
+    new_lines = [json.dumps(f, sort_keys=False) for f in new_features]
+    output.write_text("\n".join([header] + body_lines + new_lines) + "\n", encoding="utf-8")
 
     # Summary
     from collections import Counter
-    kinds = Counter(f["kind_label"] for f in features)
-    print(f"Wrote {len(features)} features to {output}")
-    print("Breakdown by kind_label:")
+    all_features = [f for f in features]  # features defined in this script
+    kinds = Counter(f["kind_label"] for f in all_features)
+    action = f"appended {len(new_features)} new" if existing_ids else f"wrote {len(new_features)}"
+    print(f"{action} features to {output} ({all_features_count} total)")
+    print("Breakdown by kind_label (this build):")
     for kind, count in sorted(kinds.items(), key=lambda kv: -kv[1]):
         print(f"  {kind}: {count}")
 

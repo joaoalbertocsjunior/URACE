@@ -40,7 +40,39 @@ This creates a certificate keypair used to authenticate all peer connections. Yo
 
 ---
 
-## Step 3: Configure Capabilities
+## Step 3: Choose a Network Mode
+
+Network mode controls how far your node reaches. The default (`hybrid`) works for most teams:
+
+| Mode | When to use |
+|------|-------------|
+| `intranet` | Air-gapped or fully private LAN — no internet peers |
+| `hybrid` | LAN-first with optional internet gateway (default) |
+| `internet` | Fully public deployment with DHT discovery |
+
+```sh
+# Default — no action needed. Or set explicitly:
+urace exchange settings set --network-mode hybrid
+
+# Private/air-gapped team:
+urace exchange settings set --network-mode intranet
+
+# Ready to connect to the wider public network:
+urace exchange settings set --network-mode internet
+```
+
+**Upgrading from intranet to internet**: First resolve your public address via STUN, then optionally designate one peer as the internet-facing gateway:
+
+```sh
+urace exchange network public-address
+urace exchange settings set --network-mode internet
+# Or in hybrid mode, set a gateway peer:
+urace exchange settings set --network-mode hybrid --internet-gateway <peer-id>
+```
+
+---
+
+## Step 4: Configure Capabilities
 
 Control what your node does on the network:
 
@@ -53,6 +85,12 @@ urace exchange settings set --max-transfers-per-day 50
 
 # Enable auto-probing of pinned peers
 urace exchange settings set --auto-select true
+
+# Set minimum peers required for consensus decisions (default: 2)
+urace exchange settings set --consensus-min-threshold 3
+
+# Override baseline token grant per new peer
+urace exchange settings set --baseline-grant-tokens 500
 ```
 
 ---
@@ -64,12 +102,16 @@ urace exchange settings set --auto-select true
 | `enabled` | `false` | Exchange is off until explicitly enabled |
 | `network` | `false` | P2P networking off until enabled |
 | `advertise` | `false` | LAN advertising off |
+| `network_mode` | `hybrid` | Network reach: `intranet`, `hybrid`, or `internet` |
+| `internet_gateway` | — | Peer ID of the internet-facing gateway (hybrid mode) |
 | `auto_select` | `true` | Auto-probe pinned peers on startup |
 | `token_settlement` | `false` | Token transfers disabled (reputation-only until enabled) |
 | `max_transfers_per_day` | `20` | Daily bundle transfer limit |
 | `max_rpc_per_day` | `200` | Daily RPC call limit |
 | `max_rpc_per_peer_per_day` | `50` | Per-peer RPC limit |
 | `feature_borrow_enabled` | `true` | P2P is first source for feature requests |
+| `consensus_min_threshold` | `2` | Minimum peers for consensus decisions |
+| `baseline_grant_tokens` | `3` | Tokens granted to each new peer on join |
 
 Show current settings:
 
