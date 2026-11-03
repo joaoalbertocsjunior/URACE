@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Specification-trial commands, exposed through the canonical URACE CLI."""
+import argparse,json,time
+from pathlib import Path
+from product_resources import report,overall
+import efficiency_score as scoring
+from common import BASE,atomic
+
+def main():
+    import sys
+    sys.path.insert(0, str(BASE.parent/'runtime'))
+    from urace.trial_cli import build_parser
+    parser=build_parser()
+    args=parser.parse_args()
+    if args.group=='work':
+        import project_work as work
+        try:
+            if not args.project:raise ValueError('--project is required')
+            if args.work_action=='init':result=work.initialize(args.project,args.template)
+            elif args.work_action=='status':result=work.status(args.project)
+            else:result=work.run(args.project,provider=args.work_executor,mode=args.execution_mode,max_seconds=args.max_seconds,adaptive=args.adaptive=='true',run_id=args.run_id)
+        except (ValueError,OSError,RuntimeError,KeyError,TypeError) as error:parser.error(str(error))
+        print(json.dumps(result,indent=2));return 0
+    if args.group=='study' and args.action=='benefit':
+        import repository_study as study
+        try:
+            if args.benefit_action=='configure':result=study.configure(BASE,None if args.enabled is None else args.enabled=='true',args.repetitions,args.efforts)
+            elif args.benefit_action=='run':result=study.run_one(BASE)
+            else:result=study.status(BASE)
+        except (ValueError,OSError,RuntimeError,KeyError,TypeError) as error:parser.error(str(error))
+        print(json.dumps(result,indent=2));return 0
+    if args.group=='study':
+        from workflow_study import status,run_one,configure
+        try:
+            if args.action=='configure':result=configure(BASE,None if args.enabled is None else args.enabled=='true',args.repetitions,args.efforts)
+            elif args.action=='run':result=run_one(BASE)
+            else:result=status(BASE)
+        except (ValueError,OSError,RuntimeError,KeyError,TypeError) as error:parser.error(str(error))
+        print(json.dumps(result,indent=2));return 0
+    if args.group=='status' and args.kind=='scores':
+        from executable_scores import view,render
+        try:
+            if not 1<=args.limit<=10000:raise ValueError('History limit must be1..10000')
+            result=view(BASE,args.version,args.executor,args.history,args.compare,args.limit)
+            from urace.value_discovery import execution_quality_views
+            result['native_output_quality']=execution_quality_views(BASE)
+        except (ValueError,OSError,RuntimeError,KeyError) as error:parser.error(str(error))
+        print(json.dumps(result,indent=2) if args.json else render(result));return 0
+    if args.group=='status' and args.kind=='analysis':
+        from spec_trial import version,load
+        from snapshot_metadata import inspect_snapshot,rollups
+        try:
+            if args.version is not None and args.version<0:raise ValueError('Version must be nonnegative')
+            if args.analysis_scope=='packet':
+                if args.version is not None or args.period is not None:raise ValueError('Packet is a current evidence index; use product/runtime for period analysis')
+                from assessment_packet import packet
+                result=packet(BASE)
+            elif args.analysis_scope=='snapshot':
+                if args.period is not None:raise ValueError('--period applies only to product/runtime analysis')
+                number=args.version if args.version is not None else load(BASE/'active-version.json')['version']
+                result=inspect_snapshot(version(number))
+            else:
+                if args.version is not None:raise ValueError('--version applies only to snapshot analysis')
+                paths=rollups(BASE,period=args.period or '3h');result=load(Path(paths['product_overall' if args.analysis_scope=='product' else 'runtime_overall']))
+        except (ValueError,OSError,RuntimeError,KeyError) as error:parser.error(str(error))
+        print(json.dumps(result,indent=2));return 0
+    if args.group in ('config','data'):
+        try:
+            if args.group=='config':
+                if args.review:
+                    measurements=overall(args.scope,args.executor) if args.product=='*' else report(args.product,args.scope,args.executor)
+                    result=scoring.score(measurements)
+                elif args.file:
+                    with open(args.file) as stream:definition=json.load(stream)
+                    result=scoring.configure(definition,args.product,args.executor)
+                elif args.disable:result=scoring.configure({'enabled':False,'metrics':[]},args.product,args.executor)
+                else:result=scoring.inspect(args.product,args.executor)
+            elif args.action=='record':result=scoring.record(args.product,args.executor,args.name,args.value,args.unit,args.source)
+            else:result=[r for r in scoring.read_custom() if r['product_id']==scoring.product_id(args.product) and (args.executor=='all' or r['executor'] in ('all',args.executor))]
+        except (ValueError,OSError,KeyError,TypeError) as error:parser.error(str(error))
+        print(json.dumps(result,indent=2));return 0
+    if args.kind=='runtime':
+        from spec_trial import status
+        return status()
+    try:result=overall(args.scope,args.executor) if args.all_products else report(args.product or 'URACE.md',args.scope,args.executor)
+    except ValueError as error:parser.error(str(error))
+    try:result['efficiency_score']=scoring.score(result)
+    except (ValueError,KeyError,TypeError,OSError) as error:parser.error(str(error))
+    from spec_trial import load
+    trial=load(BASE/'trial-clock.json',{}).get('trial_id','unidentified-trial')
+    snapshot=BASE/'reports/trials'/trial/'resource-inspections'/('resources-'+str(time.time_ns())+'.json');result['inspection_snapshot']=str(snapshot);atomic(snapshot,result)
+    if args.json:print(json.dumps(result,indent=2))
+    else:
+        print(f"{result['product']} [{result['scope']}; executor={result['executor']}]")
+        print(f"Known tokens: {result['known_tokens']:,}; calls: {result['native_calls']}; missing usage: {result['missing_usage']}; executor seconds: {result['known_executor_seconds']:.2f}")
+        print(f"Completed tasks: {result['completed_tasks']}; accepted improvements: {result['accepted_improvements']}; rejected/deferred: {result['rejected_or_deferred']}")
+        e=result['efficiency'];print(f"Acceptance: {e['acceptance_rate_pct']}%; tokens/accepted: {e['tokens_per_accepted_improvement']}; accepted/hour: {e['accepted_improvements_per_elapsed_hour']}")
+        if result['efficiency_score']['enabled']:print(f"Custom efficiency score: {result['efficiency_score']['score']}; missing: {result['efficiency_score']['missing_metrics']}")
+        print('Score reliability: '+result['efficiency_score']['methodology_review']['score_reliability'])
+        for name,p in result['providers'].items():print(f"{name}: {p['known_tokens']:,} known tokens, {p['native_calls']} calls, {p['known_executor_seconds']:.2f}s")
+        for p in result.get('products',[]):print(f"Product {p['product']}: {p['known_tokens']:,} known tokens, {p['native_calls']} calls")
+    return 0
+
+if __name__=='__main__':raise SystemExit(main())

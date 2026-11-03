@@ -1,0 +1,26 @@
+# Qualified comparative engineering evidence
+
+The primary trial product remains URACE.md from baseline5688fda. Ordinary repository pairs measure runtime orchestration infrastructure, not textual product-version improvement. Frozen specification studies supply the product text separately. Neither proves comprehension, real-user benefit or market fit.
+
+The versioned protocol is in trial/qualification_protocol.py and is frozen in each repository study plan before dispatch. Cohort identity binds trial, task contracts including phase two, evaluator/quality data, execution code, native client versions, requested models/efforts, tool schema, sandbox image and controller Python. A changed identity starts a separate cohort; prior plans, rows and snapshots remain intact.
+
+Each provider/native-effort profile needs at least 30 compatible ordinary matched pairs with six in each of navigation, recovery, interruption, receipts and requirements_change. Failover is separately labeled simulation. Sampling prioritizes incomplete pairs, then the least represented profiles/families. Eligibility is independent per executor. Completed failures are counted rather than replaced because of their outcomes. Pair and arm launch records expose attrition and queue time.
+
+Standalone and managed arms share task, tools, public tests, provider/model/native effort and a 480-second active wall allowance spanning requirement phases. Order is counterbalanced. Managed goal/context packets, up to three outer repair attempts and atomic publication differ from standalone's one outer attempt and are explicitly treatment. Ordinary repairs keep the requested provider. End-to-end times include admission and controller gaps; nested native/tool timing is not added to workflow elapsed time.
+
+Functional acceptance remains outside executor workspaces. Functional cases, robustness data and runner are hashed before inference and verified on resume. Every completed attempt, including failed public development, is measured without sending private diagnostics into repair prompts. Existing functional, robustness, determinism and regression gates are unchanged. Tests share a fixed synthetic task oracle; independent human review and representative real usage are unmeasured.
+
+Receipt reconciliation verifies embedded records against authoritative native transport receipts, deduplicates equal IDs, rejects conflicting IDs and cached-total disagreement, checks provider/product scope and native time against workflow time, and preserves unknown usage/credits. Failed and unmatched completed arms are separately visible. Incomplete launched pairs block a complete assessment; all pending attempts remain in native/product accounting.
+
+Comparisons remain per profile, with six-per-family gates, measured quality/delivery deltas, explicitly defined resource reductions and deterministic paired bootstrap intervals. Inputs are sorted before resampling. Intervals are conditional/descriptive; repeated fixed tasks may be dependent. P50/P90/P95 require 5/20/40 observations. There is no universal worth percentile. Routing retains its 20% gain/5% cross-resource tolerance, quality nonregression and stricter narrow-sample rules.
+
+The single supervisor retains 3-hour reviews and persisted deadlines, 20-minute metadata refresh and 30-second idle admission checks. Every review includes day/week/month windows. A separate Claude diagnostic uses ordinary shared admission, a 120-second wall cap and a persisted 18,900-second cooldown. Its product is urace-qualification-preflight, excluded from productive proof. No quota/backoff/credit policies are changed.
+
+## Smaller evidence and executor packets
+
+Use `python3 -m urace trial status analysis --kind packet --json` for a read-only current evidence index through the existing grouped CLI/API. It includes exact health/progress and hashed paths to full reports, not a replacement for detailed assessment. Drill down for code, failures, quality and resource claims; verify freshness and current source qualification. No missing facts become success.
+
+Executor prompt JSON uses compact separators, preserving every decoded key/value and every source string. This removes redundant formatting only. Actual token savings and job-quality equivalence remain unmeasured. More aggressive context reduction defaults OFF unless exact model/native effort/client/runtime/task conditions, >=35 matched context cases, complete resources and nonregressing quality satisfy the existing gain rule. No additional lossy compression or lowered gates is enabled.
+
+
+Protocol v3 records cumulative active invocation intervals across resumes and requirement phases. The same 480-second allowance applies to both arms and includes active validation/publication processing. Inactive queue and controller-suspension gaps remain in end-to-end elapsed time and resource reports but do not consume active allowance. Prior-phase consumption cannot be reset. Incomplete hard-crash intervals are charged conservatively and flagged as uncertain, withholding qualification. Legacy incomplete checkpoints cannot acquire a fresh allowance. Completed historical results remain unchanged; v3 requires a separate frozen execution/measurement cohort. Actual publication is retained in history if total active processing overruns, while qualified delivery credit is withheld.

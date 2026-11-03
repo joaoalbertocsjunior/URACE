@@ -1,0 +1,23 @@
+{
+  "enabled": true,
+  "metrics": [
+    {
+      "name": "acceptance_rate_pct",
+      "weight": 0.4,
+      "direction": "higher",
+      "target": 90
+    },
+    {
+      "name": "tokens_per_accepted_improvement",
+      "weight": 0.3,
+      "direction": "lower",
+      "target": 30000
+    },
+    {
+      "name": "accepted_improvements_per_elapsed_hour",
+      "weight": 0.3,
+      "direction": "higher",
+      "target": 2
+    }
+  ]
+}
