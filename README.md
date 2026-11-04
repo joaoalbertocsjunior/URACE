@@ -57,6 +57,15 @@ urace run
 urace inspect --goals
 ```
 
+### Reuse URACE Building Blocks The Way You Want
+
+URACE exposes reusable building blocks — architectural patterns, mechanisms, schemas, and protocols — that you can compose into derived systems. Use `urace derive` to extract and apply them.
+
+```sh
+# Limit update scope to specific building blocks
+urace update --opt-in-constructs AP8,AP14
+```
+
 ### Derive: Introspect Your System
 The `derive` command extracts architectural patterns, mechanisms, schemas, protocols, and contracts from your product spec. Use it to understand what you have and suggest what you need.
 
