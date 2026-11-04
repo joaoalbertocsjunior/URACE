@@ -34,66 +34,62 @@ conda install -c conda-forge urace
 # Initialize a product
 urace init
 
-# Run an improvement cycle
-urace run
+# Start the autonomous daemon — it improves your product in the background
+urace daemon start
 
-# Check status
-urace status --json
-
-# Open the P2P exchange
-urace exchange status
+# Or just talk to it — freeform input routes to the right command automatically
+urace "What's my project status?"
+urace "Add goal: improve checkout conversion by 20%"
+urace "Show recent operations"
 ```
+
+The daemon runs improvement cycles on a schedule (default: every 30 min). You watch it work, intervene when you want, stop when you're done (`Ctrl+C`). No pipeline to configure.
 
 ## Core Concepts
 
 ### Goals and Plans
-URACE tracks `objectives` (what you want) and `plans` (how to get there). Each cycle, the runtime evaluates progress, selects the best next operation, and records outcomes.
+Tell URACE what you want. It figures out how to get there, executes the work, and tracks every outcome.
 
 ```sh
-urace add "Improve checkout conversion by 20%"
-urace run
+urace add "Reduce API p99 latency below 200ms"
+urace "What's blocking my latency goal?"
 urace inspect --goals
 ```
 
-### P2P Exchange
-Enable the exchange to participate in the feature marketplace:
+### P2P Exchange — Stop Rebuilding What Others Already Solved
+
+Every verified feature your product ships becomes an asset you can offer to peers. Every feature a peer already built is available for you to borrow — always cheaper than building it yourself.
 
 ```sh
-# Enable exchange (opt-in, off by default)
+# Join the network (opt-in)
 urace exchange settings set --enabled true --network true
-
-# Create identity
 urace exchange peer identity
 
-# Find peers
+# See what peers are offering
 urace exchange network discover
-urace exchange network refresh
 
-# Borrow a feature
-urace exchange feature define my-feature --wanted true
-urace exchange rule set <peer_id> my-feature receive --allow true
+# Borrow a feature instead of building it
+urace exchange feature define auth-refresh --wanted true
 
-# Mint your own feature to the network
-urace exchange equity grant my-feature --creator <your_peer_id>
-urace exchange equity list-for-sale my-feature --bp 5000 --price 80
+# Offer your own work to the network
+urace exchange equity grant auth-refresh --creator <your_peer_id>
 ```
 
-### Token Economy
-Earn tokens by passing quality gates. Spend them to borrow features from peers.
+Your work earns reputation. Reputation earns tokens. Tokens unlock the network.
+
+### Token Economy — Quality Pays
+
+Pass a quality gate → earn tokens automatically. No manual claims, no invoices. Spend tokens to borrow verified features from peers.
 
 ```sh
-# Check your balance
+# See what you've earned
 urace exchange ledger summary
 
-# View reputation
-urace exchange reputation show <peer_id>
-
-# Calculate network supply capacity
-urace exchange ledger supply-calc --peers 1000 --ledger-mb 50
-
-# Transfer tokens for settlement
-urace exchange ledger transfer <peer_id> <amount_units>
+# Your reputation on the network
+urace exchange reputation show <your_peer_id>
 ```
+
+The more you improve your product, the more you earn. The more the network grows, the more features you can borrow. It compounds.
 
 ## P2P Network Commands
 
