@@ -7232,8 +7232,9 @@ Key options:
         _json_out_flag = "--json" in _git_args
         if _json_out_flag:
             _git_args = [a for a in _git_args if a != "--json"]
-        _cwd = str(ROOT)
-        _res = _sp.run(["git"] + _git_args, cwd=_cwd, text=True, capture_output=True)
+        # Use SYSTEM_ROOT (the actual git checkout root) when ROOT has no .git dir
+        _git_cwd = str(ROOT) if (ROOT / ".git").is_dir() else str(SYSTEM_ROOT)
+        _res = _sp.run(["git"] + _git_args, cwd=_git_cwd, text=True, capture_output=True)
         _json_out = _json_out_flag or getattr(args, "json", False) or getattr(args, "format", None) == "json"
         if _json_out:
             print(json.dumps({"returncode": _res.returncode, "stdout": _res.stdout, "stderr": _res.stderr}))
@@ -7245,12 +7246,14 @@ Key options:
         return _res.returncode
     if args.command == "gh":
         import subprocess as _sp, shutil as _sh
-        _json_out = getattr(args, "json", False) or getattr(args, "format", None) == "json"
+        _json_out_flag_gh = "--json" in getattr(args, "gh_args", [])
+        _json_out = _json_out_flag_gh or getattr(args, "json", False) or getattr(args, "format", None) == "json"
         if not _sh.which("gh"):
             _err = {"status": "error", "error": "gh CLI not found; install from https://cli.github.com"}
             print(json.dumps(_err) if _json_out else f"Error: {_err['error']}"); return 1
         _gh_args = getattr(args, "gh_args", [])
-        _res = _sp.run(["gh"] + _gh_args, cwd=str(ROOT), text=True, capture_output=True)
+        _gh_cwd = str(ROOT) if (ROOT / ".git").is_dir() else str(SYSTEM_ROOT)
+        _res = _sp.run(["gh"] + _gh_args, cwd=_gh_cwd, text=True, capture_output=True)
         if _json_out:
             print(json.dumps({"returncode": _res.returncode, "stdout": _res.stdout, "stderr": _res.stderr}))
         else:
