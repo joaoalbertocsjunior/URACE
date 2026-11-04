@@ -95,7 +95,7 @@ _MINIMAL_CONFIG = {
     "operator_patterns": [],
     "p2p": {},
     "product": "ci-test-product",
-    "product_files": ["URACE.md", "README.md"],
+    "product_files": [],
     "product_type": "generic",
     "product_types": ["generic"],
     "product_registry": [],
@@ -147,15 +147,12 @@ def _ensure_product_files_at_root():
             )
         created.append(_urace)
     if not _readme.exists():
-        _real = ROOT / "urace" / "README.md"
-        if _real.exists():
-            _readme.write_text(_real.read_text(encoding="utf-8"), encoding="utf-8")
-        else:
-            _readme.write_text(
-                "# URACE\n## Get Running\n## Use It\n## Stay Safe and Recover\n"
-                + "Valid guidance.\n" * 50,
-                encoding="utf-8",
-            )
+        # Always use a stable stub — decoupled from volatile README content.
+        _readme.write_text(
+            "# URACE\n## Get Running\n## Use It\n## Stay Safe and Recover\n"
+            + "Valid guidance.\n" * 50,
+            encoding="utf-8",
+        )
         created.append(_readme)
     yield
     for path in created:
