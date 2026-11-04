@@ -6419,24 +6419,29 @@ class R34AdditionsTests(unittest.TestCase):
 
     def test_evaluate_sweet_spot_over_engineered_when_ceiling_exceeded(self):
         """Surface exceeds complexity_ceiling -> maturity OVER_ENGINEERED."""
-        config = copy.deepcopy(self.config)
-        config["product_files"] = ["URACE.md"]  # ensures surface > 1 (conftest stub has 50+ lines)
-        config["capability_envelope"] = {
-            "capabilities": [
-                {"id": "cap-aabbccdd22", "name": "c", "description": "d",
-                 "scope": "runtime", "tier": "FOUNDATIONAL", "value_weight": 1.0},
-            ],
-            "completeness_target": 1.0,
-            "complexity_ceiling": 1,  # impossibly small ceiling
-        }
-        state = copy.deepcopy(self.state)
-        state["capability_states"] = [{
-            "capability_id": "cap-aabbccdd22",
-            "status": "CAPABLE",
-            "completeness_fraction": 1.0,
-            "last_assessed_at": "2026-01-01T00:00:00+00:00",
-        }]
-        cli._evaluate_sweet_spot(state, config)
+        import tempfile
+        with tempfile.TemporaryDirectory() as _d:
+            _root = Path(_d)
+            (_root / "surface.txt").write_text("line\n" * 10)
+            config = copy.deepcopy(self.config)
+            config["product_files"] = ["surface.txt"]
+            config["capability_envelope"] = {
+                "capabilities": [
+                    {"id": "cap-aabbccdd22", "name": "c", "description": "d",
+                     "scope": "runtime", "tier": "FOUNDATIONAL", "value_weight": 1.0},
+                ],
+                "completeness_target": 1.0,
+                "complexity_ceiling": 1,  # impossibly small ceiling; surface=10 > 1
+            }
+            state = copy.deepcopy(self.state)
+            state["capability_states"] = [{
+                "capability_id": "cap-aabbccdd22",
+                "status": "CAPABLE",
+                "completeness_fraction": 1.0,
+                "last_assessed_at": "2026-01-01T00:00:00+00:00",
+            }]
+            with patch.object(cli, "ROOT", _root):
+                cli._evaluate_sweet_spot(state, config)
         ssa = state["sweet_spot_assessments"][-1]
         self.assertEqual(ssa["maturity_level"], "OVER_ENGINEERED")
 

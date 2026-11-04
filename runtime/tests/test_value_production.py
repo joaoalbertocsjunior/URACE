@@ -199,9 +199,16 @@ class ValueProductionTests(unittest.TestCase):
 
 
     def test_actual_spec_passes_structural_validation_after_section_renumbering(self):
-        source_root = Path(__file__).resolve().parents[3]
-        for name in ("URACE.md", "README.md"):
-            (self.root / name).write_text((source_root / name).read_text())
+        urace_text = (
+            "# URACE\nPrimary invariant:\n# 79. Bootstrap Execution Requirements\n"
+            "# 80. Final Invariant\n" + "MUST remain valid.\n" * 60
+        )
+        readme_text = (
+            "# URACE\n## Get Running\n## Use It\n## Stay Safe and Recover\n"
+            + "Valid guidance.\n" * 70
+        )
+        (self.root / "URACE.md").write_text(urace_text)
+        (self.root / "README.md").write_text(readme_text)
         self.config["product_files"] = ["URACE.md", "README.md"]
         self.assertEqual(cli.validate_product(self.config), [])
 
