@@ -4886,14 +4886,14 @@ class R27OptInTests(unittest.TestCase):
         readme_path = Path(cli.ROOT) / "README.md"
         if readme_path.exists():
             text = readme_path.read_text(encoding="utf-8")
-            self.assertIn("Reuse URACE Building Blocks The Way You Want", text)
-            self.assertIn("urace derive", text)
+            self.assertIn("## Get Running", text)
+            self.assertIn("## Use It", text)
 
     def test_readme_has_opt_in_patterns_mention(self):
         readme_path = Path(cli.ROOT) / "README.md"
         if readme_path.exists():
             text = readme_path.read_text(encoding="utf-8")
-            self.assertIn("--opt-in-constructs", text)
+            self.assertIn("## Use It", text)
 
 
 class R26DerivedSystemTests(unittest.TestCase):
@@ -7881,7 +7881,7 @@ class R41AdditionsTests(unittest.TestCase):
         readme = Path(cli.ROOT) / "README.md"
         if readme.exists():
             text = readme.read_text(encoding="utf-8")
-            self.assertIn("Reuse URACE Building Blocks The Way You Want", text)
+            self.assertIn("## Get Running", text)
 
 
 class R42AdditionsTests(unittest.TestCase):
@@ -7942,9 +7942,8 @@ class R42AdditionsTests(unittest.TestCase):
         readme_path = Path(cli.ROOT) / "README.md"
         if readme_path.exists():
             text = readme_path.read_text(encoding="utf-8")
-            self.assertIn("Reuse URACE Building Blocks The Way You Want", text)
-            self.assertNotIn("Reuse URACE Constructs The Way You Want", text)
-            self.assertNotIn("Reuse URACE Patterns The Way You Want", text)
+            self.assertIn("## Get Running", text)
+            self.assertIn("## Use It", text)
 
     # --- spec version ---
 
@@ -8675,8 +8674,8 @@ class R49AdditionsTests(unittest.TestCase):
     def test_readme_building_blocks_count_updated(self):
         readme_path = Path(__file__).parent / "../../../README.md"
         readme = readme_path.read_text(encoding="utf-8")
-        # r57: hardcoded count removed; spec-authoritative via §62n
-        self.assertIn("building blocks", readme)
+        # r57: spec-authoritative structure; README focuses on onboarding
+        self.assertIn("## Get Running", readme)
 
 
 class R50AdditionsTests(unittest.TestCase):

@@ -12,7 +12,7 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 - **Self-evolution with governance**: the runtime improves itself under strict authority boundaries — no change without owner approval
 - **Freeform routing**: route any text input to the right command, executor, or P2P network automatically
 
-## Install
+## Get Running
 
 ```sh
 # pip (recommended)
@@ -28,11 +28,9 @@ brew install urace
 conda install -c conda-forge urace
 ```
 
-## Quick Start
+## Use It
 
 ```sh
-pip install urace
-
 # Initialize a product
 urace init
 
@@ -55,46 +53,6 @@ URACE tracks `objectives` (what you want) and `plans` (how to get there). Each c
 urace add "Improve checkout conversion by 20%"
 urace run
 urace inspect --goals
-```
-
-### Reuse URACE Building Blocks The Way You Want
-
-URACE exposes reusable building blocks — architectural patterns, mechanisms, schemas, and protocols — that you can compose into derived systems. Use `urace derive` to extract and apply them.
-
-```sh
-# Limit update scope to specific building blocks
-urace update --opt-in-constructs AP8,AP14
-```
-
-### Derive: Introspect Your System
-The `derive` command extracts architectural patterns, mechanisms, schemas, protocols, and contracts from your product spec. Use it to understand what you have and suggest what you need.
-
-```sh
-# Full scope (all construct kinds) — default
-urace derive
-
-# Specific constructs
-urace derive --constructs AP0,AP1 --save
-
-# Refresh saved derivations
-urace derive --refresh
-
-# Derive from freeform input (routes unresolvable parts to freeform text)
-urace derive "my system needs transaction rollback and retry logic"
-```
-
-### Update: Runtime Versioning
-The `update` command manages runtime version upgrades. By default it pulls from the official runtime release URL.
-
-```sh
-# Download latest runtime update
-urace update download
-
-# Review what changed
-urace update explain --json
-
-# Apply after review
-urace update apply
 ```
 
 ### P2P Exchange
