@@ -150,7 +150,7 @@ def _ensure_product_files_at_root():
         # Always use a stable stub — decoupled from volatile README content.
         _readme.write_text(
             "# URACE\n## Get Running\n## Use It\n## Stay Safe and Recover\n"
-            + "Valid guidance.\n" * 50,
+            + "Valid guidance.\n" * 70,
             encoding="utf-8",
         )
         created.append(_readme)
