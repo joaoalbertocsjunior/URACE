@@ -1713,6 +1713,7 @@ class UraceLifecycleTests(unittest.TestCase):
             (root / "README.md").write_text(readme_text, encoding="utf-8")
             config = copy.deepcopy(self.config)
             config["state_path"] = str(root / "state" / "state.json")
+            config["product_files"] = ["URACE.md", "README.md"]
             with patch.object(cli, "ROOT", root):
                 state = cli.initial_state(config)
                 cli.save_state(config, state)
@@ -1730,6 +1731,7 @@ class UraceLifecycleTests(unittest.TestCase):
             (root / "URACE.md").write_text(urace_text, encoding="utf-8")
             (root / "README.md").write_text(readme_text, encoding="utf-8")
             config = copy.deepcopy(self.config); config["state_path"] = str(root / "state/state.json")
+            config["product_files"] = ["URACE.md", "README.md"]
             with patch.object(cli, "ROOT", root):
                 state = cli.initial_state(config); cli.write_stable_snapshot(config)
                 changed = readme_text + "External accepted guidance.\n"
