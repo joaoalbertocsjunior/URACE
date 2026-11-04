@@ -7228,9 +7228,13 @@ Key options:
     if args.command == "git":
         import subprocess as _sp
         _git_args = getattr(args, "git_args", [])
+        # argparse REMAINDER captures --json before argparse can parse it; strip it here
+        _json_out_flag = "--json" in _git_args
+        if _json_out_flag:
+            _git_args = [a for a in _git_args if a != "--json"]
         _cwd = str(ROOT)
         _res = _sp.run(["git"] + _git_args, cwd=_cwd, text=True, capture_output=True)
-        _json_out = getattr(args, "json", False) or getattr(args, "format", None) == "json"
+        _json_out = _json_out_flag or getattr(args, "json", False) or getattr(args, "format", None) == "json"
         if _json_out:
             print(json.dumps({"returncode": _res.returncode, "stdout": _res.stdout, "stderr": _res.stderr}))
         else:
