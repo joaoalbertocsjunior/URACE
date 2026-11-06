@@ -18013,6 +18013,376 @@ A spec change MUST be accompanied by a runtime change that implements or modifie
 
 ---
 
+# 62aa. P2P Feature Exchange Protocol
+
+The **P2PFeatureExchangeProtocol** governs the peer-to-peer feature marketplace: minting verified improvements, pricing, borrowing, delivery routing, and token economy invariants.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62z]`
+
+## Exchange Invariants
+
+1. **Off-by-default.** The exchange MUST remain disabled until explicitly enabled by the owner via `urace exchange settings set --enabled true`. No peer discovery, no token flow, and no artifact transmission MAY occur in a disabled exchange.
+2. **P2P-first cost guarantee.** The P2P borrow price for any feature MUST always be strictly less than the cost of building the equivalent feature via an executor. The ceiling formula enforces this:
+   ```
+   ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
+   ```
+   `gas_overhead` is derived from `estimate_gas_overhead(config)`: dynamic EVM (gas_per_tx × gas_price × units_per_gwei), static override (`gas_overhead_units`), or 0 (off-chain default). Gas is deducted from headroom before applying completeness and margin so the buyer's total cost always remains below executor cost.
+3. **Single earn path.** Tokens enter circulation only via `APPLIED_AFTER_LOCAL_QUALIFICATION` events (verified quality gate pass with `score_delta > 0`). No other event MAY create new token balance.
+4. **Quarantine model.** Borrowed features MUST NOT be executed automatically. They MUST remain in quarantine until the operator explicitly applies them.
+5. **Cryptographic integrity.** Every bundle MUST be signed before transmission (ML-KEM-768 + Ed25519 hybrid). Bundles that fail signature verification MUST be rejected.
+
+## Executor Price Ceiling
+
+The consensus ceiling is derived from IQR-filtered reputation-weighted median of peer-reported executor prices:
+
+- Peers reporting prices outside `[Q1 × 0.5, Q3 × 2.0]` are outliers for that cycle.
+- An outlier in a single refresh cycle MUST receive a `PRICE_OUTLIER_WARNING` audit row (no reputation penalty).
+- An outlier in two or more refresh cycles that are ≥3600 seconds apart (multi-cycle) MUST receive a `REPUTATION_PENALTY` audit row.
+- Reputation-weighted voting requires `reputation ≥ 0.1` to participate.
+
+## Completeness Scoring
+
+| Component present | Completeness bonus |
+|---|----|
+| `description` | +0.10 |
+| `spec_context` | +0.20 |
+| `tags` | +0.10 |
+| `include_context` | +0.10 |
+| implementation artifact (any type or size) | +0.30 |
+| large artifact (`artifact_size_bytes > 102400`) | +0.05 |
+| **Maximum** | **1.00** |
+
+## IGC Kinds
+
+| Kind | Description |
+|---|---|
+| `EQUITY_GRANT` | Feature minted; `peer_id` = original creator |
+| `EQUITY_LISTING` | Ask price posted |
+| `EQUITY_LISTING_FILLED` | Buyer filled listing; tokens transferred |
+| `FEATURE_BORROWED` | Borrow credit — always to original creator; `credit_units` field stores the network-size-aware, supply-pressure-adjusted earn amount computed by `mint_per_adoption()` at fill time (adoption rank, network size, complexity, supply pressure); old rows without `credit_units` fall back to 1 token flat |
+| `DELIVERY_FEE` | 10% of ask price to replica holder (delivery only) |
+| `BUNDLE_REPLICA_REGISTERED` | Peer registered as replica holder |
+| `BUNDLE_REPLICATION_OFFER` | Auto-sell offered bundle replication to network |
+| `PRICE_OUTLIER_WARNING` | Single-cycle executor price outlier detected |
+| `REPUTATION_PENALTY` | Multi-cycle consistent outlier penalized |
+| `RECEIVE_RESERVED` | Borrow spend reserved |
+| `LEDGER_BLOCK_SEAL` | Tamper-chain block sealed with balance snapshot |
+| `DELIVERY_FEE` | Bandwidth compensation to replica holder |
+
+**Implements:** P2PFeatureExchangeProtocol (§62l).
+**Runtime:** `urace/runtime/urace/peer_exchange.py`, `urace/runtime/urace/exchange_cli.py`, `urace/runtime/urace/feature_equity.py`, `urace/runtime/urace/token_ledger.py`.
+
+---
+
+# 62ab. Artifact Bundle Protocol
+
+The **ArtifactBundleProtocol** governs how implementation artifacts are stored, transferred, and verified on the P2P exchange. It supports any file type and any artifact size without bloating the JSONL audit log.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62aa]`
+
+## Content-Addressed Store
+
+Artifact bytes are stored externally from the JSONL audit log in a content-addressed store:
+
+```
+<exchange_root>/bundle-artifacts/<sha256[:2]>/<sha256>
+```
+
+The bundle JSON carries only a `artifact_ref` (SHA-256 hex) pointer. Artifact bytes are transferred separately on demand via `urace exchange bundle fetch-artifact`.
+
+## Bundle Schema
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `artifact_ref` | string (SHA-256 hex) | if external | Content-addressed pointer to artifact bytes |
+| `artifact_size_bytes` | integer | if external | Size of artifact bytes |
+| `content_type` | string (MIME) | if external | MIME type of artifact |
+| `artifact` | string | backward-compat | Inline text artifact (≤64 KiB only) |
+| `spec_context` | string | NO | Language-agnostic behavior spec |
+
+## Size and Type Constraints
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `ARTIFACT_INLINE_LIMIT` | 65 536 bytes | Inline `artifact` field only for text ≤ this size |
+| `ARTIFACT_STORE_LIMIT` | 104 857 600 bytes | 100 MB per-artifact hard cap |
+
+Artifacts exceeding `ARTIFACT_INLINE_LIMIT` MUST be stored externally and referenced via `artifact_ref`. All content types are permitted: Python, compiled binaries, datasets, model weights, ZIP archives, patches, and binary payloads.
+
+## Sensitive Filename Block
+
+The runtime MUST reject any artifact whose filename contains: `credential`, `secret`, `.env`, `password`, `private_key`, `id_rsa`, `id_ed25519`.
+
+## Verification
+
+A received bundle MUST be accepted only when:
+1. If `artifact_ref` is present: SHA-256 of received bytes equals `artifact_ref`. Bytes are stored to the content-addressed store.
+2. If only inline `artifact` is present (legacy): bundle is accepted as-is.
+3. If both are present: `artifact_ref` MUST match SHA-256 of `artifact.encode()`.
+
+**Implements:** ArtifactBundleProtocol (§62l).
+**Runtime:** `urace/runtime/urace/peer_exchange.py` — `prepare()`, `verify()`, `receive()`, `artifact_bytes()`.
+
+---
+
+# 62ac. Delivery Routing Protocol
+
+The **DeliveryRoutingProtocol** governs how bundles are delivered from seller to buyer, ensuring the original creator always receives token credit regardless of who physically delivers the bytes.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62ab]`
+
+## Routing Order
+
+When a buyer fills a listing, delivery MUST follow this priority order:
+
+1. **Owner-first.** The original creator (from `EQUITY_GRANT.peer_id`) is attempted first if the peer has been seen in `PEER_PROBE` within the last 300 seconds.
+2. **Replica fallback.** Any registered replica holder (`BUNDLE_REPLICA_REGISTERED`) is used if the owner is offline.
+3. **Self-delivery.** If no replica holders exist, the buyer receives the artifact from the exchange store directly.
+
+## Credit Rules
+
+| Event | Recipient | Amount | Condition |
+|---|---|---|---|
+| `FEATURE_BORROWED` | Original creator (always) | 1 token (tracked) | Every successful borrow |
+| `DELIVERY_FEE` | Replica holder | 10% of ask price | Only when replica holder delivered |
+| `EQUITY_LISTING_FILLED` | Equity seller | ask price in full | On listing fill |
+
+`FEATURE_BORROWED` MUST always credit `EQUITY_GRANT.peer_id`, never the equity seller or the delivery peer. `DELIVERY_FEE` MUST NOT be counted toward `FEATURE_BORROWED`.
+
+## Auto-Replication
+
+During `auto-sell`, if a feature has zero non-creator replica holders, the runtime MUST emit a `BUNDLE_REPLICATION_OFFER` audit row (cooldown: 86 400 seconds). Peers with `auto_replicate: true` (default) MUST automatically accept the offer and register as replica holders via `BUNDLE_REPLICA_REGISTERED`.
+
+## Replica Registration
+
+A peer registers as a replica holder via:
+```sh
+urace exchange equity register-replica <feature_id> --artifact-hash <sha256>
+```
+
+The `artifact-hash` MUST match the `artifact_ref` in the original `EQUITY_GRANT` row. A `BUNDLE_REPLICA_REGISTERED` row is emitted to the audit log.
+
+**Implements:** DeliveryRoutingProtocol (§62l).
+**Runtime:** `urace/runtime/urace/exchange_cli.py` (fill-listing handler), `urace/runtime/urace/equity_auto_trade.py` (auto_sell).
+
+---
+
+# 62ad. Ledger Block Seal Protocol
+
+The **LedgerBlockSealProtocol** governs the unified ledger block mechanism that provides tamper-chain integrity, O(tail) balance lookup, and compact searchability — without requiring a full log replay for every balance query.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62aa]`
+
+## LEDGER_BLOCK_SEAL Row Schema
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `kind` | `LEDGER_BLOCK_SEAL` | YES | Row kind |
+| `block_height` | integer | YES | Monotonically increasing block number |
+| `block_hash` | string (SHA-256) | YES | Hash of this block's data |
+| `prev_block_hash` | string (SHA-256) | YES | Hash of prior block (chain link) |
+| `rows_hash` | string (SHA-256) | YES | SHA-256 of all rows in this block |
+| `row_start_index` | integer | YES | First row index in this block |
+| `row_end_index` | integer | YES | Last row index in this block (inclusive) |
+| `row_count` | integer | YES | Number of rows in this block |
+| `credit_balance_snapshot` | object | YES | `{peer_id: balance_tokens}` for all peers in block |
+| `at_unix` | float | YES | Unix timestamp |
+| `at` | ISO-8601 | YES | Human-readable timestamp |
+
+## Sealing Contract
+
+`compact checkpoint` MUST seal a new ledger block by:
+1. Reading all audit rows not yet covered by a prior `LEDGER_BLOCK_SEAL`.
+2. Computing `rows_hash = sha256(json.dumps(rows))`.
+3. Computing `block_hash = sha256(rows_hash + prev_block_hash)`.
+4. Snapshotting all peer credit balances active in the block.
+5. Appending the `LEDGER_BLOCK_SEAL` row.
+
+An implementation MUST NOT modify or remove existing `LEDGER_BLOCK_SEAL` rows.
+
+## O(tail) Balance Lookup
+
+`balance_fast(peer_id)` MUST:
+1. Find the latest `LEDGER_BLOCK_SEAL` row.
+2. Read `credit_balance_snapshot[peer_id]` from that row (O(1)).
+3. Replay only audit rows after `row_end_index` (the "tail").
+4. Return snapshot + tail delta.
+
+If no `LEDGER_BLOCK_SEAL` row exists, fall back to full `balance()` replay.
+
+**Implements:** LedgerBlockSealProtocol (§62l).
+**Runtime:** `urace/runtime/urace/ledger_compaction.py` — `seal_ledger_block()`, `balance_fast()`.
+
+---
+
+# 62ae. Cold-Start Protocol
+
+The **ColdStartProtocol** governs how new peers enter the exchange without prior tokens, breaking the chicken-and-egg bootstrapping problem while maintaining Sybil resistance.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62aa]`
+
+## Cold-Start Path
+
+A new peer with no quality gate history MUST be able to follow this path:
+
+1. Join network → receive 1 trial borrow (no quality pass required).
+2. Borrow a feature, integrate it, improve their product.
+3. Quality gate pass → bootstrap grant unlocks (3 tokens) + `score_delta` earns.
+4. Borrow more features with earned tokens.
+
+## Trial Borrow Allowance
+
+| Constant | Default | Description |
+|---|---|---|
+| `trial_borrow_allowance` | 1 | Free borrows allowed before first quality pass |
+| `warm_up_borrow_threshold` | 5 | Auto-buy bypasses `min_adoption_count` for features with fewer total borrows |
+
+`can_receive()` MUST check trial borrows first. If `trial_borrows_remaining(peer_id) > 0` and no prior quality pass exists, the borrow MUST be allowed regardless of token balance.
+
+After the first `APPLIED_AFTER_LOCAL_QUALIFICATION` event, trial borrow allowance is exhausted and all subsequent borrows require positive token balance.
+
+## Sybil Resistance
+
+The bootstrap grant (`baseline_grant = 3 tokens`) MUST be locked until the peer's first `APPLIED_AFTER_LOCAL_QUALIFICATION` event. Before that event:
+- `balance(peer_id) = 0` (grant is locked, not credited).
+- Only trial borrows are permitted (bounded by `trial_borrow_allowance`).
+
+This prevents fake peer identities from farming the bootstrap grant: creating 100 fake peers yields 0 spendable tokens until each peer passes a real quality gate.
+
+## Warm-Up Borrow Threshold
+
+Auto-buy MUST bypass the `min_adoption_count` gate for features whose total borrow count is below `warm_up_borrow_threshold`. This allows brand-new features to gain initial adoption without being filtered out by the adoption count guard.
+
+**Implements:** ColdStartProtocol (§62l).
+**Runtime:** `urace/runtime/urace/token_ledger.py` — `_trial_borrows_remaining()`, `can_receive()`, `check_can_receive()`.
+
+---
+
+# 62af. Artifact Chunk DHT Protocol
+
+The **ArtifactChunkDHTProtocol** governs how artifact bytes are split, encrypted, and distributed across peer nodes so that no single holder can read the content, the creator's storage is not a single point of failure, and the network scales to millions of peers without requiring every node to hold full artifacts.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62ab]`
+
+## Erasure Coding
+
+Artifacts are encoded using systematic Reed-Solomon over GF(256) with Vandermonde evaluation:
+
+- `n_data = 4`, `n_parity = 2`: any 4 of 6 chunks reconstruct the original; up to 2 nodes can be offline.
+- Primitive polynomial: x⁸ + x⁴ + x³ + x² + 1 (0x11D).
+- Original byte length is prepended as an 8-byte big-endian header before RS encoding, making each chunk self-describing.
+- Gaussian elimination in GF(256) is used for missing-chunk reconstruction (RREF, full chunk-width matrix operations).
+
+## Per-Chunk Encryption
+
+Each chunk is independently AES-256-GCM encrypted:
+
+1. **DEK derivation:** `HKDF-SHA256(salt='URACE-ARTIFACT-SEED-v1', IKM=artifact-seed.bin, info=artifact_sha256+'\x01')` → master DEK.
+2. **Chunk key:** `HMAC-SHA256(master_dek, '{sha256}:chunk:{idx}\x01')` → per-chunk AES key.
+3. **Ciphertext:** `nonce(12B) || AESGCM(key).encrypt(nonce, plaintext, aad='urace-chunk-{idx}')`.
+4. `artifact-seed.bin` is creator-local private material (mode 0o600, never shared); only the creator can derive the DEK.
+
+## Storage Layout
+
+```
+<exchange_root>/bundle-chunks/<sha256[:2]>/<sha256>/chunk-NNN.bin
+<exchange_root>/bundle-chunks/<sha256[:2]>/<sha256>/manifest.json
+```
+
+`manifest.json` schema: `urace-chunk-manifest-v1` — fields: `artifact_sha256`, `artifact_size_bytes`, `n_data`, `n_parity`, `n_total`, `chunk_hashes[]`, `chunk_size_bytes`.
+
+## Security Guarantees
+
+- Replica holder nodes receive `get_chunk_bytes()` output = encrypted ciphertext; useless without the DEK.
+- `store_chunk()` verifies `sha256(encrypted_chunk) == manifest.chunk_hashes[i]` before writing; tampered chunks are rejected.
+- DEK is released to buyers via §62ai DEK Distribution Protocol.
+
+**Runtime:** `urace/runtime/urace/chunk_store.py` — `_rs_encode_block()`, `_rs_reconstruct_block()`, `ChunkStore`.
+
+---
+
+# 62ag. Token Epoch Decay Protocol
+
+The **TokenEpochDecayProtocol** prevents quality-hub cartel hoarding by applying 1% epoch decay to unused balance above a soft cap. It weakens entrenched advantage without reducing active-earner rewards.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62aa]`
+
+## Decay Rule
+
+For each peer `p` and each epoch:
+- If `balance(p) ≤ BASE_CAP_UNITS`: no decay.
+- If `balance(p) > BASE_CAP_UNITS`: `decay = round((balance - cap) × decay_rate, 4)` where `decay_rate = 0.01`.
+- Cooldown: once per 24h per peer (checked via last `CREDIT_DELTA direction=decay` timestamp).
+- A `CREDIT_DELTA` row with `direction='decay'`, `score_delta=-decay_amount`, `reason='epoch_decay_above_cap'` is emitted.
+
+## Parameters
+
+| Parameter | Default | Config key |
+|---|---|---|
+| `BASE_CAP_UNITS` | 50 tokens | `base_cap_units` |
+| `decay_rate` | 0.01 (1%) | hardcoded |
+| Cooldown | 86400s | hardcoded |
+
+## Anti-Cartel Properties
+
+- Quality hubs with >50 tokens lose 1% of their excess per epoch — not their total balance.
+- Active earners (regularly spending and re-earning) stay near the cap and are unaffected.
+- Prevents indefinite accumulation of monopolistic token advantage without reducing throughput incentives.
+
+**Runtime:** `urace/runtime/urace/token_ledger.py` — `apply_token_decay()`.
+
+---
+
+# 62ah. Feature Composition Protocol
+
+The **FeatureCompositionProtocol** allows verified atomic features to be bundled into composite features. A composite earns its creator tokens normally; its component provenance is permanent.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62aa]`
+
+## Composite Grant
+
+`grant_composite_equity(exchange, composite_feature_id, creator_id, component_feature_ids)`:
+1. Verifies every `component_feature_id` has an `EQUITY_GRANT` row (must be a verified feature).
+2. Emits `EQUITY_GRANT` with `composite=True`, `component_feature_ids=[...]`, `basis_points=10000`.
+3. Emits `FEATURE_COMPOSITION` row: `composite_feature_id`, `component_feature_ids`, `creator_peer_id`.
+4. Idempotent: does nothing if composite already has an `EQUITY_GRANT`.
+
+## Audit Row Schemas
+
+**EQUITY_GRANT (composite)** — additional fields: `composite: true`, `component_feature_ids: [str]`.
+
+**FEATURE_COMPOSITION**: `composite_feature_id: str`, `component_feature_ids: [str]`, `creator_peer_id: str`.
+
+**Runtime:** `urace/runtime/urace/feature_equity.py` — `grant_composite_equity()`.
+
+---
+
+# 62ai. DEK Distribution Protocol
+
+The **DEKDistributionProtocol** governs how the artifact decryption key (DEK) reaches the buyer after a listing is filled, without exposing it to replica holders or the audit chain in plaintext.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62af, §62aa]`
+
+## v2 Protocol (current)
+
+1. **At `list-for-sale`:** Creator emits `LISTING_DEK_AVAILABLE` row: `listing_id`, `feature_id`, `artifact_sha256`, `holder_peer_id`.
+2. **At `fill-listing`:** After `EQUITY_LISTING_FILLED`, the system emits `ARTIFACT_KEY_GRANT` row: `listing_id`, `feature_id`, `artifact_sha256`, `grantee_peer_id`, `grantor_peer_id`.
+3. **Buyer retrieves artifact:** `exchange bundle fetch-artifact <bundle_id> --out <path>` calls `_load_artifact_bytes()` which checks `ChunkStore.load()` (v2 path) first, then falls back to flat AES-GCM file (v1).
+
+## Audit Row Schemas
+
+**LISTING_DEK_AVAILABLE**: `listing_id: str`, `feature_id: str`, `artifact_sha256: str`, `holder_peer_id: str`.
+
+**ARTIFACT_KEY_GRANT**: `listing_id: str`, `feature_id: str`, `artifact_sha256: str`, `grantee_peer_id: str`, `grantor_peer_id: str`.
+
+## v3 Roadmap (not yet implemented)
+
+For fully offline creators at million-peer scale: Shamir's Secret Sharing splits DEK into k-of-n shares held by replica nodes; any k reconstruct. Unlocked by `EQUITY_LISTING_FILLED` in the ledger. Requires Kademlia DHT routing for share discovery.
+
+**Runtime:** `urace/runtime/urace/exchange_cli.py` — `list-for-sale` (LISTING_DEK_AVAILABLE), `fill-listing` (ARTIFACT_KEY_GRANT).
+
+---
+
 # 63. Concurrency
 
 Where multiple runtimes MAY operate:
@@ -20104,6 +20474,9 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r123 | 2026-11-06 | spec+runtime | §62aj–§62al v3 capability-ready foundations: ShamirDEKProtocol (Shamir SSS over GF(256) byte-by-byte, k-of-n threshold, Lagrange interpolation at x=0, LISTING_DEK_SHARE commitment rows at list-for-sale when replica holders ≥ 2, `shamir.py`); KademliaDHTProtocol (256 k-bucket routing table, XOR metric, chunk routing key = sha256(artifact:chunk:idx), `routing_table()` on Exchange populated on every `peer()` call, `routing-table.json` persisted, `chunk find-holders` CLI, `network routing-table` CLI, `kademlia.py`); LedgerSlidingWindowProtocol (light-peer sync logic, `balance_from_seal()` = seal snapshot + CREDIT_DELTA tail, `prune_to_window()`, `verify_tail()`, `sync-state` and `light-balance` CLI commands, `ledger_sync.py`). All network RPCs are stubs — primitives are complete and wired. Runtime: `shamir.py` (new), `kademlia.py` (new), `ledger_sync.py` (new), `chunk_store.py` (get_artifact_dek), `peer_exchange.py` (routing_table()), `exchange_cli.py` (Shamir at list-for-sale, 5 new CLI commands). Tests: 21+24+27=72 new tests all passing. QE: PASS. JOIN: PASS. **New external references:** `LISTING_DEK_SHARE`/`share_index`/`share_commitment`/`k_threshold`/`n_total` → §62aj; `routing-table.json`/`chunk_holders()`/`routing_table()` → §62ak; `balance_from_seal`/`prune_to_window`/`verify_tail`/`sync-state`/`light-balance` → §62al. |
+| r122 | 2026-11-05 | spec+runtime | §62af–§62ai internet-wide scale architecture: ArtifactChunkDHTProtocol (Reed-Solomon GF(256) erasure coding n_data=4/n_parity=2, AES-256-GCM per-chunk encryption, ChunkStore class, DEK derived from artifact-seed.bin via HKDF-SHA256, replica holders store ciphertext only); TokenEpochDecayProtocol (1% epoch decay on balance > BASE_CAP_UNITS per 24h, CREDIT_DELTA direction=decay, anti-cartel hoarding prevention); FeatureCompositionProtocol (FEATURE_COMPOSITION audit row, composite=True flag on EQUITY_GRANT, component_feature_ids, `grant_composite_equity` function); DEKDistributionProtocol (LISTING_DEK_AVAILABLE at list-for-sale, ARTIFACT_KEY_GRANT at fill-listing, v2 inline; v3 Shamir SSS planned). Runtime: `chunk_store.py` (new — full RS+ChunkStore implementation), `token_ledger.py` (apply_token_decay), `feature_equity.py` (grant_composite_equity), `peer_exchange.py` (_store_artifact/_load_artifact_bytes wired to ChunkStore), `exchange_cli.py` (chunk status/store commands, LISTING_DEK_AVAILABLE, ARTIFACT_KEY_GRANT). Tests: 17 RS/ChunkStore tests (all pass), 4 TokenDecayTests (all pass), 7 CompositeEquityTests (all pass). QE: PASS. JOIN: PASS. **New external references:** `LISTING_DEK_AVAILABLE`/`ARTIFACT_KEY_GRANT` → §62ai; `FEATURE_COMPOSITION`/`composite`/`component_feature_ids` → §62ah; `CREDIT_DELTA direction=decay`/`base_cap_units` → §62ag; `chunk_store`/`n_data`/`n_parity`/`artifact-seed.bin`/`bundle-chunks` → §62af. |
+| r121 | 2026-11-04 | spec+runtime | §62aa–§62ae P2P Exchange Protocol suite: P2PFeatureExchangeProtocol (executor ceiling, IQR consensus, multi-cycle-only reputation penalty); ArtifactBundleProtocol (content-addressed store, any type/size, ARTIFACT_INLINE_LIMIT=64KB, ARTIFACT_STORE_LIMIT=100MB); DeliveryRoutingProtocol (owner-first, replica fallback, DELIVERY_FEE=10% to replica, FEATURE_BORROWED always credits original creator, BUNDLE_REPLICATION_OFFER auto-replication); LedgerBlockSealProtocol (LEDGER_BLOCK_SEAL tamper chain + credit_balance_snapshot + O(tail) balance_fast); ColdStartProtocol (trial_borrow_allowance=1, warm_up_borrow_threshold=5, Sybil-resistant bootstrap grant locked until first quality pass). Runtime: `peer_exchange.py` (artifact store helpers, any-type prepare/verify/receive), `exchange_cli.py` (register-replica, fill-listing delivery routing, consensus multi-cycle penalty, fetch-artifact, compact balance-fast), `equity_auto_trade.py` (warm-up gate, auto-replication), `token_ledger.py` (trial borrow allowance, Sybil-resistant balance), `feature_equity.py` (**meta on EQUITY_GRANT), `ledger_compaction.py` (seal_ledger_block, balance_fast). Tests: all existing tests updated for grant-lock invariant. **New external references:** `EQUITY_GRANT`/`FEATURE_BORROWED`/`DELIVERY_FEE`/`BUNDLE_REPLICA_REGISTERED`/`BUNDLE_REPLICATION_OFFER`/`LEDGER_BLOCK_SEAL` → §62aa; `artifact_ref`/`artifact_size_bytes`/`content_type` → §62ab; `register-replica`/`fetch-artifact` → §62k; `trial_borrow_allowance`/`warm_up_borrow_threshold` → §62ae. |
 | r120 | 2026-10-20 | spec+runtime | §62z DefaultContinuationSemantics (FOUNDATIONAL Protocol): degrade-log-continue contract for unspecified situations; DegradationEvent schema; `continuation_confidence` field; 3 safety exceptions (effect-integrity, authority, OnboardGate); Spec Evolution Gate invariant (spec changes gated on runtime changes). Runtime: `continuation.py` (`degrade`, `handle_unspecified`, `reset_confidence`); wired into `cycle()` (reset at boundary, confidence in outcome). Default continuation regression tests; independent outcome verification and signed value accounting (§60), scope/transition validation fixes, measured resource accounting. |
 | r119 | 2026-10-20 | spec+runtime | PRVS CAP pass: 4 missing CLI commands wired (`urace explain <id>`, `urace intent rollback`, `urace add principal`, `urace check --migration-dry-run`); data parser CAP fix (verify/status/credential + --auto/--schema/--direction/--status gaps); 19 new CAP tests (1480 total); spec version bump r118→r119; §82 major compression. **New external references:** `urace explain` → §62k; `urace intent rollback` → §62k; `urace add principal` → §62k; `urace check --migration-dry-run` → §62k. |
 | r118 | 2026-10-20 | spec+runtime | Architectural Composition diagram gap closure: TIER 3 +30 constructs from r109–r117 across 12 domains; TIER 7 — Data I/O Layer (§62x/§62y/§62w); 22 new FeatureBundles; 30 new §80 stems; DRY+KISS+PRVS pass. **New external references:** 22 FeatureBundles → §62j; 30 stems → §80. |

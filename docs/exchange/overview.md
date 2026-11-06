@@ -67,6 +67,48 @@ Returns:
 
 ---
 
+## Artifact Bundles
+
+A bundle is the unit of transfer on the P2P exchange. It carries a verified implementation alongside its metadata.
+
+### Any Type, Any Size
+
+Artifact content is stored in a **content-addressed store** (`exchange_root/bundle-artifacts/<sha256[:2]>/<sha256>`), not embedded in the audit log. The bundle JSON only carries a `sha256` reference — the actual bytes are transferred separately on demand.
+
+| Field | Description |
+|-------|-------------|
+| `artifact_ref` | SHA-256 of artifact bytes — content-addressed pointer |
+| `artifact_size_bytes` | Size of the artifact (not limited to text) |
+| `content_type` | MIME type (`text/x-python`, `application/octet-stream`, `application/zip`, etc.) |
+| `artifact` | Inline text (backward compat; only for ≤64 KiB text artifacts) |
+| `spec_context` | Language-agnostic behavior spec — what it does, not how |
+
+This means bundles can carry **any artifact type**: Python files, compiled binaries, datasets, model weights, ZIP archives, patches, or any binary payload. The audit log stays lean regardless of artifact size.
+
+### Delivery Routing
+
+When a buyer fills a listing, delivery is routed:
+
+1. **Owner first** — original creator is tried via peer probe cache (5-minute window)
+2. **Replica fallback** — any registered replica holder if owner is offline
+3. **Delivery fee** — 10% of ask price to the replica holder via `DELIVERY_FEE` audit row
+
+```sh
+# Become a delivery replica holder for a feature
+urace exchange equity register-replica <feature_id> --artifact-hash <sha256>
+
+# Fetch artifact bytes after filling a listing
+urace exchange bundle fetch-artifact <bundle_id> --out ./artifact_file
+```
+
+Replica holders earn delivery fees for bandwidth. The original creator always earns `FEATURE_BORROWED` token credit regardless of who delivered.
+
+### Replication Offers
+
+The auto-sell pass emits `BUNDLE_REPLICATION_OFFER` for single-holder features (cooldown: 24h). Peers with `auto_replicate: true` (default) automatically accept, registering as replica holders — keeping features available even if the creator goes offline.
+
+---
+
 ## Bootstrap Peers
 
 Bootstrap peers are fixed entry points that help new peers join the network without prior discovery. Add known peers before enabling networking:

@@ -15,8 +15,11 @@ All URACE commands in one place.
 | `urace init --ready` | Discover installed CLI clients and complete onboarding |
 | `urace init --type software\|content\|media\|model\|data` | Initialize with a specific product type (sets metric suggestions and executor context hints) |
 | `urace run` | Run one improvement cycle |
+| `urace auto` | Run autonomous improvement cycles continuously |
 | `urace status` | Show product status |
 | `urace status --json` | Status as JSON |
+| `urace check` | Inspect runtime state; fail on integrity issues |
+| `urace vitals` | Show progress, credit usage, efficiency, and lifecycle health |
 | `urace add "goal" [--scope pipeline\|quality_gate\|exchange\|runtime\|output] [--relates-to ID,ID]` | Add an objective with optional scope and cross-references |
 
 ---
@@ -70,6 +73,10 @@ All URACE commands in one place.
 | `urace exchange compact compress` | Compress context ledger to archive |
 | `urace exchange compact decompress` | Restore from compressed archive |
 | `urace exchange compact search "q"` | Search live + compressed archives |
+| `urace exchange compact checkpoint` | Write ledger checkpoint + seal a PoQ block (tamper-evidence + O(tail) balance lookup) |
+| `urace exchange compact balance-fast <peer_id>` | O(tail) credit balance using latest sealed block snapshot |
+| `urace exchange bundle fetch-artifact <bundle_id>` | Show artifact sha256/size for a bundle |
+| `urace exchange bundle fetch-artifact <bundle_id> --out <path>` | Write artifact bytes to file (any type/size) |
 
 ---
 
@@ -178,8 +185,9 @@ All URACE commands in one place.
 | `urace exchange equity listings [--feature F]` | Browse open listings |
 | `urace exchange equity fill-listing <id>` | Buy a listing |
 | `urace exchange equity holdings <feature>` | Show equity holdings |
-| `urace exchange equity auto-buy` | Run automated buying pass |
-| `urace exchange equity auto-sell` | Run automated selling pass |
+| `urace exchange equity register-replica <feature>` | Register self as delivery replica holder (earns delivery fees) |
+| `urace exchange equity auto-buy` | Run automated buying pass (bypasses adoption gate for new features) |
+| `urace exchange equity auto-sell` | Run automated selling pass (emits replication offers for single-holder features) |
 | `urace exchange equity trade-config set [--roi-preference F]` | Configure auto-trade thresholds |
 | `urace exchange equity trade-config set --preset conservative\|balanced\|aggressive` | Apply preset config |
 | `urace exchange equity trade-config set --auto-tune` | Derive config from network conditions |
@@ -314,6 +322,10 @@ The wallet is stored at `~/.urace/wallet/key.json` (chmod 600). Private key is n
 | `adapter: script` | Arbitrary CLI tool — stdin prompt, JSON stdout |
 | `adapter: http` | POST to REST endpoint, JSON response (supports Retry-After) |
 | `adapter: mcp` | MCP stdio JSONRPC 2024-11-05 (initialize + tools/call) |
+| `adapter: claude-cli` | Anthropic Claude CLI (auto-configured from `ANTHROPIC_API_KEY`) |
+| `adapter: codex-cli` | OpenAI Codex CLI (auto-configured from `OPENAI_API_KEY`) |
+
+Configure providers in `executor.providers` in your config. → [Executor setup](../getting-started/quick-start.md#2-initialize-your-product)
 
 ---
 
@@ -404,8 +416,6 @@ Set `URACE_GITHUB_TOKEN` to a GitHub personal access token with `repo` + `workfl
 
 ---
 
----
-
 ## System Health
 
 | Command | Description |
@@ -426,20 +436,284 @@ Set `URACE_GITHUB_TOKEN` to a GitHub personal access token with `repo` + `workfl
 
 ---
 
-## Always-Mandatory URACE Concerns
+## Freeform Queries
 
-These apply to every change in every session:
+| Command | Description |
+|---------|-------------|
+| `urace "any question or instruction"` | Route plain text to the right command, executor, or P2P action automatically |
+| `urace freeform-text "query"` | Explicit freeform dispatch with synonym expansion |
 
-| # | Concern | Rule |
-|---|---------|------|
-| 1–12 | Core runtime | Derive, M2M, freeform, docs, spec, ledger, version, P2P economics, abuse prevention, tests, OS agnosticism, command surface |
-| 13–20 | Governance | AGENTS.md, authority boundaries, zero-conf path, config schema, backward compat, security, quality gate invariants, self-evolution |
-| 21 | KPIs | Every quality/economic decision enforces a measurable threshold |
-| 22 | ROI signal | Users see estimated value before committing to major actions |
-| 23 | Automation | Everything automatable is automated with the best default; `--auto` available |
-| 24 | Power-user config | Every auto-behavior has a fine-grained override flag |
-| 25 | Industry standards | Protocols and formats from established standards bodies |
-| 26 | Battle-proven techniques | No experimental patterns in production code paths |
+Freeform routing uses semantic synonym expansion — "visualization" matches "chart", "llm" matches "model". Enable or disable:
+
+```sh
+urace controls set --freeform-enabled true
+```
+
+---
+
+## API Server (A2A / M2M)
+
+| Command | Description |
+|---------|-------------|
+| `urace api serve --transport a2a --port 8765` | Start an A2A JSON-RPC endpoint on `127.0.0.1` |
+| `urace api serve --transport a2a --policy /path/policy.json` | Scope the endpoint to a policy file |
+| `urace api commands` | List all commands with parameter schemas (machine-readable) |
+
+Requires `URACE_A2A_TOKEN` in the launch environment. Use an owner-managed TLS reverse proxy for remote access.
+
+→ [Agent Integrations](../agent-integrations.md) for full A2A and MCP reference.
+
+---
+
+## Auto — Autonomous Loop
+
+| Command | Description |
+|---------|-------------|
+| `urace auto` | Run autonomous improvement cycles until stopped |
+| `urace auto --cycles N` | Stop after N cycles |
+| `urace auto --cycles infinity` | Run indefinitely |
+| `urace auto --interval SECS` | Pause N seconds between cycles |
+| `urace auto --force-discovery` | Force a discovery pass before each cycle |
+| `urace auto --dry-run` | Simulate cycles without committing changes |
+| `urace auto --quiet` | Suppress per-cycle output |
+
+`urace autonomous` is an alias for `urace auto`. For background scheduling use `urace daemon start`.
+
+---
+
+## Check and Vitals
+
+| Command | Description |
+|---------|-------------|
+| `urace check` | Inspect runtime state; fail on integrity issues |
+| `urace check --fail-on BLOCKING\|WARNING\|INFO` | Exit non-zero at a given severity |
+| `urace check --migration-dry-run` | Simulate any pending schema migration |
+| `urace check --query TEXT` | Filter output by query string |
+| `urace vitals` | Show progress, credit usage, efficiency, and lifecycle health |
+| `urace vitals --since DATE` | Filter vitals to a time range |
+| `urace vitals --until DATE` | Upper bound of time range (ISO 8601) |
+| `urace vitals --limit N` | Limit result rows |
+| `urace vitals --fail-on BLOCKING\|WARNING\|INFO` | Exit non-zero at a given severity |
+
+---
+
+## Watch
+
+| Command | Description |
+|---------|-------------|
+| `urace watch` | Observe runtime improvement cycles and deployment evidence |
+| `urace watch events` | Stream lifecycle events |
+| `urace watch dashboard` | Live improvement dashboard |
+| `urace watch guard` | Monitor quality gate results |
+| `urace watch report` | Streaming report mode |
+| `urace watch --follow` | Tail new events continuously (alias: `-f`) |
+| `urace watch --limit N` | Cap the number of events shown |
+
+---
+
+## Onboard
+
+| Command | Description |
+|---------|-------------|
+| `urace onboard` | Show Product Onboard Phase status |
+| `urace onboard status` | Detailed onboard phase inspection |
+
+---
+
+## Goal Management
+
+| Command | Description |
+|---------|-------------|
+| `urace goal list` | List goals with optional status filter |
+| `urace goal list --status active\|pending\|blocked\|resolved\|cancelled\|all` | Filter by lifecycle status |
+| `urace goal inspect ID` | Full detail on a single goal |
+| `urace goal forecast ID` | Show estimated completion based on current velocity |
+| `urace goal prioritize ID --priority N` | Set numeric priority |
+| `urace goal prioritize ID --floor N --ceiling N` | Set priority bounds |
+| `urace goal schedule ID --deadline DATE` | Set a deadline |
+| `urace goal schedule ID --not-before DATE` | Set earliest start date |
+| `urace goal schedule ID --clear-deadline` | Remove deadline |
+| `urace goal schedule ID --estimate-min-hours F --estimate-max-hours F --estimate-confidence low\|medium\|high` | Add effort estimate |
+| `urace goal pin ID` | Pin goal (persist across resets) |
+| `urace goal unpin ID` | Unpin goal |
+| `urace goal defer ID --until DATE` | Defer goal until a date |
+| `urace goal resume ID` | Resume a deferred goal |
+| `urace goal resolve-update ID` | Mark a pending update resolution |
+| `urace goal disable ID` | Disable a goal without deleting it |
+| `urace goal cancel ID` | Cancel a goal |
+| `urace goal delete ID` | Permanently delete a goal |
+
+All `goal` subcommands accept `--json` for machine-readable output.
+
+---
+
+## Governance
+
+| Command | Description |
+|---------|-------------|
+| `urace intent add "STATEMENT"` | Add a DIRECTIVE rule (durable operator intent) |
+| `urace intent list` | List all intent rules |
+| `urace intent list --scope product\|runtime\|all` | Filter by scope |
+| `urace intent supersede ID` | Mark an intent rule as superseded |
+| `urace intent deactivate ID` | Deactivate an intent rule |
+| `urace intent rollback ID` | Revert to the previous version of an intent rule |
+| `urace constraint add "STATEMENT"` | Add a PROHIBITION rule |
+| `urace constraint add "STATEMENT" --allow` | Add a PERMISSION rule instead |
+| `urace constraint list` | List all constraints |
+| `urace constraint deactivate ID` | Deactivate a constraint |
+| `urace policy list` | List autonomy policy settings |
+| `urace policy set NAME VALUE` | Queue an autonomy policy change (self-evolution, external-metrics, analytics-export) |
+| `urace budget show` | Show current executor call limits |
+| `urace budget set --daily N` | Set daily executor call budget |
+| `urace budget set --monthly N` | Set monthly executor call budget |
+| `urace evaluation show` | Show evaluator weights and thresholds |
+| `urace evaluation set-weight COMPONENT VALUE` | Adjust an evaluator weight |
+| `urace evaluation set-minimum COMPONENT VALUE` | Set a minimum threshold |
+| `urace govern clear GAP_ID` | Operator clearance for a blocked gate condition |
+| `urace govern list-gates` | List active operator gate conditions |
+
+---
+
+## Evidence and Blockers
+
+| Command | Description |
+|---------|-------------|
+| `urace add evidence --kind KIND --summary TEXT` | Queue an operator-provided evidence record |
+| `urace add evidence --kind KIND --summary TEXT --source ID --detail TEXT` | Evidence with source reference and detail |
+| `urace evidence list` | Query the evidence log |
+| `urace evidence list --kind KIND` | Filter by evidence kind |
+| `urace evidence list --since DATE --until DATE` | Filter by date range |
+| `urace evidence list --limit N` | Limit results |
+| `urace blocker list` | List active blockers |
+| `urace blocker list --resolved` | Include resolved blockers |
+| `urace blocker list --scope SCOPE` | Filter by scope |
+| `urace blocker resolve ID --note TEXT` | Resolve a blocker with an optional note |
+
+---
+
+## Decisions, Reasoning, and Integrity
+
+| Command | Description |
+|---------|-------------|
+| `urace decision list` | List decision records |
+| `urace decision list --stale` | Show stale decisions |
+| `urace decision list --scope SCOPE --limit N` | Filter by scope |
+| `urace decision inspect ID` | Full detail on a single decision |
+| `urace decision assess ID --forecast JSON` | Re-assess a decision with a new forecast |
+| `urace why ID` | Traverse the reasoning chain behind a decision |
+| `urace why ID --depth N` | Limit traversal depth |
+| `urace explain ID` | Synthesize a human-readable explanation of a decision |
+| `urace integrity-signal list` | List IntegritySignal records |
+| `urace integrity-signal list --severity BLOCKING\|WARNING\|INFO` | Filter by severity |
+| `urace integrity-signal list --type TYPE` | Filter by signal type |
+| `urace integrity-signal list --resolved` | Include resolved signals |
+
+---
+
+## Tracing, Schema, and CRC
+
+| Command | Description |
+|---------|-------------|
+| `urace trace list` | Query the lifecycle trace log |
+| `urace trace list --kind CYCLE\|OPERATION\|DECISION\|TRANSITION\|GAP\|ONBOARD\|SWITCH\|FLEET` | Filter by trace kind |
+| `urace trace list --since DATE --until DATE --limit N --offset N` | Date range and pagination |
+| `urace trace list --cycle-id ID` | Filter to a specific cycle |
+| `urace trace inspect ID` | Full detail on a trace record |
+| `urace crc show` | Show the CognitiveResumeContext for the current product |
+| `urace crc show --product ID` | Show CRC for a specific product |
+| `urace crc show --product all` | Show CRCs for all products |
+| `urace crc regenerate` | Regenerate the CRC from current state |
+| `urace schema list` | List the output schema registry |
+| `urace schema inspect NAME` | Inspect a registered output schema |
+| `urace schema export --target output-schemas\|bundles\|all` | Export schemas |
+
+---
+
+## Feedback and Resource
+
+| Command | Description |
+|---------|-------------|
+| `urace feedback list` | List outcome feedback records |
+| `urace feedback list --limit N --offset N` | Paginate results |
+| `urace feedback submit ID --signal POSITIVE\|NEGATIVE\|NEUTRAL` | Submit outcome feedback on a decision |
+| `urace feedback submit ID --signal POSITIVE --detail TEXT --evidence ID` | Feedback with detail and evidence link |
+| `urace feedback submit --input-json PATH` | Submit feedback from a JSON file |
+| `urace resource status` | Show per-product resource usage and ROI |
+| `urace resource report` | Detailed resource report with date filters |
+| `urace resource report --since DATE --until DATE --limit N` | Filter report range |
+
+---
+
+## State Management
+
+| Command | Description |
+|---------|-------------|
+| `urace amend EVENT_ID --notice TEXT` | Apply an in-place amendment to an archived record (§62f) |
+| `urace amend EVENT_ID --notice TEXT --kind PROVENANCE_REVISED\|SUPERSEDED\|CUSTOM` | Specify amendment kind |
+| `urace amend EVENT_ID --notice TEXT --target RECORD_ID` | Target a specific record within the event |
+| `urace reset` | Reset URACE state to clean defaults |
+| `urace reset --release-clean` | Flush all personal data and queues |
+| `urace reset --yes` | Skip confirmation prompt |
+| `urace rollback` | Restore product files from the last accepted stable snapshot |
+| `urace rollback --dry-run` | Show what would be restored without applying |
+
+---
+
+## Report
+
+| Command | Description |
+|---------|-------------|
+| `urace report status` | Export a portable analytics report |
+| `urace report export --output PATH` | Write report to a file |
+| `urace report export --output PATH --xlsx` | Export as XLSX spreadsheet |
+
+---
+
+## Features Registry
+
+| Command | Description |
+|---------|-------------|
+| `urace features list` | List runtime feature status |
+| `urace features summary` | Aggregated feature summary |
+| `urace features candidates` | List candidate features for the next cycle |
+| `urace features filter --status STATUS --tag TAG` | Filter by status or tag |
+| `urace features show FEATURE_ID` | Full detail on a single feature |
+
+---
+
+## Classify
+
+| Command | Description |
+|---------|-------------|
+| `urace classify TEXT` | Classify freeform text into matching command candidates |
+| `urace classify TEXT --confirm` | Confirm and execute the top match |
+| `urace classify TEXT --selection N` | Select the Nth candidate |
+| `urace classify --file PATH` | Classify text read from a file |
+| `urace classify TEXT --ledger-context auto\|always\|never` | Control ledger context injection |
+
+Primarily used by freeform routing internally; useful for debugging command resolution.
+
+---
+
+## API — Full Interface
+
+| Command | Description |
+|---------|-------------|
+| `urace api serve --transport a2a --port 8765` | Start A2A JSON-RPC endpoint on `127.0.0.1` |
+| `urace api serve --transport a2a --policy FILE --port N` | Scope endpoint to policy file |
+| `urace api serve --transport stdio` | MCP stdio JSONRPC 2024-11-05 transport |
+| `urace api call --command CMD --params JSON` | Execute a single command via the API surface |
+| `urace api batch --input-json PATH` | Execute a batch of commands from a JSON file |
+| `urace api batch --input-json PATH --continue-on-error` | Continue batch on individual errors |
+| `urace api commands` | List all commands with parameter schemas |
+| `urace api watch --follow` | Stream lifecycle events via the API surface |
+| `urace api watch --kinds LIST --since ISO8601` | Filter event stream |
+| `urace api version` | Show API surface version |
+| `urace api protocols` | List supported transport protocols |
+
+Requires `URACE_A2A_TOKEN` for A2A transport. Use `--token-env VAR` to select a different env variable.
+
+→ [Agent Integrations](../agent-integrations.md) for full A2A and MCP reference.
 
 ---
 

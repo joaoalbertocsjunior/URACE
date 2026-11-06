@@ -58,7 +58,7 @@ def _equity_rows(exchange, feature_id: str) -> list[dict]:
             and r.get('feature_id') == feature_id]
 
 
-def grant_equity(exchange, feature_id: str, creator_id: str) -> None:
+def grant_equity(exchange, feature_id: str, creator_id: str, **meta) -> None:
     """Grant 100% equity to the original creator at feature qualification.
 
     Idempotent: does nothing if an EQUITY_GRANT already exists for this feature.
@@ -67,14 +67,17 @@ def grant_equity(exchange, feature_id: str, creator_id: str) -> None:
     existing = [r for r in _equity_rows(exchange, feature_id) if r.get('kind') == 'EQUITY_GRANT']
     if existing:
         return
-    exchange.append_audit_row({
+    row = {
         'kind': 'EQUITY_GRANT',
         'feature_id': feature_id,
         'peer_id': creator_id,
         'basis_points': EQUITY_TOTAL_BP,
         'at_unix': time.time(),
         'at': _now_iso(),
-    })
+    }
+    if meta:
+        row.update(meta)
+    exchange.append_audit_row(row)
 
 
 def equity_holdings(feature_id: str, exchange) -> dict[str, int]:
@@ -233,3 +236,66 @@ def distribution_fee_equity_split(feature_id: str, fee_amount: int, exchange) ->
     This incentivises holding equity in high-adoption features.
     """
     return mint_equity_split(feature_id, fee_amount, exchange)
+
+
+def grant_composite_equity(
+    exchange,
+    composite_feature_id: str,
+    creator_id: str,
+    component_feature_ids: list,
+    **meta,
+) -> None:
+    """Mint a composite feature that bundles existing verified components.
+
+    Verifies every component has an EQUITY_GRANT (must exist as a verified feature),
+    then issues:
+      - EQUITY_GRANT for the composite (100% to creator)
+      - FEATURE_COMPOSITION audit row linking composite → components
+
+    Raises ValueError if any component_feature_id has no EQUITY_GRANT.
+    Idempotent: does nothing if composite already has an EQUITY_GRANT.
+    """
+    if not component_feature_ids:
+        raise ValueError('composite feature must reference at least one component')
+
+    # Verify each component is a known feature
+    rows = exchange.audit_rows()
+    for fid in component_feature_ids:
+        has_grant = any(
+            r.get('kind') == 'EQUITY_GRANT' and r.get('feature_id') == fid
+            for r in rows
+        )
+        if not has_grant:
+            raise ValueError(f'Component feature {fid!r} has no EQUITY_GRANT — not a verified feature')
+
+    # Idempotency: skip if composite already granted
+    already = any(
+        r.get('kind') == 'EQUITY_GRANT' and r.get('feature_id') == composite_feature_id
+        for r in rows
+    )
+    if already:
+        return
+
+    now = time.time()
+    row: dict = {
+        'kind': 'EQUITY_GRANT',
+        'feature_id': composite_feature_id,
+        'peer_id': creator_id,
+        'basis_points': EQUITY_TOTAL_BP,
+        'composite': True,
+        'component_feature_ids': list(component_feature_ids),
+        'at_unix': now,
+        'at': _now_iso(),
+    }
+    if meta:
+        row.update(meta)
+    exchange.append_audit_row(row)
+
+    exchange.append_audit_row({
+        'kind': 'FEATURE_COMPOSITION',
+        'composite_feature_id': composite_feature_id,
+        'component_feature_ids': list(component_feature_ids),
+        'creator_peer_id': creator_id,
+        'at_unix': now,
+        'at': _now_iso(),
+    })

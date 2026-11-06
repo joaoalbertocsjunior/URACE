@@ -16,6 +16,16 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 
 ---
 
+## Concepts
+
+| | |
+|---|---|
+| [Node Rewards](concepts/node-rewards.md) | All reward roles, protocol fee treasury, delivery fee split |
+| [Asset Integrity](concepts/asset-integrity.md) | ALE (fingerprint/dHash/Winnowing/LLM-peer), APS staking, MIME validators |
+| [Security Model](concepts/security-model.md) | Session DEK, escrow auto-refund, cartel guard, market integrity |
+
+---
+
 ## Guides
 
 | | |
@@ -70,18 +80,19 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 
 ---
 
+## Agent and Machine Interfaces
+
+| | |
+|---|---|
+| [Agent Integrations](agent-integrations.md) | MCP and A2A protocol reference — start an A2A endpoint, wire an MCP server, review authority rules |
+| [AGENTS.md](../AGENTS.md) | Complete onboarding reference for executors and AI agents: authority model, command reference, file structure, machine interface contract |
+
+---
+
 ## Other Docs
 
-- [Agent Integrations](agent-integrations.md) — MCP and A2A agent integration
 - [Runtime Improvement](runtime-improvement.md) — Runtime self-improvement workflows
-- [Tokenomics (legacy redirect)](tokenomics.md) — Points to `economics/tokenomics.md`
 - [Peer Sharing](peer-sharing.md) — P2P bundle operations and quarantine
 - [Network Onboarding](network-onboarding.md) — Mainnet onboarding and settlement design
 - [Sharing Safeguards](sharing-safeguards.md) — Security mechanisms for peer sharing
 - [Post-Quantum Roadmap](post-quantum-roadmap.md) — Post-quantum cryptography roadmap
-
----
-
-## For Executors and AI Agents
-
-[**AGENTS.md**](../AGENTS.md) — Complete onboarding reference for executors and AI agents operating on URACE: authority model, command reference, file structure, machine interface contract, and what executors must not do.

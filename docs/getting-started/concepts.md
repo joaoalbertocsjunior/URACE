@@ -46,7 +46,25 @@ Tokens are earned only when the quality gate passes. This ensures the token supp
 
 ## Executors
 
-An **executor** is the agent that carries out operations. The default executor uses the configured AI model. You can enable or disable executors per product using `urace controls set --executor-enabled`.
+An **executor** is the agent that carries out operations. URACE supports four adapter types so you can wire any tool:
+
+| Adapter | What it connects |
+|---------|-----------------|
+| `claude-cli` | Anthropic Claude CLI (auto-configured from `ANTHROPIC_API_KEY`) |
+| `codex-cli` | OpenAI Codex CLI (auto-configured from `OPENAI_API_KEY`) |
+| `script` | Any CLI tool — stdin receives the prompt, stdout returns JSON |
+| `http` | Any REST endpoint (POST, retries on 429/503) |
+| `mcp` | MCP stdio JSONRPC 2024-11-05 server |
+
+`urace init --auto` configures the executor from your environment variables in one step. You can wire multiple providers; URACE selects among them by capability and priority.
+
+Enable or disable the executor per product:
+
+```sh
+urace controls set --executor-enabled true
+```
+
+→ [Full executor setup](quick-start.md#2-initialize-your-product)
 
 ---
 

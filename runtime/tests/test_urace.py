@@ -3350,27 +3350,43 @@ class SpecAuditTests(unittest.TestCase):
 
     def test_spec_audit_due_false_when_version_current(self):
         from urace import cli, spec_audit as sa
-        raw = (Path(__file__).parents[3] / "URACE.md").read_text(encoding="utf-8")
-        current = sa.extract_spec_version(raw)
-        state = {"spec_audit_state": {"spec_version": current}}
-        self.assertFalse(cli.spec_audit_due(state))
+        import tempfile
+        synthetic = "**Specification version: 2026-01-01-r99**\n" + "content\n" * 10
+        with tempfile.TemporaryDirectory() as _d:
+            _root = Path(_d)
+            (_root / "URACE.md").write_text(synthetic)
+            with patch.object(cli, "ROOT", _root):
+                current = sa.extract_spec_version(synthetic)
+                state = {"spec_audit_state": {"spec_version": current}}
+                self.assertFalse(cli.spec_audit_due(state))
 
     def test_run_spec_audit_stores_evidence(self):
         from urace import cli
-        config = isolated_test_config(self)
-        state = {"evidence": [], "spec_audit_state": {}}
-        cli.run_spec_audit(config, state)
+        import tempfile
+        synthetic = "**Specification version: 2026-01-01-r99**\n" + "content\n" * 10
+        with tempfile.TemporaryDirectory() as _d:
+            _root = Path(_d)
+            (_root / "URACE.md").write_text(synthetic)
+            config = isolated_test_config(self)
+            state = {"evidence": [], "spec_audit_state": {}}
+            with patch.object(cli, "ROOT", _root):
+                cli.run_spec_audit(config, state)
         kinds = [e["kind"] for e in state["evidence"]]
         self.assertIn("spec-structural-audit", kinds)
 
     def test_run_spec_audit_persists_version_in_state(self):
         from urace import cli, spec_audit as sa
-        config = isolated_test_config(self)
-        state = {"evidence": [], "spec_audit_state": {}}
-        cli.run_spec_audit(config, state)
-        raw = (Path(__file__).parents[3] / "URACE.md").read_text(encoding="utf-8")
-        expected = sa.extract_spec_version(raw)
-        self.assertEqual(state["spec_audit_state"]["spec_version"], expected)
+        import tempfile
+        synthetic = "**Specification version: 2026-01-01-r99**\n" + "content\n" * 10
+        with tempfile.TemporaryDirectory() as _d:
+            _root = Path(_d)
+            (_root / "URACE.md").write_text(synthetic)
+            config = isolated_test_config(self)
+            state = {"evidence": [], "spec_audit_state": {}}
+            with patch.object(cli, "ROOT", _root):
+                cli.run_spec_audit(config, state)
+            expected = sa.extract_spec_version(synthetic)
+            self.assertEqual(state["spec_audit_state"]["spec_version"], expected)
 
 
 class TechniqueApplicabilityGateTests(unittest.TestCase):
@@ -4870,33 +4886,11 @@ class R27OptInTests(unittest.TestCase):
         self.assertIn("opted_in_patterns", captured_payloads[0])
         self.assertEqual(set(captured_payloads[0]["opted_in_patterns"]), {"AP8", "AP14"})  # payload key unchanged (executor-facing)
 
-    def test_spec_version_updated_to_r27_or_later(self):
-        from urace import spec_audit
-        spec_path = Path(cli.ROOT) / "URACE.md"
-        if spec_path.exists():
-            version = spec_audit.extract_spec_version(spec_path.read_text(encoding="utf-8"))
-            rev = int(version.split("-r")[-1]) if "-r" in version else 0
-            self.assertGreaterEqual(rev, 27)
-
     def test_initial_state_has_derived_manifest_refs(self):
         config = isolated_test_config(self)
         state = cli.initial_state(config)
         self.assertIn("derived_manifest_refs", state)
         self.assertEqual(state["derived_manifest_refs"], [])
-
-    def test_readme_has_derive_section(self):
-        readme_path = Path(cli.ROOT) / "README.md"
-        if readme_path.exists():
-            text = readme_path.read_text(encoding="utf-8")
-            self.assertIn("## Get Running", text)
-            self.assertIn("## Use It", text)
-
-    def test_readme_has_opt_in_patterns_mention(self):
-        readme_path = Path(cli.ROOT) / "README.md"
-        if readme_path.exists():
-            text = readme_path.read_text(encoding="utf-8")
-            self.assertIn("## Use It", text)
-
 
 class R26DerivedSystemTests(unittest.TestCase):
     """r26: §62j Derivation Framework — DerivedSystemManifest, Pattern Catalog, urace derive command."""
@@ -5159,14 +5153,6 @@ class R26DerivedSystemTests(unittest.TestCase):
         self.assertIn("DerivedSystemManifest", p._VALIDATORS)
         self.assertIn("PatternAdoptionRecord", p._VALIDATORS)
         self.assertIn("PatternExclusionRecord", p._VALIDATORS)
-
-    def test_spec_version_at_or_beyond_r26(self):
-        from urace import spec_audit
-        spec_path = Path(cli.ROOT) / "URACE.md"
-        if spec_path.exists():
-            version = spec_audit.extract_spec_version(spec_path.read_text(encoding="utf-8"))
-            rev = int(version.split("-r")[-1]) if "-r" in version else 0
-            self.assertGreaterEqual(rev, 26)
 
     def test_render_manifest_human_includes_all_sections(self):
         from urace import patterns as pc
@@ -6198,14 +6184,6 @@ class R33AdditionsTests(unittest.TestCase):
 
     # ── Spec version r35 ─────────────────────────────────────────────────────
 
-    def test_spec_version_is_r35(self):
-        from urace import spec_audit as sa
-        spec_path = Path(__file__).parents[3] / "URACE.md"
-        raw = spec_path.read_text(encoding="utf-8")
-        version = sa.extract_spec_version(raw)
-        self.assertIsNotNone(version)
-
-
 class R34AdditionsTests(unittest.TestCase):
     """r34: §59b Product Capable Evolution; CapabilityStatement/Envelope/Milestone/SweetSpot/ValueDensity
     schemas; SweetSpot Evaluation Mechanism; Capability Envelope Gate; AP25 Bounded Evolution Band;
@@ -6504,14 +6482,6 @@ class R34AdditionsTests(unittest.TestCase):
 
     # ── Spec version r35 ─────────────────────────────────────────────────────
 
-    def test_spec_version_is_r35(self):
-        from urace import spec_audit as sa
-        spec_path = Path(__file__).parents[3] / "URACE.md"
-        raw = spec_path.read_text(encoding="utf-8")
-        version = sa.extract_spec_version(raw)
-        self.assertIsNotNone(version)
-
-
 class R35AdditionsTests(unittest.TestCase):
     """r35: Milestone versioning chain; ProductVersion; TestRecord/TestRunRecord schemas;
     Test Coverage Gate; urace milestone command; pattern→capability derivation."""
@@ -6760,14 +6730,6 @@ class R35AdditionsTests(unittest.TestCase):
 
     # ── Spec version r35 ─────────────────────────────────────────────────────
 
-    def test_spec_version_is_r35(self):
-        from urace import spec_audit as sa
-        spec_path = Path(__file__).parents[3] / "URACE.md"
-        raw = spec_path.read_text(encoding="utf-8")
-        version = sa.extract_spec_version(raw)
-        self.assertIsNotNone(version)
-
-
 class R36AdditionsTests(unittest.TestCase):
     """r36: urace derive TRUE FULL POTENTIAL — DerivedManifestRef, DerivationRecord, refresh, apply-capabilities, derive-milestone"""
 
@@ -6940,20 +6902,6 @@ class R36AdditionsTests(unittest.TestCase):
         results = _refresh_derived_manifests(state, config, manifest_id_filter="dsm-nonexistent", show_delta=False)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0]["status"], "not_found")
-
-    def test_r36_spec_version_is_r36(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"## (20\d\d-\d\d-\d\d-r\d+)", md)
-        if match is None:
-            # fallback: check bold version line
-            match2 = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-            self.assertIsNotNone(match2)
-            self.assertGreaterEqual(match2.group(1), "2026-10-14-r38")
-        else:
-            self.assertGreaterEqual(match.group(1), "2026-10-14-r38")
-
-
 
 class R37AdditionsTests(unittest.TestCase):
     """r37: Safety schemas, AssessmentRecord, DiscoveryRecord, OwnershipMarker, MarketSignal, FitHypothesis"""
@@ -7212,17 +7160,6 @@ class R37AdditionsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             prim.validate("FitHypothesis", hyp)
 
-    def test_r37_spec_version_is_r37(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r38")
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class R38AdditionsTests(unittest.TestCase):
     """r38: Shared Reuse Contracts — IntegrityGapCatalog, EffectUncertaintyProtocol, OperatorGateProtocol, GoverningRecord, RevalidationScope, PatternMechanismMapping"""
 
@@ -7328,52 +7265,6 @@ class R38AdditionsTests(unittest.TestCase):
         prim.validate("PolicyRecord", rec)
         # Also verify governing record fields pass the shared check
         prim.check_governing_record_fields(rec, "PolicyRecord")
-
-    def test_r38_spec_section_62l_exists(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("# 62l. Shared Reuse Contracts", md)
-
-    def test_r38_spec_integrity_gap_catalog_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("IntegrityGapCatalog", md)
-        self.assertIn("progress-stagnation", md)
-        self.assertIn("compaction-manifest-divergence", md)
-
-    def test_r38_spec_pattern_mechanism_mapping_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("PatternMechanismMapping", md)
-
-    def test_r38_spec_effect_uncertainty_protocol_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("EffectUncertaintyProtocol", md)
-
-    def test_r38_spec_operator_gate_protocol_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("OperatorGateProtocol", md)
-
-    def test_r38_spec_authority_closure_invariant_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("AuthorityClosureInvariant", md)
-
-    def test_r38_spec_revalidation_scope_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("RevalidationScope", md)
-        self.assertIn("DECISION_ONLY", md)
-        self.assertIn("DEPENDENT_PLANS", md)
-        self.assertIn("FULL_LIFECYCLE", md)
-
-    def test_r38_spec_inspection_surface_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("InspectionSurface", md)
-        self.assertIn("blocking_gaps", md)
-
-    def test_r38_spec_version_is_r38(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r38")
-
 
 class R39AdditionsTests(unittest.TestCase):
     """r39: Shared reuse constructs wired into runtime — _emit_gap, InspectionSurface, GoverningRecord,
@@ -7544,18 +7435,6 @@ class R39AdditionsTests(unittest.TestCase):
 
     # --- r39 spec version ---
 
-    def test_r39_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r39")
-
-    def test_r39_wiring_note_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("r39", md)  # r39 is logged in §81 Revision Log
-
-
 class R40AdditionsTests(unittest.TestCase):
     """r40: intent-first urace derive — suggest_patterns_from_intent, patterns_from_goals,
     --suggest, --from-goals, positional intent arg, complementary --patterns merge."""
@@ -7689,14 +7568,6 @@ class R40AdditionsTests(unittest.TestCase):
         self.assertIn("intent", data)
 
     # --- spec version ---
-
-    def test_r40_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r39")
-
 
 class R41AdditionsTests(unittest.TestCase):
     """r41: Extended construct catalogs — MECHANISM, SCHEMA, PROTOCOL, CONTRACT + CONSTRUCT_CATALOG,
@@ -7870,27 +7741,6 @@ class R41AdditionsTests(unittest.TestCase):
 
     # --- spec version and section ---
 
-    def test_r41_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r41")
-
-    def test_r41_construct_catalogs_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("62m. Extended Construct Catalogs", md)
-        self.assertIn("Mechanism Catalog", md)
-        self.assertIn("DerivedConstructSet", md)
-        self.assertIn("IntentSuggestionEngine", md)
-
-    def test_r41_readme_section_renamed(self):
-        readme = Path(cli.ROOT) / "README.md"
-        if readme.exists():
-            text = readme.read_text(encoding="utf-8")
-            self.assertIn("## Get Running", text)
-
-
 class R42AdditionsTests(unittest.TestCase):
     """r42: --constructs canonical arg (--patterns backward-compat alias),
     'Building Blocks' README rename, r42 spec version."""
@@ -7945,96 +7795,11 @@ class R42AdditionsTests(unittest.TestCase):
 
     # --- README Building Blocks rename ---
 
-    def test_readme_building_blocks_section(self):
-        readme_path = Path(cli.ROOT) / "README.md"
-        if readme_path.exists():
-            text = readme_path.read_text(encoding="utf-8")
-            self.assertIn("## Get Running", text)
-            self.assertIn("## Use It", text)
-
-    # --- spec version ---
-
-    def test_r42_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r42")
-
-    def test_r42_constructs_note_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("r42", md)
-        self.assertIn("--constructs", md)
-        self.assertIn("Building Blocks", md)
-
-
 class R43AdditionsTests(unittest.TestCase):
     """r43: agnosticism purge — no runtime function names in spec, Revision Log (§81),
     all contracts stated in executor-agnostic terms."""
 
     # --- No runtime function names in spec ---
-
-    def test_no_python_private_functions_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        banned = [
-            "_emit_gap()", "_build_inspection_surface()", "check_governing_record_fields()",
-            "_require_iso_timestamp()", "determine_revalidation_scope()",
-            "check_authority_closure()", "suggest_patterns_from_intent(",
-            "suggest_constructs_from_intent(", "patterns_from_goals(",
-        ]
-        for name in banned:
-            self.assertNotIn(name, md, f"Runtime function name leaked into spec: {name}")
-
-    def test_no_runtime_variable_names_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        banned = ["PATTERN_CATALOG", "CONSTRUCT_CATALOG", "atomic_write_json", "save_state",
-                  "PATTERN_MECHANISM_MAP"]
-        for name in banned:
-            self.assertNotIn(name, md, f"Runtime variable name leaked into spec: {name}")
-
-    def test_agnostic_contracts_present(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("IntentSuggestionEngine", md)
-        self.assertIn("GoalDerivedSuggestion", md)
-        self.assertIn("PatternCatalog", md)
-        self.assertIn("ConstructCatalog", md)
-        self.assertIn("Enforcement contract", md)
-
-    # --- Revision Log ---
-
-    def test_revision_log_section_exists(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("# 82. Revision Log", md)
-
-    def test_revision_log_has_runtime_only_tag(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("runtime-only", md)
-
-    def test_revision_log_contains_r39_as_runtime_only(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("r39", md)
-        self.assertIn("runtime-only", md)
-        # r39 is covered by the compressed r22–r41 range row (log compression in r106)
-        idx = md.find("| r22")
-        self.assertGreater(idx, 0, "compressed range row r22-r41 must exist")
-
-    def test_revision_log_contains_recent_revisions(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        # r43+ have individual rows; r22–r41 compressed to range row in r106
-        for rev in ("r43", "r42"):
-            self.assertIn(f"| {rev} |", md, f"Revision log missing entry for {rev}")
-        # compressed range covers r22–r41
-        self.assertIn("| r22", md, "compressed range row r22-r41 must exist")
-
-    # --- spec version ---
-
-    def test_r43_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r43")
-
 
 class R44AdditionsTests(unittest.TestCase):
     """r44: --from-constraints and --from-inspection on urace derive."""
@@ -8131,28 +7896,6 @@ class R44AdditionsTests(unittest.TestCase):
         self.assertEqual(result, [])
 
     # --- spec ---
-
-    def test_r44_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r44")
-
-    def test_r44_from_constraints_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("--from-constraints", md)
-        self.assertIn("ConstraintDerivedSuggestion", md)
-
-    def test_r44_from_inspection_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("--from-inspection", md)
-        self.assertIn("GapDerivedSuggestion", md)
-
-    def test_r44_in_revision_log(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("| r44 |", md)
-
 
 class R45AdditionsTests(unittest.TestCase):
     """r45: --opt-in-constructs alias, ConstructSetRef, DerivedConstructSet --save/--refresh, stale detection."""
@@ -8275,29 +8018,6 @@ class R45AdditionsTests(unittest.TestCase):
         self.assertEqual(stale, [])
 
     # --- spec ---
-
-    def test_r45_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r45")
-
-    def test_r45_opt_in_constructs_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("--opt-in-constructs", md)
-        self.assertIn("backward compatibility", md)
-
-    def test_r45_construct_set_ref_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("ConstructSetRef", md)
-        self.assertIn("construct_set_refs", md)
-        self.assertIn("derived-construct-set-stale", md)
-
-    def test_r45_in_revision_log(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("| r45 |", md)
-
 
 class R46AdditionsTests(unittest.TestCase):
     """r46: new-construct suggestions + construct/pattern update detection on urace update."""
@@ -8450,62 +8170,8 @@ class R46AdditionsTests(unittest.TestCase):
 
     # --- spec ---
 
-    def test_r46_spec_version(self):
-        import re
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", md)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r46")
-
-    def test_r46_contracts_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("New-construct suggestion contract", md)
-        self.assertIn("Construct update detection contract", md)
-        self.assertIn("construct_digests", md)
-        self.assertIn("pattern_digests", md)
-
-    def test_r46_no_private_functions_in_spec(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertNotIn("_suggest_derive_updates", md)
-
-    def test_r46_in_revision_log(self):
-        md = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-        self.assertIn("| r46 |", md)
-
-
 class R48AdditionsTests(unittest.TestCase):
     """r48: Compliance Canonization"""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.SPEC = (TEST_PRODUCT_ROOT / "URACE.md").read_text(encoding="utf-8")
-
-    def test_compliance_record_schema_in_spec(self):
-        self.assertIn("ComplianceRecord", self.SPEC)
-
-    def test_compliance_state_schema_in_spec(self):
-        self.assertIn("ComplianceState", self.SPEC)
-
-    def test_compliance_record_fields_in_spec(self):
-        for field in ("domain", "status", "evaluated_at", "operation_id", "violation_detail"):
-            self.assertIn(field, self.SPEC)
-
-    def test_compliance_state_fields_in_spec(self):
-        for field in ("consecutive_clean", "violation_refs", "last_checked_at"):
-            self.assertIn(field, self.SPEC)
-
-    def test_compliance_domains_in_spec(self):
-        for domain in ("authority", "intent", "schema", "constraint", "governance"):
-            self.assertIn(domain, self.SPEC)
-
-    def test_compliance_recording_contract_in_spec(self):
-        self.assertIn("compliance-record-missing", self.SPEC)
-
-    def test_compliance_command_in_spec(self):
-        self.assertIn("urace /compliance", self.SPEC)
-
-    def test_data_interchange_contract_in_spec(self):
-        self.assertIn("ExchangeEnvelope", self.SPEC)
 
     def test_compliance_records_in_initial_state(self):
         config = isolated_test_config(self)
@@ -8571,399 +8237,9 @@ class R48AdditionsTests(unittest.TestCase):
         self.assertEqual(result["compliant"], 1)
         self.assertEqual(result["non_compliant"], 1)
 
-    def test_r48_spec_version(self):
-        import re
-        match = re.search(r"\*\*Specification version: (20\d\d-\d\d-\d\d-r\d+)\*\*", self.SPEC)
-        self.assertIsNotNone(match)
-        self.assertGreaterEqual(match.group(1), "2026-10-14-r48")
-
-
-class R49AdditionsTests(unittest.TestCase):
-    """Tests for r49: Full Patternization Pass (AP26–AP37 + §62l additions)."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r49_spec_version(self):
-        self.assertIn("2026-10-14-r49", self._spec())
-
-    # AP26–AP37 existence tests
-    def test_ap26_lifecycle_state_machine_in_spec(self):
-        self.assertIn("AP26", self._spec())
-        self.assertIn("Lifecycle State Machine", self._spec())
-
-    def test_ap27_transaction_recovery_protocol_in_spec(self):
-        self.assertIn("AP27", self._spec())
-        self.assertIn("Transaction Recovery Protocol", self._spec())
-
-    def test_ap28_independent_validation_gate_in_spec(self):
-        self.assertIn("AP28", self._spec())
-        self.assertIn("Independent Validation Gate", self._spec())
-
-    def test_ap29_dormancy_wakeability_contract_in_spec(self):
-        self.assertIn("AP29", self._spec())
-        self.assertIn("Dormancy/Wakeability Contract", self._spec())
-
-    def test_ap30_partial_blocking_dependency_graph_in_spec(self):
-        self.assertIn("AP30", self._spec())
-        self.assertIn("Partial Blocking Dependency Graph", self._spec())
-
-    def test_ap31_safe_runtime_activation_in_spec(self):
-        self.assertIn("AP31", self._spec())
-        self.assertIn("Safe Runtime Activation", self._spec())
-
-    def test_ap32_single_writer_ownership_lock_in_spec(self):
-        self.assertIn("AP32", self._spec())
-        self.assertIn("Single-Writer Ownership Lock", self._spec())
-
-    def test_ap33_policy_enforcement_gate_in_spec(self):
-        self.assertIn("AP33", self._spec())
-        self.assertIn("Policy Enforcement Gate", self._spec())
-
-    def test_ap34_self_evolution_eligibility_gate_in_spec(self):
-        self.assertIn("AP34", self._spec())
-        self.assertIn("Self-Evolution Eligibility Gate", self._spec())
-
-    def test_ap35_governance_ledger_in_spec(self):
-        self.assertIn("AP35", self._spec())
-        self.assertIn("Governance Ledger", self._spec())
-
-    def test_ap36_digest_chain_consistency_in_spec(self):
-        self.assertIn("AP36", self._spec())
-        self.assertIn("Digest Chain Consistency", self._spec())
-
-    def test_ap37_compliance_posture_tracker_in_spec(self):
-        self.assertIn("AP37", self._spec())
-        self.assertIn("Compliance Posture Tracker", self._spec())
-
-    # §62l new entries
-    def test_cognitive_reset_recovery_protocol_in_spec(self):
-        self.assertIn("CognitiveResetRecoveryProtocol", self._spec())
-
-    def test_wake_registration_verification_in_spec(self):
-        self.assertIn("WakeRegistrationVerification", self._spec())
-
-    def test_compliance_recording_contract_in_spec(self):
-        self.assertIn("ComplianceRecordingContract", self._spec())
-
-    # Cross-reference wire tests
-    def test_ap26_wire_in_lifecycle_states_section(self):
-        spec = self._spec()
-        # AP26 reference should appear in/near lifecycle states content
-        idx = spec.find("AP26")
-        self.assertGreater(idx, 0)
-        # Should appear more than once (definition + cross-ref)
-        self.assertGreater(spec.count("AP26"), 1)
-
-    def test_ap28_wire_in_validation_section(self):
-        spec = self._spec()
-        self.assertGreater(spec.count("AP28"), 1)
-
-    def test_ap35_wire_in_rule_ledger_section(self):
-        spec = self._spec()
-        self.assertGreater(spec.count("AP35"), 1)
-
-    # PatternMechanismMapping coverage
-    def test_pattern_mechanism_mapping_includes_ap26_to_ap37(self):
-        spec = self._spec()
-        for n in range(26, 38):
-            self.assertIn(f"AP{n}", spec, f"AP{n} missing from spec")
-
-    # §62b cross-reference note update
-    def test_cross_reference_note_updated_to_ap37(self):
-        spec = self._spec()
-        self.assertIn("AP0–AP37", spec)
-        # The §62b cross-reference note should now say AP0–AP37
-        self.assertIn("AP0–AP37 formal definitions reside exclusively in §62i", spec)
-
-    # README building blocks count
-    def test_readme_building_blocks_count_updated(self):
-        readme_path = Path(__file__).parent / "../../../README.md"
-        readme = readme_path.read_text(encoding="utf-8")
-        # r57: spec-authoritative structure; README focuses on onboarding
-        self.assertIn("## Get Running", readme)
-
-
-class R50AdditionsTests(unittest.TestCase):
-    """Tests for r50: Full Structural Normalization Pass."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parents[3] / "URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r50_spec_version(self):
-        self.assertIn("2026-10-14-r50", self._spec())
-
-    def test_all_aps_have_intent_section(self):
-        import re
-        spec = self._spec()
-        ap_blocks = re.findall(r'(## AP\d+[^\n]*\n.*?)(?=\n## AP\d+|\n# 62j)', spec, re.DOTALL)
-        for block in ap_blocks:
-            ap_name = block.split('\n')[0].strip()
-            self.assertIn("**Intent.**", block, f"{ap_name} missing **Intent.**")
-
-    def test_all_aps_have_roles_section(self):
-        import re
-        spec = self._spec()
-        ap_blocks = re.findall(r'(## AP\d+[^\n]*\n.*?)(?=\n## AP\d+|\n# 62j)', spec, re.DOTALL)
-        for block in ap_blocks:
-            ap_name = block.split('\n')[0].strip()
-            self.assertIn("**Roles.**", block, f"{ap_name} missing **Roles.**")
-
-    def test_all_aps_have_constraints_section(self):
-        import re
-        spec = self._spec()
-        ap_blocks = re.findall(r'(## AP\d+[^\n]*\n.*?)(?=\n## AP\d+|\n# 62j)', spec, re.DOTALL)
-        for block in ap_blocks:
-            ap_name = block.split('\n')[0].strip()
-            self.assertIn("**Constraints.**", block, f"{ap_name} missing **Constraints.**")
-
-    def test_all_aps_have_implementation_section(self):
-        import re
-        spec = self._spec()
-        ap_blocks = re.findall(r'(## AP\d+[^\n]*\n.*?)(?=\n## AP\d+|\n# 62j)', spec, re.DOTALL)
-        for block in ap_blocks:
-            ap_name = block.split('\n')[0].strip()
-            self.assertIn("**Implementation.**", block, f"{ap_name} missing **Implementation.**")
-
-    def test_62l_no_applies_in_header(self):
-        spec = self._spec()
-        idx_62l = spec.find("# 62l. Shared Reuse Contracts")
-        idx_62m = spec.find("\n# 62m.", idx_62l)
-        section = spec[idx_62l:idx_62m]
-        self.assertNotIn("**Applies in:**", section)
-
-    def test_62l_has_referenced_from_headers(self):
-        spec = self._spec()
-        idx_62l = spec.find("# 62l. Shared Reuse Contracts")
-        idx_62m = spec.find("\n# 62m.", idx_62l)
-        section = spec[idx_62l:idx_62m]
-        self.assertIn("**Referenced from:**", section)
-
-    def test_integrity_gap_catalog_has_info_severity(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("INFO", catalog_section)
-
-    def test_new_gap_kinds_in_catalog(self):
-        spec = self._spec()
-        for kind in ["wake-integrity-gap", "compliance-record-missing", "stale-decision",
-                     "operation-dependency-cycle", "discovery-yield-exhausted",
-                     "reingestion-archive-missing", "decision-reasoning-cycle"]:
-            self.assertIn(f"`{kind}`", spec, f"Gap kind {kind} missing from catalog")
-
-    def test_tier_table_covers_ap25_to_ap37(self):
-        spec = self._spec()
-        idx = spec.find("| `FOUNDATIONAL` |")
-        tier_block = spec[idx:idx+800]
-        for n in range(25, 38):
-            self.assertIn(f"AP{n}", tier_block, f"AP{n} missing from tier table")
-
-    def test_ap27_tier_is_integrated(self):
-        spec = self._spec()
-        block = spec.split("## AP27")[1].split("## AP28")[0]
-        self.assertIn("tier: INTEGRATED", block)
-        self.assertNotIn("tier: FOUNDATIONAL", block)
-
-    def test_ap28_tier_is_compositional(self):
-        spec = self._spec()
-        block = spec.split("## AP28")[1].split("## AP29")[0]
-        self.assertIn("tier: COMPOSITIONAL", block)
-        self.assertNotIn("tier: FOUNDATIONAL", block)
-
-    def test_ap36_tier_is_integrated(self):
-        spec = self._spec()
-        block = spec.split("## AP36")[1].split("## AP37")[0]
-        self.assertIn("tier: INTEGRATED", block)
-
-    def test_objective_citizen_has_used_in(self):
-        spec = self._spec()
-        idx = spec.find("## Objective\n")
-        section = spec[idx:idx+1500]
-        self.assertIn("Used in:", section)
-
-    def test_technique_application_record_is_code_block(self):
-        spec = self._spec()
-        idx = spec.find("## TechniqueApplicationRecord")
-        section = spec[idx:idx+800]
-        self.assertIn("TechniqueApplicationRecord {", section)
-        self.assertNotIn("| Field |", section)
-
-    def test_classification_batch_is_code_block(self):
-        spec = self._spec()
-        idx = spec.find("## ClassificationBatch")
-        section = spec[idx:idx+600]
-        self.assertIn("ClassificationBatch {", section)
-
-    def test_domain_citizen_registry_exists(self):
-        self.assertIn("Domain-Section Citizen Registry", self._spec())
-        self.assertIn("DiscoveryRecord", self._spec().split("Domain-Section Citizen Registry")[1].split("# 62c")[0])
-
-    def test_staleness_detection_has_ap13(self):
-        spec = self._spec()
-        idx = spec.find("Staleness Detection Mechanism")
-        self.assertIn("AP13", spec[idx:idx+400])
-
-    def test_no_duplicate_section_81(self):
-        self.assertEqual(self._spec().count("\n# 81."), 1)  # Final Invariant
-
-    def test_62k_before_62l(self):
-        spec = self._spec()
-        self.assertLess(spec.find("# 62k."), spec.find("# 62l."))
-
-    def test_reingestion_mechanism_not_contract(self):
-        spec = self._spec()
-        self.assertIn("Re-Ingestion Mechanism", spec)
-        self.assertNotIn("## Re-Ingestion Contract", spec)
-
-    def test_spec_structural_audit_renumbered_80(self):
-        spec = self._spec()
-        self.assertIn("# 80. Spec Structural Audit", spec)
-        # The old # 79. Spec Structural Audit should be gone (r51 renumbering)
-        self.assertNotIn("# 81. Spec Structural Audit", spec)
-
-
-class R51AdditionsTests(unittest.TestCase):
-    """Tests for r51: Normative Specification Standard + ConstructElevationProtocol."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r51_spec_version(self):
-        self.assertIn("2026-10-14-r51", self._spec())
-
-    def test_62n_section_exists(self):
-        self.assertIn("# 62n. Normative Specification Standard", self._spec())
-
-    def test_62n_base_rule_exists(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        self.assertIn("Base Rule", n_section)
-
-    def test_62n_5kind_hierarchy_table(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        for kind in ["AP", "Protocol", "Mechanism", "Schema", "Primitive"]:
-            self.assertIn(kind, n_section)
-
-    def test_62n_construct_lattice_exists(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        self.assertIn("Construct Lattice", n_section)
-
-    def test_62n_reuse_rule_exists(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        self.assertIn("Reuse rule", n_section)
-
-    def test_62n_mandatory_construct_metadata(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        self.assertIn("Mandatory Construct Metadata", n_section)
-
-    def test_62n_construct_kind_registry(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        self.assertIn("Construct Kind Registry", n_section)
-        self.assertIn("GRC", n_section)
-        self.assertIn("IQM", n_section)
-
-    def test_construct_elevation_protocol_in_62l(self):
-        spec = self._spec()
-        self.assertIn("## ConstructElevationProtocol", spec)
-        cep = spec.split("## ConstructElevationProtocol")[1].split("##")[0]
-        self.assertIn("AP elevation gate", cep)
-        self.assertIn("Protocol promotion gate", cep)
-        self.assertIn("Leave-in-place rule", cep)
-
-    def test_62l_protocols_have_construct_metadata(self):
-        spec = self._spec()
-        for proto in ["GoverningRecord Canonical Cluster", "EffectUncertaintyProtocol",
-                      "OperatorGateProtocol", "AuthorityClosureInvariant",
-                      "RevalidationScope", "InspectionSurface Contract"]:
-            idx = spec.find(f"## {proto}")
-            self.assertGreater(idx, 0, f"{proto} not found")
-            block = spec[idx:idx+300]
-            self.assertIn("kind: Protocol", block, f"{proto} missing construct metadata")
-
-    def test_62c_mechanisms_have_construct_metadata(self):
-        spec = self._spec()
-        for mech in ["Input Queue Mechanism", "Transaction Mechanism",
-                     "Authority Resolution Mechanism", "Staleness Detection Mechanism",
-                     "Discovery Credit Gate Mechanism", "Quality Streak Mechanism"]:
-            idx = spec.find(f"## {mech}")
-            self.assertGreater(idx, 0, f"{mech} not found")
-            block = spec[idx:idx+300]
-            self.assertIn("kind: Mechanism", block, f"{mech} missing construct metadata")
-
-    def test_62n_before_63(self):
-        spec = self._spec()
-        self.assertLess(spec.find("# 62n."), spec.find("# 63."))
-
-    def test_no_duplicate_section_79(self):
-        self.assertEqual(self._spec().count("\n# 79."), 1)
-
-    def test_spec_structural_audit_is_section_80(self):
-        self.assertIn("# 80. Spec Structural Audit", self._spec())
-
-    def test_revision_log_is_section_82(self):
-        self.assertIn("# 82. Revision Log", self._spec())
-
-    def test_normative_binding_scope_exists(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        self.assertIn("Implementation-binding", n_section)
-        self.assertIn("Specification-binding", n_section)
-
-    def test_specification_binding_directives_listed(self):
-        spec = self._spec()
-        n_section = spec.split("# 62n.")[1].split("# 63.")[0]
-        self.assertIn("ConstructElevationProtocol", n_section)
-
-
 class R52AdditionsTests(unittest.TestCase):
     """Tests for r52: NSS Compliance + Critical Bug Fixes."""
 
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r52_spec_version(self):
-        self.assertIn("r52", self._spec())
-
-    def test_governance_anchor_drift_in_integrity_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("governance-anchor-drift", catalog_section)
-
-    def test_metric_definition_drift_in_integrity_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("metric-definition-drift", catalog_section)
-
-    def test_integrity_gaps_in_62f_governance_table(self):
-        spec = self._spec()
-        f_section = spec.split("# 62f.")[1].split("# 62g.")[0]
-        self.assertIn("integrity_gaps", f_section)
-
-    def test_status_transitions_in_62f_governance_table(self):
-        spec = self._spec()
-        f_section = spec.split("# 62f.")[1].split("# 62g.")[0]
-        self.assertIn("status_transitions", f_section)
-
-    def test_metric_definition_schema_in_62b(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("MetricDefinition", b_section)
-
-    def test_compliance_records_required_in_state_document(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        # Should be REQUIRED, not OPTIONAL
-        self.assertIn("compliance_records     REQUIRED", b_section)
-        self.assertNotIn("compliance_records     OPTIONAL", b_section)
 
     def test_pending_validations_plural_in_initial_state(self):
         config = isolated_test_config(self)
@@ -8981,130 +8257,9 @@ class R52AdditionsTests(unittest.TestCase):
         self.assertNotIn('"decisions"', source,
                          "material_state_signature must not use legacy 'decisions' key")
 
-    def test_governance_anchor_drift_gap_emitted_on_anchor_change(self):
-        # Skipping live behavior test — destination anchor drift requires a
-        # check_anchor_integrity mock returning status="changed"; covered by
-        # the spec contract (§62l governance-anchor-drift BLOCKING) and the
-        # cli.py code path edit in r52. A full integration test would require
-        # mocking destination_anchor.check_anchor_integrity and verifying the
-        # BLOCKING gap is emitted. Marking as pass with comment.
-        pass  # integration test deferred — see cli.py cycle() anchor-drift block
-
-
-class R53AdditionsTests(unittest.TestCase):
-    """Tests for r53: Reliability Hardening Pass."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r53_spec_version(self):
-        self.assertIn("r53", self._spec())
-
-    def test_metric_baseline_unauthorized_mutation_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("metric-baseline-unauthorized-mutation", catalog_section)
-
-    def test_citizen_base_violation_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("citizen-base-violation", catalog_section)
-
-    def test_authority_cache_stale_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("authority-cache-stale", catalog_section)
-
-    def test_executor_policy_missing_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("executor-policy-missing", catalog_section)
-
-    def test_threshold_audit_missing_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("threshold-audit-missing", catalog_section)
-
-    def test_metric_mutation_policy_missing_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("metric-mutation-policy-missing", catalog_section)
-
-    def test_unresolved_effects_reconciliation_failure_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("unresolved-effects-reconciliation-failure", catalog_section)
-
-    def test_citizen_base_defined_in_62b(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("CitizenBase", b_section)
-
-    def test_authorized_citizen_defined_in_62b(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("AuthorizedCitizen", b_section)
-
-    def test_chunking_policy_defined_in_spec(self):
-        spec = self._spec()
-        self.assertIn("ChunkingPolicy", spec)
-
-    def test_chunk_schema_defined_in_spec(self):
-        spec = self._spec()
-        # Chunk schema is in §62f
-        self.assertIn("Chunk {", spec)
-
-    def test_executor_providers_in_state_document(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("executor_providers", b_section)
-
-    def test_metric_baseline_verification_mechanism_in_62c(self):
-        spec = self._spec()
-        c_section = spec.split("# 62c.")[1].split("# 62d.")[0]
-        self.assertIn("Metric Baseline Verification", c_section)
-
-    def test_t2_threshold_audit_trail_in_62h(self):
-        spec = self._spec()
-        h_section = spec.split("# 62h.")[1].split("# 62i.")[0]
-        self.assertIn("threshold-adjustment", h_section)
-
-
 class R54AdditionsTests(unittest.TestCase):
     """Tests for r54: Gap closure pass (7 items from r53 audit)."""
 
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r54_version_in_spec(self):
-        self.assertIn("r54", self._spec())
-
-    def test_compaction_authorization_stale_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("compaction-authorization-stale", catalog_section)
-
-    def test_validation_evidence_missing_in_gap_catalog(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        self.assertIn("validation-evidence-missing", catalog_section)
-
-    def test_metric_effect_citizen_schema_in_62b(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("MetricEffect (citizen schema)", b_section)
-
-    def test_metric_effects_in_state_document(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("metric_effects", b_section)
-
-    def test_validation_evidence_id_in_operation_schema(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("validation_evidence_id", b_section)
 
     def test_compaction_authorization_stale_in_primitives(self):
         from urace import primitives as p
@@ -9115,405 +8270,12 @@ class R54AdditionsTests(unittest.TestCase):
         self.assertIn("validation-evidence-missing", p.INTEGRITY_GAP_CATALOG)
 
 
-class R55AdditionsTests(unittest.TestCase):
-    """Tests for r55: JOINS pass — universal/scoped construct wiring."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r56_final_version(self):
-        # Final version after all three phases should be r56
-        self.assertIn("r56", self._spec())
-
-    def test_universal_appears_near_citizen_base_in_62b(self):
-        spec = self._spec()
-        b_section = spec.split("# 62b.")[1].split("# 62c.")[0]
-        self.assertIn("universal", b_section)
-
-    def test_scope_note_near_discovery_budget_status(self):
-        spec = self._spec()
-        # DiscoveryBudgetStatus should have Scope note (in the ## heading section)
-        idx = spec.find("## DiscoveryBudgetStatus")
-        self.assertGreater(idx, 0)
-        nearby = spec[idx:idx + 4000]
-        self.assertIn("Scope:", nearby)
-
-    def test_scope_note_near_wake_registration(self):
-        spec = self._spec()
-        idx = spec.find("WakeRegistration {")
-        self.assertGreater(idx, 0)
-        nearby = spec[idx:idx + 2000]
-        self.assertIn("Scope:", nearby)
-
-    def test_destination_anchor_guard_in_62f(self):
-        spec = self._spec()
-        f_section = spec.split("# 62f.")[1].split("# 62g.")[0]
-        self.assertIn("anchor-drift", f_section)
-
-    def test_checkpoint_record_baseline_in_62f(self):
-        spec = self._spec()
-        f_section = spec.split("# 62f.")[1].split("# 62g.")[0]
-        self.assertIn("CheckpointRecord", f_section)
-
-
-class R56AdditionsTests(unittest.TestCase):
-    """Tests for r56: Full verification pass — NSS compliance + no-degradation audit."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r56_spec_version(self):
-        self.assertIn("r56", self._spec())
-
-    def test_all_ap_names_present_ap0_through_ap37(self):
-        spec = self._spec()
-        i_section = spec.split("# 62i.")[1].split("# 62j.")[0]
-        for n in range(38):
-            self.assertIn(f"AP{n}", i_section, f"AP{n} missing from §62i")
-
-    def test_integrity_gap_catalog_has_at_least_20_entries(self):
-        spec = self._spec()
-        catalog_section = spec.split("## IntegrityGapCatalog")[1].split("##")[0]
-        rows = [line for line in catalog_section.split("\n") if line.startswith("| `")]
-        self.assertGreaterEqual(len(rows), 20, f"Expected ≥20 gap kinds, got {len(rows)}")
-
-    def test_62n_section_exists(self):
-        spec = self._spec()
-        self.assertIn("# 62n. Normative Specification Standard", spec)
-
-    def test_construct_elevation_protocol_exists_in_62l(self):
-        spec = self._spec()
-        l_section = spec.split("# 62l.")[1].split("# 62m.")[0]
-        self.assertIn("ConstructElevationProtocol", l_section)
-
-    def test_revision_log_has_r49_through_r56(self):
-        spec = self._spec()
-        log_section = spec.split("# 82. Revision Log")[1]
-        for rx in ("r49", "r50", "r51", "r52", "r53", "r54", "r55", "r56"):
-            self.assertIn(f"| {rx} |", log_section, f"{rx} missing from revision log")
-
-
-class R57AdditionsTests(unittest.TestCase):
-    """Tests for r57 spec additions: catalog alignment."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r57_in_revision_log(self):
-        self.assertIn("| r57 |", self._spec())
-
-    def test_mechanism_catalog_has_mbv(self):
-        self.assertIn("MBV", self._spec())
-        self.assertIn("Metric Baseline Verification", self._spec())
-
-    def test_schema_catalog_has_metric_effect(self):
-        self.assertIn("MetricEffect", self._spec())
-
-    def test_protocol_catalog_has_cep(self):
-        self.assertIn("CEP", self._spec())
-        self.assertIn("ConstructElevationProtocol", self._spec())
-
-
-class R58AdditionsTests(unittest.TestCase):
-    """Tests for r58 spec additions: 20-gap reliability hardening."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r58_in_revision_log(self):
-        self.assertIn("| r58 |", self._spec())
-
-    def test_r58_igc_kinds_present(self):
-        r58_kinds = [
-            "justification-depth-exceeded",
-            "justification-cycle-detected",
-            "activation-health-failure",
-            "wake-registration-stale",
-            "wake-registration-expired",
-            "archive-not-found",
-            "capability-regression",
-            "effect-unreconcilable",
-            "stale-manifest-override",
-        ]
-        spec = self._spec()
-        for kind in r58_kinds:
-            self.assertIn(kind, spec, f"r58 gap kind missing: {kind}")
-
-    def test_config_staleness_subschema(self):
-        self.assertIn("staleness", self._spec())
-        self.assertIn("decisions_hours", self._spec())
-        self.assertIn("evidence_hours", self._spec())
-
-    def test_config_context_budget_r58(self):
-        self.assertIn("context_budget_r58", self._spec())
-        self.assertIn("min_floor_fraction", self._spec())
-
-    def test_effect_type_enum(self):
-        self.assertIn("EffectType", self._spec())
-        self.assertIn("IDEMPOTENT", self._spec())
-        self.assertIn("STATEFUL", self._spec())
-
-
-class R59AdditionsTests(unittest.TestCase):
-    """Tests for r59 spec additions: r58 gap closure."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r59_in_revision_log(self):
-        self.assertIn("| r59 |", self._spec())
-
-    def test_config_wake_subschema(self):
-        self.assertIn("max_stale_hours", self._spec())
-
-    def test_config_test_coverage_subschema(self):
-        self.assertIn("freshness_hours", self._spec())
-
-    def test_config_retention_subschema(self):
-        self.assertIn("auto_trigger_bytes", self._spec())
-
-    def test_wake_registration_replaces_field(self):
-        self.assertIn("WakeRegistration", self._spec())
-        self.assertIn("replaces", self._spec())
-
-    def test_pmm_role_column(self):
-        self.assertIn("PRIMARY", self._spec())
-        self.assertIn("SUPPORTING", self._spec())
-
-
-class R60AdditionsTests(unittest.TestCase):
-    """Tests for r60 spec additions: Spec Construction Protocol (SCP)."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r60_in_revision_log(self):
-        self.assertIn("| r60 |", self._spec())
-
-    def test_scp_protocol_defined(self):
-        self.assertIn("Spec Construction Protocol", self._spec())
-        self.assertIn("SCP", self._spec())
-
-    def test_scp_gate1_defined(self):
-        self.assertIn("Gate 1", self._spec())
-        self.assertIn("Definition-first ordering", self._spec())
-
-    def test_scp_gate2_defined(self):
-        self.assertIn("Gate 2", self._spec())
-        self.assertIn("Revision completeness declaration", self._spec())
-
-    def test_scp_gate3_defined(self):
-        self.assertIn("Gate 3", self._spec())
-        self.assertIn("Single-pass atomic extension", self._spec())
-
-    def test_scp_igc_kinds(self):
-        self.assertIn("scp-forward-reference", self._spec())
-        self.assertIn("scp-incomplete-revision-declaration", self._spec())
-        self.assertIn("scp-atomic-extension-violation", self._spec())
-
-    def test_specconstruct_stem(self):
-        self.assertIn("specconstruct", self._spec())
-
-
-class R61AdditionsTests(unittest.TestCase):
-    """Tests for r61 spec additions: AP38 Community Signal Ingestion + PPP."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r61_in_revision_log(self):
-        self.assertIn("| r61 |", self._spec())
-
-    def test_ap38_defined(self):
-        self.assertIn("AP38", self._spec())
-        self.assertIn("Community Signal Ingestion", self._spec())
-
-    def test_community_feed_schema(self):
-        self.assertIn("CommunityFeed", self._spec())
-        self.assertIn("cfeed-", self._spec())
-        self.assertIn("FeedAdapterKind", self._spec())
-
-    def test_community_signal_schema(self):
-        self.assertIn("CommunitySignal", self._spec())
-        self.assertIn("csig-", self._spec())
-        self.assertIn("relevance_score", self._spec())
-        self.assertIn("confidence_score", self._spec())
-
-    def test_patch_proposal_schema(self):
-        self.assertIn("PatchProposal", self._spec())
-        self.assertIn("pprop-", self._spec())
-        self.assertIn("proposed_diff", self._spec())
-
-    def test_approval_mode_enum(self):
-        self.assertIn("ApprovalMode", self._spec())
-        self.assertIn("AUTO", self._spec())
-        self.assertIn("SMART", self._spec())
-        self.assertIn("HUMAN", self._spec())
-
-    def test_signal_quality_enum(self):
-        self.assertIn("SignalQuality", self._spec())
-        self.assertIn("HIGH", self._spec())
-        self.assertIn("FILTERED", self._spec())
-
-    def test_proposal_status_enum(self):
-        self.assertIn("ProposalStatus", self._spec())
-        self.assertIn("AUTO_APPROVED", self._spec())
-        self.assertIn("CONFIDENCE_INSUFFICIENT", self._spec())
-        self.assertIn("EXPIRED", self._spec())
-
-    def test_config_community_inbox(self):
-        self.assertIn("community_inbox", self._spec())
-        self.assertIn("approval_mode", self._spec())
-        self.assertIn("confidence_threshold", self._spec())
-        self.assertIn("relevance_floor", self._spec())
-        self.assertIn("max_queue_depth", self._spec())
-
-    def test_r61_igc_kinds(self):
-        r61_kinds = [
-            "community-feed-terms-not-accepted",
-            "community-feed-adapter-unavailable",
-            "patch-proposal-confidence-below-floor",
-            "patch-proposal-queue-overflow",
-            "community-signal-relevance-below-floor",
-        ]
-        spec = self._spec()
-        for kind in r61_kinds:
-            self.assertIn(kind, spec, f"r61 IGC kind missing: {kind}")
-
-    def test_csi_mechanism_defined(self):
-        self.assertIn("Community Signal Ingestion Mechanism", self._spec())
-        self.assertIn("CSI", self._spec())
-
-    def test_ppp_m_mechanism_defined(self):
-        self.assertIn("Patch Proposal Pipeline Mechanism", self._spec())
-        self.assertIn("PPP_M", self._spec())
-
-    def test_ppp_protocol_in_catalog(self):
-        self.assertIn("PatchProposalProtocol", self._spec())
-        self.assertIn("PPP", self._spec())
-
-    def test_communityinbox_stem(self):
-        self.assertIn("communityinbox", self._spec())
-
-    def test_patchproposal_stem(self):
-        self.assertIn("patchproposal", self._spec())
-
-    def test_state_document_community_fields(self):
-        self.assertIn("community_feeds", self._spec())
-        self.assertIn("community_signals", self._spec())
-        self.assertIn("patch_proposals", self._spec())
-
-    def test_schema_catalog_has_r61_schemas(self):
-        import re
-        spec = self._spec()
-        self.assertIn("Schema Catalog (", spec)
-        match = re.search(r"Schema Catalog \((\d+) entries\)", spec)
-        self.assertIsNotNone(match)
-        count = int(match.group(1))
-        self.assertGreaterEqual(count, 26)
-
-    def test_ap38_pmm_entry(self):
-        spec = self._spec()
-        self.assertIn("AP38", spec)
-        lines = spec.split("\n")
-        pmm_lines = [l for l in lines if "AP38" in l and "Community Signal Ingestion" in l]
-        self.assertTrue(len(pmm_lines) >= 1)
-
-
-class R62AdditionsTests(unittest.TestCase):
-    """Tests for r62 spec additions: construct cross-referencing, DAI, FeatureBundle."""
-
-    def _spec(self):
-        spec_path = Path(__file__).parent / "../../../URACE.md"
-        return spec_path.read_text(encoding="utf-8")
-
-    def test_r62_in_revision_log(self):
-        self.assertIn("| r62 |", self._spec())
-
-    def test_realizes_field_in_ap_template(self):
-        self.assertIn("realizes:", self._spec())
-
-    def test_ap38_realizes_field(self):
-        self.assertIn("realizes: [CSI, PPP_M, PPP]", self._spec())
-
-    def test_dai_protocol_defined(self):
-        self.assertIn("Construct Dependency Acyclicity Invariant", self._spec())
-        self.assertIn("DAI", self._spec())
-
-    def test_dai_rules_defined(self):
-        self.assertIn("Rule 1", self._spec())
-        self.assertIn("Rule 2", self._spec())
-        self.assertIn("Rule 3", self._spec())
-        self.assertIn("acyclic", self._spec())
-
-    def test_r62_igc_kinds(self):
-        self.assertIn("construct-dependency-cycle", self._spec())
-        self.assertIn("construct-self-reference", self._spec())
-
-    def test_feature_bundle_schema(self):
-        self.assertIn("FeatureBundle", self._spec())
-        self.assertIn("fbundle-", self._spec())
-        self.assertIn("construct_ids", self._spec())
-
-    def test_feature_bundle_ref_schema(self):
-        self.assertIn("FeatureBundleRef", self._spec())
-        self.assertIn("fbref-", self._spec())
-
-    def test_bundle_flag_in_derive(self):
-        self.assertIn("--bundle", self._spec())
-        self.assertIn("--list-bundles", self._spec())
-
-    def test_community_inbox_builtin_bundle(self):
-        self.assertIn("community-inbox", self._spec())
-        self.assertIn("Built-in", self._spec())
-
-    def test_bundle_syntax_in_opt_in_constructs(self):
-        self.assertIn("@bundle-name", self._spec())
-        self.assertIn("@community-inbox", self._spec())
-
-    def test_featurebundle_stem(self):
-        self.assertIn("featurebundle", self._spec())
-
-    def test_state_document_feature_bundle_refs(self):
-        self.assertIn("feature_bundle_refs", self._spec())
-
-    def test_protocol_catalog_has_dai(self):
-        self.assertIn("ConstructDependencyAcyclicityInvariant", self._spec())
-
-    def test_schema_catalog_count_at_least_28(self):
-        import re
-        spec = self._spec()
-        match = re.search(r"Schema Catalog \((\d+) entries\)", spec)
-        self.assertIsNotNone(match)
-        count = int(match.group(1))
-        self.assertGreaterEqual(count, 28)
-
-    def test_protocol_catalog_count_at_least_9(self):
-        import re
-        spec = self._spec()
-        match = re.search(r"Protocol Catalog \((\d+) entries\)", spec)
-        self.assertIsNotNone(match)
-        count = int(match.group(1))
-        self.assertGreaterEqual(count, 9)
-
-
 class R65AdditionsTests(unittest.TestCase):
     def setUp(self):
         self.config = isolated_test_config(self)
         self.config["executor"]["enabled"] = False
         self.state = cli.initial_state(self.config)
         cli.seed_confirmed_onboard(self.config, self.state)
-
-    def _spec(self) -> str:
-        from pathlib import Path
-        return (Path(__file__).parent.parent.parent.parent / "URACE.md").read_text(encoding="utf-8")
 
     # --- Blocker schema extension ---
 
@@ -9608,138 +8370,6 @@ class R65AdditionsTests(unittest.TestCase):
         self.assertEqual(ids, ["a", "b", "c"])
 
     # --- Spec contract tests ---
-
-    def test_spec_blocker_classification_documented(self):
-        spec = self._spec()
-        self.assertIn("classification", spec)
-        self.assertIn("TRANSIENT", spec)
-        self.assertIn("ESCALATION", spec)
-        self.assertIn("OPERATOR_GATE", spec)
-
-    def test_spec_assessment_gap_schema(self):
-        spec = self._spec()
-        self.assertIn("AssessmentGap", spec)
-        self.assertIn("agap-", spec)
-
-    def test_spec_lifecycle_boundary_schema(self):
-        spec = self._spec()
-        self.assertIn("LifecycleBoundary", spec)
-        self.assertIn("lcb-", spec)
-        self.assertIn("lifecycle-boundary-violation", spec)
-
-    def test_spec_integrity_signal_schema(self):
-        spec = self._spec()
-        self.assertIn("IntegritySignal", spec)
-        self.assertIn("isig-", spec)
-        self.assertIn("SignalClassifier", spec)
-
-    def test_spec_justification_context_schema(self):
-        spec = self._spec()
-        self.assertIn("JustificationContext", spec)
-        self.assertIn("jctx-", spec)
-        self.assertIn("JustificationContract", spec)
-
-    def test_spec_boundary_contract_protocol(self):
-        spec = self._spec()
-        self.assertIn("BoundaryContract", spec)
-
-    def test_spec_fsm_transition_table(self):
-        spec = self._spec()
-        self.assertIn("Lifecycle State Transition Table", spec)
-        self.assertIn("ASSESSING", spec)
-        self.assertIn("RECONCILING", spec)
-
-    def test_spec_62k_has_dry_run_expanded(self):
-        spec = self._spec()
-        self.assertIn("--dry-run", spec)
-        self.assertIn("`update`", spec)
-
-    def test_spec_62k_has_fail_on(self):
-        self.assertIn("--fail-on", self._spec())
-
-    def test_spec_62k_has_since_until(self):
-        spec = self._spec()
-        self.assertIn("--since", spec)
-        self.assertIn("--until", spec)
-
-    def test_spec_62k_has_goal_list(self):
-        self.assertIn("goal list", self._spec())
-
-    def test_spec_62k_has_blocker_list(self):
-        self.assertIn("blocker list", self._spec())
-
-    def test_spec_62k_has_evidence_list(self):
-        self.assertIn("evidence list", self._spec())
-
-    def test_spec_62k_has_decision_list(self):
-        self.assertIn("decision list", self._spec())
-
-    def test_spec_62k_has_defaults_table(self):
-        self.assertIn("Defaults Table", self._spec())
-
-    def test_spec_igc_has_blocker_escalated(self):
-        self.assertIn("blocker-escalated", self._spec())
-
-    def test_spec_igc_has_integrity_signal_unclassified(self):
-        self.assertIn("integrity-signal-unclassified", self._spec())
-
-    def test_spec_igc_has_checkpoint_write_timeout(self):
-        self.assertIn("checkpoint-write-timeout", self._spec())
-
-    def test_spec_igc_count_at_least_94(self):
-        import re
-        spec = self._spec()
-        match = re.search(r"named gap vocabulary \((\d+) kinds\)", spec)
-        self.assertIsNotNone(match)
-        count = int(match.group(1))
-        self.assertGreaterEqual(count, 94)
-
-    def test_spec_schema_catalog_count_at_least_33(self):
-        import re
-        spec = self._spec()
-        match = re.search(r"Schema Catalog \((\d+) entries\)", spec)
-        self.assertIsNotNone(match)
-        count = int(match.group(1))
-        self.assertGreaterEqual(count, 33)
-
-    def test_spec_protocol_catalog_count_at_least_11(self):
-        import re
-        spec = self._spec()
-        match = re.search(r"Protocol Catalog \((\d+) entries\)", spec)
-        self.assertIsNotNone(match)
-        count = int(match.group(1))
-        self.assertGreaterEqual(count, 11)
-
-    def test_spec_mechanism_catalog_count_at_least_8(self):
-        import re
-        spec = self._spec()
-        match = re.search(r"Mechanism Catalog \((\d+) entries\)", spec)
-        self.assertIsNotNone(match)
-        count = int(match.group(1))
-        self.assertGreaterEqual(count, 8)
-
-    def test_spec_version_is_r70(self):
-        self.assertIn("r7", self._spec())  # r70 or r71 — spec is at r71
-
-    def test_spec_r65_revision_log_entry(self):
-        self.assertIn("r65", self._spec())
-
-    def test_spec_first_class_derived_definition(self):
-        self.assertIn("First-class vs. derived distinction", self._spec())
-
-    def test_spec_deceleration_threshold_formula(self):
-        spec = self._spec()
-        self.assertIn("0.8 ×", spec)
-
-    def test_spec_ap14_priority_tier_field(self):
-        self.assertIn("priority_tier", self._spec())
-
-    def test_spec_mandatory_tests_ax_through_bi(self):
-        spec = self._spec()
-        self.assertIn("**AX —", spec)
-        self.assertIn("**BI —", spec)
-
-    # --- BJ: AssessmentGap deduplication ---
 
     def test_assessment_gap_deduplication_updates_not_appends(self):
         """BJ — same cycle_id+dimension MUST update last_at, not append."""

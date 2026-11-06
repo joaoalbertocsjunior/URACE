@@ -59,6 +59,8 @@ DEFAULT_CONFIG: dict = {
         # Lucrativity guard — projected earnings must exceed threshold
         'min_lucrativity_score': 0.10,    # skip if projected earnings score < 0.10
         'lucrativity_window_days': 30.0,  # projection horizon in days
+        # Cold-start warm-up: bypass min_adoption_count for brand-new features
+        'warm_up_borrow_threshold': 5,    # features with < N borrows skip adoption gate; quality gate alone decides
     },
     'auto_sell': {
         'enabled': False,
@@ -68,6 +70,9 @@ DEFAULT_CONFIG: dict = {
         # Trigger early sell when depletion is detected
         'sell_on_near_depleted': True,    # auto-list when feature is NEAR_DEPLETED
         'sell_on_slowing': False,         # auto-list when feature is SLOWING (earlier exit)
+        # Hands-free replication: offer bundle to network when no replica holders exist
+        'auto_replicate': True,           # emit BUNDLE_REPLICATION_OFFER for single-holder features
+        'replication_offer_cooldown': 86400,  # seconds between replication offers per feature
     },
     'auto_mint': {
         'enabled': False,                 # opt-in: auto-mint completed minimal work to P2P
@@ -523,6 +528,7 @@ def list_for_sale(
     basis_points: int,
     ask_price_units: int,
     estimated_network_size: int = 1,
+    config: dict | None = None,
 ) -> str:
     """Broadcast a sell intent for basis_points of feature_id at ask_price_units.
 
@@ -599,12 +605,17 @@ def list_for_sale(
         )
         if created_row:
             exec_ref = int(created_row.get('executor_reference_price_units', 0))
-            if exec_ref > 0 and ask_price_units > exec_ref:
-                raise ValueError(
-                    f'ask_price_units {ask_price_units} exceeds executor reference price {exec_ref}. '
-                    f'P2P borrow price must be ≤ executor mint cost (buyers must always save vs executor). '
-                    f'Earn more by selling to many buyers, not by charging above executor price.'
-                )
+            if exec_ref > 0:
+                from . import cost_model as _cm_at
+                _gas_at = _cm_at.estimate_gas_overhead(config) if config else 0.0
+                _effective_ceiling = exec_ref - int(_gas_at)
+                if ask_price_units > _effective_ceiling:
+                    raise ValueError(
+                        f'ask_price_units {ask_price_units} exceeds executor reference price {exec_ref}'
+                        + (f' minus gas overhead {int(_gas_at)} = {_effective_ceiling}' if _gas_at else '')
+                        + '. P2P borrow price must be ≤ executor mint cost (buyers must always save vs executor). '
+                        'Earn more by selling to many buyers, not by charging above executor price.'
+                    )
 
     listing_id = f'elst-{int(time.time() * 1000)}-{seller_id[:8]}'
     exchange.append_audit_row({
@@ -812,12 +823,16 @@ def auto_buy(
                             'reason': f'quality {q:.2f} < {min_q}'})
             continue
 
-        # Adoption gate
+        # Adoption gate: bypass for brand-new features in cold-start warm-up window
         adopt = ac.get(feature_id, 0)
+        warm_up_threshold = int(cfg.get('warm_up_borrow_threshold', 5))
         if adopt < min_adopt:
-            skipped.append({'listing_id': lid, 'feature_id': feature_id,
-                            'reason': f'adoption {adopt} < {min_adopt}'})
-            continue
+            if warm_up_threshold > 0 and adopt < warm_up_threshold:
+                pass  # new feature — quality gate alone decides; adoption gate waived
+            else:
+                skipped.append({'listing_id': lid, 'feature_id': feature_id,
+                                'reason': f'adoption {adopt} < {min_adopt}'})
+                continue
 
         # Price gate
         max_price = int(base_borrow * max_price_x)
@@ -983,7 +998,7 @@ def auto_sell(
 
         sell_bp = min(bp_to_list, held)
         try:
-            lid = list_for_sale(exchange, feature_id, seller_id, sell_bp, market_price)
+            lid = list_for_sale(exchange, feature_id, seller_id, sell_bp, market_price, config=config)
             listed.append({'listing_id': lid, 'feature_id': feature_id,
                            'bp': sell_bp, 'ask_price_units': market_price,
                            'depletion_state': dep['state'],
@@ -991,7 +1006,36 @@ def auto_sell(
         except ValueError as e:
             skipped.append({'feature_id': feature_id, 'reason': str(e)})
 
-    return {'listed': listed, 'skipped': skipped}
+    # Auto-replication: for each held feature with 0 non-creator replica holders,
+    # emit BUNDLE_REPLICATION_OFFER so peers with auto_replicate=True can self-register.
+    # Prevents single-point-of-failure delivery and warms up availability.
+    replication_offers: list[dict] = []
+    sell_cfg = (config or {}).get('auto_sell', {})
+    if sell_cfg.get('auto_replicate', True):
+        import hashlib as _rhl, time as _art
+        cooldown = int(sell_cfg.get('replication_offer_cooldown', 86400))
+        _all_rows_rep = rows  # already fetched above
+        for fid in sorted(feature_ids):
+            holdings_rep = _fe.equity_holdings(fid, exchange)
+            if holdings_rep.get(seller_id, 0) <= 0:
+                continue  # seller holds no equity in this feature
+            _grant_r = next((r for r in _all_rows_rep if r.get('kind') == 'EQUITY_GRANT' and r.get('feature_id') == fid), None)
+            _creator = _grant_r.get('peer_id', '') if _grant_r else ''
+            _replicas = {r.get('replica_peer_id', '') for r in _all_rows_rep if r.get('kind') == 'BUNDLE_REPLICA_REGISTERED' and r.get('feature_id') == fid and r.get('replica_peer_id', '')}
+            _non_creator = _replicas - {_creator}
+            if _non_creator:
+                continue  # already has replica holders
+            # Check cooldown: skip if a recent offer was already emitted
+            _recent_offers = [r for r in _all_rows_rep if r.get('kind') == 'BUNDLE_REPLICATION_OFFER' and r.get('feature_id') == fid]
+            if _recent_offers:
+                _last_offer_time = max(float(r.get('at_unix', 0)) for r in _recent_offers)
+                if _art.time() - _last_offer_time < cooldown:
+                    continue
+            _offer_id = _rhl.sha256(f'{fid}:{_art.time()}'.encode()).hexdigest()[:16]
+            exchange.append_audit_row({'kind': 'BUNDLE_REPLICATION_OFFER', 'feature_id': fid, 'creator_peer_id': _creator, 'offer_id': _offer_id, 'at_unix': _art.time()})
+            replication_offers.append({'offer_id': _offer_id, 'feature_id': fid, 'creator_peer_id': _creator})
+
+    return {'listed': listed, 'skipped': skipped, 'replication_offers': replication_offers}
 
 
 def _purchase_cost(exchange, feature_id: str, buyer_id: str) -> int:

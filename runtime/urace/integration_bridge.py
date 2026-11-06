@@ -368,3 +368,148 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--worker',required=True);args=parser.parse_args()
     try:raise SystemExit(worker(json.loads(args.worker)))
     except Exception as exc:print(json.dumps({'status':'error','error':type(exc).__name__+': '+str(exc)[:500]}));raise SystemExit(2)
+
+
+# ── Optional on-chain attestation stubs ───────────────────────────────────────
+# These are STUB-only: they emit audit rows that an external bridge
+# (NFT minter, crypto wallet) can consume. URACE economy is primary;
+# on-chain is optional attestation layer only.
+
+
+class ChainAdapter:
+    """Protocol for optional on-chain attestation. Implement a subclass and set
+    config p2p.chain_adapter to its dotted import path to go live on-chain.
+    NullAdapter (default) emits audit rows only — no network calls.
+    """
+    def mint_nft(self, feature_id: str, creator_peer_id: str, metadata: dict) -> dict:
+        """Mint NFT attestation. Returns {tx_hash, token_id, chain_id, status}."""
+        raise NotImplementedError
+
+    def on_ramp(self, peer_id: str, amount_units: int, crypto_address: str) -> dict:
+        """Convert crypto to URACE units. Returns {tx_hash, amount_crypto, crypto_symbol, status}."""
+        raise NotImplementedError
+
+    def off_ramp(self, peer_id: str, amount_units: int, crypto_address: str) -> dict:
+        """Convert URACE units to crypto. Returns {tx_hash, amount_crypto, crypto_symbol, status}."""
+        raise NotImplementedError
+
+    def verify(self, feature_id: str) -> dict:
+        """Verify on-chain attestation. Returns {verified, tx_hash, block_number, chain_id}."""
+        raise NotImplementedError
+
+
+class NullAdapter(ChainAdapter):
+    """Default stub adapter — emits audit rows, makes no network calls."""
+
+    def mint_nft(self, feature_id, creator_peer_id, metadata):
+        return {'tx_hash': None, 'token_id': None, 'chain_id': None, 'status': 'stub'}
+
+    def on_ramp(self, peer_id, amount_units, crypto_address):
+        return {'tx_hash': None, 'amount_crypto': None, 'crypto_symbol': None, 'status': 'stub'}
+
+    def off_ramp(self, peer_id, amount_units, crypto_address):
+        return {'tx_hash': None, 'amount_crypto': None, 'crypto_symbol': None, 'status': 'stub'}
+
+    def verify(self, feature_id):
+        return {'verified': None, 'tx_hash': None, 'block_number': None, 'chain_id': None, 'status': 'stub'}
+
+
+def get_chain_adapter(config: dict) -> ChainAdapter:
+    """Load ChainAdapter from config p2p.chain_adapter (dotted import path).
+    Defaults to NullAdapter. Example: 'mypackage.eth.EthereumAdapter'
+    """
+    adapter_path = config.get('p2p', {}).get('chain_adapter', '')
+    if not adapter_path:
+        return NullAdapter()
+    try:
+        module_path, cls_name = adapter_path.rsplit('.', 1)
+        import importlib
+        module = importlib.import_module(module_path)
+        cls = getattr(module, cls_name)
+        if not issubclass(cls, ChainAdapter):
+            raise TypeError(f'{adapter_path} is not a ChainAdapter subclass')
+        return cls()
+    except Exception:
+        return NullAdapter()  # graceful fallback — never break on bad config
+
+
+def stub_nft_mint(exchange, feature_id: str, creator_peer_id: str, config: dict = None) -> dict:
+    """Emit NFT_MINT_REQUESTED audit row via adapter; return adapter result.
+
+    Wire a live ChainAdapter via config p2p.chain_adapter to mint on-chain attestations.
+    Defaults to NullAdapter (audit row only, no network calls).
+    """
+    import time as _t, datetime as _dt
+    adapter = get_chain_adapter(config or {})
+    result = adapter.mint_nft(feature_id, creator_peer_id, {'feature_id': feature_id, 'creator': creator_peer_id})
+    exchange.append_audit_row({
+        'kind': 'NFT_MINT_REQUESTED',
+        'feature_id': feature_id,
+        'creator_peer_id': creator_peer_id,
+        'tx_hash': result.get('tx_hash'),
+        'token_id': result.get('token_id'),
+        'chain_id': result.get('chain_id'),
+        'adapter_status': result.get('status'),
+        'at_unix': _t.time(),
+        'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+    })
+    return result
+
+
+def stub_crypto_on_ramp(exchange, peer_id: str, amount_units: int, crypto_address: str, config: dict = None) -> dict:
+    """Emit CRYPTO_ON_RAMP_REQUESTED audit row via adapter; return adapter result."""
+    import time as _t, datetime as _dt
+    adapter = get_chain_adapter(config or {})
+    result = adapter.on_ramp(peer_id, amount_units, crypto_address)
+    exchange.append_audit_row({
+        'kind': 'CRYPTO_ON_RAMP_REQUESTED',
+        'peer_id': peer_id,
+        'amount_units': amount_units,
+        'crypto_address': crypto_address,
+        'tx_hash': result.get('tx_hash'),
+        'amount_crypto': result.get('amount_crypto'),
+        'crypto_symbol': result.get('crypto_symbol'),
+        'adapter_status': result.get('status'),
+        'at_unix': _t.time(),
+        'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+    })
+    return result
+
+
+def stub_crypto_off_ramp(exchange, peer_id: str, amount_units: int, crypto_address: str, config: dict = None) -> dict:
+    """Emit CRYPTO_OFF_RAMP_REQUESTED audit row via adapter; return adapter result."""
+    import time as _t, datetime as _dt
+    adapter = get_chain_adapter(config or {})
+    result = adapter.off_ramp(peer_id, amount_units, crypto_address)
+    exchange.append_audit_row({
+        'kind': 'CRYPTO_OFF_RAMP_REQUESTED',
+        'peer_id': peer_id,
+        'amount_units': amount_units,
+        'crypto_address': crypto_address,
+        'tx_hash': result.get('tx_hash'),
+        'amount_crypto': result.get('amount_crypto'),
+        'crypto_symbol': result.get('crypto_symbol'),
+        'adapter_status': result.get('status'),
+        'at_unix': _t.time(),
+        'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+    })
+    return result
+
+
+def stub_on_chain_verify(exchange, feature_id: str, config: dict = None) -> dict:
+    """Emit ON_CHAIN_VERIFY_REQUESTED audit row via adapter; return adapter result."""
+    import time as _t, datetime as _dt
+    adapter = get_chain_adapter(config or {})
+    result = adapter.verify(feature_id)
+    exchange.append_audit_row({
+        'kind': 'ON_CHAIN_VERIFY_REQUESTED',
+        'feature_id': feature_id,
+        'tx_hash': result.get('tx_hash'),
+        'block_number': result.get('block_number'),
+        'chain_id': result.get('chain_id'),
+        'verified': result.get('verified'),
+        'adapter_status': result.get('status'),
+        'at_unix': _t.time(),
+        'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+    })
+    return result

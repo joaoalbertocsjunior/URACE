@@ -246,3 +246,58 @@ class FeatureMarketPriceTests(unittest.TestCase):
         high = self.cl.feature_market_price('f', self.ex, base,
                                             adoption_count=50, estimated_network_size=100)
         self.assertGreater(high, low)
+
+
+class CompositeEquityTests(unittest.TestCase):
+    def setUp(self):
+        from urace import feature_equity as fe
+        self.fe = fe
+        self.ex = MockExchange()
+        self.fe.grant_equity(self.ex, 'comp-a', 'alice')
+        self.fe.grant_equity(self.ex, 'comp-b', 'alice')
+        self.fe.grant_equity(self.ex, 'comp-c', 'bob')
+
+    def test_composite_grants_full_equity(self):
+        self.fe.grant_composite_equity(self.ex, 'comp-bundle', 'alice',
+                                       ['comp-a', 'comp-b', 'comp-c'])
+        h = self.fe.equity_holdings('comp-bundle', self.ex)
+        self.assertEqual(h.get('alice'), 10_000)
+
+    def test_composite_emits_feature_composition_row(self):
+        self.fe.grant_composite_equity(self.ex, 'comp-bundle', 'alice',
+                                       ['comp-a', 'comp-b'])
+        rows = self.ex.audit_rows()
+        comp_rows = [r for r in rows if r.get('kind') == 'FEATURE_COMPOSITION']
+        self.assertEqual(len(comp_rows), 1)
+        self.assertEqual(comp_rows[0]['composite_feature_id'], 'comp-bundle')
+        self.assertIn('comp-a', comp_rows[0]['component_feature_ids'])
+        self.assertIn('comp-b', comp_rows[0]['component_feature_ids'])
+
+    def test_composite_equity_grant_has_composite_flag(self):
+        self.fe.grant_composite_equity(self.ex, 'comp-bundle', 'alice', ['comp-a'])
+        rows = self.ex.audit_rows()
+        grant = next((r for r in rows if r.get('kind') == 'EQUITY_GRANT'
+                      and r.get('feature_id') == 'comp-bundle'), None)
+        self.assertIsNotNone(grant)
+        self.assertTrue(grant.get('composite'))
+        self.assertIn('comp-a', grant.get('component_feature_ids', []))
+
+    def test_composite_idempotent(self):
+        self.fe.grant_composite_equity(self.ex, 'comp-bundle', 'alice', ['comp-a'])
+        self.fe.grant_composite_equity(self.ex, 'comp-bundle', 'alice', ['comp-a'])
+        grants = [r for r in self.ex.audit_rows()
+                  if r.get('kind') == 'EQUITY_GRANT' and r.get('feature_id') == 'comp-bundle']
+        self.assertEqual(len(grants), 1)
+
+    def test_composite_rejects_unknown_component(self):
+        with self.assertRaises(ValueError):
+            self.fe.grant_composite_equity(self.ex, 'comp-x', 'alice',
+                                           ['comp-a', 'nonexistent-feat'])
+
+    def test_composite_requires_at_least_one_component(self):
+        with self.assertRaises(ValueError):
+            self.fe.grant_composite_equity(self.ex, 'comp-empty', 'alice', [])
+
+    def test_composite_creator_recorded(self):
+        self.fe.grant_composite_equity(self.ex, 'comp-bundle', 'bob', ['comp-c'])
+        self.assertEqual(self.fe.original_creator('comp-bundle', self.ex), 'bob')

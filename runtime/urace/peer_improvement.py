@@ -87,22 +87,44 @@ def evaluate(root: Path, bundle_id: str) -> dict[str, Any]:
     bundle = load_bundle(root, bundle_id)
     payload = bundle["payload"]
     artifact = payload.get("artifact", "")
-    artifact_bytes = len(artifact.encode())
+    artifact_ref = payload.get("artifact_ref", "") or payload.get("sha256", "")
+    # For artifact_ref bundles: load bytes from content-addressed store if available
+    _artifact_raw_bytes: bytes | None = None
+    if not artifact and artifact_ref:
+        from . import peer_exchange as _pe
+        _qdir = quarantine_dir(root)
+        _store_path = _pe._artifact_store_path(_qdir.parent, artifact_ref)
+        if _store_path.exists():
+            _artifact_raw_bytes = _store_path.read_bytes()
+            try:
+                artifact = _artifact_raw_bytes.decode('utf-8', errors='replace')
+            except Exception:
+                artifact = ''
+    artifact_bytes_count = (
+        len(_artifact_raw_bytes) if _artifact_raw_bytes is not None
+        else int(payload.get("artifact_size_bytes", 0)) or len(artifact.encode())
+    )
+    artifact_bytes = artifact_bytes_count
     issues: list[str] = []
 
     if artifact_bytes == 0:
         issues.append("artifact is empty")
-    if artifact_bytes > _MAX_ARTIFACT_BYTES:
+    if artifact_bytes > _MAX_ARTIFACT_BYTES and not artifact_ref:
         issues.append(f"artifact exceeds size limit ({artifact_bytes} > {_MAX_ARTIFACT_BYTES})")
 
     # Verify sha256 integrity
-    actual_sha = hashlib.sha256(artifact.encode()).hexdigest()
+    actual_sha = hashlib.sha256(_artifact_raw_bytes).hexdigest() if _artifact_raw_bytes else hashlib.sha256(artifact.encode()).hexdigest()
     if actual_sha != payload.get("sha256", ""):
         issues.append("artifact sha256 mismatch — bundle integrity compromised")
 
     # Relevance check: does it reference URACE domain concepts?
+    content_type = payload.get("content_type", "text/plain")
     artifact_lower = artifact.lower()
-    relevant_signals = [s for s in _SAFE_ARTIFACT_SIGNALS if s in artifact_lower]
+    if content_type.startswith("text"):
+        relevant_signals = [s for s in _SAFE_ARTIFACT_SIGNALS if s in artifact_lower]
+    else:
+        # Binary artifact: use content_type as a signal
+        relevant_signals = [content_type] if content_type else []
 
     # Schema check
     if payload.get("schema") != "urace-peer-bundle-v1":
@@ -177,6 +199,15 @@ def promote(root: Path, bundle_id: str, config: dict[str, Any], state: dict[str,
 
     from ._common import identifier, now, queue_input
 
+    # 0-spin eligibility: high-confidence verified implementations can be applied directly
+    # without an executor generation cycle — only acceptance gate needed (cheap local check)
+    _zero_spin = (
+        report["verdict"] == "SAFE"
+        and boost >= 10  # multi-peer amplification confirms artifact quality
+        and len(artifact) > 100  # has real implementation content
+        and payload.get("spec_context", "").strip()  # spec provided for acceptance gate
+    )
+
     entry = queue_input(config, "goal", {
         "title": f"Evaluate peer-contributed artifact for feature: {feature}",
         "success_measure": "Artifact reviewed, incorporated or explicitly rejected with documented rationale",
@@ -194,6 +225,9 @@ def promote(root: Path, bundle_id: str, config: dict[str, Any], state: dict[str,
         "peer_feature": feature,
         "peer_evaluation": report,
         "peer_amplification_boost": boost,
+        "requires_acceptance_gate": True,  # lifecycle loop must see a CAPABILITY_GATE TestRunRecord before counting feature as CAPABLE
+        "zero_spin_eligible": _zero_spin,  # True → executor generation skip; apply directly + acceptance gate only
+        "spec_context": payload.get("spec_context", ""),  # spec for acceptance gate verification
     })
 
     # Record the promotion event in state

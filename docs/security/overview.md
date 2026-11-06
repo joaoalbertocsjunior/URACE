@@ -17,6 +17,12 @@ URACE is designed with defense in depth. Every layer — networking, feature exc
 | Token supply | Only earn path is verified quality gate pass |
 | Price integrity | Executor ceiling, 1.5× momentum guard, wash trading block |
 | Consensus | Persistent network size max prevents threshold lowering |
+| Artifact integrity | Content-addressed store (SHA-256); `artifact_ref` verified on every receive |
+| Bundle single-holder risk | Warning emitted on `list-for-sale` if no replica holders exist |
+| Circular transfer / laundering | 24h window detection blocks circular credit flows |
+| Price ceiling manipulation | IQR outlier rejection; reputation penalty on multi-cycle consistent violations |
+| Sybil token farming | Bootstrap grant locked until first quality gate pass; 1 trial borrow limit |
+| Delivery fraud | `DELIVERY_FEE` only paid on verified `BUNDLE_REPLICA_REGISTERED` holders; `FEATURE_BORROWED` always credits original creator |
 | Identity | Certificate pinning, rotation with rule migration |
 | IP privacy | DHT uses hashed node IDs; no IPs in audit trail |
 | Flood protection | 10 RPC rejections/hour → automatic peer block |
@@ -41,6 +47,14 @@ URACE does not rely on a single security mechanism. Multiple independent defense
 - Single earn path prevents inflation
 - Wash trading detection blocks circular self-dealing
 - Cartel detection via trust graph analysis
+- Bootstrap grant locked until quality pass prevents Sybil token farming
+- Consensus ceiling uses IQR-filtered reputation-weighted median — single-cycle outliers get warnings, multi-cycle consistent violations get reputation penalties
+
+**At the artifact distribution layer:**
+- All artifact bytes stored content-addressed (SHA-256); integrity verified on receive
+- Bundle single-holder risk warning emitted on listing — promotes replication
+- Delivery fee only paid for registered replica holders (verified in audit log)
+- Original creator credit is always correct regardless of delivery path
 
 **At the governance layer:**
 - Self-evolution changes require explicit owner approval

@@ -42,17 +42,29 @@ class TokenLedgerAuditDerivedTests(unittest.TestCase):
     def _exchange(self, name='node'):
         return _make_exchange(self.tmp.name, name)
 
-    def test_initial_balance_equals_baseline_grant(self):
+    def test_initial_balance_locked_until_quality_pass(self):
         from urace import token_ledger as tl
         e = self._exchange()
-        # No audit events yet — balance is purely the baseline grant.
+        # No events: grant is locked (Sybil resistance — prevents fake-peer token farming)
+        self.assertEqual(tl.balance(e, 'peer1'), 0)
+        # After quality pass: grant unlocks
+        with e.lock():
+            e.event('APPLIED_AFTER_LOCAL_QUALIFICATION', peer='peer1', feature='feat',
+                    bundle='b' * 64, score_delta=0.0,
+                    canonical_fingerprint='c' * 64, outcome_fingerprint='o' * 64,
+                    affected_files=[])
         self.assertEqual(tl.balance(e, 'peer1'), 3)
 
     def test_receive_reserved_event_counts_as_spend(self):
         from urace import token_ledger as tl
         e = self._exchange()
         peer = 'p' * 64
+        # Give peer a quality pass first so the grant is available
         with e.lock():
+            e.event('APPLIED_AFTER_LOCAL_QUALIFICATION', peer=peer, feature='feat',
+                    bundle='q' * 64, score_delta=0.0,
+                    canonical_fingerprint='c' * 64, outcome_fingerprint='o' * 64,
+                    affected_files=[])
             e.event('RECEIVE_RESERVED', peer=peer, bytes=100, bundle='b' * 64)
         self.assertAlmostEqual(tl.balance(e, peer), 2.0)
 
@@ -71,10 +83,16 @@ class TokenLedgerAuditDerivedTests(unittest.TestCase):
         from urace import token_ledger as tl
         e = self._exchange()
         peer = 'p' * 64
+        # Give peer a quality pass so grant unlocks, then exhaust with 3 borrows
+        with e.lock():
+            e.event('APPLIED_AFTER_LOCAL_QUALIFICATION', peer=peer, feature='feat',
+                    bundle='q' * 64, score_delta=0.0,
+                    canonical_fingerprint='c' * 64, outcome_fingerprint='o' * 64,
+                    affected_files=[])
         for i in range(3):
             with e.lock():
                 e.event('RECEIVE_RESERVED', peer=peer, bytes=100, bundle=f'{i:064d}')
-        self.assertAlmostEqual(tl.balance(e, peer), 0.0)
+        self.assertAlmostEqual(tl.balance(e, peer), 0.0)  # 3 grant - 3 spent = 0
         with self.assertRaises(ValueError):
             tl.check_can_receive(e, peer)
 
@@ -159,6 +177,12 @@ class TokenSettlementIntegrationTests(unittest.TestCase):
     def test_settlement_blocks_after_baseline_exhausted(self):
         a, b, aid, bid = _make_pair(self.tmp.name)
         b.configure(token_settlement=True)
+        # Unlock grant for the sender (aid) on exchange b via quality pass
+        with b.lock():
+            b.event('APPLIED_AFTER_LOCAL_QUALIFICATION', peer=aid, feature='feat',
+                    bundle='q' * 64, score_delta=0.0,
+                    canonical_fingerprint='c' * 64, outcome_fingerprint='o' * 64,
+                    affected_files=[])
         for i in range(3):
             art = f'urace runtime improvement {i}'
             r = a.prepare(bid, 'feat', art, True)
@@ -172,6 +196,12 @@ class TokenSettlementIntegrationTests(unittest.TestCase):
         """Without token_settlement, mark_qualified earns tokens regardless of receipt."""
         from urace import peer_improvement as pi, token_ledger as tl
         a, b, aid, bid = _make_pair(self.tmp.name)
+        # Unlock grant for aid first so the before/after delta reflects earn-only (not grant+earn)
+        with b.lock():
+            b.event('APPLIED_AFTER_LOCAL_QUALIFICATION', peer=aid, feature='feat',
+                    bundle='q' * 64, score_delta=0.0,
+                    canonical_fingerprint='c' * 64, outcome_fingerprint='o' * 64,
+                    affected_files=[])
         # token_settlement=False (default) — receipt_verified gate is off
         art = 'urace runtime improvement'
         r = a.prepare(bid, 'feat', art, True)
@@ -332,3 +362,66 @@ class AutoRelayTests(unittest.TestCase):
         relay = result.get('relay', {})
         relayed_peers = [x['peer'] for x in relay.get('relayed_to', [])]
         self.assertNotIn(aid[:16], relayed_peers)
+
+
+class TokenDecayTests(unittest.TestCase):
+    """apply_token_decay: 1% epoch decay on unused balance above cap."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _exchange(self, name='node'):
+        return _make_exchange(self.tmp.name, name)
+
+    def _qualify(self, exchange, peer_id, delta=10.0):
+        with exchange.lock():
+            exchange.event('APPLIED_AFTER_LOCAL_QUALIFICATION', peer=peer_id,
+                           feature='feat', bundle='b' * 64, score_delta=delta,
+                           canonical_fingerprint='c' * 64, outcome_fingerprint='o' * 64,
+                           affected_files=[])
+
+    def test_no_decay_below_cap(self):
+        from urace import token_ledger as tl
+        e = self._exchange()
+        self._qualify(e, 'peer1', delta=5.0)
+        # balance = 3 (grant) + 5 = 8; default cap = 50 → no decay
+        decay = tl.apply_token_decay(e, 'peer1')
+        self.assertEqual(decay, 0.0)
+
+    def test_decay_applied_above_cap(self):
+        from urace import token_ledger as tl
+        e = self._exchange()
+        # Qualify many times to exceed cap of 50
+        for _ in range(10):
+            self._qualify(e, 'peer1', delta=10.0)
+        bal_before = tl.balance(e, 'peer1')
+        self.assertGreater(bal_before, 50)
+        decay = tl.apply_token_decay(e, 'peer1', decay_rate=0.01)
+        self.assertGreater(decay, 0.0)
+        # decay ≈ (bal_before - 50) * 0.01
+        expected = round((bal_before - 50) * 0.01, 4)
+        self.assertAlmostEqual(decay, expected, places=2)
+
+    def test_decay_emits_credit_delta_row(self):
+        from urace import token_ledger as tl
+        e = self._exchange()
+        for _ in range(10):
+            self._qualify(e, 'peer1', delta=10.0)
+        tl.apply_token_decay(e, 'peer1')
+        rows = e.audit_rows()
+        decay_rows = [r for r in rows if r.get('kind') == 'CREDIT_DELTA'
+                      and r.get('direction') == 'decay' and r.get('peer') == 'peer1']
+        self.assertEqual(len(decay_rows), 1)
+        self.assertLess(decay_rows[0].get('score_delta', 0), 0)
+
+    def test_decay_cooldown_24h(self):
+        from urace import token_ledger as tl
+        e = self._exchange()
+        for _ in range(10):
+            self._qualify(e, 'peer1', delta=10.0)
+        d1 = tl.apply_token_decay(e, 'peer1')
+        # Second call within 24h: no additional decay
+        d2 = tl.apply_token_decay(e, 'peer1')
+        self.assertGreater(d1, 0.0)
+        self.assertEqual(d2, 0.0)

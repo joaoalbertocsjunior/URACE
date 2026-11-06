@@ -13,7 +13,8 @@ URACE tokens represent earned reputation from accepted quality improvements. The
 | Earn path | Quality gate pass (`score_delta > 0`) — one earn path only |
 | Spend path | Borrow features from peers, commission work |
 | Precision | 8 decimals (satoshi model: 1 token = 100,000,000 base units) |
-| Baseline grant | 3 tokens per new peer (bootstrap participation before first earn) |
+| Baseline grant | 3 tokens per new peer — **locked until first quality gate pass** (Sybil resistance) |
+| Trial borrow allowance | 1 free borrow before first quality pass — breaks cold-start chicken-and-egg |
 | Deduplication | Exact copies blocked by `canonical_fingerprint`; near-copies by `outcome_fingerprint` |
 
 ---
@@ -75,7 +76,7 @@ Supply scales with bandwidth, not peers. The constraint is always "can new peers
 
 ## Initial Ledger
 
-URACE ships with a pre-built initial ledger of **1,356 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. All initial ledger features are:
+URACE ships with a pre-built initial ledger of **1,370 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. All initial ledger features are:
 
 - **Free-use**: borrow cost = 0 tokens
 - **No owner**: minted without a creator, available to all peers
@@ -84,14 +85,14 @@ URACE ships with a pre-built initial ledger of **1,356 built-in features** — e
 
 | Metric | Value |
 |--------|-------|
-| Initial features minted | 1,356 |
+| Initial features minted | 1,370 |
 | Format | JSONL (`runtime/initial_ledger.jsonl`) — line 1 is a header, each subsequent line is one feature |
 | Breakdown | mechanism · schema · contract · integration · protocol features |
 | Revenue features | 65% (882 features with active token flow) |
 | Free/decayed features | 35% (474 features — consume infra but generate no token flow) |
 | Max features at 1 Mbps / 1,000 peers | 3,840 |
 | Utilization at baseline infra | 35% |
-| Room for user features at baseline | 2,484 additional features |
+| Room for user features at baseline | 2,470 additional features |
 | Max features at 10 Mbps / 10,000 peers | 65,536 |
 | Utilization at 10 Mbps | 2% |
 
@@ -167,6 +168,90 @@ These are **utility-anchored estimates** — each token buys real developer-equi
 
 ---
 
+## Sybil Resistance
+
+The bootstrap grant is **locked until a peer's first quality gate pass** — it cannot be farmed by creating throwaway peer identities.
+
+| Attack | Defense |
+|--------|---------|
+| Create 100 fake peers → 300 free tokens | Grant = 0 until first APPLIED_AFTER_LOCAL_QUALIFICATION event |
+| Use 1 trial borrow per fake peer | Trial borrow allowance = 1 (configurable); exhausted after 1 use, no more without quality pass |
+| Collude on borrow prices | IQR outlier rejection; reputation penalty on multi-cycle consistent violations |
+
+The cold-start path for a **legitimate new peer**:
+1. Join network → get 1 trial borrow (free, no quality pass needed)
+2. Borrow a feature, integrate it, improve your product
+3. Quality gate pass → bootstrap grant unlocks (3 tokens) + score_delta earns
+4. Borrow more with earned tokens
+
+---
+
+## Delivery Fee Model
+
+When a buyer fills a listing, the system routes delivery through the **feature owner first** (original creator), falling back to any registered **replica holder** if the owner is unavailable.
+
+| Event | Who earns | Amount |
+|-------|-----------|--------|
+| `FEATURE_BORROWED` | Original creator (always) | `credit_units` — computed at fill time by `mint_per_adoption()` |
+| `DELIVERY_FEE` | Replica holder (delivery only) | 10% of ask price |
+| `EQUITY_LISTING_FILLED` | Equity seller | ask price in full |
+
+**Creator earn is computed at fill time** using `mint_per_adoption()` — not a flat amount. The result is stored in the `credit_units` field of the `FEATURE_BORROWED` audit row, so the audit log is the authoritative source. Old rows without `credit_units` fall back to 1 token flat (backward compat).
+
+**`mint_per_adoption()` formula components:**
+
+| Factor | Effect |
+|--------|--------|
+| `feature_complexity` (LOC × deps × tests) | Base earn — complex features earn more |
+| `adoption_rank` | Novelty decay — `1 / (1 + log2(rank))`; early adopters earn more |
+| `network_size` | Saturation threshold — `n_sat = ceil(0.30 × network_size)` |
+| `estimated_network_size` | Anchors supply pressure physics ceiling |
+| `supply_pressure_multiplier` | Soft quadratic squeeze as total supply approaches physics ceiling |
+| `epoch_decay` | `0.99^epochs_elapsed` — older features earn less |
+| `adopter_trust` | `0.5 + 0.5 × trust` — high-reputation borrowers generate more earn |
+| `rep_tier_bonus` | Wilson-based stackable bonus across 4 quality tiers |
+
+Same-peer repeat borrows store `credit_units = 0` — creator earns nothing on reborrow from the same node.
+
+**Replica holders** earn delivery fees for bandwidth, but do NOT earn `FEATURE_BORROWED` token credits — that always credits the original creator regardless of who physically delivered.
+
+```sh
+# Register as replica holder for a feature
+urace exchange equity register-replica <feature_id> --artifact-hash <sha256>
+```
+
+---
+
+## Ceiling Enforcement
+
+P2P borrow prices are always cheaper than building the feature from scratch with an executor:
+
+```
+ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
+```
+
+`gas_overhead` is deducted from the headroom before applying completeness and margin. It defaults to 0 for off-chain deployments; set `gas_per_tx_gwei`, `gas_price_gwei`, and `urace_units_per_gwei` for dynamic EVM estimation, or `gas_overhead_units` for a static override. See [Price Mechanics](price-mechanics.md) for the full breakdown.
+
+| Field | Completeness bonus |
+|-------|--------------------|
+| description | +0.1 |
+| spec_context | +0.2 |
+| tags | +0.1 |
+| include_context | +0.1 |
+| implementation artifact (any type/size) | +0.3 |
+| large artifact (>100 KB) | +0.05 bonus |
+| **Maximum** | **1.0** |
+
+`iter_savings = avg_saved_verification_iterations × executor_per_call_cost` — verified implementations skip N executor calls, reducing ceiling further. The more complete the bundle, the higher the ceiling; but all ceilings are still below executor cost.
+
+The network reaches **consensus on the ceiling** via lazy gossip during `network refresh`:
+- Peer-reported executor prices are IQR-filtered (reject outliers outside [Q1×0.5, Q3×2.0])
+- Reputation-weighted (rep ≥ 0.1 required)
+- Peers reporting consistent cross-cycle outliers (>1h apart) receive reputation penalties
+- Single-cycle outlier = warning only (no penalty, no false positives)
+
+---
+
 ## Cartel Detection
 
 URACE uses Dijkstra shortest-path trust graph analysis to detect coordinated manipulation:
@@ -207,7 +292,11 @@ urace exchange ledger transfer <peer_id> <amount_units>
 | Price manipulation | 1.5× momentum ceiling, executor price ceiling |
 | Supply inflation | Per-feature bp cap (10,000 bp = 100%), fake adoption requires proof-of-purchase |
 | Consensus hijacking | Persistent network size max, reputation-weighted votes |
-| Sybil attacks | Certificate pinning, reputation decay, cluster analysis |
+| Sybil attacks | Certificate pinning, reputation decay, cluster analysis; bootstrap grant locked until quality pass |
+| Fake replica spam | Replica registration requires valid EQUITY_GRANT; delivery fee only paid on actual delivery audit row |
+| Price ceiling gaming | Multi-cycle IQR consensus; reputation penalty on consistent cross-cycle outliers |
+| Cold-start abuse | Trial borrow limited to 1 per peer; additional borrows require earned balance |
+| Circular money laundering | 24h round-trip detection blocks circular credit flow |
 | DoS flooding | RPC flood detection (10 rejections/hour → block), chunked reads |
 
 ---

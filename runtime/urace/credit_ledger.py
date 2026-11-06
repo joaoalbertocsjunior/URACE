@@ -422,6 +422,8 @@ def earn_units(root, peer_id, units: int, reason, bundle_id=None, metadata: dict
             adopter_trust=metadata.get('adopter_trust', 0.5),
             adoption_rank=metadata['adoption_rank'],
             network_size=metadata.get('network_size', 1),
+            estimated_network_size=metadata.get('estimated_network_size', metadata.get('network_size', 1)),
+            total_network_supply=metadata.get('total_network_supply', 0),
             epochs_elapsed=metadata.get('epochs_elapsed', 0),
         )
         if minted == 0:
@@ -1188,3 +1190,96 @@ def feature_market_price(
     raw = int(base_borrow_cost * quality_mult * velocity_mult * s_mult)
     price = max(base_borrow_cost, raw)
     return _jitter(price, BORROW_JITTER_FRAC)
+
+
+def apply_cartel_penalty(exchange, peer_id: str) -> dict:
+    """Check if peer is operating as cartel member and apply penalty if so.
+
+    Cartel detection: avg earn rate > 3× network median over last 30 days.
+    Idempotent: only once per 7-day window per peer.
+    Emits CREDIT_DELTA(direction='cartel_penalty') if penalty applied.
+    Returns {'applied': bool, 'reason': str}.
+    """
+    import time as _t
+    import statistics as _stats
+
+    try:
+        rows = exchange.audit_rows()
+    except Exception:
+        return {'applied': False, 'reason': 'no_audit_rows'}
+
+    now = _t.time()
+    window_30d = now - 30 * 86400
+    window_7d = now - 7 * 86400
+
+    # Idempotency: skip if already penalized within last 7 days
+    recent_penalties = [
+        r for r in rows
+        if r.get('kind') == 'CREDIT_DELTA'
+        and r.get('direction') == 'cartel_penalty'
+        and r.get('peer') == peer_id
+        and float(r.get('at_unix', 0)) > window_7d
+    ]
+    if recent_penalties:
+        return {'applied': False, 'reason': 'already_penalized_in_7d_window'}
+
+    # Compute per-peer earn totals over last 30 days
+    earn_rows = [
+        r for r in rows
+        if r.get('kind') == 'CREDIT_DELTA'
+        and r.get('direction') in ('earn', 'composition_referral', 'delivery_fee', 'borrow_earn', 'seal_reward', 'llm_peer_reward')
+        and float(r.get('at_unix', 0)) > window_30d
+    ]
+    if not earn_rows:
+        return {'applied': False, 'reason': 'no_earn_rows'}
+
+    peer_totals: dict[str, int] = {}
+    for r in earn_rows:
+        p = r.get('peer', '')
+        if p:
+            peer_totals[p] = peer_totals.get(p, 0) + abs(int(r.get('delta_units', r.get('amount_units', 0))))
+
+    if len(peer_totals) < 2:
+        return {'applied': False, 'reason': 'insufficient_peers_for_comparison'}
+
+    peer_earn = peer_totals.get(peer_id, 0)
+    if peer_earn == 0:
+        return {'applied': False, 'reason': 'peer_has_no_earnings'}
+
+    network_median = _stats.median(peer_totals.values())
+    if network_median <= 0:
+        return {'applied': False, 'reason': 'zero_network_median'}
+
+    cartel_threshold = 3.0 * network_median
+    if peer_earn <= cartel_threshold:
+        return {'applied': False, 'reason': f'earn_rate_ok ({peer_earn} <= {cartel_threshold:.1f})'}
+
+    # Penalty = 50% of excess above median
+    excess = peer_earn - network_median
+    penalty = max(1, int(excess * 0.5))
+
+    import datetime as _dt
+    exchange.append_audit_row({
+        'kind': 'CREDIT_DELTA',
+        'direction': 'cartel_penalty',
+        'peer': peer_id,
+        'amount_units': -penalty,
+        'peer_earn_30d': peer_earn,
+        'network_median_30d': round(network_median, 2),
+        'cartel_threshold': round(cartel_threshold, 2),
+        'excess': excess,
+        'at_unix': now,
+        'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+        'note': f'Cartel penalty: earn {peer_earn} > 3× median {network_median:.1f} — excess*0.5={penalty}',
+    })
+    exchange.append_audit_row({
+        'kind': 'CARTEL_WEIGHT_PENALTY',
+        'peer': peer_id,
+        'penalty_units': penalty,
+        'peer_earn_30d': peer_earn,
+        'network_median_30d': round(network_median, 2),
+        'at_unix': now,
+        'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+    })
+    return {'applied': True, 'penalty_units': penalty, 'peer_earn_30d': peer_earn,
+            'network_median_30d': round(network_median, 2)}

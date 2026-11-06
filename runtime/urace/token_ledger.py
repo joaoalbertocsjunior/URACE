@@ -36,18 +36,24 @@ def _grant(exchange) -> int:
 def balance(exchange, peer_id: str) -> float:
     """Net token balance derived from the tamper-evident audit log.
 
-    balance = baseline_grant
+    balance = baseline_grant (locked until first quality gate pass)
               + sum(score_delta for APPLIED events where peer == peer_id)
               + count(FEATURE_BORROWED events where creator_peer_id == peer_id)
               - count(RECEIVE_RESERVED events where peer == peer_id)
 
     With token_settlement=True, only receipt_verified=True events earn tokens.
+    Bootstrap grant locked until first quality pass prevents Sybil token farming.
     Raises ValueError if the audit chain has been tampered with.
     """
-    grant = _grant(exchange)
     p = exchange.load()
     settlement = p.get('token_settlement', False)
     rows = exchange.audit_rows()
+    # Bootstrap grant unlocks on first quality gate pass — Sybil resistance
+    _has_quality_pass = any(
+        r.get('kind') == 'APPLIED_AFTER_LOCAL_QUALIFICATION' and r.get('peer') == peer_id
+        for r in rows
+    )
+    grant = _grant(exchange) if _has_quality_pass else 0
     earned_improvement = sum(
         float(r.get('score_delta', 0.0))
         for r in rows
@@ -55,16 +61,26 @@ def balance(exchange, peer_id: str) -> float:
         and r.get('peer') == peer_id
         and (not settlement or r.get('receipt_verified', False))
     )
-    # Count distinct borrower nodes — one credit per unique peer that borrowed the feature.
-    borrow_peers = {
-        r['borrower_peer_id']
-        for r in rows
-        if r.get('kind') == 'FEATURE_BORROWED'
-        and r.get('creator_peer_id') == peer_id
-        and r.get('borrower_peer_id')
-        and (not settlement or r.get('receipt_verified', False))
-    }
-    earned_propagation = len(borrow_peers) * _BORROW_CREDIT
+    # Count adoption earns: new rows carry precomputed credit_units (network-size-aware,
+    # supply-pressure-adjusted, computed at mint time). Old rows fall back to flat _BORROW_CREDIT.
+    # Same-peer repeat borrows stored with credit_units=0 — no additional earn.
+    _old_borrow_peers: set[str] = set()
+    _new_earned_units: int = 0
+    for r in rows:
+        if r.get('kind') != 'FEATURE_BORROWED':
+            continue
+        if r.get('creator_peer_id') != peer_id:
+            continue
+        borrower = r.get('borrower_peer_id', '')
+        if not borrower:
+            continue
+        if settlement and not r.get('receipt_verified', False):
+            continue
+        if 'credit_units' in r:
+            _new_earned_units += int(r['credit_units'])
+        else:
+            _old_borrow_peers.add(borrower)
+    earned_propagation = (_new_earned_units / UNIT) + len(_old_borrow_peers) * _BORROW_CREDIT
     spent = sum(
         1.0
         for r in rows
@@ -73,7 +89,31 @@ def balance(exchange, peer_id: str) -> float:
     return round(grant + earned_improvement + earned_propagation - spent, 4)
 
 
+def _trial_borrows_remaining(exchange, peer_id: str) -> int:
+    """New peers get trial_borrow_allowance free borrows before first quality gate pass.
+
+    Bootstrap the cold-start: peer can borrow once to trigger their first improvement
+    cycle, which unlocks the full baseline grant. After their first quality pass,
+    trial allowance is exhausted and normal balance rules apply.
+    """
+    p = exchange.load()
+    allowance = int(p.get('trial_borrow_allowance', 1))
+    if allowance <= 0:
+        return 0
+    rows = exchange.audit_rows()
+    has_quality_pass = any(
+        r.get('kind') == 'APPLIED_AFTER_LOCAL_QUALIFICATION' and r.get('peer') == peer_id
+        for r in rows
+    )
+    if has_quality_pass:
+        return 0
+    borrows_used = sum(1 for r in rows if r.get('kind') == 'RECEIVE_RESERVED' and r.get('peer') == peer_id)
+    return max(0, allowance - borrows_used)
+
+
 def can_receive(exchange, peer_id: str, cost: float = 1.0) -> bool:
+    if _trial_borrows_remaining(exchange, peer_id) > 0:
+        return True
     return balance(exchange, peer_id) >= cost
 
 
@@ -82,7 +122,10 @@ def check_can_receive(exchange, peer_id: str, cost: float = 1.0) -> None:
 
     The actual spend record IS the RECEIVE_RESERVED event about to be written —
     no separate deduction needed.
+    New peers with remaining trial_borrow_allowance are exempt from balance checks.
     """
+    if _trial_borrows_remaining(exchange, peer_id) > 0:
+        return
     bal = balance(exchange, peer_id)
     if bal < cost:
         raise ValueError(
@@ -90,6 +133,45 @@ def check_can_receive(exchange, peer_id: str, cost: float = 1.0) -> None:
             f'(balance={bal:.2f}, cost={cost:.2f}); '
             f'earn tokens by qualifying received improvements first'
         )
+
+
+def apply_token_decay(exchange, peer_id: str, decay_rate: float = 0.01) -> float:
+    """Apply 1% epoch decay to unused balance above BASE_CAP_UNITS.
+
+    Emits CREDIT_DELTA(direction='decay') audit row. Returns decay amount in tokens.
+    Cooldown: once per 24h per peer. Only applies when balance > cap.
+    Anti-cartel: prevents quality-hub hoarding without reducing active-earner rewards.
+    """
+    import time as _t, datetime as _dt
+    p = exchange.load()
+    cap = float(p.get('base_cap_units', 50))
+    bal = balance(exchange, peer_id)
+    if bal <= cap:
+        return 0.0
+    rows = exchange.audit_rows()
+    last_decay = max(
+        (float(r.get('at_unix', 0)) for r in rows
+         if r.get('kind') == 'CREDIT_DELTA'
+         and r.get('direction') == 'decay'
+         and r.get('peer') == peer_id),
+        default=0.0,
+    )
+    if _t.time() - last_decay < 86400:
+        return 0.0
+    excess = bal - cap
+    decay_amount = round(excess * decay_rate, 4)
+    if decay_amount <= 0:
+        return 0.0
+    exchange.append_audit_row({
+        'kind': 'CREDIT_DELTA', 'direction': 'decay', 'peer': peer_id,
+        'amount_units': -int(decay_amount * UNIT),
+        'score_delta': -decay_amount,
+        'reason': 'epoch_decay_above_cap',
+        'balance_before_tokens': bal, 'cap_tokens': cap,
+        'at_unix': _t.time(),
+        'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+    })
+    return decay_amount
 
 
 def summary(exchange) -> dict[str, Any]:
@@ -102,7 +184,7 @@ def summary(exchange) -> dict[str, Any]:
 
     def _peer(pid: str) -> dict:
         if pid not in peers:
-            peers[pid] = {'earned_improvement': 0.0, 'earned_propagation': set(), 'spent': 0.0}
+            peers[pid] = {'earned_improvement': 0.0, 'earned_propagation': set(), 'earned_propagation_units': 0, 'spent': 0.0}
         return peers[pid]
 
     for r in rows:
@@ -115,7 +197,11 @@ def summary(exchange) -> dict[str, Any]:
             creator = r.get('creator_peer_id', '')
             borrower = r.get('borrower_peer_id', '')
             if creator and borrower and (not settlement or r.get('receipt_verified', False)):
-                _peer(creator)['earned_propagation'].add(borrower)
+                if 'credit_units' in r:
+                    _peer(creator).setdefault('earned_propagation_units', 0)
+                    _peer(creator)['earned_propagation_units'] += int(r['credit_units'])
+                else:
+                    _peer(creator)['earned_propagation'].add(borrower)
         elif kind == 'RECEIVE_RESERVED':
             peer = r.get('peer', '')
             if peer:
@@ -124,7 +210,11 @@ def summary(exchange) -> dict[str, Any]:
     result_peers = {}
     for pid, d in peers.items():
         imp = round(d['earned_improvement'], 4)
-        prop = round(len(d['earned_propagation']) * _BORROW_CREDIT, 4)
+        prop = round(
+            d.get('earned_propagation_units', 0) / UNIT
+            + len(d['earned_propagation']) * _BORROW_CREDIT,
+            4,
+        )
         spent = round(d['spent'], 4)
         result_peers[pid] = {
             'earned_improvement': imp,
@@ -134,9 +224,11 @@ def summary(exchange) -> dict[str, Any]:
             'balance': round(grant + imp + prop - spent, 4),
         }
 
+    trial_allowance = int(p.get('trial_borrow_allowance', 1))
     return {
         'schema': SCHEMA,
         'baseline_grant': grant,
+        'trial_borrow_allowance': trial_allowance,
         'settlement': 'audit-derived',
         'mainnet_settlement_enabled': False,
         'tamper_evident': True,

@@ -41,6 +41,65 @@ def validate(batch,parser):
             if not isinstance(params.get('dependencies',[]),list) or not all(isinstance(v,str) for v in params.get('dependencies',[])):raise ValueError('goal dependencies must be strings')
     return batch
 
+_SYNONYMS = {
+    'chart': {'visualization', 'graph', 'plot', 'diagram'},
+    'visualization': {'chart', 'graph', 'plot', 'diagram'},
+    'fast': {'performance', 'speed', 'optimize', 'efficient'},
+    'slow': {'performance', 'latency', 'bottleneck'},
+    'image': {'photo', 'picture', 'img', 'thumbnail'},
+    'text': {'content', 'copy', 'writing', 'prose'},
+    'model': {'llm', 'ml', 'ai', 'neural'},
+    'data': {'dataset', 'csv', 'table', 'schema'},
+    'test': {'spec', 'unittest', 'pytest', 'validation'},
+    'api': {'endpoint', 'rest', 'http', 'service'},
+    'search': {'query', 'find', 'lookup', 'retrieve'},
+    'report': {'summary', 'analytics', 'dashboard', 'metrics'},
+}
+
+
+def _semantic_score(text: str, feature: dict) -> float:
+    """Score how well a feature matches user text. Returns 0.0–1.0.
+
+    Checks overlap between text tokens and feature name, description words, and tags.
+    Handles vague/partial input: partial word matches also score (prefix match).
+    Synonym expansion bridges common vocabulary gaps (e.g. chart/visualization).
+    """
+    text_tokens = set(text.lower().split())
+    if not text_tokens:
+        return 0.0
+    # Expand text tokens with synonyms (use original set for denominator)
+    expanded_text_tokens = set(text_tokens)
+    for t in text_tokens:
+        expanded_text_tokens.update(_SYNONYMS.get(t, set()))
+    feature_tokens: set[str] = set()
+    fid = (feature.get('feature_id') or '').lower().replace('-', ' ').replace('_', ' ')
+    feature_tokens.update(fid.split())
+    desc = (feature.get('description') or '').lower()
+    feature_tokens.update(desc.split())
+    for tag in (feature.get('tags') or []):
+        feature_tokens.update(tag.lower().replace('-', ' ').split())
+    spec = (feature.get('spec_context') or '').lower()
+    feature_tokens.update(spec.split()[:30])
+    # Exact token overlap (uses expanded set so synonyms count as exact hits)
+    exact = len(expanded_text_tokens & feature_tokens)
+    # Partial/prefix overlap (handle vague/incomplete inputs)
+    partial = sum(
+        1 for tt in expanded_text_tokens
+        for ft in feature_tokens
+        if len(tt) >= 3 and (ft.startswith(tt) or tt.startswith(ft)) and tt != ft
+    )
+    # Denominator is original text_tokens — do not inflate base with synonym expansion
+    score = (exact + 0.4 * partial) / max(len(text_tokens), 1)
+    return min(score, 1.0)
+
+
+def _rank_p2p_features(text: str, features: list[dict], top_n: int = 8) -> list[dict]:
+    """Rank features by semantic match score; return top_n scoring above zero."""
+    scored = [(f, _semantic_score(text, f)) for f in features]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [f for f, s in scored[:top_n] if s > 0.0]
+
+
 def _p2p_free_features(config):
     """Return free-use P2P features (no owner, 0 cost) as routing context hints.
 
@@ -112,13 +171,19 @@ def _sanitize_feature_description(desc):
     lines=[l for l in desc.splitlines() if 'OPERATOR_INPUT_JSON=' not in l]
     return '\n'.join(lines)
 
-def prompt(text,parser,p2p_context=None,state_context=None):
+def prompt(text,parser,p2p_context=None,paid_p2p_context=None,state_context=None):
     from .command_surface import catalog
     grammar={k:[{'command':c['command'],'actions':c['actions']} for c in commands] for k,commands in catalog(parser).items()}
     _p2p_hint=''
     if p2p_context:
         _safe_context=[{**f,'description':_sanitize_feature_description(f.get('description',''))} for f in p2p_context]
-        _p2p_hint=' Available P2P features (free-use from initial ledger): '+json.dumps(_safe_context,separators=(',',':'))+'. These can be referenced as borrow candidates at zero cost.'
+        _p2p_hint=' Available P2P features (free-use): '+json.dumps(_safe_context,separators=(',',':'))+'. These can be borrowed at zero cost.'
+    _paid_hint=''
+    if paid_p2p_context:
+        _safe_paid=[{**f,'description':_sanitize_feature_description(f.get('description',''))} for f in paid_p2p_context]
+        _paid_hint=(' Available P2P features (paid, always cheaper than executor cold-start): '+json.dumps(_safe_paid,separators=(',',':'))
+            +'. When one or more of these features partially or fully covers the user request, suggest borrowing them (urace exchange feature define --wanted true) before executor implementation — the combination of borrow+executor is guaranteed cheaper than executor alone.'
+            +' For vague or incomplete requests, pick the best-matching feature or combination of features that together best cover the intent, even if no single feature is an exact match.')
     _state_hint=''
     if state_context and any(state_context.values()):
         _ctx_str=json.dumps(state_context,separators=(',',':'))[:640]
@@ -132,7 +197,7 @@ def prompt(text,parser,p2p_context=None,state_context=None):
       'Existing command requests use command parameters command (installed command path) and args (array of strings). '
       'Conversational or unsupported requests use response with parameters.text; explain ambiguity rather than invent executable work. '
       'The full raw_text must equal the input. Each section raw_text must occur within the input. '
-      +_p2p_hint+_state_hint+
+      +_p2p_hint+_paid_hint+_state_hint+
       'Use only these installed command families and actions: '+json.dumps(grammar,separators=(',',':'))+'\nOPERATOR_INPUT_JSON='+json.dumps(text,ensure_ascii=False))
 
 def _suggest_next_steps(config, state):
@@ -223,20 +288,31 @@ def _route(cli,args,config,state,parser):
             if _ts>_day_ago_ts:_freeform_tokens+=int(_c.get('tokens',0) or 0)
         if _freeform_tokens>=_freeform_token_limit:return _error(args,f'Freeform routing token budget exceeded ({_freeform_tokens}/{_freeform_token_limit} tokens in 24h); use deterministic commands or raise freeform_max_tokens_per_24h in executor config')
     _ledger_ctx=getattr(args,'ledger_context','auto')
+    _p2p_suggestions=[]  # fresh P2P ranking injected into result even on cache hit
     if _ledger_ctx=='never':
         _free_p2p=[]
+        _paid_p2p=[]
     elif cached is None:
         _free_p2p=_p2p_free_features(config)
-        if _ledger_ctx=='auto' and _free_p2p:
-            _text_words=set(text.lower().split())
-            _has_match=any(
-                _text_words & {t.lower() for t in (f.get('tags') or [])}
-                for f in _free_p2p[:20]
-            )
-            if not _has_match:
-                _free_p2p=[]
+        _paid_p2p=_p2p_paid_features(config) if config.get('exchange',{}).get('enabled') else []
+        if _ledger_ctx=='auto':
+            # Semantic scoring: handles vague, partial, combinatorial inputs
+            # Include both free and paid; paid are annotated with borrow_price_units
+            _all_p2p = _free_p2p + _paid_p2p
+            _ranked = _rank_p2p_features(text, _all_p2p, top_n=10)
+            _free_p2p = [f for f in _ranked if f.get('borrow_price_units', 0) == 0]
+            _paid_p2p = [f for f in _ranked if f.get('borrow_price_units', 0) > 0]
     else:
         _free_p2p=[]
+        _paid_p2p=[]
+        # Cache hit: re-rank P2P features locally without an executor call.
+        # P2P ranking is local and grammar-independent — always provide fresh suggestions.
+        if _ledger_ctx=='auto':
+            try:
+                _all_p2p=_p2p_free_features(config)+(_p2p_paid_features(config) if config.get('exchange',{}).get('enabled') else [])
+                _p2p_suggestions=_rank_p2p_features(text,_all_p2p,top_n=10)
+            except Exception:
+                pass
     _product_types=config.get('product_types') or ([config.get('product_type','software')] if config.get('product_type') else ['software'])
     _state_context={
         'active_objectives':[{'title':o.get('title',''),'status':o.get('status','')} for o in (state.get('objectives') or [])[-3:] if o.get('status')=='active'],
@@ -244,7 +320,7 @@ def _route(cli,args,config,state,parser):
         'active_blockers':[b.get('reason','') for b in (state.get('blockers') or []) if not b.get('resolved')],
         'product_types':_product_types,
     } if cached is None else {}
-    instruction=prompt(text,parser,p2p_context=_free_p2p or None,state_context=_state_context or None) if cached is None else None;batch=cached;failures=[];usage=[]
+    instruction=prompt(text,parser,p2p_context=_free_p2p or None,paid_p2p_context=_paid_p2p or None,state_context=_state_context or None) if cached is None else None;batch=cached;failures=[];usage=[]
     # One corrective retry is justified by a specific rejected response, not blind repetition.
     for attempt in range(0 if cached is not None else 2):
         started=time.monotonic();metadata=None
@@ -344,7 +420,7 @@ def _route(cli,args,config,state,parser):
         except (OSError,ValueError) as error:
             deferred.append({**item,'queue_error':type(error).__name__});rc=2;continue
         queued.append({'kind':input_kind,'id':entry['id']})
-    result={'status':'interpretation_required' if deferred else ('error' if rc else 'classified'),'text':text,'batch':batch,'queued':queued,'commands':commands,'responses':responses,'deferred':deferred,'routing_attempts':len(usage),'routing_source':'VALIDATED_CACHE' if cached is not None else 'BOUNDED_EXECUTOR_CLASSIFICATION','source_coverage':source_coverage(text,batch['items']),'executor_usage':usage}
+    result={'status':'interpretation_required' if deferred else ('error' if rc else 'classified'),'text':text,'batch':batch,'queued':queued,'commands':commands,'responses':responses,'deferred':deferred,'routing_attempts':len(usage),'routing_source':'VALIDATED_CACHE' if cached is not None else 'BOUNDED_EXECUTOR_CLASSIFICATION','source_coverage':source_coverage(text,batch['items']),'executor_usage':usage,'p2p_suggestions':_p2p_suggestions}
     if args.json:print(json.dumps(result,ensure_ascii=False))
     else:
         for response in responses:print(response)

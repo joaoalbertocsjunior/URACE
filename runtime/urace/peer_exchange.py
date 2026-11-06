@@ -1,11 +1,13 @@
 """Opt-in, product-scoped signed artifact exchange. Incoming artifacts are quarantined, never executed."""
 from pathlib import Path
 from contextlib import contextmanager
-import base64, fcntl, gzip, hashlib, http.client, http.server, ipaddress, json, os, re, ssl, subprocess, tempfile, time, urllib.parse, datetime
+import base64, fcntl, gzip, hashlib, hmac, http.client, http.server, ipaddress, json, os, re, ssl, subprocess, tempfile, time, urllib.parse, datetime
 
 SCHEMA='urace-exchange-v2'
 PROTOCOL_VERSION=2
 LIMIT=524288
+ARTIFACT_INLINE_LIMIT=65536
+ARTIFACT_STORE_LIMIT=104857600
 ID=re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$')
 
 def encoded(value):return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
@@ -27,6 +29,74 @@ def directory(config):
  from ._common import state_path
  from .resource_usage import product_identity
  return state_path(config).parent/'exchange'/hashlib.sha256(product_identity(config).encode()).hexdigest()[:24]
+
+def _artifact_store_path(exchange_root,sha256_hex):
+ return exchange_root/'bundle-artifacts'/sha256_hex[:2]/sha256_hex
+
+def _artifact_key(exchange_root, sha256_hex):
+ """Derive a per-artifact AES-256 key from local private seed + artifact hash."""
+ seed_path = exchange_root / 'artifact-seed.bin'
+ if not seed_path.exists():
+  seed = os.urandom(32)
+  fd = os.open(str(seed_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+  with os.fdopen(fd, 'wb') as f:
+   f.write(seed)
+   f.flush()
+   os.fsync(f.fileno())
+ else:
+  seed = seed_path.read_bytes()
+ salt = b'URACE-ARTIFACT-v1'
+ prk = hmac.new(salt, seed + sha256_hex.encode(), 'sha256').digest()
+ okm = hmac.new(prk, b'\x01', 'sha256').digest()
+ return okm
+
+def _store_artifact(exchange_root, sha256_hex, raw_bytes):
+ p = _artifact_store_path(exchange_root, sha256_hex)
+ if not p.exists():
+  p.parent.mkdir(parents=True, exist_ok=True)
+  try:
+   from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+   key = _artifact_key(exchange_root, sha256_hex)
+   nonce = os.urandom(12)
+   ciphertext = AESGCM(key).encrypt(nonce, raw_bytes, b'URACE-ARTIFACT-v1')
+   p.write_bytes(nonce + ciphertext)
+  except ImportError:
+   p.write_bytes(raw_bytes)
+  os.chmod(p, 0o600)
+ # Also store in erasure-coded ChunkStore (v2 path) — replica holders get ciphertext only
+ try:
+  from .chunk_store import ChunkStore
+  ChunkStore(exchange_root).store(sha256_hex, raw_bytes)
+ except Exception:
+  pass
+
+def _load_artifact_bytes(exchange_root, sha256_hex):
+ # v2 path: erasure-coded ChunkStore (may reconstruct even when flat file is missing)
+ try:
+  from .chunk_store import ChunkStore
+  _cs_data = ChunkStore(exchange_root).load(sha256_hex)
+  if _cs_data is not None:
+   return _cs_data
+ except Exception:
+  pass
+ # v1 path: flat AES-GCM encrypted file
+ p = _artifact_store_path(exchange_root, sha256_hex)
+ if not p.exists():
+  return None
+ data = p.read_bytes()
+ try:
+  from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+  key = _artifact_key(exchange_root, sha256_hex)
+  if len(data) < 13:
+   return data
+  nonce, ciphertext = data[:12], data[12:]
+  try:
+   return AESGCM(key).decrypt(nonce, ciphertext, b'URACE-ARTIFACT-v1')
+  except Exception:
+   return data
+ except ImportError:
+  return data
+
 
 class Exchange:
  def __init__(self,root):self.root=Path(root)
@@ -121,6 +191,20 @@ class Exchange:
  def identity(self):
   key=self.root/'identity-key.pem';cert=self.root/'identity-cert.pem'
   if not key.exists() and not cert.exists():
+   # Rate-limit identity creation: max 3 per exchange root per 24h (DoS hardening)
+   _id_log = self.root / 'identity-creations.json'
+   _now_id = time.time()
+   _id_history = []
+   if _id_log.exists():
+    try:
+     _id_history = json.loads(_id_log.read_text())
+    except Exception:
+     _id_history = []
+   _id_history = [t for t in _id_history if _now_id - t < 86400]
+   if len(_id_history) >= 3:
+    raise ValueError('Identity creation rate limit exceeded (max 3 per 24h per exchange root). This prevents Sybil identity farming.')
+   _id_history.append(_now_id)
+   atomic(self.root / 'identity-creations.json', _id_history)
    self.openssl('genpkey','-algorithm','ED25519','-out',key);os.chmod(key,0o600)
    self.openssl('req','-new','-x509','-key',key,'-out',cert,'-days','365','-subj','/CN=urace-peer','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1')
   if key.is_symlink() or cert.is_symlink() or not key.is_file() or not cert.is_file():raise ValueError('Incomplete regular exchange identity')
@@ -137,7 +221,18 @@ class Exchange:
    p=self.load();prior=p['peers'].get(fingerprint,{})
    if post_quantum is not None and prior.get('post_quantum') not in (None,post_quantum):raise ValueError('Key replacement requires a separately qualified rotation protocol; retain historical identity')
    p['peers'][fingerprint]={'certificate':certificate,'endpoint':endpoint,'blocked':prior.get('blocked',False),'post_quantum':post_quantum if post_quantum is not None else prior.get('post_quantum')};atomic(self.root/'policy.json',p);self.event('PEER_PINNED',peer=fingerprint)
+  # v3 readiness: add peer to Kademlia routing table for DHT chunk discovery
+  try:
+   from .kademlia import RoutingTable as _RT
+   _rt=_RT.load(self.root/'routing-table.json',self.identity()['peer_id'])
+   _rt.add(fingerprint,endpoint or '')
+   _rt.save(self.root/'routing-table.json')
+  except Exception:pass
   return {'peer_id':fingerprint,'trusted_for_content':False}
+ def routing_table(self):
+  """Return Kademlia routing table for DHT chunk/peer discovery (v3)."""
+  from .kademlia import RoutingTable as _RT
+  return _RT.load(self.root/'routing-table.json',self.identity()['peer_id'])
  def block(self,peer,blocked):
   with self.lock():
    p=self.load()
@@ -191,7 +286,7 @@ class Exchange:
  def verify(self,bundle,p):
   if not isinstance(bundle,dict) or set(bundle)!={'payload','signature'}:raise ValueError('Invalid signed bundle')
   b=bundle['payload']
-  if not isinstance(b,dict) or set(b)!={'schema','sender','recipient','feature','dependencies','created_unix','artifact','sha256','distribution_terms'} or b['schema']!=SCHEMA:raise ValueError('Invalid bundle contract')
+  if not isinstance(b,dict) or not {'schema','sender','recipient','feature','dependencies','created_unix','sha256','distribution_terms'}.issubset(set(b)) or b['schema']!=SCHEMA:raise ValueError('Invalid bundle contract')
   from .feature_policy import DEFAULT,validate as validate_terms,effective
   if not isinstance(b['distribution_terms'],dict):raise ValueError('Distribution terms required')
   declared=validate_terms({key:b['distribution_terms'][key] for key in DEFAULT})
@@ -200,34 +295,65 @@ class Exchange:
   if b['recipient']!=identity['peer_id'] or not self.permitted(p,peer,feature,'receive'):raise ValueError('Receive policy denied')
   if b['dependencies']!=p['features'][feature]['dependencies']:raise ValueError('Dependency contract differs')
   if type(b['created_unix']) not in (int,float) or not time.time()-604800<=b['created_unix']<=time.time()+300:raise ValueError('Expired/future bundle')
-  if not isinstance(b['artifact'],str) or hashlib.sha256(b['artifact'].encode()).hexdigest()!=b['sha256']:raise ValueError('Artifact digest invalid')
+  if 'artifact_ref' in b:
+   if b.get('sha256') and b['sha256']!=b['artifact_ref']:raise ValueError('Artifact digest mismatch: sha256 != artifact_ref')
+   if 'artifact' in b:
+    if not isinstance(b['artifact'],str) or hashlib.sha256(b['artifact'].encode()).hexdigest()!=b['artifact_ref']:raise ValueError('Inline artifact hash mismatch')
+  elif 'artifact' in b:
+   if not isinstance(b['artifact'],str) or hashlib.sha256(b['artifact'].encode()).hexdigest()!=b['sha256']:raise ValueError('Artifact digest invalid')
+  else:raise ValueError('Bundle must include artifact or artifact_ref')
   from .ledger_crypto import verify
   try:verify(self.trusted_crypto(p,peer),b,bundle['signature'],'peer-bundle')
   except Exception as exc:raise ValueError('Invalid hybrid bundle signature') from exc
   return b
- def prepare(self,peer,feature,artifact,reviewed):
+ def prepare(self,peer,feature,artifact_data,reviewed,content_type=None):
   if not reviewed:raise ValueError('Explicit content review required before export')
-  if not isinstance(artifact,str) or len(artifact.encode())>LIMIT//2:raise ValueError('Bounded UTF-8 artifact required')
+  if isinstance(artifact_data,str):raw_bytes=artifact_data.encode()
+  else:raw_bytes=bytes(artifact_data)
+  if len(raw_bytes)>ARTIFACT_STORE_LIMIT:raise ValueError(f'Artifact exceeds {ARTIFACT_STORE_LIMIT} byte limit')
+  sha256_hex=hashlib.sha256(raw_bytes).hexdigest()
+  _store_artifact(self.root,sha256_hex,raw_bytes)
   with self.lock():
    p=self.load()
    if not self.permitted(p,peer,feature,'send'):raise ValueError('Send policy denied')
    self.trusted_crypto(p,peer)
    from .feature_policy import DEFAULT,effective
    created=time.time();terms=effective(p['features'][feature].get('distribution_policy',DEFAULT),created)
-   payload={'schema':SCHEMA,'sender':self.identity()['peer_id'],'recipient':peer,'feature':feature,'dependencies':p['features'][feature]['dependencies'],'created_unix':created,'artifact':artifact,'sha256':hashlib.sha256(artifact.encode()).hexdigest(),'distribution_terms':terms};bundle={'payload':payload,'signature':self.sign(payload)};bid=digest(bundle);folder=self.root/'outbox';folder.mkdir(exist_ok=True);atomic(folder/(bid+'.json'),bundle);self.event('EXPORTED',peer=peer,feature=feature,bundle=bid,bytes=len(encoded(bundle)))
+   ct=content_type or ('text/plain' if isinstance(artifact_data,str) else 'application/octet-stream')
+   payload={'schema':SCHEMA,'sender':self.identity()['peer_id'],'recipient':peer,'feature':feature,'dependencies':p['features'][feature]['dependencies'],'created_unix':created,'artifact_ref':sha256_hex,'artifact_size_bytes':len(raw_bytes),'content_type':ct,'sha256':sha256_hex,'distribution_terms':terms}
+   if isinstance(artifact_data,str) and len(raw_bytes)<=ARTIFACT_INLINE_LIMIT:payload['artifact']=artifact_data
+   bundle={'payload':payload,'signature':self.sign(payload)};bid=digest(bundle);folder=self.root/'outbox';folder.mkdir(exist_ok=True);atomic(folder/(bid+'.json'),bundle);self.event('EXPORTED',peer=peer,feature=feature,bundle=bid,bytes=len(raw_bytes))
   return {'bundle_id':bid,'status':'EXPORTED','sent':False,'privacy':'Owner-reviewed content; automatic anonymization is not guaranteed'}
  def prepare_relay(self,peer,source_bundle_id):
   # Local qualification serves as the review gate — no separate manual review required.
   rows=self.audit_rows()
   if not any(r.get('kind')=='APPLIED_AFTER_LOCAL_QUALIFICATION' and r.get('bundle')==source_bundle_id for r in rows):raise ValueError('Bundle must have APPLIED_AFTER_LOCAL_QUALIFICATION event before relay; qualification is the review')
   record=self.inspect(source_bundle_id);payload=record['bundle']['payload']
-  result=self.prepare(peer,payload['feature'],payload['artifact'],True)
+  _art_data=payload.get('artifact')
+  if _art_data is None:
+   _art_ref=payload.get('artifact_ref') or payload.get('sha256','')
+   _art_bytes=_load_artifact_bytes(self.root,_art_ref) if _art_ref else None
+   if _art_bytes is None:raise ValueError('Artifact bytes not in local store — cannot relay without artifact')
+   _art_data=_art_bytes
+  _ct=payload.get('content_type')
+  result=self.prepare(peer,payload['feature'],_art_data,True,content_type=_ct)
   with self.lock():self.event('RELAY_PREPARED',source_bundle=source_bundle_id,relay_bundle=result['bundle_id'],peer=peer)
   return {**result,'relay':True,'source_bundle_id':source_bundle_id}
  def token_summary(self):
   from . import token_ledger as _tl
   return _tl.summary(self)
- def _dedup_check(self,artifact_text):
+ def _dedup_check(self,artifact_text,artifact_ref=None):
+  if artifact_text is None and artifact_ref:
+   from ._common import SYSTEM_ROOT
+   raw_sha=artifact_ref
+   qual_dir=SYSTEM_ROOT/'trial'/'runtime-qualifications'
+   if not qual_dir.exists():return None
+   for rp in qual_dir.glob('*/receipt.json'):
+    try:
+     r=json.loads(rp.read_text())
+     if r.get('artifact_sha256')==raw_sha:return r['id']
+    except (OSError,ValueError,KeyError):continue
+   return None
   from ._common import SYSTEM_ROOT
   from .tokenomics import canonical_fingerprint
   import ast as _ast
@@ -259,9 +385,12 @@ class Exchange:
    p=self.load();b=self.verify(bundle,p)
    if authenticated_peer is not None and b['sender']!=authenticated_peer:raise ValueError('TLS peer differs from signer')
    bid=digest(bundle);folder=self.root/'quarantine';folder.mkdir(exist_ok=True);target=folder/(bid+'.json')
+   _art_ref=b.get('artifact_ref') or b.get('sha256','')
+   _art_inline=b.get('artifact')
+   if _art_ref and _art_inline:_store_artifact(self.root,_art_ref,_art_inline.encode())
    if target.exists():
     return self.counter_receipt(bid,b,'ALREADY_QUARANTINED')
-   dup=self._dedup_check(b['artifact'])
+   dup=self._dedup_check(b.get('artifact'),b.get('artifact_ref'))
    if dup:self.event('RECEIVE_DUPLICATE',peer=b['sender'],feature=b['feature'],bundle=bid,matched_qualification=dup);return self.counter_receipt(bid,b,'DUPLICATE_ALREADY_ACCEPTED')
    self.budget(b['sender'],size)
    if p.get('token_settlement'):
@@ -277,8 +406,13 @@ class Exchange:
   if not re.fullmatch('[a-f0-9]{64}',bid):raise ValueError('Invalid bundle digest')
   for folder in ('quarantine','outbox'):
    path=self.root/folder/(bid+'.json')
-   if path.exists():return {'bundle_id':bid,'location':folder,'bundle':json.loads(path.read_text()),'incorporation':'Requires independent local qualification; transport never executes artifacts'}
+   if path.exists():
+    _bdata=json.loads(path.read_text());_payload=_bdata.get('payload',{})
+    _art_ref=_payload.get('artifact_ref') or _payload.get('sha256','')
+    return {'bundle_id':bid,'location':folder,'bundle':_bdata,'incorporation':'Requires independent local qualification; transport never executes artifacts','artifact_stored':bool(_art_ref and _artifact_store_path(self.root,_art_ref).exists()),'artifact_size_bytes':_payload.get('artifact_size_bytes',len(_payload.get('artifact','').encode())),'content_type':_payload.get('content_type','text/plain')}
   raise ValueError('Unknown bundle')
+ def artifact_bytes(self,sha256_hex):
+  return _load_artifact_bytes(self.root,sha256_hex)
  def review(self,bid,status,note):
   if status not in ('approved-for-evaluation','rejected','blocked'):raise ValueError('Review cannot claim applied or used')
   with self.lock():

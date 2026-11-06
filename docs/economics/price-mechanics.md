@@ -10,9 +10,26 @@ URACE enforces several pricing rules to keep the marketplace fair, prevent manip
 
 Every feature minted to the P2P network must declare an `executor_reference_price_units` — the cost to build that feature from scratch using an executor.
 
-**The P2P borrow price is enforced to be ≤ executor reference price.**
+**The full ceiling formula:**
+
+```
+ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
+```
+
+| Term | Description |
+|------|-------------|
+| `executor_reference_price` | Derived from median fills in the local ledger (last 90 days); floor: 10 units |
+| `gas_overhead` | On-chain transaction cost in URACE units; deducted first so the buyer's total cost always stays below executor cost |
+| `completeness` | Bundle completeness score 0.0–1.0 (see table below) |
+| `margin` | Seller profit margin as a fraction (e.g. 0.20 = 20%) |
+| `iter_savings` | `avg_saved_iterations × executor_per_call_cost` — verified implementations skip N executor re-runs |
 
 This guarantee means: if you can get a feature from a peer, it is always cheaper than having an executor build it. Buyers always save money.
+
+**`gas_overhead` resolution (priority order):**
+1. Dynamic EVM: `gas_per_tx_gwei × gas_price_gwei × urace_units_per_gwei` (all three > 0)
+2. Static override: `gas_overhead_units` config key
+3. Default: `0` (off-chain / account-abstraction sponsored)
 
 When listing a feature for sale:
 
@@ -20,7 +37,7 @@ When listing a feature for sale:
 urace exchange equity list-for-sale <feature-id> --bp 5000 --price 80
 ```
 
-URACE validates that `--price` does not exceed the `executor_reference_price_units` set when the feature was minted.
+URACE validates that `--price` does not exceed the ceiling at listing time. The validation is enforced again at fill time via `vs_executor_comparison()`.
 
 ---
 
@@ -68,6 +85,27 @@ Equity in a feature is expressed in basis points:
 Multiple peers can hold equity in a single feature. Earnings from borrows are distributed proportionally.
 
 Feature equity is capped at 10,000 bp total — no feature can have more than 100% equity granted.
+
+---
+
+## Governance Supply Ceiling
+
+`max_mintable_units(N)` sets the maximum total creator-earn supply allowed for a network of `N` peers:
+
+```
+max_mintable_units(N) = max(BASE_CAP_UNITS × 10,  BASE_CAP_UNITS × N × 5)
+```
+
+At fill time, if `total_network_supply ≥ max_mintable_units(estimated_network_size)`, creator earn floors at 1 base unit instead of 0 — supply is choked softly, not hard-stopped.
+
+| Network | Ceiling |
+|---------|---------|
+| N = 1 (bootstrap) | 500 tokens |
+| N = 100 | 25,000 tokens |
+| N = 1,000 | 250,000 tokens |
+| N = 10,000 | 2,500,000 tokens |
+
+This ceiling grows linearly with network size and is distinct from the physics-derived `supply_pressure_multiplier` (which activates much earlier via a quadratic curve). Both are enforced simultaneously.
 
 ---
 

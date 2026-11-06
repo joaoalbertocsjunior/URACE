@@ -210,6 +210,139 @@ def latest_checkpoint(exchange) -> dict | None:
     return max(ckpts, key=lambda r: float(r.get('at_unix', 0)))
 
 
+def seal_ledger_block(exchange, root: str) -> dict:
+    """Seal a LEDGER_BLOCK_SEAL row: unified PoQ tamper chain + balance snapshot.
+
+    A sealed block combines two previously separate concerns:
+      1. Tamper-evidence: sha256(all rows in block) chained to prev_block_hash
+      2. Search optimization: balance_snapshot enables O(tail) balance lookups
+
+    After sealing, callers can call balance_fast() instead of replaying all rows.
+    Auto-triggered by compact checkpoint when ledger_block_mode=True.
+    """
+    from . import credit_ledger as _cl
+    import hashlib as _bhl, json as _bjson
+
+    try:
+        all_rows = exchange.audit_rows()
+    except Exception:
+        all_rows = []
+
+    # Find previous block seal
+    prev_seals = [r for r in all_rows if r.get('kind') == 'LEDGER_BLOCK_SEAL']
+    if prev_seals:
+        prev = max(prev_seals, key=lambda r: int(r.get('block_height', 0)))
+        prev_height = int(prev.get('block_height', 0))
+        prev_hash = prev.get('block_hash', '0' * 64)
+        row_start = int(prev.get('row_end_index', 0))
+    else:
+        prev_height = -1
+        prev_hash = '0' * 64
+        row_start = 0
+
+    block_rows = all_rows[row_start:]
+    if not block_rows:
+        return {'status': 'no_new_rows', 'block_height': prev_height}
+
+    # Merkle-style: sha256 of canonical JSON of all rows in this block
+    rows_payload = _bjson.dumps(block_rows, sort_keys=True, separators=(',', ':')).encode()
+    rows_hash = _bhl.sha256(rows_payload).hexdigest()
+    block_hash = _bhl.sha256(f'{prev_hash}:{rows_hash}'.encode()).hexdigest()
+
+    block_height = prev_height + 1
+    row_end_index = len(all_rows)
+
+    # Snapshot credit balances for all peers seen in this block
+    peer_ids: set = set()
+    for r in block_rows:
+        pid = r.get('peer', '')
+        if pid:
+            peer_ids.add(pid)
+    credit_snapshot: dict = {}
+    for pid in sorted(peer_ids):
+        try:
+            credit_snapshot[pid] = _cl.balance(root, pid)
+        except Exception:
+            pass
+
+    exchange.append_audit_row({
+        'kind': 'LEDGER_BLOCK_SEAL',
+        'block_height': block_height,
+        'block_hash': block_hash,
+        'prev_block_hash': prev_hash,
+        'rows_hash': rows_hash,
+        'row_start_index': row_start,
+        'row_end_index': row_end_index,
+        'row_count': len(block_rows),
+        'credit_balance_snapshot': credit_snapshot,
+        'at_unix': time.time(),
+        'at': _now_iso(),
+    })
+
+    # Maintainer reward: sealer earns for chain-integrity work
+    try:
+        _policy = exchange.load()
+        _seal_reward = int(_policy.get('p2p', {}).get('seal_reward_units', 1))
+    except Exception:
+        _seal_reward = 1
+    try:
+        _local_id = exchange.identity().get('peer_id', '')
+    except Exception:
+        _local_id = ''
+    if _seal_reward > 0 and _local_id:
+        exchange.append_audit_row({
+            'kind': 'CREDIT_DELTA',
+            'direction': 'seal_reward',
+            'peer': _local_id,
+            'amount_units': _seal_reward,
+            'block_height': block_height,
+            'reason': 'ledger_block_seal',
+            'at_unix': time.time(),
+            'at': _now_iso(),
+        })
+
+    return {
+        'status': 'sealed',
+        'block_height': block_height,
+        'block_hash': block_hash,
+        'row_count': len(block_rows),
+        'peers_snapshotted': len(credit_snapshot),
+        'seal_reward_units': _seal_reward,
+    }
+
+
+def balance_fast(root: str, peer_id: str, exchange) -> int:
+    """O(tail) credit balance using the latest sealed block snapshot.
+
+    Falls back to full O(all) balance() if no sealed block exists.
+    Use this when performance matters and exchange is available.
+    """
+    from . import credit_ledger as _cl
+
+    try:
+        all_rows = exchange.audit_rows()
+    except Exception:
+        return _cl.balance(root, peer_id)
+
+    seals = [r for r in all_rows if r.get('kind') == 'LEDGER_BLOCK_SEAL']
+    if not seals:
+        return _cl.balance(root, peer_id)
+
+    latest_seal = max(seals, key=lambda r: int(r.get('block_height', 0)))
+    snapshot = latest_seal.get('credit_balance_snapshot', {})
+    base = int(snapshot.get(peer_id, 0))
+    tail_start = int(latest_seal.get('row_end_index', 0))
+    tail_rows = all_rows[tail_start:]
+
+    # Replay only tail rows (the unsealed portion)
+    delta = 0
+    for r in tail_rows:
+        if r.get('kind') == 'CREDIT_DELTA' and r.get('peer') == peer_id:
+            delta += int(r.get('delta_units', 0) or 0)
+
+    return base + delta
+
+
 def sync_tail_rows(exchange) -> tuple[dict | None, list[dict]]:
     """Return (latest_checkpoint, tail_rows) for P2P bootstrap.
 

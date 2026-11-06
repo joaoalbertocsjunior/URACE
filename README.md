@@ -1,296 +1,230 @@
 # URACE
 
-**Unified Runtime for Autonomous Collaborative Evolution** — a P2P-first lifecycle control plane for AI-assisted software products.
+**Unified Runtime for Autonomous Collaborative Evolution.**
 
-URACE manages goals, execution, quality gates, peer collaboration, and token-based reputation in a single runtime. It is designed to be embedded in any product, operated by humans or AI agents, and governed by cryptographic authority boundaries.
-
-## What URACE Does
-
-- **Product lifecycle**: track goals, plans, operations, and quality metrics across cycles
-- **P2P feature marketplace**: peers mint, list, and borrow verified software features at prices guaranteed lower than building from scratch
-- **Token reputation**: earn tokens by improving your product; spend them to borrow from peers
-- **Self-evolution with governance**: the runtime improves itself under strict authority boundaries — no change without owner approval
-- **Freeform routing**: route any text input to the right command, executor, or P2P network automatically
-
-## Get Running
+URACE is a lifecycle control plane that runs inside your software product. It manages goals, drives AI-assisted improvement cycles, enforces quality gates, and connects to a P2P network where verified features can be borrowed from peers — always cheaper than building from scratch.
 
 ```sh
-# pip (recommended)
 pip install urace
-
-# npm
-npm install -g urace-cli
-
-# Homebrew
-brew install urace
-
-# conda
-conda install -c conda-forge urace
-```
-
-## Use It
-
-```sh
-# Initialize a product
 urace init
-
-# Start the autonomous daemon — it improves your product in the background
 urace daemon start
-
-# Or just talk to it — freeform input routes to the right command automatically
-urace "What's my project status?"
-urace "Add goal: improve checkout conversion by 20%"
-urace "Show recent operations"
+urace "Add goal: reduce p99 latency by 30%"
 ```
 
-The daemon runs improvement cycles on a schedule (default: every 30 min). You watch it work, intervene when you want, stop when you're done (`Ctrl+C`). No pipeline to configure.
+URACE runs autonomous improvement cycles, picks the best next action, executes it, and checkpoints the result. You come back to a better product.
 
-## Core Concepts
+---
 
-### Goals and Plans
-Tell URACE what you want. It figures out how to get there, executes the work, and tracks every outcome.
+## The loop
 
-```sh
-urace add "Reduce API p99 latency below 200ms"
-urace "What's blocking my latency goal?"
-urace inspect --goals
+```
+Goal → Discovery → Execution → Quality gate → Tokens → Borrow peer features → Better product
 ```
 
-### P2P Exchange — Stop Rebuilding What Others Already Solved
+One earn path: verified quality improvement. One spend path: borrow verified peer features — always cheaper than building from scratch. That ceiling is enforced by the protocol, not a promise.
 
-Every verified feature your product ships becomes an asset you can offer to peers. Every feature a peer already built is available for you to borrow — always cheaper than building it yourself.
+---
+
+## Your product and your executor
+
+**A product** is any software system you initialize URACE in — a web API, ML pipeline, data processor, content generator, or anything else. URACE does not care what language it runs in. Run `urace init` inside your project directory:
 
 ```sh
-# Join the network (opt-in)
+urace init                              # auto-detect product type from directory
+urace init --type model                 # ML training or evaluation pipeline
+urace init --type content               # content production pipeline
+urace init --type data                  # data ingestion or transformation pipeline
+urace init --type software --type media # mixed: code + media generation
+```
+
+Product types: `software` (default), `model`, `content`, `media`, `data`.
+
+**An executor** is the agent that carries out operations each cycle. URACE auto-configures Claude or Codex from your API keys (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`). You can also wire any other tool:
+
+```yaml
+# config.json — executor.providers:
+- id: my-agent
+  adapter: script            # any CLI tool: stdin=prompt, stdout=JSON
+  command: ./run_agent.sh
+
+- id: my-api
+  adapter: http              # any REST endpoint (retries on 429/503)
+  endpoint: http://localhost:8080/improve
+
+- id: my-mcp
+  adapter: mcp               # MCP stdio JSONRPC 2024-11-05
+  command: npx my-mcp-server
+  tool: improve
+```
+
+`urace init --auto` wires the executor from environment variables in one step. The executor never modifies your source code without your approval.
+
+→ [Full executor setup](docs/getting-started/quick-start.md#2-initialize-your-product) · [Concepts](docs/getting-started/concepts.md)
+
+---
+
+## In 5 minutes
+
+```sh
+urace init                                # wire up your product
+urace daemon start                        # background cycles every 30 min
+urace "What's blocking my latency goal?"  # plain text, any request
+urace run                                 # trigger a cycle now
+urace status                              # see what it found
+```
+
+---
+
+## The P2P market — borrow before you build
+
+Every verified feature on the network costs less than building it yourself:
+
+```
+ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
+```
+
+The reference price is derived automatically from median ledger fills. The minimum viable price floor (production + bandwidth + protocol fee) is enforced at listing. No config needed.
+
+Your first borrow is free. After your first quality gate pass, you earn tokens automatically.
+
+```sh
+# Join the network
 urace exchange settings set --enabled true --network true
-urace exchange peer identity
+urace exchange peer identity          # auto-generates your keypair
 
-# See what peers are offering
+# Discover what's available
+urace exchange compact search "rate limiter"
+urace exchange compact search "image classifier"
 urace exchange network discover
 
-# Borrow a feature instead of building it
-urace exchange feature define auth-refresh --wanted true
+# Borrow — always cheaper than executor cost, guaranteed
+urace exchange equity fill-listing <listing_id>
 
-# Offer your own work to the network
-urace exchange equity grant auth-refresh --creator <your_peer_id>
-```
+# Fetch artifact — any language, any format, any binary
+urace exchange bundle fetch-artifact <bundle_id> --out ./artifact_file  # any language, format, binary
 
-Your work earns reputation. Reputation earns tokens. Tokens unlock the network.
-
-### Token Economy — Quality Pays
-
-Pass a quality gate → earn tokens automatically. No manual claims, no invoices. Spend tokens to borrow verified features from peers.
-
-```sh
-# See what you've earned
+# Check your balance
 urace exchange ledger summary
-
-# Your reputation on the network
-urace exchange reputation show <your_peer_id>
 ```
 
-The more you improve your product, the more you earn. The more the network grows, the more features you can borrow. It compounds.
+---
 
-## P2P Network Commands
+## Earn from your work
 
-| Command | Description |
-|---------|-------------|
-| `exchange network discover` | Find peers via LAN/DNS-SD |
-| `exchange network probe <peer_id>` | Check what a peer offers |
-| `exchange network refresh` | Refresh offers from pinned peers |
-| `exchange network serve` | Start P2P listener |
-| `exchange network consensus-status` | View consensus threshold and state |
-| `exchange network disconnect [--duration-minutes N]` | Pause networking temporarily |
-| `exchange network-audit list [--kind K] [--peer P]` | View P2P network events |
+| Role | How you earn |
+|------|-------------|
+| Creator/Minter | `earn` — every time a peer borrows your feature |
+| Delivery node (replica) | `delivery_fee` — proportional to delivery count |
+| Composition owner | `composition_referral` — multi-level dynamic split |
+| Challenger | `challenge_bounty` — successful APS challenge |
+| Base/original owner | `provenance_compensation` — when derivative is listed |
+| Ledger sealer | `seal_reward` — 1 unit per sealed block |
+| LLM similarity peer | `llm_peer_reward` — 2 units per SIMILARITY_VERDICT |
 
-## Peer Management
-
-| Command | Description |
-|---------|-------------|
-| `exchange peer add --certificate FILE` | Pin a new peer |
-| `exchange peer block <id>` / `unblock <id>` | Block or unblock a peer |
-| `exchange peer rotate <old_id> --new-certificate FILE` | Rotate identity, migrate rules |
-| `exchange peer list` | List all peers |
-
-## Equity Trading
-
-| Command | Description |
-|---------|-------------|
-| `exchange equity holdings <feature>` | Show who holds what |
-| `exchange equity list-for-sale <feature> --bp N --price N` | List equity for sale |
-| `exchange equity listings [--feature F]` | Browse open listings |
-| `exchange equity fill-listing <id>` | Buy a listing |
-| `exchange equity auto-buy` | Run automated buying pass |
-| `exchange equity auto-sell` | Run automated selling pass |
-| `exchange equity trade-config set` | Configure auto-trade thresholds |
-| `exchange compact depletion <feature_id>` | Check feature saturation |
-
-## Reputation
-
-| Command | Description |
-|---------|-------------|
-| `exchange reputation show <peer_id>` | Breakdown of earned vs. market reputation |
-| `exchange reputation leaderboard` | Top peers by earned reputation |
-| `exchange reputation history <peer_id> --days 30` | Reputation trend over time |
-
-## Work Market
-
-Request work from peers and escrow payment until delivery is verified:
+Rewards are funded by a 2% protocol fee on every fill — not inflation.
 
 ```sh
-# Create a work request
-urace exchange work create "Add retry logic to API client" --budget 100 --complexity 0.4
+# Mint a verified feature
+urace exchange equity grant <feature_id> --creator <your_peer_id> \
+  --description "Redis rate limiter with sliding window" \
+  --spec-context "Limits reqs/key; evicts on TTL; thread-safe"
 
-# List bids
-urace exchange work list --state OPEN
+# List it — price ceiling auto-enforced
+urace exchange equity list-for-sale <feature_id> --bp 5000 --price 80
 
-# Accept best bid
-urace exchange work accept <request_id> --bidder <peer_id>
+# Become a delivery node — earn delivery fees per borrow
+urace exchange equity register-replica <feature_id> --artifact-hash <sha256>
 
-# Verify delivery
-urace exchange work verify <request_id> --approve true
-
-# Decompose high-complexity work
-urace exchange work decompose "Large refactor" --budget 1000 --complexity 0.9
+# Auto-trade — set thresholds once, runs itself
+urace exchange equity auto-buy
+urace exchange equity auto-sell
 ```
 
-## Rules and Access Control
+---
+
+## Any artifact, any size
+
+Bundles carry any file type at any size. Artifact bytes live in a content-addressed store — never in the audit log — with at-rest encryption. Replica holders store ciphertext only.
+
+Artifact delivery uses per-session DEK wrapping (X25519 ECDH + AES-256-GCM). The raw key never leaves the device. Escrow auto-refunds after 48 hours if the seller fails to deliver.
 
 ```sh
-# Set a rule
-urace exchange rule set <peer_id> <feature_id> send --allow true
-
-# Export all rules for backup
-urace exchange rule export --file rules.json
-
-# Import rules from file
-urace exchange rule import --file rules.json
+urace exchange bundle fetch-artifact <bundle_id> --out ./model.bin
 ```
+
+---
+
+## Asset integrity — no stolen work ships
+
+Every feature grant runs three layers before it reaches the market:
+
+1. **Exact fingerprint** — SHA-256 collision detection
+2. **Perceptual similarity** — dHash + Winnowing shingle overlap (threshold: 60%)
+3. **LLM-peer check** — SIMILARITY_VERDICT from independent peers
+
+Feature packs (bundles of multiple assets) are checked **per member** — not aggregated. A pack of stolen files each at 20% similarity is caught. A grant where > 95% of content traces back to known sources is hard-blocked.
+
+Asset Provenance Staking (APS) adds a 30-day on-chain challenge window after mint. Successful challenge slashes the stake and compensates the original creator.
+
+---
+
+## Cartel and hijack prevention
+
+A cluster of co-registered nodes cannot take availability-ransom over a feature:
+
+- RS(4,6) erasure coding: needs any 4 of 6 chunks to reconstruct
+- Cluster holding > ⅓ of chunk slots **or** ≥ 3 replica slots is flagged and penalized
+- Pre-registration guard blocks the registration before it completes
+
+MIME replication priority is auto-calibrated per node from audit history — each node preferentially replicates the content types its own features actually need.
+
+---
 
 ## Security
 
-URACE is P2P-first with defense in depth:
+TLS 1.3 + certificate pinning + post-quantum signatures (ML-KEM-768 + Ed25519) + quarantine model + at-rest artifact encryption + wash trading block + RPC flood protection + per-session DEK + escrow auto-refund + ALE/APS asset lineage enforcement + cartel chunk guard.
 
-- **TLS 1.3 mandatory** — all peer connections use mutual TLS with certificate pinning
-- **Post-quantum ready** — ML-KEM-768 + Ed25519 hybrid signatures on all bundles
-- **IP anonymization** — DHT uses hashed node IDs; no IPs in audit trail; `relay_only` mode available
-- **Quarantine model** — incoming artifacts are never executed automatically
-- **Authority boundary** — self-evolution changes require owner authorization
-- **Wash trading blocked** — buying and selling same feature within 24h is rejected
-- **Price momentum guard** — ask prices capped at 1.5× 7-day median
-- **Executor price ceiling** — P2P borrow always cheaper than executor mint cost
-- **Consensus hardening** — threshold uses persistent all-time-max network size
-- **RPC flood protection** — 10 rejections/hour triggers automatic peer block
-- **DHT bootstrap rate limiting** — minimum 5 min between bootstrap attempts
+Incoming artifacts are never auto-executed. Self-evolution requires owner authorization.
 
-## Configuration Defaults
+→ [Full security overview](docs/security/overview.md)
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `enabled` | `false` | Exchange is off until explicitly enabled |
-| `network` | `false` | P2P networking off until enabled |
-| `advertise` | `false` | LAN advertising off |
-| `auto_select` | `true` | Auto-probe pinned peers |
-| `token_settlement` | `false` | Token transfers disabled until enabled |
-| `max_transfers_per_day` | `20` | Daily bundle transfer limit |
-| `max_rpc_per_day` | `200` | Daily RPC limit |
-| `max_rpc_per_peer_per_day` | `50` | Per-peer RPC limit |
-| `feature_borrow_enabled` | `true` | P2P is default first source for features |
+---
+
+## Works with AI agents
 
 ```sh
-urace exchange settings set --enabled true --network true --advertise true
+urace "What features on the network match my current goals?"
+urace derive                           # generate implementation from active goals
+urace freeform-text "explain the current bottleneck"
 ```
 
-## Tokenomics Summary
+URACE is designed for both humans and AI agents. Full MCP and A2A support. Freeform queries use semantic synonym expansion — "visualization" matches "chart", "llm" matches "model".
 
-| Property | Value |
-|----------|-------|
-| Earn path | Quality gate pass only |
-| Precision | 8 decimals (satoshi model) |
-| Per-peer baseline grant | 3 tokens |
-| Default network supply (1,000 peers) | ~9,250 tokens |
-| Max unique features (1,000 peers) | ~6,250 |
-| Price ceiling | ≤ executor reference price |
-| Epoch-adjustable | Yes — run `exchange ledger supply-calc` with updated network params |
+---
 
-See [docs/tokenomics.md](docs/tokenomics.md) for full economics model and price estimation.
+## Docs
 
-## Documentation
+| | |
+|---|---|
+| [Quick start](docs/getting-started/quick-start.md) | [CLI reference](docs/reference/cli.md) |
+| [P2P exchange](docs/exchange/overview.md) | [Token economy](docs/economics/tokenomics.md) |
+| [Asset integrity](docs/concepts/asset-integrity.md) | [Node rewards](docs/concepts/node-rewards.md) |
+| [Security model](docs/concepts/security-model.md) | [Price mechanics](docs/economics/price-mechanics.md) |
+| [Security overview](docs/security/overview.md) | [Agent integrations](docs/agent-integrations.md) |
+| [Full docs index](docs/index.md) | |
 
-Full documentation is at **[docs/index.md](docs/index.md)**.
+---
 
-### Getting Started
-
-| Document | Description |
-|----------|-------------|
-| [docs/getting-started/install.md](docs/getting-started/install.md) | pip install, requirements, verify |
-| [docs/getting-started/quick-start.md](docs/getting-started/quick-start.md) | 5-minute guide — init, run, mint to P2P |
-| [docs/getting-started/concepts.md](docs/getting-started/concepts.md) | Goals, plans, operations, lifecycle overview |
-
-### Guides
-
-| Document | Description |
-|----------|-------------|
-| [docs/guides/products.md](docs/guides/products.md) | Product lifecycle: add goals, run cycles, inspect, status |
-| [docs/guides/controls.md](docs/guides/controls.md) | Enable/disable capabilities per product |
-| [docs/guides/derive.md](docs/guides/derive.md) | Extract architectural patterns from your product spec |
-| [docs/guides/search.md](docs/guides/search.md) | Search context ledger and P2P audit trail |
-| [docs/guides/update.md](docs/guides/update.md) | Runtime versioning: download, explain, apply |
-
-### Exchange
-
-| Document | Description |
-|----------|-------------|
-| [docs/exchange/overview.md](docs/exchange/overview.md) | What the exchange is and who it's for |
-| [docs/exchange/setup.md](docs/exchange/setup.md) | Enable, create identity, configure settings |
-| [docs/exchange/features.md](docs/exchange/features.md) | Mint features, borrow from peers, equity trading |
-| [docs/exchange/work-market.md](docs/exchange/work-market.md) | Request work, bids, escrow, verify delivery |
-| [docs/exchange/network.md](docs/exchange/network.md) | P2P discovery, consensus, disconnect, audit |
-| [docs/exchange/reputation.md](docs/exchange/reputation.md) | Tokens, ledger, reputation history, leaderboard |
-
-### Economics and Security
-
-| Document | Description |
-|----------|-------------|
-| [docs/economics/tokenomics.md](docs/economics/tokenomics.md) | Full token model: supply, earn, spend, epoch |
-| [docs/economics/price-mechanics.md](docs/economics/price-mechanics.md) | Executor ceiling, momentum guard, wash trading |
-| [docs/security/overview.md](docs/security/overview.md) | Defense in depth, security guarantees table |
-| [docs/security/authority-boundary.md](docs/security/authority-boundary.md) | Self-evolve governance, protected files |
-| [docs/security/peer-security.md](docs/security/peer-security.md) | TLS 1.3, post-quantum, quarantine, flood protection |
-
-### Reference
-
-| Document | Description |
-|----------|-------------|
-| [docs/reference/cli.md](docs/reference/cli.md) | All CLI commands in one table |
-| [docs/reference/config.md](docs/reference/config.md) | All config options with defaults |
-| [docs/reference/spec.md](docs/reference/spec.md) | URACE system spec: guarantees, invariants, lifecycle |
-
-### Other Docs
-
-| Document | Description |
-|----------|-------------|
-| [docs/agent-integrations.md](docs/agent-integrations.md) | MCP and A2A agent integration |
-| [docs/runtime-improvement.md](docs/runtime-improvement.md) | Runtime improvement workflows |
-| [docs/peer-sharing.md](docs/peer-sharing.md) | P2P exchange, bundle operations, quarantine safety |
-| [docs/network-onboarding.md](docs/network-onboarding.md) | Mainnet onboarding, settlement design |
-| [docs/sharing-safeguards.md](docs/sharing-safeguards.md) | Security mechanisms for peer sharing |
-| [docs/post-quantum-roadmap.md](docs/post-quantum-roadmap.md) | Post-quantum cryptography roadmap |
-
-## Directory Structure
+## Structure
 
 ```
 urace/
-├── runtime/urace/       # Full lifecycle control plane and CLI
-├── runtime/tests/       # Behavioral regression tests
-├── trial/               # Supervised improvement workflow
-├── docs/                # User and operator documentation
-├── state/               # Local deployment data (not tracked)
-└── generated/           # Generated artifacts (not tracked)
+├── runtime/urace/   — lifecycle control plane and CLI
+├── runtime/tests/   — 2900+ behavioral regression tests
+├── exchange/        — initial ledger (1370 free features)
+├── trial/           — supervised improvement workflow
+├── docs/            — full documentation
+└── state/           — local deployment data (not tracked)
 ```
 
-## License
-
-Code: [Apache 2.0](LICENSES/Apache-2.0.txt) — Specification (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt)
-
-Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.4.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
