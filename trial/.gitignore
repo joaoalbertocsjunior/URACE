@@ -113,3 +113,9 @@
 !/test_capability_tool_pipeline.py
 !/test_runtime_cycle.py
 !/test_runtime_regression_guard.py
+!/measurement_corpus.py
+!/executor_receipt.py
+!/measurement_report.py
+!/test_measurement_corpus.py
+!/test_executor_receipt.py
+!/test_measurement_report.py
