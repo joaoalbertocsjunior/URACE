@@ -9,11 +9,19 @@ from urace.p2p_matching import benchmark, intent_queries, rank_candidates
 
 TRIAL = Path(__file__).resolve().parents[2] / 'trial'
 sys.path.insert(0, str(TRIAL))
-from p2p_retrieval_benchmark import run as run_retrieval_benchmark
-from p2p_local_feature_assets import family_assets, verify_bundle
+try:
+    from p2p_retrieval_benchmark import run as run_retrieval_benchmark
+    from p2p_local_feature_assets import family_assets, verify_bundle
+    _TRIAL_AVAILABLE = True
+except ImportError:
+    run_retrieval_benchmark = None
+    family_assets = None
+    verify_bundle = None
+    _TRIAL_AVAILABLE = False
 
 
 class P2PIntentMatchingTests(unittest.TestCase):
+    @unittest.skipUnless(_TRIAL_AVAILABLE, 'trial/ modules not on PYTHONPATH')
     def test_initial_ledger_assets_bundle_actual_tagged_runtime_sources(self):
         repo_root = Path(__file__).resolve().parents[2]
         assets = family_assets(repo_root)
@@ -88,6 +96,7 @@ class P2PIntentMatchingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             benchmark([{'raw_text': 'request', 'batch': {}, 'features': []}])
 
+    @unittest.skipUnless(_TRIAL_AVAILABLE, 'trial/ modules not on PYTHONPATH')
     def test_benchmark_cli_marks_review_claims_as_self_reported_and_not_value_proof(self):
         header = {'schema': 'urace-p2p-retrieval-dataset-v1', 'dataset_kind': 'reviewed_real_work',
                   'split': 'held_out', 'independent_reviewers': 2,
