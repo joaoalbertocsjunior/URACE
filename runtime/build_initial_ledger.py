@@ -179,6 +179,11 @@ add("rt-crc-save", "CRC save", "Persist CRC file.", ["cognitive_resume"], "mecha
 add("rt-crc-load", "CRC load", "Load CRC file.", ["cognitive_resume"], "mechanism")
 add("rt-crc-load-or-generate", "CRC load-or-generate", "Load or generate CRC.", ["cognitive_resume"], "mechanism")
 
+# ===================== cli_parser.py =====================
+add("rt-cli-parse-cycles", "CLI parse_cycles", "Parse --cycles flag including infinite sentinel.", ["cli_parser", "cli"], "mechanism")
+add("rt-cli-build-parser", "CLI build_parser", "Build the full urace argument parser.", ["cli_parser", "cli"], "mechanism")
+add("rt-cli-dispatch-parser", "CLI dispatch_parser", "Build parser for dispatcher (MCP/A2A) mode.", ["cli_parser", "cli"], "mechanism")
+
 # ===================== command_surface.py =====================
 add("rt-cmd-compat", "Compat command set", "Backwards-compat command names.", ["command_surface"], "schema")
 add("rt-cmd-phantoms", "Phantom commands", "Deprecated phantom commands.", ["command_surface"], "schema")
@@ -314,6 +319,10 @@ add("p2p-credit-apply-borrow-cost", "Apply borrow cost", "Charge borrower.", ["c
 add("p2p-credit-escrow-jitter", "Escrow jitter frac", "±4% escrow jitter.", ["credit_ledger"], "schema")
 add("p2p-credit-consensus-escrow-floor", "Consensus escrow floor", "Network-consensus escrow floor.", ["credit_ledger"], "mechanism")
 add("p2p-credit-escrow-budget", "Escrow budget", "Escrow budget units.", ["credit_ledger"], "mechanism")
+
+# ===================== data_cli.py =====================
+add("rt-data-credential-command", "Data credential handler", "Handle data source credential set/clear.", ["data_cli", "cli"], "mechanism")
+add("rt-data-command", "Data subcommand handler", "Handle data source add/list/remove/set-active.", ["data_cli", "cli"], "mechanism")
 
 # ===================== data_transport.py =====================
 add("rt-data-transport-error", "TransportError", "Typed transport error.", ["data_transport"], "schema")
@@ -500,6 +509,9 @@ add("rt-p2p-query-gate", "Actionable-intent discovery gate", "Avoid local/remote
 add("rt-p2p-local-source-binding", "Initial-ledger local source binding", "Expose source paths and SHA-256 hashes linking minted URACE features to exact local runtime modules.", ["freeform_routing", "p2p_matching"], "schema")
 add("rt-ff-prompt", "Freeform prompt", "Build prompt.", ["freeform_routing"], "mechanism")
 add("rt-ff-route", "Freeform route", "Route freeform text to command.", ["freeform_routing"], "mechanism")
+
+# ===================== local_feature_sources.py =====================
+add("rt-local-source-binding", "Local feature source binding resolver", "Verify ledger-bound module file digests and return VERIFIED_LOCAL_IMPLEMENTATION or MISSING status.", ["local_feature_sources", "p2p", "integrity"], "mechanism")
 
 # ===================== implementation_sequence.py =====================
 add("rt-is-local-only", "Local-only predicate", "Classify local-only task.", ["implementation_sequence"], "mechanism")
