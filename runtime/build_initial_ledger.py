@@ -273,6 +273,15 @@ add("rt-cont-degrade", "Confidence degrade", "Degrade confidence on failure.", [
 add("rt-cont-handle-unspecified", "Handle unspecified outcome", "Handle unspecified outcomes.", ["continuation"], "mechanism")
 add("rt-cont-reset-confidence", "Reset confidence", "Reset confidence tracker.", ["continuation"], "mechanism")
 
+# ===================== cost_model.py (receipt contract) =====================
+add("rt-cost-receipt-schema", "Executor receipt schema", "urace-executor-receipt-v1 schema constant.", ["cost_model", "receipts", "economics"], "schema")
+add("rt-cost-provider-rates", "Provider published rates", "Published per-token USD rates for Anthropic and OpenAI models (2025-11); update rate_effective when provider changes pricing.", ["cost_model", "receipts", "economics"], "contract")
+add("rt-cost-usd-from-tokens", "USD from tokens", "Convert observed token counts to USD at published provider rates; usd_source always provider_published_rate.", ["cost_model", "receipts", "economics"], "mechanism")
+add("rt-cost-receipt-from-operation", "Receipt from operation", "Extract urace-executor-receipt-v1 from a completed operation's usage metadata; returns None if token counts are unavailable.", ["cost_model", "receipts"], "mechanism")
+add("rt-cost-store-receipt", "Store receipt", "Write executor receipt to state/receipts/receipt_{operation_id}.json.", ["cost_model", "receipts"], "mechanism")
+add("rt-cost-load-receipts", "Load receipts", "Load receipts from state/receipts/ with optional since-date and limit filters.", ["cost_model", "receipts"], "mechanism")
+add("rt-cost-summarize-receipts", "Summarize receipts", "Aggregate token counts, USD totals, and model breakdown across a list of receipts.", ["cost_model", "receipts", "economics"], "mechanism")
+
 # ===================== credit_ledger.py =====================
 add("p2p-credit-schema", "Credit ledger schema v1", "urace-credit-ledger-v1.", ["credit_ledger", "p2p", "economics"], "schema")
 add("p2p-credit-baseline-grant", "Baseline grant (3)", "New peers get 3 baseline requests.", ["credit_ledger", "economics"], "contract")

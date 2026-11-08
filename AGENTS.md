@@ -1,6 +1,6 @@
 # AGENTS.md — URACE Executor and Agent Onboarding
 
-**Runtime version: 0.2.0**
+**Runtime version: 0.5.0**
 
 This document is the authoritative onboarding reference for any automated agent, AI executor, or programmatic client operating on a URACE runtime. Read this before issuing any `urace` command.
 

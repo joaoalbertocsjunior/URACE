@@ -283,6 +283,19 @@ urace exchange ledger transfer <peer_id> <amount_units>
 
 ---
 
+## Executor Cost Receipts
+
+The runtime auto-captures a `urace-executor-receipt-v1` receipt after every executor operation. Receipts record token counts (input, output, cache-read) and USD at published provider rates (Anthropic and OpenAI models as of 2025-11). USD is never imputed from URACE unit prices — URACE units and provider USD are separate dimensions with no established conversion.
+
+```sh
+urace cost summary          # aggregate USD + token totals
+urace cost list --limit 20  # per-call breakdown
+```
+
+Receipts are stored in `state/receipts/` and never leave the local machine. See [CLI Reference](../reference/cli.md#cost) and [Spec](../reference/spec.md#executor-receipt-contract) for the full schema.
+
+---
+
 ## Related
 
 - [Price Mechanics](price-mechanics.md) — executor ceiling, momentum guard, wash trading

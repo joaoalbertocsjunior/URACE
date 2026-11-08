@@ -316,3 +316,246 @@ def total_operation_cost(operation: str, config: dict, **kwargs) -> dict:
     if not fn:
         return {'schema': SCHEMA, 'operation': operation, 'error': f'Unknown operation: {operation!r}'}
     return fn(config, **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Executor receipt contract
+#
+# Receipts capture real API token counts from completed operations and convert
+# them to USD at published provider rates. usd_source is always
+# 'provider_published_rate' — not a reconciled invoice. Callers must reconcile
+# against provider billing statements before making a qualified cost claim.
+# ---------------------------------------------------------------------------
+
+RECEIPT_SCHEMA = 'urace-executor-receipt-v1'
+
+# Published rates as of 2025-11. Update rate_effective when provider changes.
+# source: anthropic.com/pricing, openai.com/api/pricing
+PROVIDER_RATES: dict[str, dict] = {
+    'claude-sonnet-4-6': {
+        'input_usd_per_mtok': 3.00,
+        'output_usd_per_mtok': 15.00,
+        'cache_write_usd_per_mtok': 3.75,
+        'cache_read_usd_per_mtok': 0.30,
+        'provider': 'anthropic',
+        'rate_source': 'anthropic.com/pricing',
+        'rate_effective': '2025-11',
+    },
+    'claude-opus-4-7': {
+        'input_usd_per_mtok': 15.00,
+        'output_usd_per_mtok': 75.00,
+        'cache_write_usd_per_mtok': 18.75,
+        'cache_read_usd_per_mtok': 1.50,
+        'provider': 'anthropic',
+        'rate_source': 'anthropic.com/pricing',
+        'rate_effective': '2025-11',
+    },
+    'claude-haiku-4-5-20251001': {
+        'input_usd_per_mtok': 0.80,
+        'output_usd_per_mtok': 4.00,
+        'cache_write_usd_per_mtok': 1.00,
+        'cache_read_usd_per_mtok': 0.08,
+        'provider': 'anthropic',
+        'rate_source': 'anthropic.com/pricing',
+        'rate_effective': '2025-11',
+    },
+    'gpt-4o': {
+        'input_usd_per_mtok': 2.50,
+        'output_usd_per_mtok': 10.00,
+        'cache_write_usd_per_mtok': 0.0,
+        'cache_read_usd_per_mtok': 1.25,
+        'provider': 'openai',
+        'rate_source': 'openai.com/api/pricing',
+        'rate_effective': '2025-11',
+    },
+    'gpt-4o-mini': {
+        'input_usd_per_mtok': 0.15,
+        'output_usd_per_mtok': 0.60,
+        'cache_write_usd_per_mtok': 0.0,
+        'cache_read_usd_per_mtok': 0.075,
+        'provider': 'openai',
+        'rate_source': 'openai.com/api/pricing',
+        'rate_effective': '2025-11',
+    },
+}
+
+
+def usd_from_tokens(
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    *,
+    cache_write_tokens: int = 0,
+    cache_read_tokens: int = 0,
+) -> tuple[float, dict]:
+    """Return (usd_observed, rate_snapshot) using published provider rates.
+
+    Raises ValueError for unknown models; add them to PROVIDER_RATES.
+    """
+    if not isinstance(input_tokens, int) or input_tokens < 0:
+        raise ValueError('input_tokens must be a non-negative int')
+    if not isinstance(output_tokens, int) or output_tokens < 0:
+        raise ValueError('output_tokens must be a non-negative int')
+    rates = PROVIDER_RATES.get(model)
+    if rates is None:
+        raise ValueError(f'No published rate for model {model!r}; add it to PROVIDER_RATES')
+    usd = (
+        input_tokens * rates['input_usd_per_mtok'] / 1_000_000
+        + output_tokens * rates['output_usd_per_mtok'] / 1_000_000
+        + cache_write_tokens * rates['cache_write_usd_per_mtok'] / 1_000_000
+        + cache_read_tokens * rates['cache_read_usd_per_mtok'] / 1_000_000
+    )
+    snapshot = {
+        'model': model,
+        'input_usd_per_mtok': rates['input_usd_per_mtok'],
+        'output_usd_per_mtok': rates['output_usd_per_mtok'],
+        'cache_write_usd_per_mtok': rates['cache_write_usd_per_mtok'],
+        'cache_read_usd_per_mtok': rates['cache_read_usd_per_mtok'],
+        'provider': rates['provider'],
+        'rate_source': rates['rate_source'],
+        'rate_effective': rates['rate_effective'],
+    }
+    return round(usd, 10), snapshot
+
+
+def _extract_model_from_transport(transport_usage: list) -> str | None:
+    """Walk transport_usage receipts to find the first named model."""
+    for t in transport_usage:
+        if not isinstance(t, dict):
+            continue
+        inner = t.get('usage', {})
+        if isinstance(inner, dict):
+            models = inner.get('models', {})
+            if isinstance(models, dict) and models:
+                return next(iter(models))
+    return None
+
+
+def receipt_from_operation(operation: dict) -> dict | None:
+    """Extract an executor receipt from a completed operation's usage metadata.
+
+    Returns None if usage is absent or token counts are unavailable.
+    The returned dict has schema RECEIPT_SCHEMA and is ready for store_receipt().
+    """
+    import time as _time
+    usage = operation.get('usage')
+    if not isinstance(usage, dict):
+        return None
+    input_tokens = usage.get('input_tokens')
+    output_tokens = usage.get('output_tokens')
+    if not (isinstance(input_tokens, int) and input_tokens >= 0
+            and isinstance(output_tokens, int) and output_tokens >= 0):
+        return None
+    cache_read = usage.get('cached_input_tokens') or 0
+    if not isinstance(cache_read, int):
+        cache_read = 0
+
+    model = _extract_model_from_transport(
+        usage.get('transport_usage') if isinstance(usage.get('transport_usage'), list) else []
+    )
+
+    reported_cost = usage.get('reported_cost_usd')
+    receipt: dict = {
+        'schema': RECEIPT_SCHEMA,
+        'operation_id': operation.get('id', ''),
+        'arm': 'direct_executor',
+        'input_tokens': input_tokens,
+        'output_tokens': output_tokens,
+        'cache_read_tokens': cache_read,
+        'model': model or 'unknown',
+        'captured_at': int(_time.time()),
+    }
+    if model and model in PROVIDER_RATES:
+        usd, snapshot = usd_from_tokens(model, input_tokens, output_tokens,
+                                        cache_read_tokens=cache_read)
+        receipt['usd_observed'] = usd
+        receipt['usd_source'] = 'provider_published_rate'
+        receipt['rate_snapshot'] = snapshot
+    elif isinstance(reported_cost, (int, float)):
+        receipt['usd_observed'] = float(reported_cost)
+        receipt['usd_source'] = 'executor_reported'
+    else:
+        receipt['usd_observed'] = None
+        receipt['usd_source'] = 'unavailable'
+    return receipt
+
+
+def _receipts_dir(config: dict):
+    from pathlib import Path
+    from urace._common import state_path
+    return state_path(config).parent / 'receipts'
+
+
+def store_receipt(config: dict, receipt: dict):
+    """Write receipt to state/receipts/receipt_{operation_id}.json."""
+    import json
+    d = _receipts_dir(config)
+    d.mkdir(parents=True, exist_ok=True)
+    op_id = receipt.get('operation_id', 'unknown')
+    path = d / f'receipt_{op_id}.json'
+    path.write_bytes(json.dumps(receipt, indent=2, allow_nan=False).encode())
+    return path
+
+
+def _parse_since_ts(since: str) -> int:
+    from datetime import datetime, timezone
+    try:
+        dt = datetime.fromisoformat(since)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except ValueError:
+        return 0
+
+
+def load_receipts(config: dict, *, since: str | None = None,
+                  limit: int | None = None) -> list[dict]:
+    """Load receipts from state/receipts/, newest first."""
+    import json
+    d = _receipts_dir(config)
+    if not d.exists():
+        return []
+    since_ts = _parse_since_ts(since) if since else 0
+    out: list[dict] = []
+    for path in sorted(d.glob('receipt_*.json'), reverse=True):
+        try:
+            r = json.loads(path.read_text(encoding='utf-8'))
+        except Exception:
+            continue
+        if r.get('schema') != RECEIPT_SCHEMA:
+            continue
+        if since_ts and (r.get('captured_at') or 0) < since_ts:
+            continue
+        out.append(r)
+        if limit and len(out) >= limit:
+            break
+    return out
+
+
+def summarize_receipts(receipts: list[dict]) -> dict:
+    """Aggregate token counts and USD totals across a list of receipts."""
+    total_input = sum(r.get('input_tokens') or 0 for r in receipts)
+    total_output = sum(r.get('output_tokens') or 0 for r in receipts)
+    total_cache = sum(r.get('cache_read_tokens') or 0 for r in receipts)
+    all_usd = [r['usd_observed'] for r in receipts
+               if isinstance(r.get('usd_observed'), (int, float))]
+    provider_rate_usd = [r['usd_observed'] for r in receipts
+                         if r.get('usd_source') == 'provider_published_rate'
+                         and isinstance(r.get('usd_observed'), (int, float))]
+    models: dict[str, int] = {}
+    for r in receipts:
+        m = r.get('model', 'unknown')
+        models[m] = models.get(m, 0) + 1
+    return {
+        'receipt_count': len(receipts),
+        'total_input_tokens': total_input,
+        'total_output_tokens': total_output,
+        'total_cache_read_tokens': total_cache,
+        'usd_total': round(sum(all_usd), 6) if all_usd else None,
+        'usd_provider_rate_total': round(sum(provider_rate_usd), 6) if provider_rate_usd else None,
+        'models': models,
+        'usd_source_note': (
+            'provider_published_rate = published per-token price, not reconciled invoice; '
+            'reconcile against provider billing for a defensible cost claim'
+        ),
+    }

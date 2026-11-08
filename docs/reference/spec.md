@@ -103,6 +103,31 @@ Quality is measured relative to objectives. Each objective contributes a weighte
 
 ---
 
+## Executor Receipt Contract
+
+Schema: `urace-executor-receipt-v1`
+
+After every executor operation the runtime captures a receipt and writes it to `state/receipts/receipt_{operation_id}.json`. The receipt is never transmitted externally.
+
+| Field | Description |
+|-------|-------------|
+| `schema` | `urace-executor-receipt-v1` |
+| `operation_id` | Operation identifier from the executor |
+| `arm` | Always `direct_executor` |
+| `model` | Model name extracted from `transport_usage` |
+| `input_tokens` | Uncached input token count |
+| `output_tokens` | Output token count |
+| `cache_read_tokens` | Cache-read token count (may be 0) |
+| `usd_observed` | USD at published provider rate, or `null` if unavailable |
+| `usd_source` | `provider_published_rate` \| `executor_reported` \| `unavailable` |
+| `captured_at` | Unix timestamp of capture |
+
+**USD source hierarchy**: published provider rate → executor-reported cost → `unavailable`. Receipt capture errors are suppressed so execution never fails due to receipt issues.
+
+CLI: `urace cost summary` / `urace cost list` — see [CLI Reference](cli.md#cost).
+
+---
+
 ## Self-Evolution Model
 
 When the runtime generates a self-improvement:

@@ -14,6 +14,14 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = 'urace-executor-receipt-v1'
+P2P_SCHEMA = 'urace-p2p-integration-receipt-v1'
+
+# Valid integration steps that can generate provider calls in the P2P arm.
+# asset_analysis   — LLM reads and summarises the borrowed asset
+# context_adaptation — LLM fits the asset to the product context
+# validation       — LLM runs quality gate / acceptance check
+# gap_fill         — executor finishes work the asset left incomplete
+P2P_STEPS = frozenset({'asset_analysis', 'context_adaptation', 'validation', 'gap_fill'})
 
 # Published rates as of 2025-11. Update rate_effective when provider changes pricing.
 # source: anthropic.com/pricing, openai.com/pricing
@@ -157,6 +165,62 @@ def capture_receipt(
     return {**receipt, 'receipt_sha256': sha, 'receipt_path': str(receipt_path)}
 
 
+def capture_p2p_receipt(
+    task_id: str,
+    task_sha256: str,
+    p2p_step: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    *,
+    cache_write_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    asset_id: str = '',
+    output_dir: Path,
+) -> dict:
+    """Write a P2P integration step receipt for one task run to output_dir.
+
+    p2p_step must be one of P2P_STEPS. Multiple steps per task are allowed;
+    each is written to a separate file p2p_receipt_{task_id}_{p2p_step}.json.
+    Returns the receipt dict augmented with receipt_sha256 and receipt_path.
+    """
+    if not isinstance(task_id, str) or not task_id.strip():
+        raise ValueError('task_id must be a non-empty string')
+    if not isinstance(task_sha256, str) or len(task_sha256) != 64:
+        raise ValueError('task_sha256 must be a 64-char hex string')
+    if p2p_step not in P2P_STEPS:
+        raise ValueError(f'p2p_step must be one of {sorted(P2P_STEPS)}; got {p2p_step!r}')
+    usd, rate_snapshot = usd_from_tokens(
+        model, input_tokens, output_tokens,
+        cache_write_tokens=cache_write_tokens,
+        cache_read_tokens=cache_read_tokens,
+    )
+    receipt: dict = {
+        'schema': P2P_SCHEMA,
+        'task_id': task_id,
+        'task_sha256': task_sha256,
+        'arm': 'p2p_integration',
+        'p2p_step': p2p_step,
+        'asset_id': asset_id,
+        'model': model,
+        'input_tokens': input_tokens,
+        'output_tokens': output_tokens,
+        'cache_write_tokens': cache_write_tokens,
+        'cache_read_tokens': cache_read_tokens,
+        'usd_observed': usd,
+        'usd_source': 'provider_published_rate',
+        'rate_snapshot': rate_snapshot,
+        'captured_at': int(time.time()),
+    }
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    receipt_path = output_dir / f'p2p_receipt_{task_id}_{p2p_step}.json'
+    receipt_bytes = json.dumps(receipt, indent=2, allow_nan=False).encode()
+    receipt_path.write_bytes(receipt_bytes)
+    sha = hashlib.sha256(receipt_bytes).hexdigest()
+    return {**receipt, 'receipt_sha256': sha, 'receipt_path': str(receipt_path)}
+
+
 def load_receipts(receipts_dir: Path) -> list[dict]:
     """Load all executor receipts from receipts_dir, verifying schema."""
     receipts_dir = Path(receipts_dir)
@@ -170,3 +234,22 @@ def load_receipts(receipts_dir: Path) -> list[dict]:
         receipt['receipt_path'] = str(path)
         out.append(receipt)
     return out
+
+
+def load_p2p_receipts(receipts_dir: Path) -> dict[str, list[dict]]:
+    """Load P2P integration receipts grouped by task_id.
+
+    Returns {task_id: [receipt, ...]} with receipts in step order.
+    """
+    receipts_dir = Path(receipts_dir)
+    grouped: dict[str, list[dict]] = {}
+    for path in sorted(receipts_dir.glob('p2p_receipt_*.json')):
+        raw = path.read_bytes()
+        receipt = json.loads(raw)
+        if receipt.get('schema') != P2P_SCHEMA:
+            raise ValueError(f'Unknown P2P receipt schema in {path.name}')
+        receipt['receipt_sha256'] = hashlib.sha256(raw).hexdigest()
+        receipt['receipt_path'] = str(path)
+        tid = receipt['task_id']
+        grouped.setdefault(tid, []).append(receipt)
+    return grouped

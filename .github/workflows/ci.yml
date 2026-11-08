@@ -20,7 +20,7 @@ jobs:
           python-version: '3.11'
       - run: pip install -e "urace/runtime/[peer-security,peer-discovery,test]"
       - run: python -m pytest urace/runtime/tests/ -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py -x -q
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
 
   test-312:
     runs-on: ubuntu-latest
@@ -35,7 +35,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -e "urace/runtime/[peer-security,peer-discovery,test]"
       - run: python -m pytest urace/runtime/tests/ -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py -x -q
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
 
   test-313:
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
           python-version: '3.13'
       - run: pip install -e "urace/runtime/[peer-security,peer-discovery,test]"
       - run: python -m pytest urace/runtime/tests/ -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py -x -q
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
 
   lint:
     runs-on: ubuntu-latest

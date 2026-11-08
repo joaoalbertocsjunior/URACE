@@ -1579,6 +1579,13 @@ def execute_with_executor(config: dict[str, Any], state: dict[str, Any], objecti
     operation["elapsed_seconds"] = time.monotonic() - _execution_started
     execution_call["elapsed_seconds"] = operation["elapsed_seconds"]
     _retain_call_usage(execution_call, operation["usage"])
+    try:
+        from urace.cost_model import receipt_from_operation, store_receipt
+        _receipt = receipt_from_operation(operation)
+        if _receipt is not None:
+            store_receipt(config, _receipt)
+    except Exception:
+        pass
     if prepared["status"] == "NO_EFFECT":
         execution_call["outcome"] = "no_effect"
         operation["status"] = "OBSERVED_NO_EFFECT"
@@ -5721,6 +5728,49 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(payload, indent=2, sort_keys=True))
             return 0
         parser.error(f'Unknown usage action: {action}')
+    if args.command == "cost":
+        command_surface.validate(args, raw_args, parser)
+        if _unknown: parser.error('Unrecognized cost arguments: ' + ' '.join(_unknown))
+        config = load_config()
+        from urace.cost_model import load_receipts as _load_receipts, summarize_receipts as _summarize
+        action = getattr(args, 'cost_action', None)
+        since = getattr(args, 'since', None)
+        limit = getattr(args, 'limit', None)
+        receipts = _load_receipts(config, since=since, limit=limit)
+        fmt = getattr(args, 'format', None)
+        if action == 'summary':
+            summary = _summarize(receipts)
+            if fmt == 'json':
+                print(json.dumps(summary, indent=2, sort_keys=True))
+            else:
+                models_str = ', '.join(f'{m} ({c})' for m, c in summary['models'].items()) or 'none'
+                usd = summary['usd_provider_rate_total']
+                usd_str = f'${usd:.6f}' if usd is not None else 'unavailable'
+                print(f"Receipts:          {summary['receipt_count']}")
+                print(f"Input tokens:      {summary['total_input_tokens']:,}")
+                print(f"Output tokens:     {summary['total_output_tokens']:,}")
+                print(f"Cache read tokens: {summary['total_cache_read_tokens']:,}")
+                print(f"Models:            {models_str}")
+                print(f"USD (provider rate): {usd_str}")
+                print(f"Note: {summary['usd_source_note']}")
+            return 0
+        if action == 'list':
+            if fmt == 'json':
+                print(json.dumps(receipts, indent=2))
+            else:
+                if not receipts:
+                    print('No receipts found.')
+                for r in receipts:
+                    usd = r.get('usd_observed')
+                    usd_str = f'${usd:.6f}' if isinstance(usd, (int, float)) else 'n/a'
+                    src = r.get('usd_source', '')
+                    model = r.get('model', 'unknown')
+                    op_id = r.get('operation_id', '')[:16]
+                    inp = r.get('input_tokens', 0)
+                    out = r.get('output_tokens', 0)
+                    print(f'{op_id}  {model:<28} in={inp:>7,} out={out:>6,}  {usd_str} ({src})')
+            return 0
+        parser.error(f'Unknown cost action: {action}')
     if args.command == "help":
         if not args.operation:
             if args.json:

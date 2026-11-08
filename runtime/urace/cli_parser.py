@@ -794,6 +794,16 @@ def _build_parser_template() -> argparse.ArgumentParser:
     patterns_p = usage_sub.add_parser("patterns", help="Show aggregated usage patterns, top commands, and goal outcomes")
     patterns_p.add_argument("--json", action="store_true")
     patterns_p.add_argument("--limit", type=int, default=20)
+    cost_cmd = sub.add_parser("cost", help="show executor call receipts and USD estimates at published provider rates")
+    cost_sub = cost_cmd.add_subparsers(dest="cost_action", required=True)
+    cost_summary_p = cost_sub.add_parser("summary", help="aggregate token and USD totals across stored receipts")
+    cost_summary_p.add_argument("--since", default=None, metavar="ISO_DATE", help="include receipts from this date onward (e.g. 2026-01-01)")
+    cost_summary_p.add_argument("--limit", type=int, default=None, help="max receipts to include")
+    cost_summary_p.add_argument("--json", action="store_const", const="json", dest="format", help="output as JSON")
+    cost_list_p = cost_sub.add_parser("list", help="list individual executor receipts")
+    cost_list_p.add_argument("--since", default=None, metavar="ISO_DATE")
+    cost_list_p.add_argument("--limit", type=int, default=20)
+    cost_list_p.add_argument("--json", action="store_const", const="json", dest="format", help="output as JSON")
     command_surface.finalize(parser)
     return parser
 

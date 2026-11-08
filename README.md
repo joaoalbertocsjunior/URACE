@@ -105,6 +105,10 @@ urace exchange bundle fetch-artifact <bundle_id> --out ./artifact_file  # any la
 
 # Check your balance
 urace exchange ledger summary
+
+# Inspect executor costs (auto-captured at published provider rates)
+urace cost summary
+urace cost list --limit 10
 ```
 
 ---
@@ -227,4 +231,4 @@ urace/
 └── state/           — local deployment data (not tracked)
 ```
 
-v0.4.1 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.5.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

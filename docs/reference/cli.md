@@ -720,6 +720,25 @@ Requires `URACE_A2A_TOKEN` for A2A transport. Use `--token-env VAR` to select a 
 
 ---
 
+## Cost
+
+| Command | Description |
+|---------|-------------|
+| `urace cost summary` | Aggregate token counts and USD totals at published provider rates |
+| `urace cost summary --since ISO_DATE` | Filter receipts to those captured on or after a date |
+| `urace cost summary --limit N` | Cap the number of receipts included |
+| `urace cost summary --json` | Machine-readable JSON output |
+| `urace cost list` | Per-receipt one-liner: timestamp, operation ID, model, tokens, USD |
+| `urace cost list --since ISO_DATE` | Filter list to recent receipts |
+| `urace cost list --limit N` | Cap list length |
+| `urace cost list --json` | Machine-readable JSON array output |
+
+Receipts are captured automatically after every `execute_with_executor` call and stored in `state/receipts/`. USD is computed at the published provider rate for the observed model (`provider_published_rate`); if the model is unknown the receipt falls back to `executor_reported` cost or marks `usd_source: unavailable`.
+
+Receipt schema: `urace-executor-receipt-v1`.
+
+---
+
 ## Related
 
 - [Config Reference](config.md) — all config options

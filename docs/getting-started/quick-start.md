@@ -190,6 +190,30 @@ urace exchange market stats --json
 
 ---
 
+## 9. Inspect Executor Costs
+
+After any `urace run` or operation, the runtime auto-captures an executor receipt at the published provider rate. View aggregate USD and token usage:
+
+```sh
+urace cost summary
+```
+
+Per-call breakdown:
+
+```sh
+urace cost list --limit 20
+```
+
+Filter to recent calls:
+
+```sh
+urace cost summary --since 2026-11-01
+```
+
+Receipts are stored locally in `state/receipts/` and never leave your machine.
+
+---
+
 ## What's Next
 
 - [Product Lifecycle Guide](../guides/products.md) — goals, plans, operations, GitHub products
