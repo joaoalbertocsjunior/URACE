@@ -1,10 +1,10 @@
-"""Unified cost model for URACE operations.
+"""Estimate operating costs and keep incomparable resources distinct.
 
-Every token-denominated cost of operating on the P2P network passes through here.
-Enables the core claim: 'cheaper than raw executor' by making costs transparent and comparable.
+This module does not establish that P2P is cheaper than executor work. A
+qualified comparison requires task-matched receipts and independent acceptance.
 
 Cost components:
-  executor_cost               — reference price per executor call (from policy or ledger median)
+  executor_cost               — optional owner-configured estimate per executor call
   p2p_delivery_cost           — estimated bandwidth/relay overhead per byte delivered
   erasure_cost                — per-chunk overhead for Reed-Solomon n_parity extra replicas
   mint_stake_cost             — amortized mint stake over expected feature lifetime (borrows)
@@ -27,7 +27,6 @@ SCHEMA = 'urace-cost-model-v1'
 
 # Default constants — all overridable via config p2p.*
 _DEFAULTS = {
-    'executor_reference_price_per_unit': 1,   # 1 token per executor call
     'p2p_bytes_per_unit': 1_000_000,          # 1 token per MB delivered
     'erasure_overhead_fraction': 0.5,          # n_parity=2 out of n_total=6 → ~0.5 overhead
     'mint_stake_units': 3,                     # default stake
@@ -64,7 +63,7 @@ def estimate_gas_overhead(config: dict) -> float:
     Example configs:
       Base/Arbitrum cheap tx (~65k gas, 0.01 Gwei, 1 unit/Gwei):
         gas_per_tx_gwei: 65000, gas_price_gwei: 0.01, urace_units_per_gwei: 1
-        → 65000 × 0.01 × 1 = 650 units  (adjust urace_units_per_gwei to your token price)
+        → 65000 × 0.01 × 1 = 650 configured URACE units (the conversion is an owner estimate)
 
       Static override (measured externally, set once):
         gas_overhead_units: 5  → 5 URACE units per tx regardless of chain conditions
@@ -172,15 +171,24 @@ def amortized_mint_cost_per_borrow(config: dict) -> float:
 def vs_executor_comparison(config: dict, ask_price_units: int,
                             executor_calls_saved: int = 1,
                             executor_reference_price: int | None = None) -> dict:
-    """Compare cost of borrowing a feature vs running the executor directly.
+    """Return a legacy estimate, explicitly marked unqualified unless baseline is supplied.
 
-    executor_reference_price — override the config value (e.g. from network median).
-    cheaper_than_executor is ALWAYS computed; never silently skipped.
+    Ledger trades and reputation credits are not executor costs. Configured values are
+    estimates too; only task-specific observed receipts can support a savings claim.
     """
     if executor_reference_price is not None:
         executor_ref = executor_reference_price
     else:
-        executor_ref = _cfg(config, 'executor_reference_price_per_unit')
+        executor_ref = config.get('p2p', {}).get('executor_reference_price_per_unit')
+    if executor_ref is None:
+        return {
+            'schema': SCHEMA, 'operation': 'vs_executor_comparison',
+            'comparison_status': 'UNQUALIFIED', 'comparison_source': 'no_observed_executor_baseline',
+            'executor_cost_per_call': None, 'executor_calls_saved': None,
+            'executor_total': None, 'borrow_total': borrow_feature_cost(config, ask_price_units)['total_buyer_cost'],
+            'amortized_mint_cost': amortized_mint_cost_per_borrow(config),
+            'net_saving': None, 'cheaper_than_executor': None,
+        }
     executor_total = executor_ref * executor_calls_saved
     borrow = borrow_feature_cost(config, ask_price_units)
     # Use the full buyer cost (includes network_download + protocol_fee)
@@ -196,41 +204,77 @@ def vs_executor_comparison(config: dict, ask_price_units: int,
         'borrow_total': p2p_total_cost,
         'amortized_mint_cost': round(amortized, 4),
         'net_saving': round(net_saving, 4),
-        'cheaper_than_executor': net_saving > 0,
+        'comparison_status': 'ESTIMATE_ONLY',
+        'comparison_source': 'explicit_config_estimate' if executor_reference_price is None else 'caller_supplied_estimate',
+        'cheaper_than_executor': None,
     }
 
 
-def derive_executor_reference_price(rows: list) -> int:
-    """Derive executor reference price from local ledger history.
+def compare_paired_cost_inputs(config: dict, *, executor_cost_units: float | None,
+                               ask_price_units: int, artifact_size_bytes: int = 0,
+                               integration_cost_units: float | None = None,
+                               validation_cost_units: float | None = None,
+                               residual_executor_cost_units: float | None = None,
+                               amortize_mint: bool = False,
+                               task_id: str | None = None,
+                               acceptance_contract_sha256: str | None = None,
+                               executor_receipt_id: str | None = None,
+                               p2p_receipt_id: str | None = None,
+                               acceptance_receipt_id: str | None = None,
+                               executor_accepted: bool | None = None,
+                               p2p_accepted: bool | None = None,
+                               independent_acceptance: bool = False,
+                               executor_tokens: dict | None = None,
+                               p2p_tokens: dict | None = None) -> dict:
+    """Compare a task matched pair; unknown costs or non-equivalent outcomes block qualification.
 
-    Priority:
-    1. Median price from EQUITY_LISTING_FILLED rows (last 90 days)
-    2. Median amount_units from CREDIT_DELTA(direction='earn') rows (last 90 days)
-    3. Fallback: 10 (hardcoded floor)
-    Returns int >= 1.
+    Inputs are in the same URACE cost unit. Executor token counts and fiat charges
+    must be reported separately by callers; they are never silently converted.
     """
-    import time as _time
-    cutoff = _time.time() - 90 * 86400
-    filled = [r for r in rows
-              if r.get('kind') == 'EQUITY_LISTING_FILLED'
-              and float(r.get('at_unix', 0)) >= cutoff
-              and r.get('price_units') is not None]
-    if filled:
-        prices = sorted(int(r['price_units']) for r in filled)
-        mid = len(prices) // 2
-        median = prices[mid] if len(prices) % 2 == 1 else (prices[mid - 1] + prices[mid]) // 2
-        return max(1, median)
-    earn = [r for r in rows
-            if r.get('kind') == 'CREDIT_DELTA'
-            and r.get('direction') == 'earn'
-            and float(r.get('at_unix', 0)) >= cutoff
-            and r.get('amount_units') is not None]
-    if earn:
-        amounts = sorted(int(r['amount_units']) for r in earn)
-        mid = len(amounts) // 2
-        median = amounts[mid] if len(amounts) % 2 == 1 else (amounts[mid - 1] + amounts[mid]) // 2
-        return max(1, median)
-    return 10  # hardcoded floor
+    p2p = borrow_feature_cost(config, ask_price_units, artifact_size_bytes)
+    amortized = amortized_mint_cost_per_borrow(config) if amortize_mint else 0.0
+    required = (executor_cost_units, integration_cost_units, validation_cost_units,
+                residual_executor_cost_units)
+    costs_complete = all(v is not None and math.isfinite(float(v)) and float(v) >= 0 for v in required)
+    pair_complete = bool(task_id and acceptance_contract_sha256 and executor_receipt_id
+                         and p2p_receipt_id and acceptance_receipt_id and independent_acceptance
+                         and executor_accepted is True and p2p_accepted is True)
+    complete = costs_complete and pair_complete
+    p2p_total = (p2p['total_buyer_cost'] + amortized + float(integration_cost_units or 0)
+                 + float(validation_cost_units or 0) + float(residual_executor_cost_units or 0))
+    saving = float(executor_cost_units) - p2p_total if complete else None
+    return {
+        'schema': SCHEMA, 'operation': 'paired_p2p_vs_executor_cost_estimate',
+        'comparison_status': 'PAIR_INPUTS_COMPLETE_UNVERIFIED' if complete else 'UNQUALIFIED_MISSING_RECEIPTS_OR_PAIR',
+        'task_id': task_id,
+        'acceptance_contract_sha256': acceptance_contract_sha256,
+        'executor_receipt_id': executor_receipt_id,
+        'p2p_receipt_id': p2p_receipt_id,
+        'acceptance_receipt_id': acceptance_receipt_id,
+        'executor_accepted': executor_accepted,
+        'p2p_accepted': p2p_accepted,
+        'independent_acceptance': independent_acceptance,
+        'executor_cost_units': executor_cost_units,
+        'p2p_acquisition_cost_units': p2p['total_buyer_cost'],
+        'integration_cost_units': integration_cost_units,
+        'validation_cost_units': validation_cost_units,
+        'residual_executor_cost_units': residual_executor_cost_units,
+        'amortized_mint_cost_units': amortized,
+        'p2p_total_cost_units': round(p2p_total, 4) if complete else None,
+        'net_saving_units': round(saving, 4) if complete else None,
+        'cheaper_than_executor': None,
+        'cheaper_than_executor_estimate': (saving > 0) if complete else None,
+        'receipt_verification': 'CALLER_ASSERTED_NOT_VALIDATED',
+        'independently_qualified': False,
+        'executor_token_usage': executor_tokens,
+        'p2p_token_usage': p2p_tokens,
+        'qualification_note': 'This helper checks supplied fields only; it does not verify receipt provenance or acceptance authority. Integrate with the trial verifier before claiming qualified savings.',
+    }
+
+
+def derive_executor_reference_price(rows: list) -> int | None:
+    """Deprecated: exchange prices/rewards are not evidence of executor cost."""
+    return None
 
 
 def minimum_viable_price(config: dict, artifact_size_bytes: int = 0) -> int:

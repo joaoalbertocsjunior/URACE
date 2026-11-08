@@ -62,6 +62,44 @@ class ExchangeTests(unittest.TestCase):
     self.b.configure(network=False)
     with self.assertRaises(ValueError):pe.request(self.a,self.bid,'exchange.info',{})
    finally:server.shutdown();thread.join(timeout=5)
+ def test_remote_open_asset_catalog_fetches_signed_bytes_to_quarantine(self):
+  import time,hashlib
+  from urace import remote_assets
+  self.pair(True);raw=b'open fixture asset\x00bytes';sha=hashlib.sha256(raw).hexdigest()
+  self.a.feature('featureA',[],offered=True)
+  self.a.feature_policy('featureA',{'access':'open','license_id':'MIT'})
+  pe._store_artifact(self.a.root,sha,raw)
+  self.a.append_audit_row({'kind':'EQUITY_GRANT','feature_id':'featureA','peer_id':self.aid,
+                           'visibility':'public','description':'open fixture component','tags':['fixture'],
+                           'artifact_ref':sha,'artifact_size_bytes':len(raw),
+                           'content_type':'application/octet-stream'})
+  with pe.server(self.a) as server:
+   thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+   try:
+    self.b.peer(self.a.identity()['certificate'],'https://127.0.0.1:'+str(server.server_port),post_quantum=self.a.identity()['post_quantum'])
+    result=remote_assets.discover(self.b,query='fixture',peer_limit=3)
+    self.assertEqual(len(result['open_assets']),1)
+    self.assertEqual(result['network_metrics']['rpc_calls'],1)
+    self.assertGreater(result['network_metrics']['application_payload_bytes'],0)
+    item=result['open_assets'][0]
+    received=remote_assets.fetch_open_asset(self.b,self.aid,item['asset_id'])
+    self.assertEqual(received['status'],'QUARANTINED');self.assertFalse(received['applied'])
+    self.assertEqual(received['seller_ack']['status'],'BUYER_QUARANTINE_RECEIPT_VERIFIED')
+    self.assertEqual(received['network_metrics']['rpc_calls'],3)
+    self.assertGreater(received['network_metrics']['application_payload_bytes'],0)
+    seller_rows=self.a.audit_rows()
+    self.assertEqual(sum(row.get('kind')=='OPEN_ASSET_QUARANTINE_ACK' for row in seller_rows),1)
+    self.assertEqual(sum(row.get('kind')=='OPEN_ASSET_QUARANTINE_ACK_ATTESTED' for row in seller_rows),1)
+    replay=pe.request(self.b,self.aid,'exchange.assets.receipt',
+                      {'asset_id':item['asset_id'],'status':received['status'],
+                       'receipt':received['receipt']})
+    self.assertEqual(replay['seller_attestation'],received['seller_ack']['seller_attestation'])
+    self.assertEqual(sum(row.get('kind')=='OPEN_ASSET_QUARANTINE_ACK' for row in self.a.audit_rows()),1)
+    self.assertEqual(sum(row.get('kind')=='OPEN_ASSET_SELLER_ACK_RECEIVED' for row in self.b.audit_rows()),1)
+    bundle=self.b.inspect(received['bundle_id'])['bundle']
+    artifact=self.b.artifact_bytes(bundle['payload']['artifact_ref'])
+    self.assertEqual(artifact,raw)
+   finally:server.shutdown();thread.join(timeout=5)
  def test_pinned_certificate_mismatch_rejected(self):
   self.pair(True);third=pe.Exchange(Path(self.tmp.name)/'third');third.configure(enabled=True,network=True);third.peer(self.a.identity()['certificate'],post_quantum=self.a.identity()['post_quantum'])
   with pe.server(third) as server:

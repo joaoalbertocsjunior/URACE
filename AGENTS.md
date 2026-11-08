@@ -61,17 +61,23 @@ URACE/urace/
 │   ├── build_initial_ledger.py    ← regenerate exchange/initial_ledger/ after module changes
 │   ├── urace/                     ← runtime Python package
 │   │   ├── cli.py                 ← top-level CLI entrypoint
+│   │   ├── cli_parser.py          ← canonical argparse grammar
+│   │   ├── data_cli.py            ← isolated data-source command handlers
 │   │   ├── exchange_cli.py        ← exchange/P2P CLI verbs
 │   │   ├── _common.py             ← state load/save, invariant enforcement
 │   │   ├── authority.py           ← authority boundary resolution
 │   │   ├── peer_exchange.py       ← P2P exchange (Exchange class, audit)
 │   │   ├── freeform_routing.py    ← freeform intent routing
+│   │   ├── p2p_matching.py        ← post-classification intent-to-asset ranking
+│   │   ├── local_feature_sources.py ← verify initial-ledger source bindings
 │   │   └── ...
-│   └── tests/                     ← acceptance test suite
+│   └── tests/                     ← acceptance suite split by feature into test_*.py modules
 ├── trial/                         ← qualification harness (separate process)
+│   ├── p2p_local_feature_assets.py ← package/verify source-grounded local feature assets
+│   ├── p2p_cost_claim_review.py   ← verify two pinned reviews for one live cohort claim
 ├── exchange/
 │   ├── initial_ledger/
-│   │   ├── initial_ledger.json    ← 1,356 built-in free-use P2P features
+│   │   ├── initial_ledger.jsonl   ← 1,392 built-in free-use P2P features
 │   │   └── README.md
 │   └── (live data — gitignored)
 ├── products/                      ← product snapshots (gitignored live data)
@@ -205,7 +211,11 @@ Bootstrap peers are contacted during exchange init when no DHT neighbors are kno
 ```sh
 urace exchange network peers --json   # anonymized SHA-256 peer hashes
 urace exchange network size --json    # heuristic DHT estimate
+urace exchange network assets [QUERY] --json  # discover authenticated pinned-peer assets; paid asks are discovery-only
+urace exchange network fetch-asset <peer_id> <asset_id> --json  # fetch an explicitly selected open-use asset into quarantine
 ```
+
+Remote open-use fetch requires a pinned authenticated peer, a public listing, an explicit zero-price open-use license, an allowed local receive rule, a verified seller signature and digest, and an artifact no larger than 300,000 bytes. The artifact is quarantined; fetch never applies or executes it. The seller verifies the buyer-signed quarantine receipt, records and signs an acknowledgement bound to the bundle, asset, artifact, receipt and seller audit event, and handles exact receipt replays idempotently while rejecting conflicting receipts. The buyer verifies and stores that attestation, so pair evidence does not require reading the remote seller's local files. This is cryptographic integrity and seller attestation under pinned-key assumptions, not global consensus or a guarantee against compromised keys/endpoints. Paid remote asks are informational only because cross-peer purchase settlement is not implemented. Do not claim that a P2P ask or reputation credit is cheaper than executor work without qualified paired evidence. A claim is cohort-specific and requires a source-custodian signature binding the source-corpus digest and exact frozen task manifest, plus a complete 30-pair LIVE study with six pairs per family, both arms accepted in every pair, P2P value no lower in every pair, complete comparable USD costs, zero URACE units paid, an allowed provider billing basis, and a paired 95% bootstrap upper bound below zero. It remains unqualified until two distinct reviewers pinned in the frozen plan sign the exact cohort and summary using `trial/p2p_cost_claim_review.py` and attest to full evidence review, workload-provenance review, and independence. These signatures provide accountable attestations, not automatic proof that signers are honest. Synthetic and unspecified evidence can never qualify a savings claim; no cohort proves a universal executor price ceiling.
 
 ### Market Stats (token velocity + supply health)
 
@@ -364,6 +374,8 @@ urace freeform-text "deploy to staging" --json
 urace freeform-text --file path/to/brief.txt --json
 urace freeform-text --path ./docs/ --json
 ```
+
+Freeform routing searches reachable pinned-peer catalogs before executor classification when P2P context is enabled. It only suggests assets by default. `urace freeform-text "<intent>" --p2p-asset <asset_id> --json` explicitly fetches a currently advertised open-use asset into quarantine and skips executor classification; it does not apply or execute the asset. `--ledger-context never` disables this route. Transfer, integration, validation, and any residual executor work remain costs even when the license usage price is zero.
 
 **Security limits:**
 - Query capped at 4,096 bytes
@@ -537,7 +549,7 @@ urace exchange compact search <query> --json  # searches live + archives
 
 ## 13. P2P Initial Ledger
 
-The initial ledger (`exchange/initial_ledger/initial_ledger.jsonl`) contains **1,356 built-in free-use features** covering every atomic runtime, trial, CLI, and P2P capability.
+The initial ledger (`exchange/initial_ledger/initial_ledger.jsonl`) contains **1,392 built-in free-use features** covering every atomic runtime, trial, CLI, and P2P capability. Where tags map exactly to local runtime modules, entries also pin source paths, byte counts and SHA-256 hashes; these metadata identify local implementations but do not themselves make a source bundle downloadable or qualify its quality.
 
 Format: JSONL — line 1 is a header (`{"schema":..., "feature_count":N}`), subsequent lines are one feature per JSON object. Enables streaming reads and line-addressable verification.
 
@@ -563,6 +575,17 @@ Executors do not control the qualification gate. The gate runs in the `trial/` h
 4. Accepted changes are committed to the portfolio
 
 **Do not attempt to bypass qualification** (the authority boundary blocks this).
+
+### P2P-first versus direct-executor paired comparison
+
+The two arms for evaluating “cheaper than executor” are:
+
+1. `direct_executor`: solve the frozen task from scratch with the pinned executor/model/effort profile.
+2. `p2p_borrow` (P2P-first): discover a relevant asset, receive an eligible open-use artifact into quarantine, integrate and validate it, then use executor calls for remaining work as needed. Paid remote assets are not fetchable until cross-peer settlement is implemented.
+
+Both arms use the same frozen task and independent acceptance/value rubric, with counterbalanced order. The plan embeds exact task and rubric text, verifies their hashes, and pins one provider/model/client/native-effort profile. The evaluator signs pass/fail and normalized value score [0,1] for each arm. Count all provider-native usage. A signed paired cost receipt must cover both arms under one declared provider billing basis, with non-provider costs measured under the frozen methodology. Report provider tokens, USD components, URACE reputation units, discovery/fetch/transfer, integration, validation, and residual executor work separately. Record failures; do not drop them. URACE units stay unconverted unless a dated, independently verifiable rate is pinned. Zero-price assets or lower provider-token use alone do not establish lower total cost. `trial/p2p_study_plan.py` freezes a counterbalanced 30-pair plan (six per family); `trial/p2p_pair_protocol.py` verifies collected evidence; `trial/p2p_study_runner.py` coordinates a configured live study. `trial/p2p_synthetic_cohort.py` exercises 30 synthetic tasks and real localhost mutual-TLS P2P catalog/fetch/quarantine/ack flow with no provider calls. Its results validate the pipeline only and cannot support economic claims.
+
+Do not state that URACE/P2P is cheaper than executor work as an established result. It is a design objective to evaluate. Peer work-market escrow floors, reputation balances, P2P asks, and configured executor-call estimates are not a common cost unit. `network_hire` routing based on credit pressure is a resource-routing heuristic, not proof of savings. No live P2P-first paired cohort has qualified yet.
 
 ---
 
@@ -871,7 +894,54 @@ Response fields: `public_address`, `features_to_port` (with `kpi_score`, `positi
 
 ---
 
-## 26. Related References
+## 26. CI and Team Pipeline Integration
+
+URACE does not require a native CI adapter. The CLI and MCP stdio transport cover all synchronous CI use cases directly.
+
+### CLI steps (GitHub Actions, Jenkins, CircleCI, etc.)
+
+```yaml
+# GitHub Actions example
+- name: Check URACE health
+  run: python3 -m urace check --json
+
+- name: Classify and route operator input
+  run: python3 -m urace classify "implement feature X" --json
+
+- name: Run autonomous cycle (non-interactive)
+  run: python3 -m urace auto --cycles 1 --json
+```
+
+No server process, no webhook, no extra dependencies — just the installed runtime.
+
+### MCP stdio (agent-driven pipelines)
+
+For pipelines that drive URACE through an MCP client, start the stdio server with a **scoped policy file** that restricts which commands the CI token may call:
+
+```json
+// ci-policy.json
+{
+  "project_id": "my-product-ci",
+  "executor_id": "ci-runner",
+  "read_only": false,
+  "commands": ["check", "vitals", "product switch", "classify"]
+}
+```
+
+```sh
+urace api serve --policy ci-policy.json
+```
+
+The `commands` list is an allowlist — anything not listed is blocked. `ADMIN` operations (`init`, `fleet`, `govern`, `rules`, `configuration`, etc.) are always excluded from bridge sessions regardless of the policy file; they require a direct CLI call with operator authority.
+
+### What is not supported
+
+- **Webhook push triggers** (GitHub webhook → autonomous cycle) — not implemented; would require a running internet-reachable daemon with HMAC replay protection.
+- **Remote ADMIN over MCP/A2A** — by design; use a direct CLI call with appropriate authority instead.
+
+---
+
+## 27. Related References
 
 - `docs/index.md` — documentation index
 - `docs/getting-started/quick-start.md` — five-minute walkthrough

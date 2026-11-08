@@ -222,9 +222,9 @@ class StdioIntegrationTests(unittest.TestCase):
   p=subprocess.Popen([sys.executable,'-m','urace','api','serve','--transport','stdio'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True)
   def send(value):p.stdin.write(json.dumps(value)+'\n');p.stdin.flush()
   def read():
-   self.assertTrue(select.select([p.stdout],[],[],10)[0],'MCP response timed out');line=p.stdout.readline();self.assertTrue(line,'Server ended');return json.loads(line)
+   self.assertTrue(select.select([p.stdout],[],[],30)[0],'MCP response timed out');line=p.stdout.readline();self.assertTrue(line,'Server ended');return json.loads(line)
   try:
-   send({'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-06-18'}});self.assertEqual(read()['result']['serverInfo']['name'],'urace');send({'jsonrpc':'2.0','method':'notifications/initialized'});send({'jsonrpc':'2.0','id':2,'method':'tools/list'});self.assertEqual(len(read()['result']['tools']),5);send({'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'urace_call','arguments':{'command':'help','params':{'operation':['api','serve']},'request_id':'stdio-integration'}}});result=read()['result'];self.assertFalse(result['isError'],result);self.assertEqual(result['structuredContent']['status'],'COMPLETED');self.assertEqual(result['structuredContent']['result']['output']['command'],'api serve');send({'jsonrpc':'2.0','id':4,'method':'tools/call','params':{'name':'urace_call','arguments':{'command':'resume','request_id':'forbidden'}}});self.assertTrue(read()['result']['isError']);p.stdin.close();self.assertEqual(p.wait(timeout=10),0)
+   send({'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-06-18'}});self.assertEqual(read()['result']['serverInfo']['name'],'urace');send({'jsonrpc':'2.0','method':'notifications/initialized'});send({'jsonrpc':'2.0','id':2,'method':'tools/list'});self.assertEqual(len(read()['result']['tools']),5);send({'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'urace_call','arguments':{'command':'help','params':{'operation':['api','serve']},'request_id':'stdio-integration'}}});result=read()['result'];self.assertFalse(result['isError'],result);self.assertEqual(result['structuredContent']['status'],'COMPLETED');self.assertEqual(result['structuredContent']['result']['output']['command'],'api serve');send({'jsonrpc':'2.0','id':4,'method':'tools/call','params':{'name':'urace_call','arguments':{'command':'resume','request_id':'forbidden'}}});self.assertTrue(read()['result']['isError']);p.stdin.close();self.assertEqual(p.wait(timeout=30),0)
   finally:
    if p.poll() is None:os.killpg(p.pid,signal.SIGKILL);p.wait(timeout=5)
    for stream in (p.stdin,p.stdout,p.stderr):
@@ -238,13 +238,13 @@ class StdioIntegrationTests(unittest.TestCase):
    _common.atomic_write_json(Path(cfg['state_path']),cli.initial_state(cfg));policy=root/'policy.json';policy.write_text(json.dumps({'project_id':'mcp-write-fixture','executor_id':'fixture','read_only':False,'commands':['add goal']}))
    def send(value):p.stdin.write(json.dumps(value)+'\n');p.stdin.flush()
    def read():
-    self.assertTrue(select.select([p.stdout],[],[],10)[0],'MCP response timed out');return json.loads(p.stdout.readline())
+    self.assertTrue(select.select([p.stdout],[],[],30)[0],'MCP response timed out');return json.loads(p.stdout.readline())
    try:
     _common.atomic_write_json(_common.CONFIG_PATH,cfg);environment=os.environ.copy();environment.pop('URACE_ACTIVE_PRODUCT',None)
     p=subprocess.Popen([sys.executable,'-m','urace','api','serve','--policy',str(policy)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=environment,start_new_session=True)
     send({'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-06-18'}});self.assertIn('result',read());send({'jsonrpc':'2.0','method':'notifications/initialized'})
     request={'jsonrpc':'2.0','id':2,'method':'tools/call','params':{'name':'urace_call','arguments':{'command':'add goal','params':{'title':'Verify delegated queueing','success_measure':'One attributable input receipt','reason':'Isolated MCP test'},'request_id':'once'}}};send(request);response=read()['result'];self.assertFalse(response['isError'],response);job=response['structuredContent'];self.assertEqual(job['status'],'COMPLETED');self.assertEqual(job['result']['output']['status'],'queued');records=list(_common.input_directory(cfg).glob('*.json'));self.assertEqual(len(records),1);record=json.loads(records[0].read_text());self.assertEqual(record['kind'],'goal')
-    request['id']=3;send(request);again=read()['result']['structuredContent'];self.assertEqual(again['job_id'],job['job_id']);self.assertEqual(len(list(_common.input_directory(cfg).glob('*.json'))),1);p.stdin.close();self.assertEqual(p.wait(timeout=10),0)
+    request['id']=3;send(request);again=read()['result']['structuredContent'];self.assertEqual(again['job_id'],job['job_id']);self.assertEqual(len(list(_common.input_directory(cfg).glob('*.json'))),1);p.stdin.close();self.assertEqual(p.wait(timeout=30),0)
    finally:
     if p is not None:
      if p.poll() is None:os.killpg(p.pid,signal.SIGKILL);p.wait(timeout=5)

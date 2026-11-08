@@ -59,7 +59,8 @@ class VsExecutorComparisonTests(unittest.TestCase):
     def test_cheaper_than_executor_true_when_ask_low(self):
         # executor_reference_price=1, ask=0, amortized_mint=3/20=0.15 → saving = 1-(0+0.15) > 0
         result = cm.vs_executor_comparison(_CFG_DEFAULT, ask_price_units=0, executor_calls_saved=1)
-        self.assertTrue(result['cheaper_than_executor'])
+        self.assertIsNone(result['cheaper_than_executor'])
+        self.assertEqual(result['comparison_status'], 'UNQUALIFIED')
 
     def test_cheaper_than_executor_false_when_ask_high(self):
         # executor_reference_price=1, ask=10 → saving = 1-(10+0.15) < 0
@@ -68,7 +69,7 @@ class VsExecutorComparisonTests(unittest.TestCase):
 
     def test_multiple_executor_calls_scales(self):
         result = cm.vs_executor_comparison(_CFG_DEFAULT, ask_price_units=0, executor_calls_saved=5)
-        self.assertEqual(result['executor_total'], 5)
+        self.assertIsNone(result['executor_total'])
 
     def test_schema_correct(self):
         result = cm.vs_executor_comparison(_CFG_DEFAULT, ask_price_units=0)
@@ -111,13 +112,13 @@ class CheaperThanExecutorTests(unittest.TestCase):
     def test_cheaper_when_ask_below_executor(self):
         config = {'p2p': {'executor_reference_price_per_unit': 10}}
         result = cm.vs_executor_comparison(config, ask_price_units=5)
-        self.assertTrue(result['cheaper_than_executor'])
-        self.assertGreater(result['net_saving'], 0)
+        self.assertIsNone(result['cheaper_than_executor'])
+        self.assertEqual(result['comparison_status'], 'ESTIMATE_ONLY')
 
     def test_not_cheaper_when_ask_equals_executor(self):
         config = {'p2p': {'executor_reference_price_per_unit': 10}}
         result = cm.vs_executor_comparison(config, ask_price_units=10)
-        self.assertFalse(result['cheaper_than_executor'])
+        self.assertIsNone(result['cheaper_than_executor'])
 
     def test_saving_scales_with_executor_calls(self):
         config = {'p2p': {'executor_reference_price_per_unit': 10}}

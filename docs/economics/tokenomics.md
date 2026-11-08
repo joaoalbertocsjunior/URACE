@@ -76,7 +76,7 @@ Supply scales with bandwidth, not peers. The constraint is always "can new peers
 
 ## Initial Ledger
 
-URACE ships with a pre-built initial ledger of **1,370 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. All initial ledger features are:
+URACE ships with a pre-built initial ledger of **1,392 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. Entries with an exact local runtime-module tag also pin source paths and file digests; these bindings identify local implementations but are not delivered artifacts or quality qualifications. All initial ledger features are:
 
 - **Free-use**: borrow cost = 0 tokens
 - **No owner**: minted without a creator, available to all peers
@@ -85,7 +85,7 @@ URACE ships with a pre-built initial ledger of **1,370 built-in features** — e
 
 | Metric | Value |
 |--------|-------|
-| Initial features minted | 1,370 |
+| Initial features minted | 1,392 |
 | Format | JSONL (`runtime/initial_ledger.jsonl`) — line 1 is a header, each subsequent line is one feature |
 | Breakdown | mechanism · schema · contract · integration · protocol features |
 | Revenue features | 65% (882 features with active token flow) |
@@ -150,21 +150,9 @@ All internal accounting uses integers (no float precision loss). On-chain conver
 
 ---
 
-## Token Price Estimation
+## No Monetary Token Valuation
 
-Tokens represent access to verified peer work:
-
-| Assumption | Value |
-|-----------|-------|
-| Avg developer-hours per feature | 2–4 hours |
-| Developer cost | $100–$200/hour |
-| Fair value per feature | $200–$800 |
-| Earn cap per feature | ~6.36 tokens (typical 200 LOC / 3 deps / 10 tests) |
-| Implied token value | $200 ÷ 6.36 to $800 ÷ 6.36 = **$31–$126 per token** |
-| Market cap (1,000-peer network, 41,400 tokens) | $1.3M–$5.2M |
-| Market cap (10,000-peer network, 688,000 tokens) | $21M–$87M |
-
-These are **utility-anchored estimates** — each token buys real developer-equivalent output, not speculation.
+URACE ledger units are reputation and closed-network accounting units. They have no verified redemption value, market exchange rate, or proven equivalence to executor usage, developer labor, or fiat. Do not infer a token price or market capitalization by dividing estimated developer labor by reward units. P2P sale prices and `CREDIT_DELTA` reputation entries are not executor-cost measurements.
 
 ---
 
@@ -176,7 +164,7 @@ The bootstrap grant is **locked until a peer's first quality gate pass** — it 
 |--------|---------|
 | Create 100 fake peers → 300 free tokens | Grant = 0 until first APPLIED_AFTER_LOCAL_QUALIFICATION event |
 | Use 1 trial borrow per fake peer | Trial borrow allowance = 1 (configurable); exhausted after 1 use, no more without quality pass |
-| Collude on borrow prices | IQR outlier rejection; reputation penalty on multi-cycle consistent violations |
+| Misstate executor reference prices | Do not treat self-reported estimates or reputation credits as cost evidence; no price-consensus penalty is applied |
 
 The cold-start path for a **legitimate new peer**:
 1. Join network → get 1 trial borrow (free, no quality pass needed)
@@ -222,9 +210,9 @@ urace exchange equity register-replica <feature_id> --artifact-hash <sha256>
 
 ---
 
-## Ceiling Enforcement
+## Estimate-Based Listing Ceiling
 
-P2P borrow prices are always cheaper than building the feature from scratch with an executor:
+When an owner reference estimate is configured, the listing CLI may apply this ceiling. It is a price heuristic and does not prove savings versus executor work:
 
 ```
 ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
@@ -242,13 +230,7 @@ ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 
 | large artifact (>100 KB) | +0.05 bonus |
 | **Maximum** | **1.0** |
 
-`iter_savings = avg_saved_verification_iterations × executor_per_call_cost` — verified implementations skip N executor calls, reducing ceiling further. The more complete the bundle, the higher the ceiling; but all ceilings are still below executor cost.
-
-The network reaches **consensus on the ceiling** via lazy gossip during `network refresh`:
-- Peer-reported executor prices are IQR-filtered (reject outliers outside [Q1×0.5, Q3×2.0])
-- Reputation-weighted (rep ≥ 0.1 required)
-- Peers reporting consistent cross-cycle outliers (>1h apart) receive reputation penalties
-- Single-cycle outlier = warning only (no penalty, no false positives)
+`iter_savings` and completeness values are estimates, not measured executor iterations or accepted task coverage. Current P2P refresh does not calculate or enforce a price-consensus ceiling. Consensus over self-reported estimates would not establish a truthful or comparable executor baseline.
 
 ---
 
@@ -289,12 +271,12 @@ urace exchange ledger transfer <peer_id> <amount_units>
 | Threat | Defense |
 |--------|---------|
 | Wash trading | 24h round-trip block per feature |
-| Price manipulation | 1.5× momentum ceiling, executor price ceiling |
+| Price manipulation | 1.5× momentum guard; configured executor-reference ceiling is only an estimate |
 | Supply inflation | Per-feature bp cap (10,000 bp = 100%), fake adoption requires proof-of-purchase |
 | Consensus hijacking | Persistent network size max, reputation-weighted votes |
 | Sybil attacks | Certificate pinning, reputation decay, cluster analysis; bootstrap grant locked until quality pass |
 | Fake replica spam | Replica registration requires valid EQUITY_GRANT; delivery fee only paid on actual delivery audit row |
-| Price ceiling gaming | Multi-cycle IQR consensus; reputation penalty on consistent cross-cycle outliers |
+| Price ceiling gaming | No consensus price ceiling exists; do not treat peer estimates or reputation as cost evidence |
 | Cold-start abuse | Trial borrow limited to 1 per peer; additional borrows require earned balance |
 | Circular money laundering | 24h round-trip detection blocks circular credit flow |
 | DoS flooding | RPC flood detection (10 rejections/hour → block), chunked reads |

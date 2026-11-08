@@ -589,10 +589,8 @@ def list_for_sale(
     if ask_price_units > 0:
         _validate_ask_price_momentum(exchange, feature_id, ask_price_units)
 
-    # Executor price ceiling: P2P borrow price MUST be ≤ executor mint cost.
-    # This guarantees the P2P market is always cheaper than hiring the executor
-    # to generate the feature from scratch. Sellers earn from volume (many buyers),
-    # not from overpricing — total earnings can exceed original cost via multi-buyer.
+    # Apply the creator-supplied reference as a listing estimate ceiling. This
+    # is not an observed executor cost and does not guarantee buyer savings.
     if ask_price_units > 0:
         try:
             all_rows = exchange.audit_rows()
@@ -613,8 +611,7 @@ def list_for_sale(
                     raise ValueError(
                         f'ask_price_units {ask_price_units} exceeds executor reference price {exec_ref}'
                         + (f' minus gas overhead {int(_gas_at)} = {_effective_ceiling}' if _gas_at else '')
-                        + '. P2P borrow price must be ≤ executor mint cost (buyers must always save vs executor). '
-                        'Earn more by selling to many buyers, not by charging above executor price.'
+                        + '. The configured executor reference is an estimate; it does not establish total buyer savings.'
                     )
 
     listing_id = f'elst-{int(time.time() * 1000)}-{seller_id[:8]}'

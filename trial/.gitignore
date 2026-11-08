@@ -87,3 +87,11 @@
 
 !/output_quality.py
 !/test_value_quality.py
+!/p2p_pair_protocol.py
+!/test_p2p_pair_protocol.py
+!/p2p_study_plan.py
+!/p2p_study_runner.py
+!/test_p2p_study_runner.py
+!/p2p_synthetic_cohort.py
+!/p2p_cost_claim_review.py
+!/test_p2p_cost_claim_review.py

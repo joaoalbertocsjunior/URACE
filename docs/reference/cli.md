@@ -160,6 +160,8 @@ All URACE commands in one place.
 | `urace exchange network discover` | Discover peers |
 | `urace exchange network probe <peer_id>` | Probe a peer's offerings |
 | `urace exchange network refresh` | Refresh offers from pinned peers |
+| `urace exchange network assets [QUERY]` | Search authenticated catalogs from pinned peers; paid asks are discovery-only |
+| `urace exchange network fetch-asset <peer_id> <asset_id>` | Fetch an explicitly open-use asset into quarantine; never executes it |
 | `urace exchange network serve` | Start P2P listener |
 | `urace exchange network consensus-status` | View consensus state |
 | `urace exchange network disconnect [--duration-minutes N]` | Pause networking |
@@ -440,8 +442,9 @@ Set `URACE_GITHUB_TOKEN` to a GitHub personal access token with `repo` + `workfl
 
 | Command | Description |
 |---------|-------------|
-| `urace "any question or instruction"` | Route plain text to the right command, executor, or P2P action automatically |
+| `urace "any question or instruction"` | Classify freeform input and rank local and reachable P2P assets before executor implementation |
 | `urace freeform-text "query"` | Explicit freeform dispatch with synonym expansion |
+| `urace freeform-text "query" --p2p-asset <asset_id>` | Explicitly fetch a selected open-use network asset into quarantine and skip executor classification |
 
 Freeform routing uses semantic synonym expansion — "visualization" matches "chart", "llm" matches "model". Enable or disable:
 

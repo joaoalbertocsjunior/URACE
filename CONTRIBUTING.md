@@ -41,7 +41,16 @@ pytest tests/ -x -q          # full suite
 pytest tests/ -k "test_name" # single test
 ```
 
-All PRs must maintain or improve test coverage. No green CI = no merge.
+Runtime tests use pytest-discoverable `test_*.py` modules grouped by feature. Keep new coverage in the smallest relevant module; avoid rebuilding a monolithic catch-all file or importing test classes from another test module. The former `test_urace.py` suite is split into `runtime/tests/test_urace_*.py` files.
+
+The paired P2P evidence protocol has a separate local-only suite because its coordinator and evidence verifier live under `trial/`:
+
+```sh
+cd urace
+PYTHONPATH=runtime python3 -m pytest trial/test_p2p_pair_protocol.py trial/test_p2p_cost_claim_review.py -q
+```
+
+That suite makes no provider calls or live network requests. Synthetic cohort results validate evidence plumbing only and MUST NOT be reported as observed product value or economic savings. All PRs must maintain or improve test coverage. No green CI = no merge.
 
 ## Commit Message Format
 

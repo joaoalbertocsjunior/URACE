@@ -527,7 +527,7 @@ def routing_score(
           'network_hire_viable': bool,
           'avg_peer_rep': float,
           'credit_pressure': float,
-          'executor_cost_factor': float,
+          'executor_cost_factor': None,  # no validated common valuation exists
         }
 
     Routing logic (evaluated in priority order):
@@ -535,14 +535,13 @@ def routing_score(
       2. network_hire — if:
            - spec_complexity ≥ 0.6 (non-trivial work)
            AND avg_peer_rep ≥ 0.5 (network quality sufficient)
-           AND (executor_cost_factor ≥ 1.5 OR credit_pressure ≥ 0.6)
+           AND credit_pressure ≥ 0.6 (resource-routing heuristic only)
       3. executor     — fallback
 
-    executor_cost_factor = executor_cost_units / consensus_escrow_floor(exchange)
-    Ratio > 1.5 means hiring peers is cheaper than running the executor.
+    Executor-call estimates and peer escrow floors are not comparable cost
+    evidence. This function therefore never claims peer hiring is cheaper.
+    Credit pressure may influence route preference, but is not a savings claim.
     """
-    from . import credit_ledger as _cl
-
     credit_pressure = max(0.0, min(1.0, 1.0 - local_credit_balance / max(1, baseline_grant_units * 10)))
 
     peers = available_peers or []
@@ -556,23 +555,21 @@ def routing_score(
         and spec_complexity >= 0.6
     )
 
-    escrow_floor = _cl.consensus_escrow_floor(exchange)
-    executor_cost_factor = (
-        executor_cost_units / escrow_floor
-        if escrow_floor > 0 else 0.0
-    )
+    # Preserve the result field for callers, but make the unavailable comparison
+    # explicit rather than divide estimates denominated under different rules.
+    executor_cost_factor = None
 
     route = 'executor'
     reason = 'default executor path'
     confidence = 0.7
 
-    if network_hire_viable and (executor_cost_factor >= 1.5 or credit_pressure >= 0.6):
+    if network_hire_viable and credit_pressure >= 0.6:
         route = 'network_hire'
         confidence = min(0.95, 0.5 + 0.25 * avg_peer_rep + 0.2 * credit_pressure)
         reason = (
-            f'network_hire preferred: complexity={spec_complexity:.2f} '
-            f'avg_rep={avg_peer_rep:.2f} cost_factor={executor_cost_factor:.2f} '
-            f'credit_pressure={credit_pressure:.0%}'
+            f'network_hire is a resource-routing option: complexity={spec_complexity:.2f} '
+            f'avg_rep={avg_peer_rep:.2f} credit_pressure={credit_pressure:.0%}; '
+            'cost comparison unavailable; no savings claim'
         )
     elif not network_hire_viable and credit_pressure < 0.4:
         confidence = 0.8

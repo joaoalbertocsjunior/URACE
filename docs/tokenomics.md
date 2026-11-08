@@ -6,7 +6,7 @@ The full tokenomics documentation covers:
 - Token definition and earn/spend paths
 - Supply model derived from network physics
 - Epoch-adjustable supply parameters
-- Token price estimation
+- No monetary token valuation
 - Cartel detection and consensus security
 - Security guarantees table
 

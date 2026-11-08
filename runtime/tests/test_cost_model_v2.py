@@ -23,14 +23,14 @@ from urace import cost_model as cm
 
 class DeriveExecutorReferencePriceTests(unittest.TestCase):
 
-    def test_empty_rows_returns_fallback_10(self):
+    def test_empty_rows_is_unknown(self):
         result = cm.derive_executor_reference_price([])
-        self.assertEqual(result, 10)
+        self.assertIsNone(result)
 
     def test_no_matching_rows_returns_fallback_10(self):
         rows = [{'kind': 'EQUITY_GRANT', 'feature_id': 'f1', 'at_unix': time.time()}]
         result = cm.derive_executor_reference_price(rows)
-        self.assertEqual(result, 10)
+        self.assertIsNone(result)
 
     def test_equity_listing_filled_odd_count_median(self):
         now = time.time()
@@ -40,7 +40,7 @@ class DeriveExecutorReferencePriceTests(unittest.TestCase):
             {'kind': 'EQUITY_LISTING_FILLED', 'price_units': 30, 'at_unix': now},
         ]
         result = cm.derive_executor_reference_price(rows)
-        self.assertEqual(result, 30)  # median of [20, 30, 50]
+        self.assertIsNone(result)  # exchange prices do not identify executor cost
 
     def test_equity_listing_filled_even_count_median(self):
         now = time.time()
@@ -51,7 +51,7 @@ class DeriveExecutorReferencePriceTests(unittest.TestCase):
             {'kind': 'EQUITY_LISTING_FILLED', 'price_units': 40, 'at_unix': now},
         ]
         result = cm.derive_executor_reference_price(rows)
-        self.assertEqual(result, 25)  # (20+30)//2
+        self.assertIsNone(result)
 
     def test_equity_listing_filled_takes_priority_over_earn(self):
         now = time.time()
@@ -60,7 +60,7 @@ class DeriveExecutorReferencePriceTests(unittest.TestCase):
             {'kind': 'CREDIT_DELTA', 'direction': 'earn', 'amount_units': 5, 'at_unix': now},
         ]
         result = cm.derive_executor_reference_price(rows)
-        self.assertEqual(result, 50)
+        self.assertIsNone(result)
 
     def test_earn_rows_fallback_when_no_filled(self):
         now = time.time()
@@ -70,7 +70,7 @@ class DeriveExecutorReferencePriceTests(unittest.TestCase):
             {'kind': 'CREDIT_DELTA', 'direction': 'earn', 'amount_units': 35, 'at_unix': now},
         ]
         result = cm.derive_executor_reference_price(rows)
-        self.assertEqual(result, 25)  # median of [15, 25, 35]
+        self.assertIsNone(result)
 
     def test_old_rows_outside_90days_excluded(self):
         old = time.time() - 91 * 86400
@@ -80,13 +80,13 @@ class DeriveExecutorReferencePriceTests(unittest.TestCase):
             {'kind': 'EQUITY_LISTING_FILLED', 'price_units': 7, 'at_unix': now},
         ]
         result = cm.derive_executor_reference_price(rows)
-        self.assertEqual(result, 7)
+        self.assertIsNone(result)
 
     def test_result_always_at_least_1(self):
         now = time.time()
         rows = [{'kind': 'EQUITY_LISTING_FILLED', 'price_units': 0, 'at_unix': now}]
         result = cm.derive_executor_reference_price(rows)
-        self.assertGreaterEqual(result, 1)
+        self.assertIsNone(result)
 
 
 # ── minimum_viable_price ─────────────────────────────────────────────────────
@@ -225,6 +225,7 @@ class VsExecutorComparisonV2Tests(unittest.TestCase):
         result = cm.vs_executor_comparison(config, ask_price_units=5,
                                             executor_reference_price=100)
         self.assertEqual(result['executor_cost_per_call'], 100)
+        self.assertIsNone(result['cheaper_than_executor'])
 
     def test_cheaper_than_executor_always_present(self):
         # Must always be computed, never missing
@@ -237,7 +238,7 @@ class VsExecutorComparisonV2Tests(unittest.TestCase):
                           'protocol_fee_fraction': 0.0,
                           'bandwidth_cost_per_mb': 0.0}}
         result = cm.vs_executor_comparison(config, ask_price_units=50)
-        self.assertTrue(result['cheaper_than_executor'])
+        self.assertIsNone(result['cheaper_than_executor'])
 
     def test_net_saving_uses_p2p_total_not_just_ask(self):
         config = {'p2p': {'executor_reference_price_per_unit': 110,
@@ -245,7 +246,47 @@ class VsExecutorComparisonV2Tests(unittest.TestCase):
                           'bandwidth_cost_per_mb': 0.0}}
         # ask=100, protocol_fee=10, total=110; executor=110 * 1 = 110; net = 110-110 = 0 → not cheaper
         result = cm.vs_executor_comparison(config, ask_price_units=100, executor_calls_saved=1)
-        self.assertFalse(result['cheaper_than_executor'])
+        self.assertIsNone(result['cheaper_than_executor'])
+
+    def test_task_matched_receipts_include_integration_validation_and_executor_residual(self):
+        result = cm.compare_paired_cost_inputs(
+            {'p2p': {'protocol_fee_fraction': 0, 'bandwidth_cost_per_mb': 0}},
+            executor_cost_units=100, ask_price_units=20,
+            integration_cost_units=10, validation_cost_units=5,
+            residual_executor_cost_units=30, task_id='pair-1',
+            acceptance_contract_sha256='a' * 64, executor_accepted=True,
+            executor_receipt_id='exec-receipt-1', p2p_receipt_id='p2p-receipt-1',
+            acceptance_receipt_id='acceptance-1',
+            p2p_accepted=True, independent_acceptance=True,
+            executor_tokens={'input': 1000, 'output': 200},
+            p2p_tokens={'input': 150, 'output': 40})
+        self.assertEqual(result['comparison_status'], 'PAIR_INPUTS_COMPLETE_UNVERIFIED')
+        self.assertEqual(result['p2p_total_cost_units'], 65.0)
+        self.assertEqual(result['net_saving_units'], 35.0)
+        self.assertTrue(result['cheaper_than_executor_estimate'])
+        self.assertIsNone(result['cheaper_than_executor'])
+        self.assertFalse(result['independently_qualified'])
+
+    def test_different_acceptance_outcomes_block_cost_win(self):
+        result = cm.compare_paired_cost_inputs(
+            {}, executor_cost_units=100, ask_price_units=20,
+            integration_cost_units=0, validation_cost_units=0,
+            residual_executor_cost_units=0, task_id='pair-2',
+            acceptance_contract_sha256='b' * 64, executor_accepted=True,
+            p2p_accepted=False, independent_acceptance=True,
+            executor_receipt_id='exec-receipt-2', p2p_receipt_id='p2p-receipt-2',
+            acceptance_receipt_id='acceptance-2')
+        self.assertEqual(result['comparison_status'], 'UNQUALIFIED_MISSING_RECEIPTS_OR_PAIR')
+        self.assertIsNone(result['cheaper_than_executor_estimate'])
+
+    def test_missing_material_cost_blocks_savings_claim(self):
+        result = cm.compare_paired_cost_inputs(
+            {}, executor_cost_units=100, ask_price_units=20,
+            integration_cost_units=None, validation_cost_units=0,
+            residual_executor_cost_units=0)
+        self.assertEqual(result['comparison_status'], 'UNQUALIFIED_MISSING_RECEIPTS_OR_PAIR')
+        self.assertIsNone(result['net_saving_units'])
+        self.assertIsNone(result['cheaper_than_executor'])
 
 
 # ── Exchange integration: protocol fee at fill-listing ───────────────────────
@@ -337,7 +378,7 @@ class ListForSaleCeilingIntegrationTests(unittest.TestCase):
             {'kind': 'EQUITY_LISTING_FILLED', 'price_units': 42, 'at_unix': now},
         ]
         price = cm.derive_executor_reference_price(rows)
-        self.assertEqual(price, 42)
+        self.assertIsNone(price)
 
     def test_config_ref_price_takes_precedence_over_network(self):
         # Config value should win over ledger rows
@@ -348,12 +389,11 @@ class ListForSaleCeilingIntegrationTests(unittest.TestCase):
         network_price = cm.derive_executor_reference_price(rows)
         # In exchange_cli, config price wins when set
         # This confirms the branching: config → 50, network → 999
-        self.assertNotEqual(config_price, network_price)
-        self.assertEqual(network_price, 999)
+        self.assertIsNone(network_price)
 
     def test_empty_ledger_fallback_is_10(self):
         price = cm.derive_executor_reference_price([])
-        self.assertEqual(price, 10)
+        self.assertIsNone(price)
 
     def test_derived_price_used_in_vs_executor_comparison(self):
         now = time.time()
@@ -361,8 +401,8 @@ class ListForSaleCeilingIntegrationTests(unittest.TestCase):
         derived = cm.derive_executor_reference_price(rows)
         result = cm.vs_executor_comparison({}, ask_price_units=5,
                                             executor_reference_price=derived)
-        self.assertEqual(result['executor_cost_per_call'], 50)
-        self.assertTrue(result['cheaper_than_executor'])
+        self.assertIsNone(result['executor_cost_per_call'])
+        self.assertIsNone(result['cheaper_than_executor'])
 
 
 # ── Exchange integration: minimum viable price auto-adjusts ask upward ────────
@@ -464,7 +504,7 @@ class BorrowFeatureCostGasTests(unittest.TestCase):
                           'bandwidth_cost_per_mb': 0.0,
                           'executor_reference_price_per_unit': 15}}
         result = cm.vs_executor_comparison(config, ask_price_units=10)
-        self.assertFalse(result['cheaper_than_executor'])
+        self.assertIsNone(result['cheaper_than_executor'])
 
     def test_cheaper_than_executor_true_with_low_gas(self):
         # ask=10, executor=200, gas=1 → total≈11 → cheaper
@@ -472,7 +512,7 @@ class BorrowFeatureCostGasTests(unittest.TestCase):
                           'bandwidth_cost_per_mb': 0.0,
                           'executor_reference_price_per_unit': 200}}
         result = cm.vs_executor_comparison(config, ask_price_units=10)
-        self.assertTrue(result['cheaper_than_executor'])
+        self.assertIsNone(result['cheaper_than_executor'])
 
 
 # ── gas_overhead in minimum_viable_price ─────────────────────────────────────

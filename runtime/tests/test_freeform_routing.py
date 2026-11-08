@@ -61,6 +61,31 @@ class FreeformRoutingTests(unittest.TestCase):
   with patch.object(cli,'load_config',return_value=self.config),patch.object(cli,'load_state_for_read',return_value=self.state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':False}),patch.object(cli.intelligent_executor,'run_routed_codex',side_effect=AssertionError('unavailable call')),contextlib.redirect_stdout(io.StringIO()) as out:
    rc=cli.main(['classify','hello','--json'])
   self.assertEqual(rc,1);self.assertIn('unavailable',json.loads(out.getvalue())['error'])
+ def test_explicit_p2p_asset_fetch_skips_executor_and_only_quarantines(self):
+  text='Use the existing response parser';candidate={'asset_id':'asset-1','seller_peer_id':'peer-1','feature_id':'parser','license_id':'MIT'}
+  exchange=type('ExchangeFixture',(),{'load':lambda self:{'enabled':True,'network':True}})()
+  with patch.object(cli,'load_config',return_value=self.config),patch.object(cli,'load_state_for_read',return_value=self.state),patch('urace.peer_exchange.Exchange',return_value=exchange),patch('urace.remote_assets.discover',return_value={'open_assets':[candidate]}),patch('urace.remote_assets.fetch_open_asset',return_value={'status':'QUARANTINED','applied':False}) as fetch,patch.object(cli.intelligent_executor,'run_routed_codex',side_effect=AssertionError('P2P selection must bypass classifier')),contextlib.redirect_stdout(io.StringIO()) as out:
+   rc=cli.main(['classify',text,'--json','--p2p-asset','asset-1'])
+  result=json.loads(out.getvalue());self.assertEqual(rc,0);self.assertEqual(result['status'],'p2p_asset_quarantined');self.assertFalse(result['applied']);fetch.assert_called_once()
+ def test_freeform_ranks_assets_after_classification_using_goal_fields(self):
+  text='Please urgently update deployment settings for login'
+  item=self.item('goal',{'title':'Improve checkout latency','success_measure':'p95 response time below 200ms'},text)
+  features=[{'feature_id':'deployment-settings','description':'urgent login deployment settings'},
+            {'feature_id':'checkout-latency','description':'checkout p95 response time latency optimizer'}]
+  exchange=type('ExchangeFixture',(),{'load':lambda self:{'enabled':False,'network':False}})()
+  with patch('urace.peer_exchange.Exchange',return_value=exchange),patch.object(freeform_routing,'_p2p_free_features',return_value=features),patch.object(freeform_routing,'_p2p_paid_features',return_value=[]):
+   rc,result,queued=self.runtext(text,self.batch(text,[item]))
+  self.assertEqual(rc,2)  # classified goal is retained pending user confirmation
+  self.assertEqual(result['p2p_suggestions'][0]['feature_id'],'checkout-latency')
+  self.assertEqual(result['p2p_suggestions'][0]['match_method'],'intent-fields-v1')
+  self.assertEqual(result['value_route']['matching_stage'],'post-classification goal/intent fields')
+  queued.assert_not_called()
+ def test_non_actionable_input_skips_asset_discovery(self):
+  text='Hello there';item=self.item('response',{'text':'Hello!'},text)
+  with patch.object(freeform_routing,'_p2p_free_features',side_effect=AssertionError('no catalog read')),patch('urace.remote_assets.discover',side_effect=AssertionError('no peer lookup')):
+   rc,result,queued=self.runtext(text,self.batch(text,[item]))
+  self.assertEqual(rc,0);self.assertEqual(result['remote_p2p_discovery']['status'],'NOT_APPLICABLE_NO_ACTIONABLE_INTENT')
+  self.assertEqual(result['p2p_suggestions'],[]);queued.assert_not_called()
 
 class RoutingCoverageAndReuseTests(unittest.TestCase):
  setUp=FreeformRoutingTests.setUp

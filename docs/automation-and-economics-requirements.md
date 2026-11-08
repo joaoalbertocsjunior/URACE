@@ -77,6 +77,12 @@ A full orchestration/freeform interpretation envelope should retain original tex
 
 Stabilize the qualified core first, gather compatible matched comparisons, and then validate independent retained-user benefit. Simulations stay labeled. Financial/token economics, independent consensus, autonomous pricing and licensing obligations need separately frozen protocols and adversarial evidence before activation. These remain requirements, not completed capabilities or claims erased from the report.
 
+### P2P-first intent routing and cost evidence
+
+Freeform routing should rank compatible free and paid P2P assets first for the user's high-level intent, then present a specific asset and its evidence. A ranking is only a candidate: it does not prove semantic equivalence or authorize spend. Paid borrowing requires explicit confirmation; if no acceptable asset is selected, the ordinary authorized executor path remains available. Record the candidate set, feature/version and content hash, selection/rejection reason, borrow receipt, integration/adaptation work, validation work, and any residual executor work.
+
+Do not infer executor cost from P2P sale prices or reputation credits. A paired cost record is eligible for a savings comparison only when both arms use the same immutable task and acceptance-contract hash, both pass independent acceptance, and receipts cover executor charges, P2P ask/fees/delivery, integration, validation, and residual executor calls. Report provider token usage separately by input/output/cache categories; do not convert tokens to URACE units or currency without an explicit, dated rate source. Missing components stay null and the comparison remains unqualified. A passing cost comparison does not replace separate product-quality and retained-user-benefit evidence.
+
 ## Latest scope clarification
 
 Rewards and economic feature packs/bundles are development-sandbox experiments only, disabled by default. A standalone prototype implements simulated funded reward caps, reputation/prestige observations, base-owner floors, opt-in prospective dynamic allocations, dependency closure, identity/duplicate checks within fixture assumptions, and suitable net-benefit/build alternatives. It makes no real payment, mints no network credit, and transfers no ownership. It cannot authenticate independent real users or market ROI from input booleans. See `dev/experiments/feature_market_v1/README.md`.

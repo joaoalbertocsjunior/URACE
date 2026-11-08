@@ -73,7 +73,7 @@ A cluster of co-registered nodes attempting to hold availability-ransom over a f
 ## Market integrity
 
 - **Wash trading block**: self-fills rejected; circular trade detection
-- **Price ceiling enforcement**: `ask_price ≤ executor_reference_price` — enforced at listing, not advisory
+- **Price ceiling**: configured estimate based ceiling may be applied at listing; it is not a qualified cost savings claim
 - **Minimum viable price floor**: `ask_price ≥ production_cost + bandwidth + protocol_fee`
 - **Single-node cartel detection**: single peer holding disproportionate balance flagged in `credit_ledger.py`
 

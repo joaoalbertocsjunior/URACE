@@ -2,15 +2,15 @@
 
 [← Documentation](../index.md)
 
-URACE enforces several pricing rules to keep the marketplace fair, prevent manipulation, and ensure borrowers always save money vs. building from scratch.
+URACE exposes pricing estimates and transaction controls. Current price metadata does not prove that a borrower saves money versus building from scratch.
 
 ---
 
-## Executor Price Ceiling
+## Configured Reference Estimate
 
-Every feature minted to the P2P network must declare an `executor_reference_price_units` — the cost to build that feature from scratch using an executor.
+An `executor_reference_price_units` value is an owner supplied estimate. A marketplace fill price or reputation reward is not an executor cost baseline. Cost savings are qualified only when task matched executor receipts and P2P acquisition, integration, validation, and residual executor costs are recorded in the same cost unit.
 
-**The full ceiling formula:**
+When configured, the listing path may apply this estimate-based ceiling:
 
 ```
 ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
@@ -18,13 +18,13 @@ ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 
 
 | Term | Description |
 |------|-------------|
-| `executor_reference_price` | Derived from median fills in the local ledger (last 90 days); floor: 10 units |
-| `gas_overhead` | On-chain transaction cost in URACE units; deducted first so the buyer's total cost always stays below executor cost |
+| `executor_reference_price` | Owner-configured estimate; sale fills and reward credits are not used as executor-cost observations |
+| `gas_overhead` | Estimated transaction overhead in URACE units; subtracting it does not establish that total buyer cost is below executor cost |
 | `completeness` | Bundle completeness score 0.0–1.0 (see table below) |
 | `margin` | Seller profit margin as a fraction (e.g. 0.20 = 20%) |
 | `iter_savings` | `avg_saved_iterations × executor_per_call_cost` — verified implementations skip N executor re-runs |
 
-This guarantee means: if you can get a feature from a peer, it is always cheaper than having an executor build it. Buyers always save money.
+This formula is a pricing heuristic, not a savings guarantee. The comparison remains unqualified when the baseline or any material cost is unknown. A cost advantage alone does not prove equivalent accepted value.
 
 **`gas_overhead` resolution (priority order):**
 1. Dynamic EVM: `gas_per_tx_gwei × gas_price_gwei × urace_units_per_gwei` (all three > 0)
@@ -37,13 +37,13 @@ When listing a feature for sale:
 urace exchange equity list-for-sale <feature-id> --bp 5000 --price 80
 ```
 
-URACE validates that `--price` does not exceed the ceiling at listing time. The validation is enforced again at fill time via `vs_executor_comparison()`.
+URACE may apply an estimate based ceiling when configured. Fill time records the comparison as unqualified until task matched cost receipts and independent acceptance are supplied.
 
 ---
 
 ## Multi-Buyer Revenue Model
 
-Sellers earn from **volume**, not markup. If you build a feature for 100 tokens executor cost and list it at 80 tokens borrow price:
+Repeated use can distribute more reputation units to the seller. This illustration does not establish profit, monetary value, or a buyer's savings:
 
 | Scenario | Revenue |
 |----------|---------|
@@ -51,7 +51,7 @@ Sellers earn from **volume**, not markup. If you build a feature for 100 tokens 
 | 10 buyers | 800 tokens |
 | 100 buyers | 8,000 tokens |
 
-The network distributes your creation cost across all adopters. With 10 buyers you've already earned 8× your original cost. This is the core incentive for minting: your work keeps earning.
+Ten fills at 80 URACE units produce 800 ledger units before fees. URACE units are not a verified reimbursement for executor charges or creator labor.
 
 ---
 

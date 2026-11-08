@@ -165,15 +165,16 @@ class RoutingScoreTests(unittest.TestCase):
         result = self.wm.routing_score(**self._base_kwargs(spec_complexity=0.3, available_peers=peers))
         self.assertEqual(result['route'], 'executor')
 
-    def test_high_complexity_good_rep_expensive_executor_routes_hire(self):
+    def test_executor_estimate_vs_peer_escrow_floor_does_not_claim_savings(self):
         peers = [{'peer_id': f'p{i}', 'combined_rep': 0.8} for i in range(3)]
-        # executor_cost = 50 × escrow_floor → cost_factor >> 1.5
         result = self.wm.routing_score(**self._base_kwargs(
             spec_complexity=0.8,
             executor_cost_units=50 * self.cl.UNIT,
             available_peers=peers,
         ))
-        self.assertEqual(result['route'], 'network_hire')
+        self.assertEqual(result['route'], 'executor')
+        self.assertIsNone(result['executor_cost_factor'])
+        self.assertNotIn('cheaper', result['reason'].lower())
 
     def test_high_credit_pressure_routes_hire(self):
         peers = [{'peer_id': f'p{i}', 'combined_rep': 0.8} for i in range(3)]
@@ -184,6 +185,7 @@ class RoutingScoreTests(unittest.TestCase):
             available_peers=peers,
         ))
         self.assertEqual(result['route'], 'network_hire')
+        self.assertIn('no savings claim', result['reason'])
 
     def test_low_rep_peers_routes_executor(self):
         peers = [{'peer_id': f'p{i}', 'combined_rep': 0.2} for i in range(5)]

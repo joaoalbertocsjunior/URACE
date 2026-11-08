@@ -8,6 +8,8 @@ surfaces, then writes the ledger to urace/exchange/p2p_audit.json.
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 from pathlib import Path
 
 features: list[dict] = []
@@ -15,14 +17,37 @@ _ids: set[str] = set()
 
 
 def _fp(feature_id: str) -> str:
-    import hashlib
     return hashlib.sha256(feature_id.encode()).hexdigest()
+
+
+def _local_source_files(tags) -> list[dict]:
+    """Bind exact runtime-module tags to source files from this checkout."""
+    source_root = Path(__file__).resolve().parent / "urace"
+    files = []
+    for tag in tags:
+        if not isinstance(tag, str) or not re.fullmatch(r"[a-zA-Z0-9_]{1,80}", tag):
+            continue
+        path = source_root / (tag + ".py")
+        if path.is_symlink() or not path.is_file():
+            continue
+        data = path.read_bytes()
+        files.append({"path": "runtime/urace/" + path.name,
+                      "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)})
+    return sorted({item["path"]: item for item in files}.values(), key=lambda item: item["path"])
 
 
 def add(feature_id: str, name: str, description: str, tags, kind_label: str, domain: str = 'software') -> None:
     if feature_id in _ids:
         raise ValueError(f"duplicate feature_id: {feature_id}")
     _ids.add(feature_id)
+    artifact_discovery = {"kind": "runtime_bundle", "peer_exchange": True}
+    source_files = _local_source_files(tags)
+    if source_files:
+        source_contract = {"license_id": "Apache-2.0", "files": source_files}
+        artifact_discovery["local_source_files"] = source_files
+        artifact_discovery["source_license_id"] = "Apache-2.0"
+        artifact_discovery["source_manifest_sha256"] = hashlib.sha256(
+            json.dumps(source_contract, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     features.append({
         "feature_id": feature_id,
         "name": name,
@@ -30,7 +55,7 @@ def add(feature_id: str, name: str, description: str, tags, kind_label: str, dom
         "tags": list(tags),
         "kind_label": kind_label,
         "domain": domain,
-        "artifact_discovery": {"kind": "runtime_bundle", "peer_exchange": True},
+        "artifact_discovery": artifact_discovery,
         "borrow_price_units": 0,
         "owner": None,
         "initial_ledger": True,
@@ -468,6 +493,11 @@ add("rt-ff-normalize", "Freeform normalize", "Normalize batch input.", ["freefor
 add("rt-ff-validate", "Freeform validate", "Validate batch against parser.", ["freeform_routing"], "mechanism")
 add("rt-ff-p2p-free", "P2P free features context", "Expose P2P free features in context.", ["freeform_routing", "p2p"], "mechanism")
 add("rt-ff-p2p-paid", "P2P paid features context", "Expose P2P paid features in context.", ["freeform_routing", "p2p"], "mechanism")
+add("rt-ff-p2p-remote-search", "Freeform remote P2P search", "Search bounded pinned seller catalogs after actionable intent classification.", ["freeform_routing", "remote_assets", "p2p"], "mechanism")
+add("rt-ff-p2p-explicit-fetch", "Freeform explicit open-asset fetch", "Fetch a selected seller asset to quarantine without invoking classification.", ["freeform_routing", "remote_assets", "p2p"], "mechanism")
+add("rt-p2p-intent-match", "Intent-to-asset ranking", "Rank the full bounded P2P catalog against validated goal and intent fields; relevance is not quality or equivalence.", ["p2p_matching", "freeform_routing", "p2p"], "mechanism")
+add("rt-p2p-query-gate", "Actionable-intent discovery gate", "Avoid local/remote asset search for freeform input with no actionable goal or intent.", ["p2p_matching", "freeform_routing", "p2p"], "mechanism")
+add("rt-p2p-local-source-binding", "Initial-ledger local source binding", "Expose source paths and SHA-256 hashes linking minted URACE features to exact local runtime modules.", ["freeform_routing", "p2p_matching"], "schema")
 add("rt-ff-prompt", "Freeform prompt", "Build prompt.", ["freeform_routing"], "mechanism")
 add("rt-ff-route", "Freeform route", "Route freeform text to command.", ["freeform_routing"], "mechanism")
 
@@ -687,6 +717,23 @@ add("p2p-px-send", "Peer send", "Peer send message.", ["peer_exchange"], "mechan
 add("p2p-px-relay-connect", "Relay connect", "Relay connection to peer.", ["peer_exchange"], "mechanism")
 add("p2p-px-server", "Peer server", "Peer-exchange server.", ["peer_exchange"], "mechanism")
 add("p2p-px-discover", "Peer discover", "Peer discover.", ["peer_exchange"], "mechanism")
+
+# ===================== remote_assets.py =====================
+add("p2p-remote-assets-catalog", "Authenticated remote asset catalog", "Expose public open-use assets and discovery-only paid asks to a pinned peer.", ["remote_assets", "p2p", "security"], "mechanism")
+add("p2p-remote-assets-validate", "Remote catalog and asset verifier", "Validate seller identity, open-use terms, bounded bytes and signed artifact digest.", ["remote_assets", "p2p", "security"], "mechanism")
+add("p2p-remote-assets-fetch", "Open-use asset fetch", "Fetch an explicitly selected open-use artifact into quarantine.", ["remote_assets", "p2p", "quarantine"], "mechanism")
+add("p2p-remote-assets-ack", "Buyer quarantine receipt acknowledgement", "Verify buyer-signed quarantine receipt at seller without claiming application or settlement.", ["remote_assets", "p2p", "audit"], "mechanism")
+
+# ===================== trial/p2p_study_plan.py =====================
+add("trial-p2p-cohort-plan", "Frozen P2P/direct cohort planner", "Freeze 30 matched task pairs with six per family and balanced arm order.", ["trial", "benchmark", "p2p"], "mechanism")
+add("trial-p2p-pair-verifier", "P2P/direct paired evidence verifier", "Verify matched receipts, acceptance, seller delivery and cost evidence without claiming total savings.", ["trial", "benchmark", "p2p"], "mechanism")
+add("trial-p2p-value-rubric", "Paired value rubric measurement", "Require an evaluator-signed normalized value score bound to each task's frozen family rubric.", ["trial", "benchmark", "evaluation"], "mechanism")
+add("trial-p2p-paired-cost", "Paired cost receipt", "Verify both-arm USD cost dimensions under a common declared billing basis while keeping URACE units separate.", ["trial", "benchmark", "cost"], "mechanism")
+add("trial-p2p-live-runner", "Adapter-driven live P2P paired runner", "Coordinate frozen direct and P2P-first arms with signed acceptance, cost evidence and public exchange snapshots.", ["trial", "benchmark", "p2p"], "mechanism")
+add("trial-p2p-synthetic-cohort", "Local-only synthetic P2P cohort", "Exercise 30 synthetic pairs over localhost mutual TLS using source bundles from minted URACE runtime features; outcomes and costs remain synthetic.", ["trial", "benchmark", "p2p", "security"], "mechanism")
+add("trial-p2p-retrieval-benchmark", "Held-out P2P retrieval benchmark", "Compare raw-request and classified-intent rankings on externally supplied labeled cases; does not measure product value or cost.", ["trial", "benchmark", "p2p"], "mechanism")
+add("trial-p2p-source-assets", "Source-grounded URACE feature bundles", "Materialize Apache-2.0 runtime module bundles from initial-ledger feature source bindings with per-file digests.", ["trial", "benchmark", "p2p"], "mechanism")
+add("trial-p2p-source-assets-verify", "Source-grounded feature bundle verifier", "Verify bundle digests, license, initial-ledger binding and local implementation bytes.", ["trial", "benchmark", "p2p", "integrity"], "mechanism")
 
 # ===================== peer_improvement.py =====================
 add("p2p-pi-schema", "Peer-improvement schema v1", "urace-peer-improvement-v1.", ["peer_improvement"], "schema")
@@ -1609,6 +1656,7 @@ _test_files = [
     ("test_feature_equity", "Feature equity tests"),
     ("test_feature_policy", "Feature policy tests"),
     ("test_freeform_routing", "Freeform routing tests"),
+    ("test_p2p_matching", "Intent-to-asset ranking and benchmark tests"),
     ("test_full_scope_audit", "Full scope audit tests"),
     ("test_implementation_sequence", "Implementation sequence tests"),
     ("test_json_flags", "JSON flags tests"),
@@ -1679,6 +1727,9 @@ _trial_tests = [
     ("test_governor", "Governor tests"),
     ("test_lifecycle", "Lifecycle tests"),
     ("test_peer_runtime", "Peer runtime tests"),
+    ("test_p2p_pair_protocol", "P2P/direct-executor paired evidence tests"),
+    ("p2p_synthetic_cohort", "Local-only 30-pair synthetic P2P benchmark"),
+    ("p2p_retrieval_benchmark", "Held-out P2P retrieval measurement"),
     ("test_product_controls_trial", "Product controls (trial) tests"),
     ("test_product_resources", "Product resources tests"),
     ("test_qualification_protocol", "Qualification protocol tests"),
@@ -1710,10 +1761,10 @@ def main() -> None:
     output = Path(__file__).resolve().parent.parent / "exchange" / "initial_ledger" / "initial_ledger.jsonl"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    # Load existing ledger to find already-present feature IDs (append-only semantics).
-    # Existing entries are never removed or rewritten — only new IDs are appended.
+    # Keep existing feature identities and order, refresh source hashes for
+    # current runtime modules, and append any newly defined feature IDs.
     existing_ids: set[str] = set()
-    existing_lines: list[str] = []
+    existing_rows: list[tuple[str, dict]] = []
     if output.exists():
         for raw in output.read_text(encoding="utf-8").splitlines():
             raw = raw.strip()
@@ -1725,21 +1776,43 @@ def main() -> None:
                 continue
             # Skip the header line(s)
             if obj.get("schema") == "urace-initial-ledger-v1":
-                existing_lines.append(raw)
                 continue
             fid = obj.get("feature_id")
             if fid:
                 existing_ids.add(fid)
-                existing_lines.append(raw)
+                existing_rows.append((raw, obj))
 
     # Determine which features are new (not already in the ledger)
     new_features = [f for f in features if f["feature_id"] not in existing_ids]
     all_features_count = len(existing_ids) + len(new_features)
 
-    # Rewrite: updated header + all existing lines (preserving order) + new entries
+    # Refresh only source bindings on existing IDs; preserve other live/reference
+    # ledger fields and append new definitions in builder order.
     header = json.dumps({"schema": "urace-initial-ledger-v1", "feature_count": all_features_count}, sort_keys=False)
-    # Replace or prepend header line
-    body_lines = [l for l in existing_lines if json.loads(l).get("schema") != "urace-initial-ledger-v1"]
+    definitions = {feature["feature_id"]: feature for feature in features}
+    body_lines = []
+    source_keys = ("local_source_files", "source_license_id", "source_manifest_sha256")
+    for original, row in existing_rows:
+        definition = definitions.get(row["feature_id"])
+        changed = False
+        if definition:
+            for key in ("name", "description", "tags", "kind_label", "domain", "canonical_fingerprint"):
+                if row.get(key) != definition.get(key):
+                    row[key] = definition.get(key)
+                    changed = True
+            old_discovery = row.get("artifact_discovery", {})
+            new_discovery = definition.get("artifact_discovery", {})
+            updated = dict(old_discovery)
+            for key in source_keys:
+                updated.pop(key, None)
+                if key in new_discovery:
+                    updated[key] = new_discovery[key]
+            if updated != old_discovery:
+                row["artifact_discovery"] = updated
+                changed = True
+        if changed:
+            original = json.dumps(row, sort_keys=False)
+        body_lines.append(original)
     new_lines = [json.dumps(f, sort_keys=False) for f in new_features]
     output.write_text("\n".join([header] + body_lines + new_lines) + "\n", encoding="utf-8")
 

@@ -1,4 +1,6 @@
 import argparse,contextlib,copy,io,json,tempfile,unittest
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from pathlib import Path
 from unittest.mock import patch
 from urace import cli,_common,api_interface,command_surface,freeform_routing
@@ -19,6 +21,16 @@ class CommandSurfaceTests(unittest.TestCase):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
   self.config=copy.deepcopy(cli.load_config());self.config.pop('active_product',None);self.config['state_path']=str(Path(self.tmp.name)/'state.json');self.config['executor']['enabled']=False
   self.path=Path(self.config['state_path']);self.state=cli.initial_state(self.config);_common.atomic_write_json(self.path,self.state)
+ def test_dispatch_parser_is_isolated_across_threads(self):
+  barrier=Barrier(2)
+  def parse_help(_):
+   parser=cli.dispatch_parser();barrier.wait(timeout=5)
+   args=parser.parse_args(['help','configuration'])
+   return id(parser),args.command,args.operation
+  with ThreadPoolExecutor(max_workers=2) as pool:
+   results=list(pool.map(parse_help,range(2)))
+  self.assertNotEqual(results[0][0],results[1][0])
+  self.assertEqual([(item[1],item[2]) for item in results],[('help',['configuration'])]*2)
  def invoke(self,argv):
   with patch.object(cli,'load_config',return_value=self.config),contextlib.redirect_stdout(io.StringIO()) as out,contextlib.redirect_stderr(io.StringIO()) as err:
    try:rc=cli.main(argv)

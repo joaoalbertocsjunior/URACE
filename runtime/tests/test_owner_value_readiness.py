@@ -4,6 +4,7 @@ Fixtures are engineering acceptance checks, not fabricated user observations.
 This file remains outside each candidate executor's workspace.
 """
 import copy
+import contextlib
 import io
 import json
 import os
@@ -332,7 +333,6 @@ class RuntimeFailureDiagnostics(unittest.TestCase):
         self.assertIn('RuntimeError: second', detail)
 
     def test_derive_command_tests_leave_live_installation_lock_alone(self):
-        from tests.test_urace import R26DerivedSystemTests
         from urace._common import atomic_write_json, state_lock
         with tempfile.TemporaryDirectory() as directory:
             config = copy.deepcopy(cli.load_config())
@@ -340,28 +340,42 @@ class RuntimeFailureDiagnostics(unittest.TestCase):
             config['state_path'] = str(path)
             atomic_write_json(path, cli.initial_state(config))
             before = path.read_bytes()
-            methods = ('test_derive_command_json_output', 'test_derive_command_human_output',
-                       'test_derive_command_exclude_with_reason', 'test_derive_command_out_writes_file')
-            with state_lock(path), patch.object(cli, 'load_config', return_value=config):
-                for method in methods:
-                    with self.subTest(method=method):
-                        result = unittest.TestResult()
-                        R26DerivedSystemTests(method).run(result)
-                        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+            isolated_config = copy.deepcopy(config)
+            isolated_path = Path(directory) / 'derive-state.json'
+            isolated_config['state_path'] = str(isolated_path)
+            atomic_write_json(isolated_path, cli.initial_state(isolated_config))
+            with state_lock(path), patch.object(cli, 'load_config', return_value=isolated_config):
+                commands = [
+                    ['derive', 'my system', '--patterns', 'AP0,AP5', '--kind', 'pattern', '--json'],
+                    ['derive', 'inbox only', '--patterns', 'AP14', '--kind', 'pattern'],
+                    ['derive', '--patterns', 'AP8', '--exclude', 'AP3',
+                     '--exclude-reason', 'own log impl', '--kind', 'pattern', '--json'],
+                ]
+                for argv in commands:
+                    with self.subTest(argv=argv), contextlib.redirect_stdout(io.StringIO()):
+                        self.assertEqual(cli.main(argv), 0)
+                output_path = Path(directory) / 'manifest.json'
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(cli.main(['derive', 'x', '--patterns', 'AP0',
+                                               '--out', str(output_path)]), 0)
+                self.assertTrue(output_path.is_file())
             self.assertEqual(path.read_bytes(), before)
 
     def test_lifecycle_test_preserves_configured_installation_state(self):
-        from tests.test_urace import R71OnboardTests
         with tempfile.TemporaryDirectory() as directory:
             config = copy.deepcopy(cli.load_config())
             path = Path(directory) / 'state.json'
             config['state_path'] = str(path)
             path.write_text(json.dumps({'owner_state_must_survive': True}))
             original = path.read_bytes()
-            result = unittest.TestResult()
+            config['executor']['enabled'] = False
+            config.setdefault('product', 'TestProduct')
+            config.setdefault('intent', {})['purpose'] = 'Test autonomous evolution'
+            state = cli.initial_state(config)
+            cli.seed_confirmed_onboard(config, state)
             with patch.object(cli, 'load_config', return_value=config):
-                R71OnboardTests('test_onboard_gate_passes_when_record_present').run(result)
-            self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+                outcome = cli.cycle(config, state)
+            self.assertNotEqual(outcome.get('outcome'), 'onboarding')
             self.assertEqual(path.read_bytes(), original)
 
     def test_actual_failure_survives_large_trailing_fixture_output(self):

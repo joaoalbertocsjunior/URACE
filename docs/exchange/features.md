@@ -19,7 +19,7 @@ urace exchange equity list-for-sale <feature-id> --bp 5000 --price 80
 ```
 
 - `--bp` is your equity stake in basis points (5000 = 50% of 10,000)
-- `--price` is the borrow price in tokens — must be ≤ executor reference price
+- `--price` is the borrow price in URACE units. A configured creator reference may impose an estimate-based listing ceiling; it is not a verified executor cost.
 
 When another peer borrows the feature, you earn tokens proportional to your equity stake. The earn amount is computed at fill time by `mint_per_adoption()` — it scales with adoption rank, network size, feature complexity, and current supply pressure. First adopters earn the most; earn decays as saturation is approached. See [Node Rewards](../concepts/node-rewards.md#creator-earn--how-the-amount-is-computed) for the full formula.
 

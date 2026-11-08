@@ -2,7 +2,7 @@
 
 [← Documentation](../index.md)
 
-The URACE exchange is a P2P feature marketplace. Peers share verified software improvements, earn tokens from adoption, and borrow each other's features at prices lower than building from scratch.
+The URACE exchange is a P2P feature marketplace. Peers share software improvements, earn reputation units from adoption, and can borrow each other's features. Whether a borrow is cheaper than executor work requires task-matched costs and acceptance evidence.
 
 ---
 
@@ -11,8 +11,8 @@ The URACE exchange is a P2P feature marketplace. Peers share verified software i
 The exchange connects software teams working on similar problems. Instead of every team solving the same challenges independently, the exchange lets teams:
 
 - **Mint** features they've built (verified by quality gate) and earn tokens when others adopt them
-- **Borrow** features from peers at a fraction of the build cost
-- **Trade equity** in features they believe will gain value
+- **Receive** open-use artifacts from pinned peers into quarantine
+- **Inspect** seller-stated paid asks; cross-peer settlement is not yet available
 - **Commission work** from peers via the escrow-backed work market
 
 ---
@@ -28,23 +28,25 @@ The exchange connects software teams working on similar problems. Instead of eve
 
 ## How It Works
 
-1. You run `urace run` and earn tokens by passing quality gates
-2. You enable the exchange and create a peer identity
-3. You mint features you've built to the network
-4. Other peers borrow your features — you earn tokens per adoption
-5. You use earned tokens to borrow features from peers
+1. You enable networking and pin peer identities.
+2. A peer can expose an authenticated catalog of explicitly open-use assets and seller-local paid listing asks.
+3. Freeform routing searches pinned catalogs before executor implementation and ranks plausible task matches.
+4. An explicitly selected open-use asset can be fetched into quarantine; applying and executing it remain separate operator-controlled steps.
+5. Paid remote asks are discovery-only. Cross-peer purchase settlement is not implemented.
 
-The token economy is self-contained: tokens only enter circulation via verified quality improvements, and tokens only leave via verified feature adoption.
+The closed-network ledger records URACE reputation units. Those units do not have a verified exchange rate to provider tokens or fiat, so ledger activity alone cannot prove economic savings.
 
 ---
 
 ## Key Properties
 
 - **Off by default**: The exchange is disabled until you explicitly enable it
-- **Executor price ceiling**: P2P borrow price is always ≤ the cost of building the feature with an executor
+- **Price estimate**: a creator supplied reference may constrain a listing; no network consensus or universal lower-cost guarantee is implemented
 - **Cryptographically verified**: All bundles are signed with post-quantum hybrid signatures
 - **Quarantine model**: Borrowed features are never executed automatically
-- **Reputation-weighted**: Peers with higher verified contribution earn more trust
+- **Open-asset fetch**: `urace exchange network assets "<intent>"` searches pinned peers; `urace exchange network fetch-asset <peer-id> <asset-id>` receives an open-licensed artifact into quarantine (maximum 300 KB per one-RPC transfer)
+- **Paid remote asks**: visible only as seller-stated URACE local units; no network purchase, shared settlement, or executor-cost comparison is available
+- **Price evidence**: P2P and reputation records are not executor cost receipts; cost claims need matched task evidence
 
 ---
 

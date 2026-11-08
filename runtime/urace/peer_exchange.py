@@ -297,11 +297,17 @@ class Exchange:
   if type(b['created_unix']) not in (int,float) or not time.time()-604800<=b['created_unix']<=time.time()+300:raise ValueError('Expired/future bundle')
   if 'artifact_ref' in b:
    if b.get('sha256') and b['sha256']!=b['artifact_ref']:raise ValueError('Artifact digest mismatch: sha256 != artifact_ref')
+   if 'artifact' in b and 'artifact_b64' in b:raise ValueError('Choose one inline artifact encoding')
+   if 'artifact_b64' in b:
+    try:
+     raw_b64=base64.b64decode(b['artifact_b64'],validate=True)
+     if len(raw_b64)>300000 or hashlib.sha256(raw_b64).hexdigest()!=b['artifact_ref']:raise ValueError('Inline artifact digest/size mismatch')
+    except (ValueError,TypeError) as exc:raise ValueError('Invalid bounded inline artifact') from exc
    if 'artifact' in b:
     if not isinstance(b['artifact'],str) or hashlib.sha256(b['artifact'].encode()).hexdigest()!=b['artifact_ref']:raise ValueError('Inline artifact hash mismatch')
-  elif 'artifact' in b:
+  elif 'artifact' in b and 'artifact_b64' not in b:
    if not isinstance(b['artifact'],str) or hashlib.sha256(b['artifact'].encode()).hexdigest()!=b['sha256']:raise ValueError('Artifact digest invalid')
-  else:raise ValueError('Bundle must include artifact or artifact_ref')
+  else:raise ValueError('Bundle must include artifact bytes or a content digest')
   from .ledger_crypto import verify
   try:verify(self.trusted_crypto(p,peer),b,bundle['signature'],'peer-bundle')
   except Exception as exc:raise ValueError('Invalid hybrid bundle signature') from exc
@@ -387,7 +393,7 @@ class Exchange:
    bid=digest(bundle);folder=self.root/'quarantine';folder.mkdir(exist_ok=True);target=folder/(bid+'.json')
    _art_ref=b.get('artifact_ref') or b.get('sha256','')
    _art_inline=b.get('artifact')
-   if _art_ref and _art_inline:_store_artifact(self.root,_art_ref,_art_inline.encode())
+   _art_inline_b64=b.get('artifact_b64')
    if target.exists():
     return self.counter_receipt(bid,b,'ALREADY_QUARANTINED')
    dup=self._dedup_check(b.get('artifact'),b.get('artifact_ref'))
@@ -397,6 +403,9 @@ class Exchange:
     from . import token_ledger as _tl
     _tl.check_can_receive(self,b['sender'])
     # The RECEIVE_RESERVED event written below IS the spend record — no separate deduction.
+   # Enforce policy and resource budgets before writing attacker-supplied bytes.
+   if _art_ref and _art_inline:_store_artifact(self.root,_art_ref,_art_inline.encode())
+   elif _art_ref and _art_inline_b64:_store_artifact(self.root,_art_ref,base64.b64decode(_art_inline_b64,validate=True))
    self.event('RECEIVE_RESERVED',peer=b['sender'],bytes=size,bundle=bid);atomic(target,bundle);self.event('RECEIVED_QUARANTINED',peer=b['sender'],feature=b['feature'],bundle=bid,bytes=size,remote_tokens=None,local_validation_seconds=time.monotonic()-started)
    return self.counter_receipt(bid,b,'QUARANTINED')
  def counter_receipt(self,bid,b,status):
@@ -560,7 +569,8 @@ def _wire_chunk_size(p):
  if explicit:return explicit
  return {'low':1024,'high':65536}.get(p.get('bandwidth_profile','auto'),4096)
 
-def request(exchange,peer,method,params):
+def request(exchange,peer,method,params,*,telemetry=None):
+ started=time.monotonic();response_bytes=0;request_bytes=0
  p=exchange.load()
  if peer not in p['peers'] or p['peers'][peer]['blocked']:raise ValueError('Unknown or blocked peer')
  u=validate_endpoint(p['peers'][peer]['endpoint'] or '');ctx=tls_context(exchange)
@@ -574,6 +584,7 @@ def request(exchange,peer,method,params):
  headers={'Content-Type':'application/json','Accept-Encoding':'gzip'}
  if _compress:
   body=gzip.compress(body,compresslevel=6);headers['Content-Encoding']='gzip'
+ request_bytes=len(body)
  c=http.client.HTTPSConnection(u.hostname,u.port or 443,context=ctx,timeout=10)
  try:
   c.connect()
@@ -583,6 +594,7 @@ def request(exchange,peer,method,params):
   while True:
    _part=r.read(_chunk)
    if not _part:break
+   response_bytes+=len(_part)
    data+=_part
    if len(data)>LIMIT*2:raise ValueError('Peer response exceeds limit — possible DoS')
   if r.getheader('Content-Encoding')=='gzip':
@@ -611,7 +623,13 @@ def request(exchange,peer,method,params):
       _t.Thread(target=_pd._run_update_check,args=(exchange,),daemon=True,name='urace-p2p-consensus-check').start()
     except Exception:pass
   return payload
- finally:c.close()
+ finally:
+  c.close()
+  if telemetry is not None:
+   telemetry.update({'method':method,'request_payload_bytes':request_bytes,
+                     'response_payload_bytes':response_bytes,
+                     'application_payload_bytes':request_bytes+response_bytes,
+                     'elapsed_seconds':time.monotonic()-started})
 
 def send(exchange,bid):
  # Reserve locally, then release all local locks before waiting on another peer.
@@ -682,10 +700,19 @@ def server(exchange,host='127.0.0.1',port=0):
     except Exception as exc:raise ValueError('Invalid hybrid RPC signature') from exc
     if rpc.get('id')!=context['request_nonce']:raise ValueError('RPC request nonce mismatch')
     if set(rpc)!={'jsonrpc','id','method','params'} or rpc['jsonrpc']!='2.0' or type(rpc['id']) not in (str,int):raise ValueError('Invalid RPC request')
-    if rpc['method']=='exchange.info' and rpc['params']=={}:result={'schema':SCHEMA,'protocol_version':PROTOCOL_VERSION,'peer_id':exchange.identity()['peer_id'],'patterns':['request-response'],'incorporation':'quarantine-only','p2p_corpus_fingerprint':_local_corpus_fingerprint(),'compress_wire_supported':True,'bandwidth_profile':p.get('bandwidth_profile','auto')}
+    if rpc['method']=='exchange.info' and rpc['params']=={}:result={'schema':SCHEMA,'protocol_version':PROTOCOL_VERSION,'peer_id':exchange.identity()['peer_id'],'patterns':['request-response'],'incorporation':'quarantine-only','capabilities':['authenticated_open_asset_catalog_v1','bounded_open_asset_fetch_v1'],'p2p_corpus_fingerprint':_local_corpus_fingerprint(),'compress_wire_supported':True,'bandwidth_profile':p.get('bandwidth_profile','auto')}
     elif rpc['method']=='exchange.offers' and rpc['params']=={}:
      from .peer_selection import offers
      result=offers(exchange,peer)
+    elif rpc['method']=='exchange.assets.catalog' and rpc['params']=={}:
+     from .remote_assets import public_catalog
+     result=public_catalog(exchange,peer)
+    elif rpc['method']=='exchange.assets.fetch' and isinstance(rpc['params'],dict) and set(rpc['params'])=={'asset_id'}:
+     from .remote_assets import _make_open_bundle
+     result=_make_open_bundle(exchange,peer,rpc['params']['asset_id'])
+    elif rpc['method']=='exchange.assets.receipt' and isinstance(rpc['params'],dict) and set(rpc['params'])=={'asset_id','status','receipt'}:
+     from .remote_assets import record_quarantine_receipt
+     result=record_quarantine_receipt(exchange,peer,rpc['params'])
     elif rpc['method']=='exchange.receive' and set(rpc['params'])=={'bundle'}:result=exchange.receive(rpc['params']['bundle'],peer)
     elif rpc['method']=='exchange.manifest' and set(rpc['params'])=={'baseline_engine_sha256','observed_failures','session_start_unix'}:result=exchange.record_manifest(peer,rpc['params'])
     elif rpc['method']=='exchange.convergence' and set(rpc['params'])=={'canonical_fingerprint'}:result=convergence_count(exchange,rpc['params']['canonical_fingerprint'])

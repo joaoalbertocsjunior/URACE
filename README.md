@@ -1,8 +1,8 @@
 # URACE
 
-**Unified Runtime for Autonomous Collaborative Evolution.**
+**Your product improves itself while you sleep.**
 
-URACE is a lifecycle control plane that runs inside your software product. It manages goals, drives AI-assisted improvement cycles, enforces quality gates, and connects to a P2P network where verified features can be borrowed from peers — always cheaper than building from scratch.
+Type what you want. URACE classifies it, discovers reusable peer features, executes improvements, enforces quality gates, and checkpoints verified results. Open-source, community-governed. No central entity controls the network.
 
 ```sh
 pip install urace
@@ -21,7 +21,7 @@ URACE runs autonomous improvement cycles, picks the best next action, executes i
 Goal → Discovery → Execution → Quality gate → Tokens → Borrow peer features → Better product
 ```
 
-One earn path: verified quality improvement. One spend path: borrow verified peer features — always cheaper than building from scratch. That ceiling is enforced by the protocol, not a promise.
+One earn path: verified quality improvement. One spend path: borrow peer features. P2P routing searches for reusable assets before executor work; cost comparisons require task-matched receipts and independent acceptance.
 
 ---
 
@@ -77,13 +77,13 @@ urace status                              # see what it found
 
 ## The P2P market — borrow before you build
 
-Every verified feature on the network costs less than building it yourself:
+Search P2P assets first for reusable value. Current prices and metadata do not prove that borrowing costs less than executor work. Compare the complete costs and independently accepted outcomes for the same task:
 
 ```
 ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
 ```
 
-The reference price is derived automatically from median ledger fills. The minimum viable price floor (production + bandwidth + protocol fee) is enforced at listing. No config needed.
+The formula is a pricing estimate, not a savings guarantee. P2P sale prices and reputation credits are not executor-cost evidence; unknown costs remain unknown.
 
 Your first borrow is free. After your first quality gate pass, you earn tokens automatically.
 
@@ -97,7 +97,7 @@ urace exchange compact search "rate limiter"
 urace exchange compact search "image classifier"
 urace exchange network discover
 
-# Borrow — always cheaper than executor cost, guaranteed
+# Borrow — compare costs and acceptance evidence before claiming savings
 urace exchange equity fill-listing <listing_id>
 
 # Fetch artifact — any language, any format, any binary
@@ -129,7 +129,7 @@ urace exchange equity grant <feature_id> --creator <your_peer_id> \
   --description "Redis rate limiter with sliding window" \
   --spec-context "Limits reqs/key; evicts on TTL; thread-safe"
 
-# List it — price ceiling auto-enforced
+# List it — configured owner estimate may constrain the suggested ask
 urace exchange equity list-for-sale <feature_id> --bp 5000 --price 80
 
 # Become a delivery node — earn delivery fees per borrow
@@ -221,10 +221,10 @@ URACE is designed for both humans and AI agents. Full MCP and A2A support. Freef
 urace/
 ├── runtime/urace/   — lifecycle control plane and CLI
 ├── runtime/tests/   — 2900+ behavioral regression tests
-├── exchange/        — initial ledger (1370 free features)
+├── exchange/        — initial ledger (1,392 features)
 ├── trial/           — supervised improvement workflow
 ├── docs/            — full documentation
 └── state/           — local deployment data (not tracked)
 ```
 
-v0.4.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.4.1 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

@@ -170,7 +170,7 @@ urace exchange equity list-for-sale api-response-feature --bp 5000 --price 80
 ```
 
 - `--bp 5000` sets your equity stake at 50% (basis points out of 10,000)
-- `--price 80` sets the borrow price at 80 tokens (must be ≤ executor reference price)
+- `--price 80` sets the borrow price at 80 URACE units (a configured reference may apply an estimate-based ceiling)
 
 When another peer borrows your feature, you earn tokens automatically.
 

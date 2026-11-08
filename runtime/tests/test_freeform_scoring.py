@@ -81,6 +81,23 @@ class TestSemanticScoreSynonyms(unittest.TestCase):
 
 
 class TestRankP2pFeatures(unittest.TestCase):
+    def test_intent_matching_normalizes_punctuation_identifiers_and_accents(self):
+        punctuation = _semantic_score(
+            'checkout_latency, p95!',
+            feature('checkout-latency', 'p95: checkout latency'))
+        self.assertEqual(punctuation, 1.0)
+        accented = _semantic_score('latência', feature('latencia', ''))
+        self.assertEqual(accented, 1.0)
+
+    def test_partial_matching_does_not_match_short_catalog_tokens(self):
+        self.assertEqual(_semantic_score('application programming interface',
+                                         feature('a', '')), 0.0)
+
+    def test_short_domain_tokens_still_match_exactly(self):
+        for token in ('AI', 'ID', 'DB', 'P2P'):
+            with self.subTest(token=token):
+                self.assertGreater(_semantic_score(token, feature(token.lower(), '')), 0.0)
+
     def test_returns_features_sorted_by_score_descending(self):
         features = [
             feature('chart-builder', 'renders charts'),

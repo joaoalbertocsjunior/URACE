@@ -164,6 +164,8 @@ def grammar(children):
   if name=='refresh':p.add_argument('--limit',type=int,default=3)
   if name=='probe':p.add_argument('peer_id')
   if name=='serve':p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=0)
+ p=verbs.add_parser('assets',help='search authenticated peer catalogs; paid asks are discovery-only');output_options(p);p.add_argument('query',nargs='?',default='');p.add_argument('--peer-limit',type=int,default=3,dest='peer_limit')
+ p=verbs.add_parser('fetch-asset',help='fetch a declared open-use asset into quarantine; never executes it');output_options(p);p.add_argument('peer_id');p.add_argument('asset_id')
  p=verbs.add_parser('consensus-status',help='show P2P consensus threshold and mismatch state');output_options(p)
  p=verbs.add_parser('public-address',help='probe STUN to discover public IP:port for intranet→internet bridge');output_options(p);p.add_argument('--stun-host',default='stun.l.google.com',dest='stun_host',help='STUN server hostname (default: stun.l.google.com)');p.add_argument('--stun-port',type=int,default=19302,dest='stun_port',help='STUN server port (default: 19302)')
  p=verbs.add_parser('disconnect',help='temporarily pause P2P networking (reconnects on next serve)');output_options(p);p.add_argument('--duration-minutes',type=int,default=60,dest='duration_minutes')
@@ -705,65 +707,8 @@ def run(args,config):
   if verb=='refresh':
    from .peer_selection import refresh
    result=refresh(exchange,args.limit)
-   # Lazy gossip consensus: collect peer-reported executor prices → reputation-weighted outlier-rejected median
-   # Zero extra round trips: prices piggyback on already-scheduled refresh probes.
-   # Manipulation-resistant: outlier rejection + minimum reputable sample required.
-   import statistics as _stats
-   _min_consensus_peers=int(config.get('p2p',{}).get('consensus_min_peers',3))
-   _peer_prices=[]
-   _local_ref=config.get('p2p',{}).get('executor_reference_price_per_unit',None)
-   if _local_ref is not None:_peer_prices.append(_local_ref)
-   _all_rows_ref=[]
-   try:_all_rows_ref=exchange.audit_rows()
-   except Exception:pass
-   _rep_cache={r.get('peer'):r.get('score',0) for r in _all_rows_ref if r.get('kind')=='REPUTATION_SNAPSHOT'}
-   for _pr in (result.get('peers',[]) if isinstance(result,dict) else []):
-    _pp=_pr.get('executor_reference_price_per_unit') if isinstance(_pr,dict) else None
-    _pid=_pr.get('id','') if isinstance(_pr,dict) else ''
-    _rep=float(_rep_cache.get(_pid,0))
-    if isinstance(_pp,(int,float)) and _pp>0 and _rep>=0.1:_peer_prices.append(_pp)
-   if len(_peer_prices)>=_min_consensus_peers:
-    # IQR outlier rejection: exclude prices outside [Q1×0.5, Q3×2.0]
-    # Outlier reporters receive REPUTATION_PENALTY — manipulation cost always exceeds gain
-    import time as _tcp
-    _sorted=sorted(_peer_prices)
-    _n=len(_sorted)
-    _q1=_sorted[max(0,_n//4)];_q3=_sorted[min(_n-1,3*_n//4)]
-    _filtered_peers=[]
-    _outlier_peers=[]
-    for _pr2 in (result.get('peers',[]) if isinstance(result,dict) else []):
-     _pp2=_pr2.get('executor_reference_price_per_unit') if isinstance(_pr2,dict) else None
-     _pid2=_pr2.get('id','') if isinstance(_pr2,dict) else ''
-     if isinstance(_pp2,(int,float)) and _pp2>0:
-      if _q1*0.5<=_pp2<=_q3*2.0:_filtered_peers.append(_pp2)
-      else:_outlier_peers.append(_pid2)
-    # Outlier reporters: warn on single-cycle violation; penalize only on consistent multi-cycle pattern.
-    # A "cycle" = one network refresh run. Warnings from the same cycle (< 1h apart) count as one.
-    # Penalty requires violations spanning ≥2 distinct cycles — eliminates false positives entirely.
-    _CYCLE_GAP=3600
-    for _bad_peer in _outlier_peers:
-     if _bad_peer:
-      _prior_warnings=[r for r in _all_rows_ref if r.get('kind') in ('REPUTATION_PENALTY','PRICE_OUTLIER_WARNING') and r.get('peer')==_bad_peer and r.get('reason')=='price_outlier_consensus']
-      _warn_times=sorted(float(r.get('at_unix',0)) for r in _prior_warnings)
-      # Multi-cycle: at least 2 prior events that span at least one full cycle gap
-      _multi_cycle=len(_warn_times)>=2 and (_warn_times[-1]-_warn_times[0])>=_CYCLE_GAP
-      if _multi_cycle:
-       # Consistent cross-cycle manipulation — penalty (manipulation cost strictly exceeds gain)
-       exchange.append_audit_row({'kind':'REPUTATION_PENALTY','peer':_bad_peer,'reason':'price_outlier_consensus','penalty':0.1,'at_unix':_tcp.time()})
-      else:
-       # Same-cycle or first occurrence — warning only; never penalizes legitimate cost variance
-       exchange.append_audit_row({'kind':'PRICE_OUTLIER_WARNING','peer':_bad_peer,'reason':'price_outlier_consensus','at_unix':_tcp.time()})
-    if len(_local_ref is not None and [_local_ref]+_filtered_peers or _filtered_peers)>=_min_consensus_peers:
-     _all_filtered=([_local_ref] if _local_ref is not None else [])+_filtered_peers
-     if len(_all_filtered)>=_min_consensus_peers:
-      _network_median=_stats.median(_all_filtered)
-      _margin_f=float(config.get('p2p',{}).get('price_margin_fraction',0.15))
-      _consensus_ceiling=int(_network_median*(1.0-_margin_f))
-      cfg2=exchange.load()
-      cfg2['consensus_ceiling_price']=_consensus_ceiling
-      cfg2['consensus_ceiling_peers_sampled']=len(_all_filtered)
-      exchange.save(cfg2)
-      if isinstance(result,dict):result['consensus_ceiling_price']=_consensus_ceiling
+   if isinstance(result,dict):
+    result['price_consensus']={'status':'NOT_COMPUTED','enforced':False,'reason':'No receipt-backed, task-matched executor cost observations are exchanged; reputation and market prices are not cost evidence.'}
   elif verb=='discover':
    _disc=pe.discover(exchange,args.seconds)
    # Annotate features with language tag if present
@@ -775,6 +720,12 @@ def run(args,config):
      if _flang:_fd['language']=_flang
    result=_disc
   elif verb=='probe':result=pe.request(exchange,args.peer_id,'exchange.info',{})
+  elif verb=='assets':
+   from .remote_assets import discover
+   result=discover(exchange,query=args.query,peer_limit=args.peer_limit)
+  elif verb=='fetch-asset':
+   from .remote_assets import fetch_open_asset
+   result=fetch_open_asset(exchange,args.peer_id,args.asset_id)
   elif verb=='consensus-status':
    import math,time as _t
    cfg=exchange.load()
@@ -888,13 +839,12 @@ def run(args,config):
    result={'work_requests':requests,'count':len(requests)}
   elif verb=='status':result=_wm.escrow_state(args.request_id,exchange)
   elif verb=='create':
-   # Maintains the invariant: P2P cost <= executor cost.
+   # Optional owner estimate bound; this does not prove economic savings.
    _ref_price=config.get('p2p',{}).get('executor_reference_price_per_unit',None)
-   if _ref_price is not None and args.budget>_ref_price:raise ValueError('bid exceeds executor reference price ceiling')
+   if _ref_price is not None and args.budget>_ref_price:raise ValueError('work budget exceeds configured executor reference estimate')
    result={'request_id':_wm.create_work_request(exchange,local_id,args.spec,args.budget,args.min_rep,args.nodes,complexity=args.complexity,work_mode=getattr(args,'work_mode','agora'),cohort_rep_floor=getattr(args,'cohort_rep_floor',0.5))}
   elif verb=='bid':
-   # Maintains the invariant: P2P cost <= executor cost.
-   # Note: bid verb uses combined_rep score, not a price — no ceiling check needed here (price is set at work creation)
+   # Bids are reputation scores, not prices; request budget is set at creation.
    _wm.submit_bid(exchange,args.request_id,local_id,args.combined_rep);result={'status':'bid_submitted'}
   elif verb=='accept':_wm.accept_bid(exchange,exchange.root,args.request_id,args.bidder_id);result={'status':'bid_accepted'}
   elif verb=='deliver':_wm.submit_delivery(exchange,args.request_id,local_id,args.delivery_hash);result={'status':'delivery_submitted'}
@@ -1177,17 +1127,13 @@ def run(args,config):
    import time as _t3
    from . import cost_model as _cm_ls
    _ref_price_ls_config=config.get('p2p',{}).get('executor_reference_price_per_unit',None)
-   # Fix 1: always derive ref price — fall back to network median when config absent
-   if _ref_price_ls_config is not None:
-    _ref_price_ls=_ref_price_ls_config
-    _ref_price_ls_source='config'
-   else:
-    _ref_price_ls=_cm_ls.derive_executor_reference_price(exchange.audit_rows())
-    _ref_price_ls_source='network_median'
-   # Fix 2: emit local price oracle row (idempotent: skip if same price within 24h)
-   _oracle_rows_ls=[r for r in exchange.audit_rows() if r.get('kind')=='EXECUTOR_REFERENCE_PRICE_LOCAL' and r.get('peer_id')==local_id and float(r.get('at_unix',0))>=_t3.time()-86400]
-   if not _oracle_rows_ls or _oracle_rows_ls[-1].get('reference_price')!=_ref_price_ls:
-    exchange.append_audit_row({'kind':'EXECUTOR_REFERENCE_PRICE_LOCAL','peer_id':local_id,'reference_price':_ref_price_ls,'derived_from':_ref_price_ls_source,'at_unix':_t3.time(),'at':datetime.now(timezone.utc).isoformat()})
+   # A marketplace ask/reward is not an executor cost baseline.
+   _ref_price_ls=_ref_price_ls_config
+   _ref_price_ls_source='explicit_config_estimate' if _ref_price_ls is not None else 'unknown'
+   # Store configured inputs as estimates, never as an observed executor-cost oracle.
+   _estimate_rows_ls=[r for r in exchange.audit_rows() if r.get('kind')=='EXECUTOR_COST_ESTIMATE_INPUT' and r.get('peer_id')==local_id and float(r.get('at_unix',0))>=_t3.time()-86400]
+   if _ref_price_ls is not None and (not _estimate_rows_ls or _estimate_rows_ls[-1].get('estimate_units')!=_ref_price_ls):
+    exchange.append_audit_row({'kind':'EXECUTOR_COST_ESTIMATE_INPUT','peer_id':local_id,'estimate_units':_ref_price_ls,'source':_ref_price_ls_source,'at_unix':_t3.time(),'at':datetime.now(timezone.utc).isoformat()})
    if not getattr(args,'basis_points',None):args.basis_points=10000
    if not getattr(args,'ask_price',None) and _ref_price_ls:
     # Compute completeness score early so we can use it for the default price
@@ -1201,7 +1147,7 @@ def run(args,config):
      if _grant_row0.get('artifact_ref','') or _grant_row0.get('artifact','').strip():_comp0+=0.3
     args.ask_price=max(1,int(_ref_price_ls*min(_comp0,1.0)))
    elif not getattr(args,'ask_price',None):
-    args.ask_price=1
+    args.ask_price=_cm_ls.minimum_viable_price(config)
    if _ref_price_ls is not None:
     _all_rows_ls=exchange.audit_rows()
     _grant_row=next((r for r in _all_rows_ls if r.get('kind')=='EQUITY_GRANT' and r.get('feature_id')==args.feature_id and r.get('peer_id')==local_id),None)
@@ -1349,7 +1295,7 @@ def run(args,config):
      if _fee_alloc:
       _deliverer=max(_fee_alloc,key=_fee_alloc.get)  # primary deliverer = highest contributor
       for _del_peer,_del_units in _fee_alloc.items():
-       exchange.append_audit_row({'kind':'DELIVERY_FEE','feature_id':_feat_id,'deliverer_peer_id':_del_peer,'buyer_peer_id':local_id,'fee_units':_del_units,'chunk_fraction':round(_fee_alloc[_del_peer]/_total_delivery_fee,4) if _total_delivery_fee>0 else 1.0,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
+       exchange.append_audit_row({'kind':'DELIVERY_FEE','listing_id':args.listing_id,'feature_id':_feat_id,'deliverer_peer_id':_del_peer,'buyer_peer_id':local_id,'fee_units':_del_units,'chunk_fraction':round(_fee_alloc[_del_peer]/_total_delivery_fee,4) if _total_delivery_fee>0 else 1.0,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
      _delivery_fee=_total_delivery_fee  # used below in composition referral pool
      # FEATURE_BORROWED always credits the original creator regardless of who delivered
      if _original_creator:
@@ -1372,9 +1318,8 @@ def run(args,config):
        _fl_credit_units=_cl_fb.mint_per_adoption(loc=_fl_loc,dependency_count=_fl_dep,test_count=_fl_tests,adoption_rank=_fl_adoption_rank,network_size=_fl_net_size,estimated_network_size=_fl_net_size,total_network_supply=_fl_total_supply)
       exchange.append_audit_row({'kind':'FEATURE_BORROWED','feature_id':_feat_id,'creator_peer_id':_original_creator,'borrower_peer_id':local_id,'listing_id':args.listing_id,'outcome_delta':0.0,'receipt_verified':True,'delivered_by':_deliverer,'credit_units':_fl_credit_units,'adoption_rank':_fl_adoption_rank,'estimated_network_size':_fl_net_size,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
      from . import cost_model as _cm
-     _fl_exec_ref=_cm.derive_executor_reference_price(_fl_all_rows)
-     _pe_cmp=_cm.vs_executor_comparison(config,_fl_price,executor_calls_saved=1,executor_reference_price=_fl_exec_ref)
-     exchange.append_audit_row({'kind':'PRICING_EFFICIENCY','feature_id':_feat_id,'listing_id':args.listing_id,'ask_price_units':_fl_price,'executor_reference_price':_pe_cmp['executor_cost_per_call'],'net_saving':_pe_cmp['net_saving'],'cheaper_than_executor':_pe_cmp['cheaper_than_executor'],'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
+     _pe_cmp=_cm.vs_executor_comparison(config,_fl_price)
+     exchange.append_audit_row({'kind':'PRICING_EFFICIENCY','feature_id':_feat_id,'listing_id':args.listing_id,'ask_price_units':_fl_price,'executor_reference_price':None,'net_saving':None,'cheaper_than_executor':None,'comparison_status':'UNQUALIFIED_MISSING_TASK_RECEIPTS','at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
      result['pricing_efficiency']=_pe_cmp
      # Dynamic composition referral: proportional to provenance weights (multi-level)
      _comp_fc=[r for r in _fl_all_rows if r.get('kind')=='FEATURE_COMPOSITION' and r.get('composite_feature_id')==_feat_id]

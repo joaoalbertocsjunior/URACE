@@ -20,7 +20,7 @@ URACE is designed with defense in depth. Every layer — networking, feature exc
 | Artifact integrity | Content-addressed store (SHA-256); `artifact_ref` verified on every receive |
 | Bundle single-holder risk | Warning emitted on `list-for-sale` if no replica holders exist |
 | Circular transfer / laundering | 24h window detection blocks circular credit flows |
-| Price ceiling manipulation | IQR outlier rejection; reputation penalty on multi-cycle consistent violations |
+| Price evidence | No P2P consensus price ceiling is enforced; declared reference values are estimates, not measured executor costs |
 | Sybil token farming | Bootstrap grant locked until first quality gate pass; 1 trial borrow limit |
 | Delivery fraud | `DELIVERY_FEE` only paid on verified `BUNDLE_REPLICA_REGISTERED` holders; `FEATURE_BORROWED` always credits original creator |
 | Identity | Certificate pinning, rotation with rule migration |
@@ -48,7 +48,7 @@ URACE does not rely on a single security mechanism. Multiple independent defense
 - Wash trading detection blocks circular self-dealing
 - Cartel detection via trust graph analysis
 - Bootstrap grant locked until quality pass prevents Sybil token farming
-- Consensus ceiling uses IQR-filtered reputation-weighted median — single-cycle outliers get warnings, multi-cycle consistent violations get reputation penalties
+- Consensus applies to selected exchange protocol decisions, not executor cost or feature prices. Peer prices and reputation credits are not proof of lower execution cost.
 
 **At the artifact distribution layer:**
 - All artifact bytes stored content-addressed (SHA-256); integrity verified on receive

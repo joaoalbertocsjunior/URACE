@@ -25,7 +25,7 @@ These hold in all URACE deployments:
 1. **One earn path**: tokens are earned only from quality gate passes. No other mechanism creates tokens.
 2. **No automatic self-modification**: the runtime never applies changes to itself without `urace update apply`.
 3. **Quarantine before execution**: borrowed P2P features are never executed automatically.
-4. **Executor price ceiling**: P2P borrow price ≤ executor reference price. Borrowers always save vs. building from scratch.
+4. **Estimated price ceiling**: configured P2P pricing heuristics can constrain asks; savings versus executor work require matched cost receipts and independent acceptance.
 5. **Append-only ledger**: the context ledger is never modified retroactively.
 6. **Protected files**: governance files cannot be modified by the runtime.
 7. **Consensus persistence**: the P2P consensus threshold uses the all-time maximum network size, never a lower current estimate.
