@@ -1168,7 +1168,7 @@ def run(args,config):
      if _art_ref or _art_inline:_has_artifact=True;_completeness+=0.3
      if _artifact_size_bytes>102400:_completeness=min(1.0,_completeness+0.05)
     _completeness=min(_completeness,1.0)
-    _margin=float(config.get('p2p',{}).get('price_margin_fraction',0.15))
+    _margin=max(0.20,float(config.get('p2p',{}).get('price_margin_fraction',0.40)))
     # Iteration savings: verified implementation saves avg_saved_iterations executor calls
     _avg_saved_iter=float(config.get('p2p',{}).get('avg_saved_verification_iterations',2.0)) if _has_artifact else 0.0
     _per_call=float(config.get('p2p',{}).get('executor_per_call_cost',0)) if _has_artifact else 0.0

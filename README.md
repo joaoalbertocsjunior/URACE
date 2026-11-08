@@ -2,207 +2,82 @@
 
 **Your product improves itself while you sleep.**
 
-Type what you want. URACE classifies it, discovers reusable peer features, executes improvements, enforces quality gates, and checkpoints verified results. Open-source, community-governed. No central entity controls the network.
+Type what you want. URACE classifies it, discovers reusable peer features, executes improvements,
+enforces quality gates, and checkpoints verified results.
+
+Open-source, community-governed.
+
+---
+
+## Install
 
 ```sh
-pip install urace
-urace init
-urace daemon start
-urace "Add goal: reduce p99 latency by 30%"
+pip install urace          # Python 3.11+
+npm install -g urace-cli   # Node 16+
+
+export ANTHROPIC_API_KEY=...  # or OPENAI_API_KEY
+urace init --auto             # detect product, wire executor
+urace daemon start            # start background cycles
 ```
 
-URACE runs autonomous improvement cycles, picks the best next action, executes it, and checkpoints the result. You come back to a better product.
+→ [Full setup](docs/getting-started/quick-start.md)
 
 ---
 
-## The loop
-
-```
-Goal → Discovery → Execution → Quality gate → Tokens → Borrow peer features → Better product
-```
-
-One earn path: verified quality improvement. One spend path: borrow peer features. P2P routing searches for reusable assets before executor work; cost comparisons require task-matched receipts and independent acceptance.
-
----
-
-## Your product and your executor
-
-**A product** is any software system you initialize URACE in — a web API, ML pipeline, data processor, content generator, or anything else. URACE does not care what language it runs in. Run `urace init` inside your project directory:
+## Use it
 
 ```sh
-urace init                              # auto-detect product type from directory
-urace init --type model                 # ML training or evaluation pipeline
-urace init --type content               # content production pipeline
-urace init --type data                  # data ingestion or transformation pipeline
-urace init --type software --type media # mixed: code + media generation
+urace "What's blocking my latency goal?"  # plain-text request, routed automatically
+urace run && urace status                 # trigger a cycle, check results
+urace cost summary                        # executor costs at published provider rates
 ```
 
-Product types: `software` (default), `model`, `content`, `media`, `data`.
-
-**An executor** is the agent that carries out operations each cycle. URACE auto-configures Claude or Codex from your API keys (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`). You can also wire any other tool:
-
-```yaml
-# config.json — executor.providers:
-- id: my-agent
-  adapter: script            # any CLI tool: stdin=prompt, stdout=JSON
-  command: ./run_agent.sh
-
-- id: my-api
-  adapter: http              # any REST endpoint (retries on 429/503)
-  endpoint: http://localhost:8080/improve
-
-- id: my-mcp
-  adapter: mcp               # MCP stdio JSONRPC 2024-11-05
-  command: npx my-mcp-server
-  tool: improve
-```
-
-`urace init --auto` wires the executor from environment variables in one step. The executor never modifies your source code without your approval.
-
-→ [Full executor setup](docs/getting-started/quick-start.md#2-initialize-your-product) · [Concepts](docs/getting-started/concepts.md)
+→ [CLI reference](docs/reference/cli.md)
 
 ---
 
-## In 5 minutes
+## P2P market
 
-```sh
-urace init                                # wire up your product
-urace daemon start                        # background cycles every 30 min
-urace "What's blocking my latency goal?"  # plain text, any request
-urace run                                 # trigger a cycle now
-urace status                              # see what it found
-```
+Peers mint, list, and borrow verified software features.
 
----
+Listing prices are capped against owner-provided estimates — not a savings guarantee.
+P2P borrows have `$0` provider cost in the current runtime; buyers pay URACE units at the listing ask.
+No URACE↔USD exchange rate exists.
+Use task-matched receipts to compare actual costs.
 
-## The P2P market — borrow before you build
-
-Search P2P assets first for reusable value. Current prices and metadata do not prove that borrowing costs less than executor work. Compare the complete costs and independently accepted outcomes for the same task:
-
-```
-ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 − margin) − iter_savings
-```
-
-The formula is a pricing estimate, not a savings guarantee. P2P sale prices and reputation credits are not executor-cost evidence; unknown costs remain unknown.
-
-Your first borrow is free. After your first quality gate pass, you earn tokens automatically.
-
-```sh
-# Join the network
-urace exchange settings set --enabled true --network true
-urace exchange peer identity          # auto-generates your keypair
-
-# Discover what's available
-urace exchange compact search "rate limiter"
-urace exchange compact search "image classifier"
-urace exchange network discover
-
-# Borrow — compare costs and acceptance evidence before claiming savings
-urace exchange equity fill-listing <listing_id>
-
-# Fetch artifact — any language, any format, any binary
-urace exchange bundle fetch-artifact <bundle_id> --out ./artifact_file  # any language, format, binary
-
-# Check your balance
-urace exchange ledger summary
-
-# Inspect executor costs (auto-captured at published provider rates)
-urace cost summary
-urace cost list --limit 10
-```
+→ [P2P exchange](docs/exchange/overview.md)
+→ [Cost breakdown and caveats](docs/economics/tokenomics.md#p2p-cost-dimensions)
+→ [Token economy](docs/economics/tokenomics.md)
 
 ---
 
-## Earn from your work
+## Earn
 
-| Role | How you earn |
-|------|-------------|
-| Creator/Minter | `earn` — every time a peer borrows your feature |
-| Delivery node (replica) | `delivery_fee` — proportional to delivery count |
-| Composition owner | `composition_referral` — multi-level dynamic split |
-| Challenger | `challenge_bounty` — successful APS challenge |
-| Base/original owner | `provenance_compensation` — when derivative is listed |
-| Ledger sealer | `seal_reward` — 1 unit per sealed block |
-| LLM similarity peer | `llm_peer_reward` — 2 units per SIMILARITY_VERDICT |
+| Role | Earns when |
+|------|-----------|
+| Creator / Minter | A peer borrows your feature |
+| Delivery replica | You deliver an artifact (per borrow) |
+| Composition owner | A derivative of your feature is filled |
+| Challenger | Your APS challenge succeeds |
+| Ledger sealer | You seal a block |
+| LLM similarity peer | You submit a SIMILARITY_VERDICT |
 
-Rewards are funded by a 2% protocol fee on every fill — not inflation.
+Funded by a protocol fee on every fill — not inflation.
 
-```sh
-# Mint a verified feature
-urace exchange equity grant <feature_id> --creator <your_peer_id> \
-  --description "Redis rate limiter with sliding window" \
-  --spec-context "Limits reqs/key; evicts on TTL; thread-safe"
-
-# List it — configured owner estimate may constrain the suggested ask
-urace exchange equity list-for-sale <feature_id> --bp 5000 --price 80
-
-# Become a delivery node — earn delivery fees per borrow
-urace exchange equity register-replica <feature_id> --artifact-hash <sha256>
-
-# Auto-trade — set thresholds once, runs itself
-urace exchange equity auto-buy
-urace exchange equity auto-sell
-```
-
----
-
-## Any artifact, any size
-
-Bundles carry any file type at any size. Artifact bytes live in a content-addressed store — never in the audit log — with at-rest encryption. Replica holders store ciphertext only.
-
-Artifact delivery uses per-session DEK wrapping (X25519 ECDH + AES-256-GCM). The raw key never leaves the device. Escrow auto-refunds after 48 hours if the seller fails to deliver.
-
-```sh
-urace exchange bundle fetch-artifact <bundle_id> --out ./model.bin
-```
-
----
-
-## Asset integrity — no stolen work ships
-
-Every feature grant runs three layers before it reaches the market:
-
-1. **Exact fingerprint** — SHA-256 collision detection
-2. **Perceptual similarity** — dHash + Winnowing shingle overlap (threshold: 60%)
-3. **LLM-peer check** — SIMILARITY_VERDICT from independent peers
-
-Feature packs (bundles of multiple assets) are checked **per member** — not aggregated. A pack of stolen files each at 20% similarity is caught. A grant where > 95% of content traces back to known sources is hard-blocked.
-
-Asset Provenance Staking (APS) adds a 30-day on-chain challenge window after mint. Successful challenge slashes the stake and compensates the original creator.
-
----
-
-## Cartel and hijack prevention
-
-A cluster of co-registered nodes cannot take availability-ransom over a feature:
-
-- RS(4,6) erasure coding: needs any 4 of 6 chunks to reconstruct
-- Cluster holding > ⅓ of chunk slots **or** ≥ 3 replica slots is flagged and penalized
-- Pre-registration guard blocks the registration before it completes
-
-MIME replication priority is auto-calibrated per node from audit history — each node preferentially replicates the content types its own features actually need.
+→ [Node rewards](docs/concepts/node-rewards.md)
+→ [Price mechanics](docs/economics/price-mechanics.md)
 
 ---
 
 ## Security
 
-TLS 1.3 + certificate pinning + post-quantum signatures (ML-KEM-768 + Ed25519) + quarantine model + at-rest artifact encryption + wash trading block + RPC flood protection + per-session DEK + escrow auto-refund + ALE/APS asset lineage enforcement + cartel chunk guard.
+Post-quantum signatures · TLS 1.3 · at-rest encryption · escrow auto-refund · cartel protection ·
+APS provenance staking · sybil resistance · wash-trading block.
 
-Incoming artifacts are never auto-executed. Self-evolution requires owner authorization.
+Incoming artifacts are never auto-executed.
 
-→ [Full security overview](docs/security/overview.md)
-
----
-
-## Works with AI agents
-
-```sh
-urace "What features on the network match my current goals?"
-urace derive                           # generate implementation from active goals
-urace freeform-text "explain the current bottleneck"
-```
-
-URACE is designed for both humans and AI agents. Full MCP and A2A support. Freeform queries use semantic synonym expansion — "visualization" matches "chart", "llm" matches "model".
+→ [Security overview](docs/security/overview.md)
+→ [Security model](docs/concepts/security-model.md)
 
 ---
 
@@ -212,23 +87,10 @@ URACE is designed for both humans and AI agents. Full MCP and A2A support. Freef
 |---|---|
 | [Quick start](docs/getting-started/quick-start.md) | [CLI reference](docs/reference/cli.md) |
 | [P2P exchange](docs/exchange/overview.md) | [Token economy](docs/economics/tokenomics.md) |
-| [Asset integrity](docs/concepts/asset-integrity.md) | [Node rewards](docs/concepts/node-rewards.md) |
-| [Security model](docs/concepts/security-model.md) | [Price mechanics](docs/economics/price-mechanics.md) |
-| [Security overview](docs/security/overview.md) | [Agent integrations](docs/agent-integrations.md) |
+| [Price mechanics](docs/economics/price-mechanics.md) | [Node rewards](docs/concepts/node-rewards.md) |
+| [Security model](docs/concepts/security-model.md) | [Spec (`URACE.md`)](URACE.md) |
 | [Full docs index](docs/index.md) | |
 
 ---
 
-## Structure
-
-```
-urace/
-├── runtime/urace/   — lifecycle control plane and CLI
-├── runtime/tests/   — 2900+ behavioral regression tests
-├── exchange/        — initial ledger (1,392 features)
-├── trial/           — supervised improvement workflow
-├── docs/            — full documentation
-└── state/           — local deployment data (not tracked)
-```
-
-v0.5.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.5.1 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

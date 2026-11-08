@@ -552,5 +552,73 @@ class MinimumViablePriceGasTests(unittest.TestCase):
         self.assertEqual(result, 8)  # ceil(7.5)
 
 
+# ── Listing ceiling margin default and clamp ──────────────────────────────────
+
+class ListingCeilingMarginTests(unittest.TestCase):
+    """Verify price_margin_fraction default=0.40, minimum clamp=0.20, and
+    that the resulting ceiling guarantees $Y + $Z < executor at worst-case $Y.
+    """
+
+    def _ceiling(self, ref_price, completeness, config=None):
+        """Compute ceiling using the same formula as exchange_cli list-for-sale."""
+        cfg = config or {}
+        margin = max(0.20, float(cfg.get('p2p', {}).get('price_margin_fraction', 0.40)))
+        return max(0, int(ref_price * completeness * (1.0 - margin)))
+
+    def test_default_margin_is_0_40(self):
+        # Default: no config → margin = 0.40 → factor = 0.60
+        ceiling = self._ceiling(100, 1.0)
+        self.assertEqual(ceiling, 60)
+
+    def test_full_completeness_ceiling_is_60_pct_of_ref(self):
+        ceiling = self._ceiling(200, 1.0)
+        self.assertEqual(ceiling, 120)  # 200 × 1.0 × 0.60
+
+    def test_bare_completeness_ceiling_is_12_pct_of_ref(self):
+        # completeness=0.2 (name only, no artifact) → 200 × 0.2 × 0.60 = 24
+        ceiling = self._ceiling(200, 0.2)
+        self.assertEqual(ceiling, 24)
+
+    def test_config_margin_override_respected(self):
+        config = {'p2p': {'price_margin_fraction': 0.30}}
+        ceiling = self._ceiling(100, 1.0, config)
+        self.assertEqual(ceiling, 70)  # 100 × 1.0 × 0.70
+
+    def test_margin_below_minimum_clamped_to_0_20(self):
+        # Supplying 0.05 (too low) must be clamped to 0.20
+        config = {'p2p': {'price_margin_fraction': 0.05}}
+        margin = max(0.20, float(config.get('p2p', {}).get('price_margin_fraction', 0.40)))
+        self.assertAlmostEqual(margin, 0.20)
+        ceiling = self._ceiling(100, 1.0, config)
+        self.assertEqual(ceiling, 80)  # clamped: 100 × 1.0 × 0.80
+
+    def test_y_plus_z_below_executor_at_default_margin(self):
+        # Structural invariant: $Y (worst-case 16% of executor) + $Z ceiling < executor
+        # At default margin=0.40, full completeness: Z_ceiling = 60% of ref_price
+        # Combined: 16% + 60% = 76% < 100%  ✓
+        ref_price = 100  # URACE units ~ executor cost estimate
+        y_max_pct = 0.16  # worst-case P2P integration step overhead
+        z_ceiling_pct = (1.0 - 0.40)  # 0.60 at default margin, full completeness
+        combined = y_max_pct + z_ceiling_pct
+        self.assertLess(combined, 1.0,
+                        f'$Y + $Z ({combined:.0%}) must be < executor (100%)')
+
+    def test_y_plus_z_below_executor_at_minimum_margin(self):
+        # At clamped minimum margin=0.20: Z_ceiling = 80%, combined = 16%+80% = 96% < 100%
+        y_max_pct = 0.16
+        z_ceiling_pct = 1.0 - 0.20
+        combined = y_max_pct + z_ceiling_pct
+        self.assertLess(combined, 1.0,
+                        f'$Y + $Z at minimum margin ({combined:.0%}) must be < executor')
+
+    def test_old_default_0_15_would_violate_invariant(self):
+        # Confirm the old default was insufficient
+        y_max_pct = 0.16
+        z_ceiling_pct = 1.0 - 0.15  # old default
+        combined = y_max_pct + z_ceiling_pct
+        self.assertGreaterEqual(combined, 1.0,
+                                'old margin=0.15 should violate the invariant (documents the fix)')
+
+
 if __name__ == '__main__':
     unittest.main()

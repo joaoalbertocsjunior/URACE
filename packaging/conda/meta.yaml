@@ -1,6 +1,6 @@
 package:
   name: urace
-  version: "0.5.0"
+  version: "0.5.1"
 
 source:
   url: https://pypi.io/packages/source/u/urace/urace-{{ version }}.tar.gz

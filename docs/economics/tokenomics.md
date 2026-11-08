@@ -76,7 +76,7 @@ Supply scales with bandwidth, not peers. The constraint is always "can new peers
 
 ## Initial Ledger
 
-URACE ships with a pre-built initial ledger of **1,392 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. Entries with an exact local runtime-module tag also pin source paths and file digests; these bindings identify local implementations but are not delivered artifacts or quality qualifications. All initial ledger features are:
+URACE ships with a pre-built initial ledger of **1,405 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. Entries with an exact local runtime-module tag also pin source paths and file digests; these bindings identify local implementations but are not delivered artifacts or quality qualifications. All initial ledger features are:
 
 - **Free-use**: borrow cost = 0 tokens
 - **No owner**: minted without a creator, available to all peers
@@ -85,7 +85,7 @@ URACE ships with a pre-built initial ledger of **1,392 built-in features** — e
 
 | Metric | Value |
 |--------|-------|
-| Initial features minted | 1,392 |
+| Initial features minted | 1,405 |
 | Format | JSONL (`runtime/initial_ledger.jsonl`) — line 1 is a header, each subsequent line is one feature |
 | Breakdown | mechanism · schema · contract · integration · protocol features |
 | Revenue features | 65% (882 features with active token flow) |
@@ -293,6 +293,52 @@ urace cost list --limit 20  # per-call breakdown
 ```
 
 Receipts are stored in `state/receipts/` and never leave the local machine. See [CLI Reference](../reference/cli.md#cost) and [Spec](../reference/spec.md#executor-receipt-contract) for the full schema.
+
+---
+
+## P2P Cost Dimensions
+
+> **Current runtime**: in the current version, P2P borrow operations (`equity fill-listing`, `bundle fetch-artifact`) complete without provider calls — `$Y = $0` in all borrows. The integration step provider calls described below are **design targets** for a future version, not current runtime behavior. The `$Z` dimension and ceiling formula are fully implemented now.
+
+Three independent cost dimensions apply when comparing executor-only vs P2P paths. They are not convertible and have no established exchange rate between them.
+
+| Measure | Executor-only | P2P path (current) |
+|---------|--------------|----------|
+| Provider USD (`$X`) | Billed at `PROVIDER_RATE` per token | `$0.00` — no integration step calls in current runtime |
+| URACE units paid (`$Z`) | 0 | ask_price in ledger units (≤ listing ceiling) |
+| URACE → USD rate | n/a | `NOT_ESTABLISHED` — no conversion exists |
+
+### P2P Integration Step Costs (`$Y`) — Design Targets
+
+When integration step provider calls are implemented, the following token ranges apply:
+
+| Step | Provider call? | Typical input tokens | Typical output tokens |
+|------|---------------|---------------------|----------------------|
+| Discovery + fetch | No | — | — |
+| Quarantine check | No | — | — |
+| Asset analysis | Sometimes | 300–800 | 100–200 |
+| Context adaptation | Often | 800–2,000 | 200–600 |
+| Quality gate / acceptance validation | Sometimes | 500–1,500 | 100–300 |
+| Gap fill (incomplete asset) | Fallback only | Same as executor for the gap | — |
+
+Expected distribution once implemented (~50% zero-call, ~35% single-step, ~15% full-adapt):
+
+- Estimated `$Y` total for a 30-task cohort at `claude-sonnet-4-6` rates: **~`$0.19`**
+- `$Z` ceiling at default margin: 60% of owner's ref
+- At max future `$Y` (~25%): combined `$Y + $Z ≈ 85%` — still under the executor-only baseline
+
+The listing ceiling margin (default 0.40) also acts as a **quality filter**:
+low-completeness listings (no artifact, no spec) can only be priced at ≤12% of the owner's reference estimate,
+disincentivising bare-minimum submissions.
+
+### What These Measures Do Not Include
+
+- **URACE→USD conversion**: no rate exists; `$Z` (ledger units) and `$X`/`$Y` (provider USD) are orthogonal dimensions
+- **Delivery fee**: the buyer pays ask_price in URACE units; creator (10%) and replica holder earn from that pool — not from provider USD
+- **Composition/referral pool**: composition owners earn from a separate referral pool; not reflected in `$Y`
+- **Gas costs**: on-chain EVM deployments add gas overhead (see [Price Mechanics](price-mechanics.md)); off-chain deployments pay `$0.00`
+- **Quality gate retry cost**: if acceptance validation fails and a re-run is needed, the new executor call is a fresh `$X` receipt — not rolled into `$Y`
+- **Savings claims**: the ceiling formula is a price heuristic — the owner's `ref` estimate is not an audited executor baseline
 
 ---
 

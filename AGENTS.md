@@ -1,6 +1,6 @@
 # AGENTS.md — URACE Executor and Agent Onboarding
 
-**Runtime version: 0.5.0**
+**Runtime version: 0.5.1**
 
 This document is the authoritative onboarding reference for any automated agent, AI executor, or programmatic client operating on a URACE runtime. Read this before issuing any `urace` command.
 
@@ -77,7 +77,7 @@ URACE/urace/
 │   ├── p2p_cost_claim_review.py   ← verify two pinned reviews for one live cohort claim
 ├── exchange/
 │   ├── initial_ledger/
-│   │   ├── initial_ledger.jsonl   ← 1,392 built-in free-use P2P features
+│   │   ├── initial_ledger.jsonl   ← 1,405 built-in free-use P2P features
 │   │   └── README.md
 │   └── (live data — gitignored)
 ├── products/                      ← product snapshots (gitignored live data)
@@ -549,7 +549,7 @@ urace exchange compact search <query> --json  # searches live + archives
 
 ## 13. P2P Initial Ledger
 
-The initial ledger (`exchange/initial_ledger/initial_ledger.jsonl`) contains **1,392 built-in free-use features** covering every atomic runtime, trial, CLI, and P2P capability. Where tags map exactly to local runtime modules, entries also pin source paths, byte counts and SHA-256 hashes; these metadata identify local implementations but do not themselves make a source bundle downloadable or qualify its quality.
+The initial ledger (`exchange/initial_ledger/initial_ledger.jsonl`) contains **1,405 built-in free-use features** covering every atomic runtime, trial, CLI, and P2P capability. Where tags map exactly to local runtime modules, entries also pin source paths, byte counts and SHA-256 hashes; these metadata identify local implementations but do not themselves make a source bundle downloadable or qualify its quality.
 
 Format: JSONL — line 1 is a header (`{"schema":..., "feature_count":N}`), subsequent lines are one feature per JSON object. Enables streaming reads and line-addressable verification.
 
