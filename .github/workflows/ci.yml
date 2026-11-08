@@ -77,8 +77,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python urace/runtime/build_initial_ledger.py
-      - run: git diff --exit-code urace/exchange/initial_ledger/initial_ledger.jsonl
+      - run: python runtime/build_initial_ledger.py
+        working-directory: urace
+      - run: git diff --exit-code exchange/initial_ledger/initial_ledger.jsonl
+        working-directory: urace
 
   audit:
     runs-on: ubuntu-latest
