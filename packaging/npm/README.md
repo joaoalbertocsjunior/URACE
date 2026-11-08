@@ -1,13 +1,13 @@
 # URACE
 
-**Unified Runtime for Autonomous Collaborative Evolution** — a P2P-first lifecycle control plane for AI-assisted software products.
+**Your product improves itself while you sleep.**
 
-URACE manages goals, execution, quality gates, peer collaboration, and token-based reputation in a single runtime. It is designed to be embedded in any product, operated by humans or AI agents, and governed by cryptographic authority boundaries.
+Type what you want. URACE classifies it, discovers reusable peer features, executes improvements, enforces quality gates, and checkpoints verified results. Open-source, community-governed. No central entity controls the network.
 
 ## What URACE Does
 
 - **Product lifecycle**: track goals, plans, operations, and quality metrics across cycles
-- **P2P feature marketplace**: peers mint, list, and borrow verified software features at prices guaranteed lower than building from scratch
+- **P2P feature marketplace**: peers mint, list, and borrow verified software features; compare costs and independently accepted outcomes before claiming savings
 - **Token reputation**: earn tokens by improving your product; spend them to borrow from peers
 - **Self-evolution with governance**: the runtime improves itself under strict authority boundaries — no change without owner approval
 - **Freeform routing**: route any text input to the right command, executor, or P2P network automatically
@@ -32,27 +32,20 @@ conda install -c conda-forge urace
 
 ```sh
 pip install urace
-
-# Initialize a product
 urace init
-
-# Run an improvement cycle
+urace daemon start
+urace "Add goal: reduce p99 latency by 30%"
 urace run
-
-# Check status
-urace status --json
-
-# Open the P2P exchange
-urace exchange status
+urace status
 ```
 
 ## Core Concepts
 
 ### Goals and Plans
-URACE tracks `objectives` (what you want) and `plans` (how to get there). Each cycle, the runtime evaluates progress, selects the best next operation, and records outcomes.
+URACE tracks goals (what you want) and plans (how to get there). Each cycle, the runtime evaluates progress, selects the best next operation, and records outcomes.
 
 ```sh
-urace add "Improve checkout conversion by 20%"
+urace "Add goal: improve checkout conversion by 20%"
 urace run
 urace inspect --goals
 ```
@@ -215,7 +208,7 @@ URACE is P2P-first with defense in depth:
 - **Authority boundary** — self-evolution changes require owner authorization
 - **Wash trading blocked** — buying and selling same feature within 24h is rejected
 - **Price momentum guard** — ask prices capped at 1.5× 7-day median
-- **Executor price ceiling** — P2P borrow always cheaper than executor mint cost
+- **Cost transparency** — ask prices compared to executor reference price; savings require paired receipts with independent acceptance
 - **Consensus hardening** — threshold uses persistent all-time-max network size
 - **RPC flood protection** — 10 rejections/hour triggers automatic peer block
 - **DHT bootstrap rate limiting** — minimum 5 min between bootstrap attempts
@@ -318,16 +311,14 @@ Full documentation is at **[docs/index.md](docs/index.md)**.
 
 ```
 urace/
-├── runtime/urace/       # Full lifecycle control plane and CLI
-├── runtime/tests/       # Behavioral regression tests
-├── trial/               # Supervised improvement workflow
-├── docs/                # User and operator documentation
-├── state/               # Local deployment data (not tracked)
-└── generated/           # Generated artifacts (not tracked)
+├── runtime/urace/   — lifecycle control plane and CLI
+├── runtime/tests/   — 2900+ behavioral regression tests
+├── exchange/        — initial ledger (1,392 features)
+├── trial/           — supervised improvement workflow
+├── docs/            — full documentation
+└── state/           — local deployment data (not tracked)
 ```
 
 ## License
 
-Code: [Apache 2.0](LICENSES/Apache-2.0.txt) — Specification (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt)
-
-Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.4.1 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
