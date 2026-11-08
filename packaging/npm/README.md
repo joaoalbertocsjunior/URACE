@@ -319,6 +319,29 @@ urace/
 └── state/           — local deployment data (not tracked)
 ```
 
+## Executor Costs
+
+After every operation the runtime auto-captures an executor receipt at the published provider rate and writes it to `state/receipts/`. Receipt schema: `urace-executor-receipt-v1`.
+
+```sh
+# Aggregate USD + token totals
+urace cost summary
+
+# Per-call breakdown
+urace cost list --limit 20
+
+# Filter to recent calls
+urace cost summary --since 2026-11-01
+
+# Machine-readable output
+urace cost summary --json
+urace cost list --json
+```
+
+USD is priced at the published provider rate for the observed model (`provider_published_rate`). If the model rate is unknown the receipt falls back to `executor_reported` cost or marks `usd_source: unavailable`. URACE units and provider USD are separate dimensions with no established conversion.
+
+---
+
 ## License
 
-v0.4.1 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.5.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
