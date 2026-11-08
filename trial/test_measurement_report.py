@@ -32,12 +32,54 @@ def _make_exec_receipts(tmp_path: Path, task_ids: list[str], *, tokens: tuple = 
     return receipts_dir
 
 
+# Realistic per-step token midpoints (from observed ranges):
+#   asset_analysis:     300–800 in,  100–200 out
+#   context_adaptation: 800–2000 in, 200–600 out
+#   validation:         500–1500 in, 100–300 out
+_P2P_STEP_TOKENS = {
+    'asset_analysis':     (550, 150),
+    'context_adaptation': (1200, 400),
+    'validation':         (900, 200),
+    'gap_fill':           (5000, 1500),  # fallback: same scale as executor
+}
+
+
 def _make_p2p_receipts(tmp_path: Path, task_ids: list[str], steps: list[str] | None = None) -> Path:
+    """Realistic P2P distribution when steps is None:
+      ~50% zero-call (dir present, no receipts — ZERO_CALLS)
+      ~35% single-step context_adaptation
+      ~15% full-adaptation (asset_analysis + context_adaptation + validation)
+    When steps is given, use those steps for every task_id (for targeted tests).
+    """
     p2p_dir = tmp_path / 'p2p_receipts'
-    for tid in task_ids:
-        for step in (steps or ['context_adaptation']):
-            # integration step uses ~15% of executor tokens
-            capture_p2p_receipt(tid, KNOWN_SHA, step, 'claude-sonnet-4-6', 700, 200, output_dir=p2p_dir)
+    if steps is not None:
+        for tid in task_ids:
+            for step in steps:
+                in_tok, out_tok = _P2P_STEP_TOKENS.get(step, (550, 150))
+                capture_p2p_receipt(
+                    tid, KNOWN_SHA, step, 'claude-sonnet-4-6', in_tok, out_tok, output_dir=p2p_dir
+                )
+        return p2p_dir
+
+    n = len(task_ids)
+    n_zero = round(n * 0.50)
+    n_full = round(n * 0.15)
+    n_single = n - n_zero - n_full
+
+    single_ids = task_ids[n_zero: n_zero + n_single]
+    full_ids = task_ids[n_zero + n_single:]
+
+    for tid in single_ids:
+        in_tok, out_tok = _P2P_STEP_TOKENS['context_adaptation']
+        capture_p2p_receipt(
+            tid, KNOWN_SHA, 'context_adaptation', 'claude-sonnet-4-6', in_tok, out_tok, output_dir=p2p_dir
+        )
+    for tid in full_ids:
+        for step in ('asset_analysis', 'context_adaptation', 'validation'):
+            in_tok, out_tok = _P2P_STEP_TOKENS[step]
+            capture_p2p_receipt(
+                tid, KNOWN_SHA, step, 'claude-sonnet-4-6', in_tok, out_tok, output_dir=p2p_dir
+            )
     return p2p_dir
 
 
@@ -232,3 +274,32 @@ def test_write_report_produces_valid_json(tmp_path):
     out_path = tmp_path / 'report.json'
     write_report(report, out_path)
     assert json.loads(out_path.read_text())['schema'] == REPORT_SCHEMA
+
+
+# --- realistic 30-task cohort bounds ---
+
+def test_realistic_30_task_p2p_within_expected_bounds(tmp_path):
+    """P2P $Y total must be 5–25% of executor $X for a 30-task cohort.
+
+    Distribution: ~50% zero-call, ~35% single-step, ~15% full-adaptation.
+    Executor: claude-sonnet-4-6 at 5000 input + 1500 output per task.
+    """
+    n = 30
+    task_ids = [f'T{i:03d}' for i in range(1, n + 1)]
+    corpus_dir = _make_corpus(tmp_path, n=n)
+    receipts_dir = _make_exec_receipts(tmp_path, task_ids, tokens=(5000, 1500))
+    p2p_dir = _make_p2p_receipts(tmp_path, task_ids)
+    report = build_report(corpus_dir, receipts_dir, None, p2p_dir)
+
+    cell = report['summary_table']['provider_usd_total']
+    exec_usd = cell['executor']
+    p2p_usd = cell['p2p']
+
+    assert isinstance(exec_usd, float) and exec_usd > 0
+    assert isinstance(p2p_usd, float) and p2p_usd >= 0
+
+    ratio = p2p_usd / exec_usd
+    assert 0.05 <= ratio <= 0.25, (
+        f'P2P $Y ({p2p_usd:.4f}) is {ratio:.1%} of executor $X ({exec_usd:.4f}); '
+        f'expected 5–25%'
+    )
