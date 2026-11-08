@@ -95,3 +95,5 @@
 !/p2p_synthetic_cohort.py
 !/p2p_cost_claim_review.py
 !/test_p2p_cost_claim_review.py
+!/p2p_local_feature_assets.py
+!/p2p_retrieval_benchmark.py
