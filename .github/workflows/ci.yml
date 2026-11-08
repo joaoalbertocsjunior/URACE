@@ -66,6 +66,20 @@ jobs:
       - run: pip install ruff
       - run: ruff check urace/runtime/urace/ --select F821,F541,F811
 
+  ledger-sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: urace
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python urace/runtime/build_initial_ledger.py
+      - run: git diff --exit-code urace/exchange/initial_ledger/initial_ledger.jsonl
+
   audit:
     runs-on: ubuntu-latest
     permissions:
