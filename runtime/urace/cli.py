@@ -9266,7 +9266,7 @@ Commands:
         print(json.dumps(result) if getattr(args, "_fmt", None) == "json" or args.json else f"exported {len(turns)} turns → {out_path}")
         return 0
     if args.command == "import":
-        src = Path(args.src)
+        src = Path(args.file)
         if not src.exists():
             print(f"urace: file not found: {src}", file=sys.stderr)
             return 1
