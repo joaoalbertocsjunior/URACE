@@ -9249,6 +9249,42 @@ Commands:
                 for cid in change_ids:
                     print(f"  {cid}")
             return 0
+    if args.command == "export":
+        config = load_config()
+        sp = state_path(config)
+        ctx_path = sp.parent / "session_context.jsonl"
+        turns: list = []
+        if ctx_path.exists():
+            for line in ctx_path.read_text(encoding="utf-8").splitlines():
+                try: turns.append(json.loads(line))
+                except json.JSONDecodeError: pass
+        payload = {"schema": "urace-aps-v1", "exported_at": now(), "turns": turns}
+        out_path = Path(getattr(args, "out", None) or (sp.parent / "export.aps.json"))
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        result = {"status": "ok", "path": str(out_path), "turns": len(turns)}
+        print(json.dumps(result) if getattr(args, "_fmt", None) == "json" or args.json else f"exported {len(turns)} turns → {out_path}")
+        return 0
+    if args.command == "import":
+        src = Path(args.src)
+        if not src.exists():
+            print(f"urace: file not found: {src}", file=sys.stderr)
+            return 1
+        try:
+            payload = json.loads(src.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"urace: {e}", file=sys.stderr)
+            return 1
+        config = load_config()
+        sp = state_path(config)
+        ctx_path = sp.parent / "session_context.jsonl"
+        ctx_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(ctx_path, "a", encoding="utf-8", newline="\n") as f:
+            for turn in payload.get("turns", []):
+                f.write(json.dumps(turn) + "\n")
+        result = {"status": "ok", "turns_imported": len(payload.get("turns", []))}
+        print(json.dumps(result) if getattr(args, "_fmt", None) == "json" or args.json else f"imported {result['turns_imported']} turns")
+        return 0
     if args.command in {"compact", "decompact", "amend", "why", "crc"}:
         from . import compaction as _compaction_module
         from . import cognitive_resume as _crc_module
