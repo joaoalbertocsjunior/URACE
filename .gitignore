@@ -30,6 +30,7 @@
 !/runtime/tests/
 /runtime/urace/*
 !/runtime/urace/*.py
+!/runtime/urace/cli/
 /runtime/tests/*
 !/runtime/tests/*.py
 

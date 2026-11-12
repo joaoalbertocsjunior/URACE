@@ -27,37 +27,37 @@ _logger = logging.getLogger(__name__)
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-from . import executor as intelligent_executor
-from . import external_metrics
-from . import analytics
-from . import scope_priority
-from . import updater
-from . import authority as authority_resolver
-from . import destination as destination_anchor
-from . import validation as independent_validation
-from . import value_trajectory
-from . import outcome_verification
-from . import rules as rule_ledger_module
-from . import spec_audit as spec_audit_module
-from .primitives import OUTPUT_SCHEMA_REGISTRY, INTEGRITY_GAP_CATALOG as IGC_KINDS
-from . import decision_record as decision_record_module
-from . import compaction as compaction_module
-from . import cognitive_resume as cognitive_resume_module
-from . import patterns as pattern_catalog_module
-from . import continuation as continuation_module
-from ._common import nullable_limit
-from . import auto_goals, user_controls, command_surface, api_interface, freeform_routing, data_transport
+from .. import executor as intelligent_executor
+from .. import external_metrics
+from .. import analytics
+from .. import scope_priority
+from .. import updater
+from .. import authority as authority_resolver
+from .. import destination as destination_anchor
+from .. import validation as independent_validation
+from .. import value_trajectory
+from .. import outcome_verification
+from .. import rules as rule_ledger_module
+from .. import spec_audit as spec_audit_module
+from ..primitives import OUTPUT_SCHEMA_REGISTRY, INTEGRITY_GAP_CATALOG as IGC_KINDS
+from .. import decision_record as decision_record_module
+from .. import compaction as compaction_module
+from .. import cognitive_resume as cognitive_resume_module
+from .. import patterns as pattern_catalog_module
+from .. import continuation as continuation_module
+from .._common import nullable_limit
+from .. import auto_goals, user_controls, command_surface, api_interface, freeform_routing, data_transport
 # Keep build_parser and parse_cycles available from urace.cli for existing API callers.
-from .cli_parser import build_parser, dispatch_parser, parse_cycles
+from ..cli_parser import build_parser, dispatch_parser, parse_cycles
 
-from ._common import (
+from .._common import (
     ROOT, CONFIG_PATH, RUNTIME_ROOT, SYSTEM_ROOT,
     now, identifier, atomic_write_text, atomic_write_json, durable_unlink,
     process_exists, state_lock, load_config, save_config, state_path, load_state,
     load_state_for_read, save_state, transaction_path, input_directory,
 )
-from .inputs import consume_inputs, queue_input, cleanup_consumed_inputs, apply_pending_inputs
-from .inspection import (
+from ..inputs import consume_inputs, queue_input, cleanup_consumed_inputs, apply_pending_inputs
+from ..inspection import (
     document_metrics, compare, objective_is_eligible, goal_is_schedulable,
     objective_score, objective_score_breakdown, goal_portfolio,
     work_evaluations, context_view, resource_accounting,
@@ -65,4375 +65,53 @@ from .inspection import (
     render_vitals, render_cycle, command_catalog, top_level_help,
 )
 
+# ── Re-exports from extracted sub-modules (backward-compat) ──────────────────
+from ..cli_emit import (
+    _emit_gap, _emit_trace, _emit_compaction_event, _emit_compliance_record,
+)
+from ..cli_output import (
+    _utcnow, _session_context_path, _load_session_context, _save_session_turn,
+    _render_report_html, _json_to_xml, _print_fmt, _XmlConvertStream,
+    _validate_freeform_query, _resolve_scope_target,
+)
+from ..cli_state import (
+    start_default_portfolio_owner, attached_portfolio_activity, refresh_analytics,
+    record_executor_failure, record_blocker, _maybe_auto_escalate, _auto_resolve_blockers,
+    record_assessment_gap, resolve_assessment_gap, transaction_is_accepted,
+    reconcile_transaction, finalize_committed_transaction, stable_path, runtime_files,
+    runtime_stable_path, write_runtime_snapshot, validate_product, write_stable_snapshot,
+    ensure_stable_product, product_digest, _product_digest_at, initial_state,
+    seed_confirmed_onboard, _current_spec_version,
+)
+from ..cli_lifecycle import (
+    _update_progress_vector, _emit_recovery_manifest, observe_progress, discover,
+    plan_for, refresh_scope_priorities, material_state_signature, executor_discovery_due,
+    _check_stale_derived_manifests, spec_audit_due, run_spec_audit,
+    executor_execution_allowed, defer_executor_capacity, _retain_call_usage,
+    _current_route_usage, _executor_readiness_capability, refresh_executor_availability,
+    discover_with_executor, _transition, execute_with_executor, core_fault_descriptor,
+    runtime_version_digest, attempt_core_auto_repair, _evaluate_wake_conditions,
+    _run_onboard_gate, _verify_wake_registrations,
+)
+from ..cli_helpers import (
+    _inspect_list, _help_action, _mutate_command,
+    _apply_effect_uncertainty_protocol, _apply_operator_gate, _determine_revalidation_scope,
+    _check_authority_closure, _sha256_digest, _observe_retention_gaps,
+    _validate_citizen_base_conformance, _validate_immutable_fields, _compact_with_chunking,
+    _validate_authority_basis_binding, _ledger_size_warning, _build_inspection_surface,
+    _try_reconcile_effect, _reconcile_unresolved_effects, _executor_independent_work,
+    _check_scheduled_tasks, _record_quality_delta, _check_staleness,
+    _regression_checkpoint_gate_passes, _apply_customizations, _evaluate_sweet_spot,
+    _capability_envelope_gate_passes, _derive_capabilities_from_patterns,
+    _derive_milestone_from_state, _refresh_derived_refs, _refresh_derived_construct_sets,
+    _refresh_derived_manifests, _print_derive_update_suggestions, _suggest_derive_updates,
+)
+from ..cli_cycle import (
+    _csi_relevance_score, _csi_confidence_score, _signal_quality, _run_csi,
+    _run_ppm, _run_feedback_accumulator, _run_ram, _try_p2p_feature,
+    _ts_age, _routing_decision, cycle, emit_cycle_feedback, emit_auto_startup,
+)
 
-# ── Output format helpers (--format json|xml) ────────────────────────────────
-
-def _json_to_xml(data: object, root: str = "urace", _indent: int = 0) -> str:
-    """Recursively convert a JSON-compatible Python object to XML string.
-
-    Elements-only (no attributes). Lists use repeated <item> children.
-    None becomes <null/>. Root tag wraps the entire output at indent=0.
-    """
-    pad = "  " * _indent
-    if _indent == 0:
-        inner = _json_to_xml(data, root, _indent=1)
-        return f"<{root}>\n{inner}</{root}>"
-    if data is None:
-        return f"{pad}<null/>\n"
-    if isinstance(data, bool):
-        return f"{pad}<bool>{str(data).lower()}</bool>\n"
-    if isinstance(data, (int, float)):
-        return f"{pad}<number>{data}</number>\n"
-    if isinstance(data, str):
-        escaped = data.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return f"{pad}<string>{escaped}</string>\n"
-    if isinstance(data, list):
-        lines = []
-        for item in data:
-            inner = _json_to_xml(item, root, _indent=_indent + 1)
-            lines.append(f"{pad}<item>\n{inner}{pad}</item>\n")
-        return "".join(lines)
-    if isinstance(data, dict):
-        lines = []
-        for key, val in data.items():
-            safe_key = re.sub(r"[^A-Za-z0-9_\-.]", "_", str(key))
-            inner = _json_to_xml(val, root, _indent=_indent + 1)
-            lines.append(f"{pad}<{safe_key}>\n{inner}{pad}</{safe_key}>\n")
-        return "".join(lines)
-    return f"{pad}<value>{data}</value>\n"
-
-
-def _validate_freeform_query(q: "str | None", max_bytes: int = 4096) -> "str | None":
-    """Validate a freeform search/query string.
-
-    Returns the cleaned query (same value) or raises ValueError with a clear message.
-    Accepts None (blank query = return all) and passes it through unchanged.
-    Enforces:
-      - must be a str if not None
-      - encoded length <= max_bytes
-      - no null bytes
-    """
-    if q is None:
-        return q
-    if not isinstance(q, str):
-        raise ValueError("Query must be a string")
-    if "\x00" in q:
-        raise ValueError("Query must not contain null bytes")
-    if len(q.encode("utf-8")) > max_bytes:
-        raise ValueError(f"Query exceeds maximum length of {max_bytes} bytes")
-    return q
-
-
-def _print_fmt(data: object, fmt: str, *, root: str = "urace") -> None:
-    """Print data as JSON (default) or XML based on fmt ('json' or 'xml').
-
-    Used by command handlers that support --format json|xml.
-    Graceful fallback: non-JSON-serializable data prints as JSON string.
-    """
-    if fmt == "xml":
-        print(_json_to_xml(data, root))
-    else:
-        print(json.dumps(data, indent=2))
-
-
-class _XmlConvertStream:
-    """Stdout wrapper that converts JSON writes to XML (used when --format xml is active).
-
-    Each call to write() is inspected: if it starts with { or [, it is parsed as JSON
-    and converted to XML. Non-JSON text passes through unchanged. This allows all
-    existing handlers (which call json.dumps) to produce XML output without modification.
-    """
-
-    def __init__(self, underlying: Any) -> None:
-        self._u = underlying
-
-    def write(self, s: str) -> int:
-        stripped = s.strip()
-        if stripped and stripped[0] in ("{", "["):
-            try:
-                data = json.loads(stripped)
-                xml_out = _json_to_xml(data) + "\n"
-                self._u.write(xml_out)
-                return len(s)
-            except (json.JSONDecodeError, ValueError):
-                pass
-        return self._u.write(s)
-
-    def flush(self) -> None:
-        self._u.flush()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._u, name)
-
-
-def _resolve_scope_target(target_expr: str | None, state_path_dir: str) -> dict:
-    """Resolve --target <field>[:<predicate>] to a concrete result dict.
-
-    Predicates:
-      'latest'    → most-recent CompactionEvent for field (from manifest)
-      '<event-id>'→ exact event ID match in manifest
-      '<record-id>'→ scan manifest events for record_ids_covered
-
-    Returns: {field, predicate, resolved_id, error}
-    """
-    if not target_expr:
-        return {"field": None, "predicate": None, "resolved_id": None, "error": None}
-
-    parts = target_expr.split(":", 1)
-    field = parts[0].strip() or None
-    predicate = parts[1].strip() if len(parts) > 1 else None
-
-    if field == "all":
-        return {"field": "all", "predicate": None, "resolved_id": None, "error": None}
-
-    if not predicate:
-        return {"field": field, "predicate": None, "resolved_id": None, "error": None}
-
-    try:
-        manifest = compaction_module.load_manifest(state_path_dir) or {}
-    except Exception:
-        manifest = {}
-
-    events = manifest.get("events", [])
-
-    if predicate == "latest":
-        # CompactionEvent uses "target_field" for field path key
-        field_events = [e for e in events if e.get("target_field") == field or e.get("field_path") == field]
-        if field_events:
-            latest = max(field_events, key=lambda e: e.get("compacted_at", ""))
-            evt_id = latest.get("id") or latest.get("event_id")
-            return {"field": field, "predicate": "latest", "resolved_id": evt_id, "error": None}
-        return {"field": field, "predicate": "latest", "resolved_id": None,
-                "error": f"no compaction events for field '{field}'"}
-
-    # CompactionEvent uses "id" as event identifier
-    matching_event = next(
-        (e for e in events if e.get("id") == predicate or e.get("event_id") == predicate), None
-    )
-    if matching_event:
-        return {"field": field, "predicate": predicate,
-                "resolved_id": matching_event.get("id") or matching_event.get("event_id"),
-                "error": None}
-
-    for event in events:
-        if predicate in event.get("record_ids_covered", []):
-            _fld = field or event.get("target_field") or event.get("field_path")
-            _eid = event.get("id") or event.get("event_id")
-            return {"field": _fld, "predicate": predicate, "resolved_id": _eid, "error": None}
-
-    return {"field": field, "predicate": predicate, "resolved_id": None,
-            "error": f"target predicate '{predicate}' not found in manifest"}
-
-
-def start_default_portfolio_owner(config: dict[str, Any], *, quiet: bool = False, json_mode: bool = False) -> subprocess.Popen[str] | None:
-    """Attach adaptive portfolio work to the persistent owner when it is installed and initialized."""
-    state_root = state_path(config).parent
-    workflow = state_root / "portfolio-workflow.json"
-    ledger = state_root / "portfolio" / "portfolio.json"
-    helper = RUNTIME_ROOT / "urace" / "portfolio.py"
-    if not (workflow.is_file() and ledger.is_file() and helper.is_file()):
-        return None
-    try:
-        policy = json.loads(ledger.read_text(encoding="utf-8")).get("cohort_policy", {}).get("mode", "auto")
-    except (OSError, json.JSONDecodeError):
-        return None
-    if policy == "disabled":
-        return None
-    child = subprocess.Popen(
-        [sys.executable, str(helper), "autonomous", "--workflow", str(workflow), "--cycles", "infinity"],
-        cwd=ROOT, text=True,
-        stdout=subprocess.DEVNULL if quiet else (sys.stderr if json_mode else None),
-        stderr=subprocess.DEVNULL if quiet else None,
-    )
-    def stop_child() -> None:
-        if child.poll() is None:
-            child.send_signal(signal.SIGINT)
-            try:
-                child.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                child.terminate(); child.wait(timeout=5)
-    atexit.register(stop_child)
-    return child
-
-
-def attached_portfolio_activity(config: dict[str, Any], owner: subprocess.Popen[str] | None) -> dict[str, Any] | None:
-    """Report delegated comparison work without calling its Executor or mutating its ledger."""
-    if owner is None or owner.poll() is not None:
-        return None
-    ledger = state_path(config).parent / "portfolio" / "portfolio.json"
-    try:
-        automation = json.loads(ledger.read_text(encoding="utf-8")).get("automation", {})
-    except (OSError, json.JSONDecodeError):
-        return None
-    phase = automation.get("phase", "IDLE")
-    planner = automation.get("planner_stage") or {}
-    active = automation.get("status") == "RUNNING" and (phase != "IDLE" or planner.get("status") == "RUNNING")
-    if not active:
-        return None
-    return {"phase": phase, "generation": automation.get("generation"), "planner_stage": planner.get("status")}
-
-
-
-
-@contextmanager
-def refresh_analytics(config: dict[str, Any], state: dict[str, Any]) -> None:
-    settings = config.get("analytics_export", {})
-    if settings.get("mode") != "ON_CHECKPOINT":
-        return
-    output = Path(settings.get("output", "urace/generated/reports/latest"))
-    if not output.is_absolute(): output = ROOT / output
-    try:
-        analytics.export_portable(ROOT, state, vitals_snapshot(config, state), output, include_xlsx=bool(settings.get("include_xlsx", False)))
-    except Exception as error:
-        print(f"urace: analytics export warning: {error}", file=sys.stderr)
-
-
-def record_executor_failure(state: dict[str, Any], stage: str, error: str, systematic_threshold: int = 3) -> None:
-    executor_state = state.setdefault("executor_state", {})
-    failures = executor_state.setdefault("failures", [])
-    existing = next((item for item in reversed(failures) if item.get("stage") == stage and item.get("error") == error), None)
-    if existing:
-        existing.update({"last_at": now(), "count": int(existing.get("count", 1)) + 1})
-        if int(existing["count"]) >= systematic_threshold and not existing.get("systematic"):
-            existing["systematic"] = True
-            fallback = float(state.get("config", {}).get("executor", {}).get("capacity_fallback_seconds", 18000))
-            cooldown_until = (datetime.now(timezone.utc) + timedelta(seconds=fallback)).isoformat()
-            executor_state["systematic_failure_cooldown_until"] = cooldown_until
-            executor_state["systematic_failure_stage"] = stage
-            executor_state["systematic_failure_error_class"] = error[:120]
-    else:
-        failures.append({"at": now(), "last_at": now(), "stage": stage, "error": error, "count": 1})
-    if len(failures) > 100:
-        _emit_compaction_event(state, "executor_failures", len(failures) - 100)
-        failures[:] = failures[-100:]
-
-
-def record_blocker(
-    state: dict[str, Any],
-    scope: str,
-    reason: str,
-    classification: str = "PERSISTENT",
-    evidence_id: str | None = None,
-    auto_clear_on: str | None = None,
-) -> None:
-    blockers = state.setdefault("blockers", [])
-    existing = next(
-        (item for item in reversed(blockers)
-         if item.get("scope") == scope and item.get("reason") == reason and item.get("resolved_at") is None),
-        None,
-    )
-    if existing:
-        new_count = int(existing.get("count", 1)) + 1
-        existing.update({"last_at": now(), "count": new_count})
-        if evidence_id and not existing.get("evidence_id"):
-            existing["evidence_id"] = evidence_id
-        if auto_clear_on and not existing.get("auto_clear_on"):
-            existing["auto_clear_on"] = auto_clear_on
-        _escalation_order = {"TRANSIENT": 0, "PERSISTENT": 1, "ESCALATION": 2, "OPERATOR_GATE": 3}
-        if _escalation_order.get(classification, 1) > _escalation_order.get(existing.get("classification", "PERSISTENT"), 1):
-            existing["classification"] = classification
-        _maybe_auto_escalate(existing, state)
-    else:
-        blocker: dict[str, Any] = {
-            "id": identifier("blocker"),
-            "at": now(),
-            "last_at": now(),
-            "scope": scope,
-            "reason": reason,
-            "count": 1,
-            "resolved_at": None,
-            "classification": classification,
-            "evidence_id": evidence_id,
-            "auto_clear_on": auto_clear_on,
-            "escalation_due": None,
-        }
-        blockers.append(blocker)
-    blockers[:] = [b for b in blockers if b.get("resolved_at") is None][-100:]
-
-
-def _maybe_auto_escalate(blocker: dict[str, Any], state: dict[str, Any]) -> None:
-    if blocker.get("classification") in ("ESCALATION", "OPERATOR_GATE"):
-        return
-    count = int(blocker.get("count", 1))
-    if count < 5:
-        return
-    try:
-        created = datetime.fromisoformat(blocker["at"].replace("Z", "+00:00"))
-        age_seconds = (datetime.now(timezone.utc) - created).total_seconds()
-    except (KeyError, ValueError):
-        return
-    if age_seconds > 3600:
-        blocker["classification"] = "ESCALATION"
-        blocker["escalation_due"] = (datetime.now(timezone.utc) + timedelta(seconds=3600)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        state.setdefault("integrity_gaps", []).append({
-            "id": identifier("igap"),
-            "at": now(),
-            "kind": "blocker-escalated",
-            "severity": "WARNING",
-            "blocker_id": blocker["id"],
-            "scope": blocker.get("scope", ""),
-            "active": True,
-        })
-
-
-def _auto_resolve_blockers(state: dict[str, Any]) -> None:
-    now_ts = datetime.now(timezone.utc)
-    for blocker in state.get("blockers", []):
-        if blocker.get("resolved_at") is not None:
-            continue
-        classification = blocker.get("classification", "PERSISTENT")
-        if classification == "OPERATOR_GATE":
-            continue
-        if classification == "TRANSIENT":
-            try:
-                last = datetime.fromisoformat(blocker["last_at"].replace("Z", "+00:00"))
-                if (now_ts - last).total_seconds() > 600:
-                    blocker["resolved_at"] = now_ts.strftime("%Y-%m-%dT%H:%M:%SZ")
-                    state.setdefault("evidence", []).append({
-                        "id": identifier("evidence"),
-                        "at": now(),
-                        "kind": "blocker-transient-expired",
-                        "blocker_id": blocker["id"],
-                        "scope": blocker.get("scope", ""),
-                    })
-            except (KeyError, ValueError):
-                pass
-
-
-def record_assessment_gap(
-    state: dict[str, Any],
-    cycle_id: str,
-    dimension: str,
-    reason: str,
-    minimum_met: str,
-    blocking: bool,
-) -> dict[str, Any]:
-    """Create or update an AssessmentGap (agap-). Deduplication contract: same
-    cycle_id+dimension MUST update last_at rather than append a new record."""
-    gaps: list[dict] = state.setdefault("assessment_gaps", [])
-    ts = now()
-    for gap in gaps:
-        if gap.get("cycle_id") == cycle_id and gap.get("dimension") == dimension and gap.get("resolved_at") is None:
-            gap["last_at"] = ts
-            gap["reason"] = reason
-            gap["minimum_met"] = minimum_met
-            gap["blocking"] = blocking
-            return gap
-    gap = {
-        "id": identifier("agap"),
-        "at": ts,
-        "last_at": ts,
-        "cycle_id": cycle_id,
-        "dimension": dimension,
-        "reason": reason,
-        "minimum_met": minimum_met,
-        "blocking": blocking,
-        "resolved_at": None,
-    }
-    gaps.append(gap)
-    return gap
-
-
-def resolve_assessment_gap(state: dict[str, Any], cycle_id: str, dimension: str) -> bool:
-    """Set resolved_at on a matching active AssessmentGap. Returns True if found."""
-    ts = now()
-    for gap in state.get("assessment_gaps", []):
-        if gap.get("cycle_id") == cycle_id and gap.get("dimension") == dimension and gap.get("resolved_at") is None:
-            gap["resolved_at"] = ts
-            return True
-    return False
-
-
-def transaction_is_accepted(state: dict[str, Any], transaction_id: str) -> bool:
-    return any(checkpoint.get("transaction") == transaction_id for checkpoint in state.get("checkpoints", []))
-
-
-def reconcile_transaction(config: dict[str, Any], root: Path | None = None) -> str | None:
-    root = ROOT if root is None else Path(root).resolve()
-    journal_path = transaction_path(config)
-    if not journal_path.exists():
-        return None
-    journal = json.loads(journal_path.read_text(encoding="utf-8"))
-    path = state_path(config)
-    state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-    accepted = transaction_is_accepted(state, journal["id"])
-    before,after=journal.get('before'),journal.get('after')
-    if not isinstance(before,dict) or not isinstance(after,dict) or set(before)!=set(after):
-        raise RuntimeError('Recovery journal file sets conflict; preserving state and journal')
-    for relative in before:
-        if not isinstance(relative,str) or not relative or Path(relative).is_absolute() or not (root/relative).resolve().is_relative_to(root.resolve()) or (root/relative).is_symlink():
-            raise RuntimeError('Recovery journal path escapes Product scope; preserving journal')
-        if not isinstance(before[relative],str) or not isinstance(after[relative],str):raise RuntimeError('Invalid recovery contents; preserving journal')
-        current=(root/relative).read_text(encoding='utf-8') if (root/relative).exists() else None
-        # Legacy APPLYING journals allowed partial, non-atomic writes. New journals
-        # declare atomic replacement, so unexpected bytes are an owner conflict.
-        legacy_partial = journal.get('recovery_protocol') is None and journal.get('phase') == 'APPLYING' and relative in journal.get('applied', [])
-        if current not in (before[relative],after[relative]) and not legacy_partial:
-            raise RuntimeError('Recovery conflicts with owner edits; preserving current files and journal')
-    selected = after if accepted else before
-    for relative, content in selected.items():
-        atomic_write_text(root / relative, content)
-    durable_unlink(journal_path)
-    disposition = "ROLLED_FORWARD" if accepted else "ROLLED_BACK"
-    if state:
-        state.setdefault("evidence", []).append({
-            "id": identifier("evidence"), "at": now(), "kind": "transaction-recovery",
-            "transaction": journal["id"], "disposition": disposition,
-        })
-        save_state(config, state)
-    return disposition
-
-
-def finalize_committed_transaction(config: dict[str, Any], state: dict[str, Any]) -> None:
-    journal_path = transaction_path(config)
-    if not journal_path.exists():
-        return
-    journal = json.loads(journal_path.read_text(encoding="utf-8"))
-    if transaction_is_accepted(state, journal["id"]):
-        durable_unlink(journal_path)
-
-
-def stable_path(config: dict[str, Any]) -> Path:
-    return state_path(config).parent / "stable"
-
-
-def runtime_files(config: dict[str, Any]) -> list[str]:
-    if config.get("product_bootstrap") and not config.get("executor",{}).get("allowed_files_by_scope",{}).get("runtime"):return []
-    files = [item for item in config["executor"]["allowed_files_by_scope"]["runtime"] if item.startswith("urace/runtime/")]
-    # Recovery includes the installed workflow extension without granting native
-    # executors permission to modify that extension or any deployment evidence.
-    core = ROOT / 'urace/runtime/urace'
-    if core.is_dir():
-        files.extend(str(path.relative_to(ROOT)) for path in core.glob('*.py') if path.is_file() and not path.is_symlink())
-    tests=ROOT/'urace/runtime/tests'
-    if tests.is_dir():files.extend(str(path.relative_to(ROOT)) for path in tests.glob('*.py') if path.is_file() and not path.is_symlink())
-    trial = ROOT / 'urace/trial'
-    if trial.is_dir():
-        for path in trial.iterdir():
-            if path.is_file() and not path.is_symlink() and (path.suffix == '.py' or path.name in
-                    {'urace','empty-mcp.json','efficiency.example.json','harness-manifest.json','runtime-qualification-config.json','runtime-cycle-installation.json','qualification-dependencies.json'}):
-                files.append(str(path.relative_to(ROOT)))
-    runtime_base = ROOT / 'urace/runtime'
-    if runtime_base.is_dir():
-        for path in runtime_base.iterdir():
-            if path.is_file() and not path.is_symlink() and path.name.endswith('.json'):
-                files.append(str(path.relative_to(ROOT)))
-    return sorted(set(files))
-
-
-def runtime_stable_path(config: dict[str, Any]) -> Path:
-    return state_path(config).parent / "stable-runtime"
-
-
-def write_runtime_snapshot(config: dict[str, Any]) -> None:
-    directory = runtime_stable_path(config)
-    files = {}
-    manifest_path = directory / "manifest.json"
-    if manifest_path.exists():
-        prior = json.loads(manifest_path.read_text(encoding="utf-8"))
-        current = set(runtime_files(config))
-        for relative in set(prior.get("files", {})) - current:
-            obsolete = directory / relative
-            durable_unlink(obsolete)
-            parent = obsolete.parent
-            while parent != directory and parent.exists() and not any(parent.iterdir()):
-                parent.rmdir()
-                parent = parent.parent
-    for relative in runtime_files(config):
-        content = (ROOT / relative).read_text(encoding="utf-8")
-        atomic_write_text(directory / relative, content)
-        files[relative] = hashlib.sha256(content.encode()).hexdigest()
-    atomic_write_json(manifest_path, {"accepted_at": now(), "files": files})
-
-
-def validate_product(config: dict[str, Any], baseline_metrics: dict[str, float] | None = None) -> list[str]:
-    errors = []
-    bootstrap=config.get("product_bootstrap")
-    if bootstrap:
-        purpose=ROOT/bootstrap["original_intent_path"]
-        if purpose.is_symlink() or not purpose.is_file() or hashlib.sha256(purpose.read_bytes()).hexdigest()!=bootstrap["intent_sha256"]:errors.append("Original owner intent changed or unavailable")
-    required = {
-        "URACE.md": ["# URACE", "Primary invariant:", "# 79. Bootstrap Execution Requirements"],
-        "README.md": ["# URACE", "## Get Running", "## Use It"],
-    }
-    for relative in config["product_files"]:
-        path = ROOT / relative
-        if not path.exists():
-            continue
-        text = path.read_text(encoding="utf-8")
-        if len(text) < (1 if bootstrap else 1000):
-            errors.append(f"{relative} is unexpectedly short")
-        if text.count("```") % 2 and not (bootstrap and relative==bootstrap["original_intent_path"]):
-            errors.append(f"{relative} has an unclosed fenced block")
-        for marker in required.get(relative, []):
-            if marker not in text:
-                errors.append(f"{relative} lost required marker: {marker}")
-        if relative == "URACE.md" and not re.search(r"(?m)^# \d+\. Final Invariant[ \t]*$", text):
-            errors.append("URACE.md lost required heading: Final Invariant")
-    if baseline_metrics:
-        current = document_metrics(config)
-        for name in ("normative_rules", "behavioral_tests"):
-            if current[name] < baseline_metrics.get(name, 0):
-                errors.append(f"{name} regressed from stable baseline")
-    return errors
-
-
-def write_stable_snapshot(config: dict[str, Any]) -> None:
-    directory = stable_path(config)
-    directory.mkdir(parents=True, exist_ok=True)
-    files = {}
-    for relative in config["product_files"]:
-        path = ROOT / relative
-        if not path.exists():
-            continue
-        content = path.read_text(encoding="utf-8")
-        atomic_write_text(directory / relative, content)
-        files[relative] = hashlib.sha256(content.encode()).hexdigest()
-    atomic_write_json(directory / "manifest.json", {"accepted_at": now(), "files": files, "metrics": document_metrics(config)})
-
-
-def ensure_stable_product(config: dict[str, Any], state: dict[str, Any]) -> bool:
-    manifest_path = stable_path(config) / "manifest.json"
-    if not manifest_path.exists():
-        errors = validate_product(config)
-        if errors:
-            raise RuntimeError("cannot establish stable Product snapshot: " + "; ".join(errors))
-        write_stable_snapshot(config)
-        return False
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    errors = validate_product(config)
-    if errors:
-        raise RuntimeError("current Product failed structural validation; files were preserved: " + "; ".join(errors))
-    current = {relative: hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
-               for relative in config["product_files"] if (ROOT / relative).exists()}
-    if current == manifest.get("files", {}):
-        return False
-    previous = dict(manifest.get("files", {}))
-    prior_lifecycle = state.get("lifecycle_state", "DORMANT")
-    state["lifecycle_state"] = "RECONCILING"
-    write_stable_snapshot(config)
-    reconciliation_id = identifier("evidence")
-    state.setdefault("evidence", []).append({
-        "id": reconciliation_id, "at": now(), "kind": "external-product-reconciliation",
-        "previous_files": previous, "current_files": current,
-        "disposition": "ACCEPTED_CURRENT_SOURCE_WITH_NEW_SNAPSHOT",
-    })
-    state.setdefault("executor_state", {})["discovery_trigger"] = {"reason": "product-file change detected", "signature": reconciliation_id}
-    state["lifecycle_state"] = prior_lifecycle
-    return True
-
-
-def product_digest(config: dict[str, Any]) -> str:
-    digest = hashlib.sha256()
-    for item in sorted(config["product_files"]):
-        path = ROOT / item
-        if path.exists():
-            digest.update(item.encode())
-            digest.update(path.read_bytes())
-    return digest.hexdigest()
-
-
-def _product_digest_at(config: dict[str, Any], before_snapshot: dict[str, str]) -> str:
-    """Product digest computed from a before-snapshot dict (path → content string).
-    Used for state_before_digest in Change bindings so no disk re-read is needed."""
-    digest = hashlib.sha256()
-    for item in sorted(config["product_files"]):
-        if item in before_snapshot:
-            digest.update(item.encode())
-            digest.update(before_snapshot[item].encode("utf-8"))
-        else:
-            path = ROOT / item
-            if path.exists():
-                digest.update(item.encode())
-                digest.update(path.read_bytes())
-    return digest.hexdigest()
-
-
-def initial_state(config: dict[str, Any] | None = None) -> dict[str, Any]:
-    if config is None:
-        config = load_config()
-    observed = document_metrics(config)
-    created = now()
-    profile = {
-        "id": "blueprint-verification",
-        "objective_reference": "continuous-improvement",
-        "intended_outcome": "Increase verified blueprint quality without weakening invariants",
-        "measures": {
-            key: {
-                "baseline": value,
-                "current": value,
-                "previous": None,
-                "target": value if key != "unresolved_markers" else 0.0,
-                "direction": "nondecreasing" if key != "unresolved_markers" else "nonincreasing",
-            }
-            for key, value in observed.items()
-        },
-        "guardrails": ["normative_rules must not decrease", "behavioral_tests must not decrease"],
-        "cadence": "each autonomous cycle or product change",
-        "next_follow_up": created,
-        "status": "active",
-        "created_at": created,
-        "updated_at": created,
-    }
-    return {
-        "schema_version": 1,
-        "state_version": 0,
-        "created_at": created,
-        "updated_at": created,
-        "lifecycle_state": "DORMANT",
-        "intent": config["intent"],
-        "authority": config["authority"],
-        "constraints": config["constraints"],
-        "self_evolution_policy": config.get("self_evolution_policy", {"mode": "NECESSARY_ONLY", "source": "bootstrap default", "provenance": "no attributable selection supplied; NECESSARY_ONLY applied per §74+§79 default"}),
-        "objectives": [],
-        "current_objective": None,
-        "current_plan": None,
-        "operations": [],
-        "evidence": [],
-        "decision_records": [],
-        "integrity_gaps": [],
-        "assessment_gaps": [],
-        "lifecycle_boundaries": [],
-        "integrity_signals": [],
-        "status_transitions": [],
-        "checkpoints": [{"id": identifier("checkpoint"), "at": created, "kind": "bootstrap", "digest": product_digest(config)}],
-        "progress_profiles": [profile],
-        "progress_observations": [],
-        "metric_system": {"version": 1, "last_review_at": None, "last_assessment": "bootstrap metrics", "change_needed": False, "change_history": []},
-        "evaluation_system": {**config.get("evaluation_system", {"version": 1, "minimum_evidence_units": 5, "weights": {}}), "last_review_at": None, "last_assessment": "bootstrap evaluation system", "change_needed": False, "change_history": []},
-        "scope_priority_system": scope_priority.derive(ROOT, config, {"objectives": [], "operations": []}),
-        "external_metric_state": {
-            "mode": config.get("external_metrics", {}).get("mode", "DISABLED"),
-            "source": config.get("external_metrics", {}).get("source", "bootstrap default"),
-            "provenance": config.get("external_metrics", {}).get("provenance", "no attributable selection supplied"),
-            "last_collection": None, "latest": [], "errors": [],
-        },
-        "operator_patterns": config.get("operator_patterns", []),
-        "context_inputs": [],
-        "connector_sources": [],
-        "metric_definitions": [],
-        "vital_definitions": [],
-        "processed_input_ids": [],
-        "pattern_memory": {},
-        "reasoning_memory": [],
-        "unresolved_effects": [],
-        "pending_validations": [],
-        "destination_anchor": destination_anchor.anchor_from_config(config),
-        "value_trajectory": {"checkpoints": [], "acceleration": None, "established_at": created, "cumulative_value": 0.0, "peak_velocity": 0.0},
-        "rule_ledger": rule_ledger_module.seed_from_config(config),
-        "wake_registry": [],
-        "blockers": [],
-        "last_cycle": None,
-        "executor_state": {
-            "last_discovery_at": None,
-            "last_operation_at": None,
-            "last_availability_check": None,
-            "available": None,
-            "failures": [],
-            "executor_calls": [],
-            "discovery_calls": 0,
-            "provider_pool": {},
-            "discovery_budget_status": "WITHIN_BUDGET",
-            "unproductive_discovery_streak": 0,
-            "progress_vector": None,
-            "progress_stagnant_cycles": 0,
-            "execution_budget": None,
-            "recovery_manifest": None,
-        },
-        "spec_audit_state": None,
-        "derived_manifest_refs": [],
-        "derivation_records": [],
-        "derivation_refs": [],
-        "construct_set_refs": [],
-        "quality_deltas": [],
-        "quality_state": {},
-        "reingestion_records": [],
-        "sweet_spot_assessments": [],
-        "capability_states": [],
-        "value_density_history": [],
-        "product_versions": [],
-        "test_run_records": [],
-        "policy_records": [],
-        "hard_constraints": [],
-        "assessment_records": [],
-        "discovery_records": [],
-        "ownership_markers": [],
-        "market_signals": [],
-        "fit_hypotheses": [],
-        "compliance_records": [],
-        "compliance_state": {},
-        "community_feeds": [],
-        "community_signals": [],
-        "patch_proposals": [],
-        "onboard_records": [],
-        "switch_records": [],
-        "fleet_records": [],
-        "trace_records": [],
-        "outcome_feedback_records": [],
-        "resource_ledger": [],
-        "roi_snapshots": [],
-        "gap_calibration_records": [],
-        "directive_mutation_records": [],
-        "state_audit_records": [],
-        "executor_trust_profiles": [],
-        "contention_decision_records": [],
-        "external_edit_records": [],
-        "unsupported_intent_records": [],
-        "lifecycle_inheritance_records": [],
-        "objective_scope_declarations": [],
-        "evidence_sufficiency_snapshots": [],
-        "evidence_age_retirement_records": [],
-        "operator_decision_escalation_records": [],
-        "rollback_completeness_attestations": [],
-        "metric_registry": [],
-        "adaptive_config_proposals": [],
-            "intent_formula_validity_records": [],
-            "authority_ceiling_records": [],
-            "intent_ambiguity_audit_records": [],
-            "goal_coverage_completeness_records": [],
-            "strategic_review_records":           [],
-            "domain_weight_records":              [],
-            "evidence_requests":                  [],
-        "state_transition_validation_records": [],
-        "intent_drift_records":                [],
-        "intent_aggregate_gap_records":        [],
-        "gap_impact_estimates":                [],
-        "causal_edge_records":                  [],
-        "causal_model_records":                 [],
-        "lookahead_plan_records":               [],
-        "principal_records":                    [],
-        "authority_conflict_records":           [],
-        "adversarial_signal_records":           [],
-        "uncertainty_bands":                    [],
-        "fleet_knowledge_records":              [],
-        "constraint_candidates":                [],
-        "explanation_records":                  [],
-        "portfolio_allocation_records":         [],
-        "deadline_records":                     [],
-        "goal_tree_nodes":                      [],
-        "objective_dependency_records":         [],
-        "intent_version_records":               [],
-        "self_modification_records":            [],
-        "normative_violation_records":          [],
-        "value_ledger_entries":                 [],
-        "attention_budget_records":             [],
-        "policy_override_records":              [],
-        "event_trigger_records":                [],
-        "degradation_records":                  [],
-        "state_space_audit_records":            [],
-        "feedback_latency_records":             [],
-        "resource_conflict_records":            [],
-        "schema_migration_records":             [],
-        "rollback_records":                     [],
-        "fleet_resource_registry":              {},
-        "last_self_modification_cycle":     0,
-        "bootstrap_file_hashes":            {},
-        "normative_halt_records":           [],
-        "value_calibration_factor":         1.0,
-        "transform_records":                [],
-        # r117
-        "data_source_records":          [],
-        "credential_records":           [],
-        "data_sync_records":            [],
-        "route_graph_records":          [],
-    }
-
-
-def seed_confirmed_onboard(config: dict, state: dict) -> None:
-    """Inject a pre-confirmed OnboardRecord into state so OnboardGate passes.
-    Used in tests to bypass the onboarding ceremony for states that represent
-    an already-onboarded product. Idempotent — does nothing if a matching
-    active record already exists.
-    """
-    product_name = config.get("product", "")
-    onboard_records = state.setdefault("onboard_records", [])
-    already = any(
-        r.get("product_name") == product_name and not r.get("superseded_at")
-        for r in onboard_records
-    )
-    if already:
-        return
-    confirmed_at = now()
-    onboard_records.append({
-        "id": identifier("onb-"),
-        "created_at": confirmed_at,
-        "product_name": product_name,
-        "confirmed_by": "test-seed",
-        "confirmed_at": confirmed_at,
-        "config_digest": product_digest(config),
-        "gates_passed": ["config-completeness", "product-files-readable", "intent-anchored"],
-        "notes": None,
-    })
-
-
-def _update_progress_vector(state: dict, stagnation_threshold: int = 5) -> None:
-    """r23: Update progress_vector and stagnation counter. Trigger REPAIRING on stagnation."""
-    objectives = state.get("objectives", [])
-    total = len(objectives)
-    if total == 0:
-        return
-    completed = sum(1 for o in objectives if o.get("status") == "completed")
-    new_pv = round(completed / total, 4)
-    es = state["executor_state"]
-    old_pv = es.get("progress_vector")
-    if old_pv is not None and new_pv <= old_pv:
-        es["progress_stagnant_cycles"] = es.get("progress_stagnant_cycles", 0) + 1
-    else:
-        es["progress_stagnant_cycles"] = 0
-    es["progress_vector"] = new_pv
-    stagnant = es.get("progress_stagnant_cycles", 0)
-    if stagnant >= stagnation_threshold and state.get("lifecycle_state") == "ACTIVE":
-        state["lifecycle_state"] = "REPAIRING"
-        _emit_gap(state, "progress-stagnation", "BLOCKING",
-                  f"progress_vector stagnant for {stagnant} consecutive cycles "
-                  f"(threshold {stagnation_threshold}); last value: {old_pv}")
-        es["progress_stagnant_cycles"] = 0
-
-
-def _emit_recovery_manifest(state: dict, emission_cause: str, execution_mode: str) -> dict:
-    """r23: Emit RecoveryManifest to executor_state.recovery_manifest."""
-    es = state["executor_state"]
-    failures = es.get("failures", [])
-    objectives = state.get("objectives", [])
-    incomplete = [o.get("title", o["id"]) for o in objectives if o.get("status") != "completed"]
-    checkpoints = state.get("checkpoints", [])
-    last_checkpoint = checkpoints[-1]["id"] if checkpoints else None
-    manifest = {
-        "manifest_id": identifier("manifest"),
-        "emitted_at": now(),
-        "emission_cause": emission_cause,
-        "last_safe_state": state.get("lifecycle_state", "DORMANT"),
-        "last_safe_commit": last_checkpoint,
-        "failure_summary": [f"{f['stage']}:{f['error']}" for f in failures[-5:]],
-        "goal_delta": "; ".join(incomplete) if incomplete else "no incomplete objectives",
-        "progress_at_emit": es.get("progress_vector"),
-        "budget_consumed": es.get("execution_budget"),
-        "recommended_tier": None,
-        "execution_mode": execution_mode,
-    }
-    es["recovery_manifest"] = manifest
-    return manifest
-
-
-def observe_progress(config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    values = document_metrics(config)
-    profile = state["progress_profiles"][0]
-    results = {}
-    for name, value in values.items():
-        measure = profile["measures"][name]
-        prior = measure["current"]
-        measure["previous"] = prior
-        measure["current"] = value
-        results[name] = {
-            "value": value,
-            "vs_baseline": compare(measure["direction"], value, measure["baseline"]),
-            "vs_previous": compare(measure["direction"], value, prior),
-            "target_met": value >= measure["target"] if measure["direction"] == "nondecreasing" else value <= measure["target"],
-        }
-    observation = {"id": identifier("observation"), "at": now(), "profile": profile["id"], "results": results}
-    prior_observation = state["progress_observations"][-1] if state["progress_observations"] else None
-    changed = prior_observation is None or any(
-        result["value"] != prior_observation["results"].get(name, {}).get("value")
-        for name, result in results.items()
-    )
-    interval = float(config.get("efficiency", {}).get("unchanged_observation_interval_seconds", 86400))
-    due = prior_observation is None or datetime.now(timezone.utc).timestamp() - datetime.fromisoformat(prior_observation["at"]).timestamp() >= interval
-    if changed or due:
-        state["progress_observations"].append(observation)
-    if state.get("lifecycle_state") == "ACTIVE":
-        profile["next_follow_up"] = "next autonomous cycle or product change"
-    return observation
-
-
-def discover(config: dict[str, Any], state: dict[str, Any], observation: dict[str, Any]) -> dict[str, Any] | None:
-    regressions = [name for name, result in observation.get("results", {}).items() if result.get("vs_previous") == "regressed"]
-    unresolved = observation.get("results", {}).get("unresolved_markers", {}).get("value", [])
-    if regressions:
-        title, reason, priority = "Repair measurable blueprint regression", f"Regressed measures: {', '.join(regressions)}", 100
-    elif unresolved:
-        title, reason, priority = "Resolve explicit blueprint uncertainty", f"{int(unresolved)} unresolved markers remain", 80
-    else:
-        return None
-    existing = next((item for item in state["objectives"] if item["title"] == title and item["status"] in {"planned", "active"}), None)
-    if existing:
-        return existing
-    if observation.get("id") and not any(item.get("id")==observation["id"] for item in state.get("progress_observations",[])):
-        state.setdefault("progress_observations",[]).append(copy.deepcopy(observation))
-    _ts = now(); objective = {
-        "id": identifier("objective"), "title": title, "reason": reason, "priority": priority,
-        "metadata": {"bottleneck_observation_ref": observation.get("id")},
-        "status": "planned", "created_at": _ts, "updated_at": _ts,
-        "success_measure": "metric regression resolved or unresolved_markers reduced to zero",
-        "scope": "documentation", "target": "product",
-        "authority_basis": "delegated objectives",
-        "expected_value": 0.7, "estimated_cost": 0.3, "risk": 0.2, "urgency": 0.8,
-        "necessity_evidence": reason, "lower_impact_route_sufficient": False,
-        "dependencies": [], "pinned": False,
-    }
-    state["objectives"].append(objective)
-    return objective
-
-
-def plan_for(state: dict[str, Any], objective: dict[str, Any]) -> dict[str, Any]:
-    plan = {
-        "id": identifier("plan"),
-        "objective_reference": objective["id"],
-        "steps": ["inspect relevant evidence", "prepare bounded local change", "run validation", "measure follow-up"],
-        "validation_strategy": "run behavioral tests and compare progress guardrails",
-        "next_review_condition": "after execution or new evidence",
-        "status": "ready",
-        "created_at": now(), "updated_at": now(), "completed_at": None,
-    }
-    state["current_objective"] = objective["id"]
-    state["current_plan"] = plan
-    state.setdefault("decision_records", []).append({
-        "id": identifier("decision"), "at": now(), "kind": "plan",
-        "outcome": plan["id"], "authority_basis": "delegated plans",
-        "justification": objective["reason"], "objective_ref": objective["id"],
-    })
-    return plan
-
-
-def refresh_scope_priorities(config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
-    system = scope_priority.derive(ROOT, config, state)
-    dependent_counts = {item.get("id"): 0 for item in state.get("objectives", [])}
-    for item in state.get("objectives", []):
-        for dependency in item.get("dependencies", []):
-            if dependency in dependent_counts: dependent_counts[dependency] += 1
-    for objective in state.get("objectives", []):
-        if not objective.get("priority_scope"):
-            objective["priority_scope"] = scope_priority.infer_scope(config, objective.get("scope", "documentation"))
-        objective["scope_attention_adjustment"] = scope_priority.ranking_adjustment(objective, system)
-        objective["scope_priority_version"] = system["version"]
-        objective["dependency_unblocking_adjustment"] = min(10.0, 2.0 * dependent_counts.get(objective.get("id"), 0))
-    state["scope_priority_system"] = system
-    from . import planning_feedback as _pf
-    _pf.apply(state)
-    return system
-
-
-def material_state_signature(state: dict[str, Any]) -> str:
-    """Exclude high-frequency timestamps while retaining consequential changes."""
-    executor = state.get("executor_state", {})
-    external = state.get("external_metric_state", {})
-    material = {
-        "lifecycle": state.get("lifecycle_state"), "current_objective": state.get("current_objective"),
-        "current_plan": state.get("current_plan"), "objectives": state.get("objectives", []),
-        "operations": state.get("operations", []), "evidence_count": len(state.get("evidence", [])),
-        "trigger_count": len(state.get("triggers", [])), "decision_count": len(state.get("decision_records", [])),
-        "checkpoint_count": len(state.get("checkpoints", [])), "blocker_count": len(state.get("blockers", [])),
-        "unresolved_effects": state.get("unresolved_effects", []), "processed_inputs": state.get("processed_input_ids", []),
-        "progress": state.get("progress_profiles", []), "metric_system": state.get("metric_system", {}), "evaluation_system": state.get("evaluation_system", {}),
-        "executor": {"available": executor.get("available"), "availability_failure_streak": executor.get("availability_failure_streak"), "calls": executor.get("executor_calls", []), "failures": executor.get("failures", []), "trigger": executor.get("discovery_trigger"), "unproductive_streak": executor.get("unproductive_discovery_streak")},
-        "external": {"latest": external.get("latest", []), "errors": external.get("errors", []), "failure_streak": external.get("failure_streak"), "next_collection_at": external.get("next_collection_at")},
-        "restart_requested": state.get("restart_requested"), "pending_runtime_activation": state.get("pending_runtime_activation"),
-    }
-    return hashlib.sha256(json.dumps(material, sort_keys=True, default=str).encode()).hexdigest()
-
-
-def executor_discovery_due(config: dict[str, Any], state: dict[str, Any]) -> bool:
-    settings = config.get("executor", {})
-    if not settings.get("enabled"):
-        return False
-    executor_state = state.setdefault("executor_state", {"last_discovery_at": None, "last_operation_at": None, "last_availability_check": None, "available": None, "failures": []})
-    current = datetime.now(timezone.utc).timestamp()
-    # Priority 1: systematic failure cooldown — always checked first per §62c ordering contract.
-    systematic_cooldown = executor_state.get("systematic_failure_cooldown_until")
-    if systematic_cooldown and current < datetime.fromisoformat(systematic_cooldown).timestamp():
-        executor_state["discovery_budget_status"] = "SYSTEMATIC_FAILURE_COOLDOWN"
-        executor_state["discovery_defer_reason"] = "systematic failure cooldown active; executor dispatch suppressed until cooldown expires"
-        return False
-    calls = executor_state.setdefault("executor_calls", [])
-    if not calls and isinstance(executor_state.get("discovery_calls"), list):
-        calls.extend({**item, "stage": "discovery", "outcome": "legacy"} for item in executor_state["discovery_calls"])
-    calls[:] = [item for item in calls if current - datetime.fromisoformat(item["at"]).timestamp() < 3024000]
-    calls_24h = [item for item in calls if current - datetime.fromisoformat(item["at"]).timestamp() < 86400]
-    # Priority 2: budget ceilings — reserve one additional call so accepted discovery can
-    # be executed without beginning work that the current budget cannot finish.
-    if nullable_limit(settings,"max_executor_calls_per_24h",2) is not None and len(calls_24h)+2>nullable_limit(settings,"max_executor_calls_per_24h",2):
-        executor_state["discovery_budget_status"] = "DAILY_LIMIT_OR_RESERVE_REACHED"
-        executor_state["discovery_defer_reason"] = f"rolling 24h call count {len(calls_24h)} at or beyond ceiling {settings.get('max_executor_calls_per_24h', 2)} (reserve included)"
-        return False
-    if nullable_limit(settings,"max_executor_calls_per_30d",12) is not None and len(calls)+2>nullable_limit(settings,"max_executor_calls_per_30d",12):
-        executor_state["discovery_budget_status"] = "MONTHLY_LIMIT_OR_RESERVE_REACHED"
-        executor_state["discovery_defer_reason"] = f"rolling 30d call count {len(calls)} at or beyond ceiling {settings.get('max_executor_calls_per_30d', 12)} (reserve included)"
-        return False
-    # Priority 3: deferred call retry — evaluated after higher-priority gates so a deferred
-    # call cannot bypass systematic cooldown or budget exhaustion.
-    if executor_state.get("deferred_discovery_call"):
-        retry_at = executor_state.get("capacity_retry_at")
-        return not retry_at or current >= datetime.fromisoformat(retry_at).timestamp()
-    previous = executor_state.get("last_discovery_at")
-    if previous is None:
-        return True
-    elapsed = current - datetime.fromisoformat(previous).timestamp()
-    trigger = executor_state.get("discovery_trigger")
-    if trigger:
-        signature = trigger.get("signature", trigger.get("reason", "trigger")) if isinstance(trigger, dict) else str(trigger)
-        previous_trigger = executor_state.get("last_trigger_call", {})
-        if previous_trigger.get("signature") == signature:
-            since_same = current - datetime.fromisoformat(previous_trigger["at"]).timestamp()
-            if since_same < float(settings.get("trigger_dedupe_seconds", 21600)):
-                executor_state["discovery_budget_status"] = "DUPLICATE_TRIGGER_SUPPRESSED"
-                executor_state["discovery_defer_reason"] = f"trigger signature {signature!r} was already processed within the dedupe window ({settings.get('trigger_dedupe_seconds', 21600)}s)"
-                return False
-        return elapsed >= float(settings.get("triggered_discovery_cooldown_seconds", 300))
-    # Proportionality gate: if lifecycle is BLOCKED, discovered work cannot be acted on.
-    lifecycle_state = state.get("lifecycle_state", "ACTIVE")
-    if lifecycle_state == "BLOCKED":
-        executor_state["discovery_budget_status"] = "DEFERRED_PROPORTIONALITY"
-        _defer_reason = "lifecycle BLOCKED; discovered work cannot proceed until unresolved effect is reconciled"
-        executor_state["discovery_defer_reason"] = _defer_reason
-        # §5242: deferred conditions MUST surface as named IntegrityGaps (idempotent)
-        if not any(g.get("kind") == "discovery-proportionality-deferred" for g in state.get("integrity_gaps", [])):
-            _emit_gap(state, "discovery-proportionality-deferred", "WARNING", _defer_reason)
-        return False
-    streak = int(executor_state.get("unproductive_discovery_streak", 0))
-    exhausted_threshold = int(settings.get("discovery_yield_exhausted_threshold", 5))
-    if streak >= exhausted_threshold and not executor_state.get("discovery_trigger"):
-        executor_state["discovery_budget_status"] = "DISCOVERY_YIELD_EXHAUSTED"
-        _defer_reason = f"unproductive streak {streak} reached exhausted threshold {exhausted_threshold}; requires qualifying reset event"
-        executor_state["discovery_defer_reason"] = _defer_reason
-        # §5244: yield-exhaustion deferral MUST surface as named IntegrityGap (idempotent)
-        if not any(g.get("kind") == "discovery-yield-exhausted" for g in state.get("integrity_gaps", [])):
-            _emit_gap(state, "discovery-yield-exhausted", "WARNING", _defer_reason)
-        return False
-    executor_state.pop("discovery_defer_reason", None)
-    base = float(settings.get("discovery_interval_seconds", 604800))
-    maximum = float(settings.get("max_discovery_interval_seconds", 4838400))
-    allocation = user_controls.discovery_interval(config, state, base, maximum, streak)
-    executor_state['resource_allocation'] = allocation
-    return elapsed >= allocation['discovery_interval_seconds']
-
-
-def _check_stale_derived_manifests(state: dict, candidate_version: str) -> list[dict]:
-    """Return stale DerivedManifestRef and ConstructSetRef records (§62j r27/r45)."""
-    stale = []
-    for ref in state.get("derived_manifest_refs", []):
-        if ref.get("spec_version") != candidate_version:
-            stale.append(ref)
-            state.setdefault("evidence", []).append({
-                "id": identifier("evidence"), "at": now(),
-                "kind": "derived-manifest-stale",
-                "manifest_id": ref["manifest_id"],
-                "stale_spec_version": ref["spec_version"],
-                "candidate_spec_version": candidate_version,
-                "intent": ref.get("intent", ""),
-            })
-    for ref in state.get("construct_set_refs", []):
-        if ref.get("spec_version") != candidate_version:
-            stale.append(ref)
-            state.setdefault("evidence", []).append({
-                "id": identifier("evidence"), "at": now(),
-                "kind": "derived-construct-set-stale",
-                "construct_set_id": ref["construct_set_id"],
-                "stale_spec_version": ref["spec_version"],
-                "candidate_spec_version": candidate_version,
-                "intent": ref.get("intent", ""),
-            })
-    for ref in state.get("feature_bundle_refs", []):
-        if ref.get("spec_version") != candidate_version:
-            stale.append(ref)
-            state.setdefault("evidence", []).append({
-                "id": identifier("evidence"), "at": now(),
-                "kind": "derived-construct-set-stale",
-                "bundle_name": ref.get("bundle_name", ""),
-                "stale_spec_version": ref["spec_version"],
-                "candidate_spec_version": candidate_version,
-            })
-    return stale
-
-
-def _current_spec_version() -> str:
-    """Return the current URACE spec version string, or 'unknown' if unreadable."""
-    spec_path = ROOT / "URACE.md"
-    try:
-        return spec_audit_module.extract_spec_version(spec_path.read_text(encoding="utf-8")) or "unknown"
-    except (OSError, AttributeError):
-        return "unknown"
-
-
-def spec_audit_due(state: dict[str, Any]) -> bool:
-    """True when URACE.md has not been audited at the current spec version (§81)."""
-    spec_path = ROOT / "URACE.md"
-    if not spec_path.exists():
-        return False
-    try:
-        current_version = spec_audit_module.extract_spec_version(spec_path.read_text(encoding="utf-8"))
-    except OSError:
-        return False
-    existing = state.get("spec_audit_state") or {}
-    return existing.get("spec_version") != current_version
-
-
-def run_spec_audit(config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] | None:
-    """Run deterministic spec structural audit (§81); store as Evidence; return compact summary."""
-    spec_path = ROOT / "URACE.md"
-    if not spec_path.exists():
-        return None
-    try:
-        report = spec_audit_module.audit(spec_path)
-    except Exception:
-        return None
-    summary = spec_audit_module.build_summary(report)
-    state["spec_audit_state"] = {
-        "spec_version": report["metadata"]["spec_version"],
-        "last_audited_at": now(),
-        "section_count": report["metadata"]["section_count"],
-        "fence_parity_even": report["global_summary"]["fence_parity_even"],
-        "rfc2119_totals": report["global_summary"]["rfc2119_totals"],
-        "high_ambiguity_sections": summary["high_ambiguity_sections"],
-        "medium_ambiguity_sections": summary["medium_ambiguity_sections"],
-        "top_gap_sections": summary["top_gap_sections"],
-        "normative_density_per_section": summary["normative_density_per_section"],
-    }
-    state.setdefault("evidence", []).append({
-        "id": identifier("evidence"),
-        "at": now(),
-        "kind": "spec-structural-audit",
-        "spec_version": report["metadata"]["spec_version"],
-        "summary": summary,
-    })
-    return summary
-
-
-def executor_execution_allowed(config: dict[str, Any], state: dict[str, Any]) -> bool:
-    settings = config.get("executor", {})
-    executor_state = state.setdefault("executor_state", {})
-    current = datetime.now(timezone.utc).timestamp()
-    retry_at = executor_state.get("capacity_retry_at")
-    if retry_at and current < datetime.fromisoformat(retry_at).timestamp():
-        executor_state["discovery_budget_status"] = "WAITING_PROVIDER_CAPACITY"
-        return False
-    calls = executor_state.setdefault("executor_calls", [])
-    calls[:] = [item for item in calls if current - datetime.fromisoformat(item["at"]).timestamp() < 2592000]
-    calls_24h = [item for item in calls if current - datetime.fromisoformat(item["at"]).timestamp() < 86400]
-    if nullable_limit(settings,"max_executor_calls_per_24h",2) is not None and len(calls_24h)>=nullable_limit(settings,"max_executor_calls_per_24h",2):
-        executor_state["discovery_budget_status"] = "DAILY_LIMIT_OR_RESERVE_REACHED"
-        return False
-    if nullable_limit(settings,"max_executor_calls_per_30d",12) is not None and len(calls)>=nullable_limit(settings,"max_executor_calls_per_30d",12):
-        executor_state["discovery_budget_status"] = "MONTHLY_LIMIT_OR_RESERVE_REACHED"
-        return False
-    return True
-
-
-def defer_executor_capacity(config: dict[str, Any], state: dict[str, Any], error: intelligent_executor.ExecutorUnavailable, stage: str) -> None:
-    executor_state = state.setdefault("executor_state", {})
-    fallback_seconds = float(config.get("executor", {}).get("capacity_fallback_seconds", 18000))
-    fallback = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + fallback_seconds, timezone.utc).isoformat()
-    retained_retry = executor_state.get("capacity_retry_at") if executor_state.get("capacity_category") == error.category and executor_state.get("capacity_stage") == stage else None
-    retry_at = error.retry_at or retained_retry or fallback
-    signature = hashlib.sha256(json.dumps({"status": "WAITING_PROVIDER_CAPACITY", "retry_at": retry_at, "category": error.category, "stage": stage}, sort_keys=True).encode()).hexdigest()
-    changed = executor_state.get("capacity_observation_signature") != signature
-    executor_state.update({
-        "available": False, "capacity_status": "WAITING_PROVIDER_CAPACITY",
-        "capacity_retry_at": retry_at, "capacity_category": error.category,
-        "capacity_stage": stage, "availability_reason": "provider capacity window unavailable",
-        "capacity_observation_signature": signature,
-    })
-    if changed:
-        state.setdefault("evidence", []).append({
-            "id": identifier("evidence"), "at": now(), "kind": "executor-capacity-deferred",
-            "stage": stage, "retry_at": retry_at, "category": error.category,
-            "disposition": "WAIT_WITHOUT_NEW_EXECUTOR_TASKS",
-        })
-
-
-def _retain_call_usage(call: dict[str, Any], metadata: Any) -> None:
-    """Accumulate distinct route receipts on a reused logical reservation."""
-    if not isinstance(metadata, dict):
-        return
-    current = call.get("usage") if isinstance(call.get("usage"), dict) else {}
-    if not current:
-        call["usage"] = copy.deepcopy(metadata)
-        return
-    old_receipts = current.get("transport_usage", []) if isinstance(current.get("transport_usage"), list) else []
-    new_receipts = metadata.get("transport_usage", []) if isinstance(metadata.get("transport_usage"), list) else []
-    # Legacy/adapter-reported usage can lack individual transport identities.
-    # Preserve it as an explicitly unattributed group, never invent a provider.
-    if not old_receipts:
-        old_receipts = [{"provider_id": None, "usage": current,
-                         "usage_scope": "unattributed_reported_usage_group"}]
-    if not new_receipts:
-        new_receipts = [{"provider_id": None, "usage": metadata,
-                         "usage_scope": "unattributed_reported_usage_group"}]
-    receipts = copy.deepcopy(old_receipts + new_receipts)
-    combined = intelligent_executor._aggregate_transport_usage(receipts)
-    call["usage"] = combined if combined is not None else {"transport_usage": receipts}
-
-
-def _current_route_usage(state: dict[str, Any], metadata: Any, prior_route: Any = None) -> Any:
-    """Attach this route's receipts without changing adapter metadata otherwise."""
-    route = state.get("executor_state", {}).get("provider_pool", {}).get("last_route", {})
-    if prior_route is not None and route == prior_route:
-        return metadata
-    receipts = route.get("transport_usage") if isinstance(route, dict) else None
-    if not isinstance(receipts, list):
-        return metadata
-    if not isinstance(metadata, dict):
-        return {
-            "source": "provider transport receipt", "usage_provenance": "PARTIAL",
-            "input_tokens": None, "cached_input_tokens": None, "output_tokens": None,
-            "reported_cost_usd": None, "transport_usage": copy.deepcopy(receipts),
-        }
-    if "transport_usage" in metadata:
-        return metadata
-    enriched = copy.deepcopy(metadata)
-    enriched["transport_usage"] = copy.deepcopy(receipts)
-    return enriched
-
-
-def _executor_readiness_capability(state: dict[str, Any]) -> str:
-    """Return the capability required by the next runnable lifecycle stage."""
-    if any(
-        objective.get("status") == "planned" and goal_is_schedulable(state, objective)
-        for objective in state.get("objectives", [])
-    ):
-        return "execution"
-    return "discovery"
-
-
-def refresh_executor_availability(config: dict[str, Any], state: dict[str, Any], force: bool = False) -> dict[str, Any]:
-    settings = config.get("executor", {})
-    executor_state = state.setdefault("executor_state", {"last_discovery_at": None, "last_operation_at": None, "last_availability_check": None, "available": None, "failures": []})
-    if not settings.get("enabled"):
-        executor_state["available"] = False
-        return {"available": False, "transition": None, "reason": "executor disabled"}
-    capability = _executor_readiness_capability(state)
-    retry_at = executor_state.get("capacity_retry_at")
-    if retry_at and datetime.now(timezone.utc).timestamp() < datetime.fromisoformat(retry_at).timestamp():
-        return {"available": False, "transition": None, "reason": "provider capacity retry scheduled", "retry_at": retry_at}
-    if retry_at:
-        executor_state.pop("capacity_retry_at", None)
-        executor_state["capacity_status"] = "PROBE_DUE"
-        force = True
-    last_check = executor_state.get("last_availability_check")
-    cached_capability = executor_state.get("availability_capability", "discovery")
-    if last_check and cached_capability == capability and not force:
-        elapsed = datetime.now(timezone.utc).timestamp() - datetime.fromisoformat(last_check).timestamp()
-        if executor_state.get("available"):
-            interval = float(settings.get("available_probe_interval_seconds", 300))
-        else:
-            failures = int(executor_state.get("availability_failure_streak", 0))
-            interval = min(float(settings.get("max_unavailable_probe_interval_seconds", 900)), float(settings.get("availability_probe_interval_seconds", 30)) * (2 ** min(failures, 10)))
-        if elapsed < interval:
-            runtime = state.setdefault("runtime_efficiency", {})
-            runtime["availability_checks_suppressed"] = int(runtime.get("availability_checks_suppressed", 0)) + 1
-            return {"available": bool(executor_state.get("available")), "transition": None, "reason": executor_state.get("availability_reason", "cached")}
-    previous = executor_state.get("available")
-    runtime = state.setdefault("runtime_efficiency", {})
-    runtime["availability_probes"] = int(runtime.get("availability_probes", 0)) + 1
-    probe_started = time.monotonic()
-    result = intelligent_executor.pool_availability(settings, executor_state.setdefault("provider_pool", {}), capability)
-    runtime["availability_probe_seconds"] = float(runtime.get("availability_probe_seconds", 0)) + (time.monotonic() - probe_started)
-    current = result["available"]
-    executor_state["availability_failure_streak"] = 0 if current else int(executor_state.get("availability_failure_streak", 0)) + 1
-    executor_state.update({"available": current, "last_availability_check": result["checked_at"], "availability_capability": capability, "availability_reason": result["reason"]})
-    # Preserve provider-reported authentication separately from availability.
-    authenticated = result.get("authenticated")
-    if authenticated is False and executor_state.get("authenticated") is not False:
-        executor_state["authenticated"] = False
-        state["evidence"].append({"id": identifier("evidence"), "at": now(), "kind": "executor-auth-failure", "reason": result.get("authentication_reason") or result.get("reason"), "disposition": "EXECUTOR_AUTHENTICATED_FAILED"})
-    else:
-        executor_state["authenticated"] = authenticated
-    transition = None if previous is None or previous == current else f"{'AVAILABLE' if current else 'UNAVAILABLE'}"
-    if previous is None and current:
-        transition = "AVAILABLE"
-    if transition:
-        trigger = {
-            "id": identifier("trigger"), "at": now(), "kind": f"EXECUTOR_{transition}",
-            "source": settings.get("kind", "executor"), "provenance": "executor availability probe", "disposition": "REASSESS",
-        }
-        state.setdefault("triggers", []).append(trigger)
-        state["evidence"].append({"id": identifier("evidence"), "at": now(), "kind": "executor-availability", "available": current, "provenance": trigger["id"]})
-        if current:
-            executor_state["capacity_status"] = "AVAILABLE"
-            executor_state["discovery_trigger"] = {"reason": "executor became available", "signature": "executor-available"}
-    return {**result, "transition": transition}
-
-
-def discover_with_executor(config: dict[str, Any], state: dict[str, Any], persist_usage: bool = False) -> dict[str, Any] | None:
-    from .implementation_sequence import local_only
-    pending=[t for t in state.get("objectives",[]) if str(t.get("status","")).lower() not in {"completed","achieved","superseded","cancelled","disabled"}]
-    if pending and all(local_only(t) for t in pending):
-        state.setdefault("executor_state",{})["discovery_budget_status"]="LOCAL_CONTROLLER_ONLY"
-        return None
-    if not state.get("executor_state", {}).get("available"):
-        return None
-    if not executor_execution_allowed(config, state):
-        return None
-    if not executor_discovery_due(config, state):
-        return None
-    executor_state = state["executor_state"]
-    deferred_id = executor_state.get("deferred_discovery_call")
-    call = next((item for item in executor_state.setdefault("executor_calls", []) if deferred_id and item.get("id") == deferred_id), None)
-    if call:
-        call.update({"outcome": "attempted", "last_transport_attempt_at": now(), "transport_attempts": int(call.get("transport_attempts", 1)) + 1, "logical_reservation_reused": True})
-        reason = call.get("reason"); signature = call.get("trigger_signature")
-    else:
-        executor_state["last_discovery_at"] = now()
-        trigger_reason = executor_state.pop("discovery_trigger", None)
-        reason = trigger_reason.get("reason") if isinstance(trigger_reason, dict) else trigger_reason
-        signature = trigger_reason.get("signature") if isinstance(trigger_reason, dict) else trigger_reason
-        call = {"id": identifier("executor-call"), "at": executor_state["last_discovery_at"], "reason": reason or "periodic opportunity audit", "trigger_signature": signature, "stage": "discovery", "outcome": "attempted", "transport_attempts": 1, "logical_reservation_reused": False}
-        from ._common import integration_context
-        if integration_context():call["integration_context"]=integration_context()
-        executor_state["executor_calls"].append(call)
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=35)).isoformat()
-        executor_state["executor_calls"] = [c for c in executor_state["executor_calls"] if c.get("started_at", c.get("at", cutoff)) >= cutoff]
-    if signature:
-        state["executor_state"]["last_trigger_call"] = {"at": call["at"], "signature": signature}
-    state["executor_state"]["discovery_budget_status"] = "WITHIN_BUDGET"
-    if persist_usage:
-        save_state(config, state)
-    _discovery_started = time.monotonic()
-    prior_route = copy.deepcopy(executor_state.get("provider_pool", {}).get("last_route"))
-    try:
-        proposal = intelligent_executor.discover(ROOT, config, state)
-    except intelligent_executor.ExecutorUnavailable as error:
-        call["outcome"] = "deferred_provider_capacity"
-        _retain_call_usage(call, _current_route_usage(state, getattr(error, "__urace_executor_metadata__", None), prior_route))
-        executor_state["deferred_discovery_call"] = call["id"]
-        raise
-    except Exception as error:
-        call["outcome"] = "failed"
-        _retain_call_usage(call, _current_route_usage(state, getattr(error, "__urace_executor_metadata__", None), prior_route))
-        executor_state.pop("deferred_discovery_call", None)
-        state["executor_state"]["unproductive_discovery_streak"] = int(state["executor_state"].get("unproductive_discovery_streak", 0)) + 1
-        raise
-    finally:
-        call["elapsed_seconds"] = time.monotonic() - _discovery_started
-    _retain_call_usage(call, _current_route_usage(state, proposal.get("__urace_executor_metadata__"), prior_route))
-    hypothesis = proposal.get("pattern_hypothesis", "").strip()
-    executor_state.pop("deferred_discovery_call", None)
-    if hypothesis:
-        memory = state.setdefault("reasoning_memory", [])
-        existing = next((item for item in memory if item["hypothesis"].casefold() == hypothesis.casefold()), None)
-        entry = existing or {"id": identifier("pattern"), "hypothesis": hypothesis, "first_seen": now(), "observations": 0}
-        entry.update({
-            "last_seen": now(), "observations": entry["observations"] + 1,
-            "supporting_evidence": proposal.get("pattern_evidence", [])[-10:],
-            "counterevidence": proposal.get("pattern_counterevidence", [])[-10:],
-            "confidence": proposal.get("pattern_confidence", 0),
-            "applicability": proposal.get("pattern_applicability", "unspecified"),
-            "learned_response": proposal.get("learned_response", "investigate before acting"),
-            "status": "ACTIVE" if proposal.get("pattern_confidence", 0) >= 0.6 else "TENTATIVE",
-        })
-        if existing is None:
-            memory.append(entry)
-        limit = int(config.get("efficiency", {}).get("max_reasoning_memory_entries", 100))
-        if len(memory) > limit:
-            memory[:] = sorted(memory, key=lambda item: (item.get("status") == "ACTIVE", item.get("confidence", 0), item.get("last_seen", "")), reverse=True)[:limit]
-    metric_system = state.setdefault("metric_system", {"version": 1, "last_review_at": None, "last_assessment": None, "change_needed": False, "change_history": []})
-    metric_system.update({"last_review_at": now(), "last_assessment": proposal["metric_assessment"], "change_needed": proposal["metric_change_needed"]})
-    evaluation_system = state.setdefault("evaluation_system", {**config.get("evaluation_system", {}), "last_review_at": None, "last_assessment": None, "change_needed": False, "change_history": []})
-    evaluation_system.update({"last_review_at": now(), "last_assessment": proposal.get("evaluation_assessment", "No separate evaluation-system assessment returned"), "change_needed": proposal.get("evaluation_change_needed", False)})
-    proposal_evidence={"id": identifier("evidence"), "at": now(), "kind": "executor-proposal", "proposal": proposal, "provenance": "Existing read-only discovery executor"}
-    state["evidence"].append(proposal_evidence)
-    if not proposal["should_act"]:
-        call["outcome"] = "no_action"
-        state["executor_state"]["unproductive_discovery_streak"] = int(state["executor_state"].get("unproductive_discovery_streak", 0)) + 1
-        return None
-    if proposal["scope"] in {"runtime", "rebootstrap"}:
-        policy = state.get("self_evolution_policy", {"mode": "DISABLED"})
-        mode = policy.get("mode", "DISABLED").upper()
-        eligible = mode == "CONTINUOUS" or (
-            mode == "NECESSARY_ONLY"
-            and proposal["self_evolution_necessary"]
-            and bool(proposal["necessity_evidence"].strip())
-            and not proposal["lower_impact_route_sufficient"]
-        )
-        if not eligible:
-            call["outcome"] = "ineligible"
-            state["executor_state"]["unproductive_discovery_streak"] = int(state["executor_state"].get("unproductive_discovery_streak", 0)) + 1
-            state["evidence"].append({
-                "id": identifier("evidence"), "at": now(), "kind": "self-evolution-policy-decision",
-                "outcome": "INELIGIBLE", "mode": mode, "scope": proposal["scope"],
-                "reason": "proposal did not satisfy the selected self-evolution policy",
-                "proposal": proposal,
-            })
-            return None
-    priority_scope = proposal.get("priority_scope")
-    definition = config.get("scope_priority", {}).get("scopes", {}).get(priority_scope, {})
-    if proposal["scope"] not in definition.get("execution_scopes", []):
-        priority_scope = scope_priority.infer_scope(config, proposal["scope"])
-    objective = {
-        "id": identifier("objective"),
-        "title": proposal["title"],
-        "reason": proposal["reason"],
-        "success_measure": proposal["success_measure"],
-        "outcome_measure_id": proposal.get("outcome_measure_id"),
-        "scope": proposal["scope"],
-        "priority_scope": priority_scope,
-        "priority": 60,
-        "metadata": {"forecast_evidence_ref": proposal_evidence["id"]},
-        "expected_value": proposal.get("expected_value", 0.5), "estimated_cost": proposal.get("estimated_cost", 0.5),
-        "risk": proposal.get("risk", 0.5), "urgency": proposal.get("urgency", 0.5), "confidence": proposal.get("pattern_confidence", 0.5),
-        "necessity_evidence": proposal.get("necessity_evidence", ""), "lower_impact_route_sufficient": proposal.get("lower_impact_route_sufficient", True),
-        "status": "planned",
-        "created_at": now(), "updated_at": now(),
-    }
-    if signature:
-        objective["input_links"] = [signature]
-
-    # --- Destination drift check (spec §8-9, §24) ---
-    anchor = state.get("destination_anchor", {})
-    if anchor:
-        drift = destination_anchor.drift_score(objective, anchor)
-        objective["destination_drift_score"] = drift
-        if drift >= destination_anchor.DRIFT_FLAG:
-            drift_evidence = destination_anchor.build_drift_evidence(objective, drift, anchor)
-            drift_evidence["id"] = identifier("evidence")
-            drift_evidence["at"] = now()
-            state.setdefault("evidence", []).append(drift_evidence)
-            if drift >= destination_anchor.DRIFT_BLOCK:
-                objective["status"] = "awaiting_operator_decision"
-                objective["drift_blocked"] = True
-                state["lifecycle_state"] = "WAITING_FOR_AUTHORITATIVE_DECISION"
-                call["outcome"] = "drift_escalated"
-                state["objectives"].append(objective)
-                return None
-
-    state["objectives"].append(objective)
-    call["objective_id"] = objective["id"]
-    call["outcome"] = "objective_created"
-    state["executor_state"]["unproductive_discovery_streak"] = 0
-    return objective
-
-
-def _transition(state: dict[str, Any], destination: str, operation_id: str) -> None:
-    prior = state.get("lifecycle_state")
-    state["lifecycle_state"] = destination
-    state.setdefault("status_transitions", []).append({"from": prior, "to": destination,
-        "status": destination, "at": now(), "operation": operation_id})
-
-
-def execute_with_executor(config: dict[str, Any], state: dict[str, Any], objective: dict[str, Any], plan: dict[str, Any], persist_usage: bool = False) -> dict[str, Any]:
-    from .implementation_sequence import local_only,execute_local
-    if local_only(objective):
-        if not goal_is_schedulable(state,objective):raise RuntimeError("Local action authority or dependency not satisfied")
-        return execute_local(config,state,objective)
-    reservation_id = objective.get("executor_capacity_reservation")
-    execution_call = next((item for item in state.setdefault("executor_state", {}).setdefault("executor_calls", []) if reservation_id and item.get("id") == reservation_id), None)
-    if not execution_call and not executor_execution_allowed(config, state):
-        objective["status"] = "deferred_budget"
-        return {"status": "DEFERRED_BUDGET", "changed_files": []}
-    if execution_call:
-        execution_call.update({"outcome": "attempted", "last_transport_attempt_at": now(), "transport_attempts": int(execution_call.get("transport_attempts", 1)) + 1, "logical_reservation_reused": True})
-    else:
-        execution_call = {"id": identifier("executor-call"), "at": now(), "reason": objective["id"], "stage": "execution", "outcome": "attempted", "transport_attempts": 1, "logical_reservation_reused": False}
-        from ._common import integration_context
-        if integration_context():execution_call["integration_context"]=integration_context()
-        state["executor_state"]["executor_calls"].append(execution_call)
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=35)).isoformat()
-        state["executor_state"]["executor_calls"] = [c for c in state["executor_state"]["executor_calls"] if c.get("started_at", c.get("at", cutoff)) >= cutoff]
-    if persist_usage:
-        save_state(config, state)
-    _execution_started = time.monotonic()
-    before_metrics = document_metrics(config)
-    scope = objective.get("scope", "documentation")
-    operation = {
-        "id": identifier("operation"), "objective_reference": objective["id"], "plan_reference": plan["id"],
-        "executor": "codex-cli", "status": "ATTEMPTED", "attempted_at": now(), "updated_at": now(),
-        "authority_basis": "delegated specification evolution" if scope == "documentation" else ("external metric policy" if scope == "metrics" else "delegated runtime self-evolution and re-bootstrap"),
-        "scope": scope,
-        "priority_scope": objective.get("priority_scope"),
-        "outcome_contract": outcome_verification.capture(ROOT, config, objective),
-    }
-    state["operations"].append(operation)
-    prior_route = copy.deepcopy(state.get("executor_state", {}).get("provider_pool", {}).get("last_route"))
-    try:
-        prepared = intelligent_executor.execute(ROOT, config, state, objective)
-    except intelligent_executor.ExecutorUnavailable as error:
-        execution_call["outcome"] = "deferred_provider_capacity"
-        operation["status"] = "DEFERRED_PROVIDER_CAPACITY"
-        metadata = _current_route_usage(state, getattr(error, "__urace_executor_metadata__", None), prior_route)
-        if isinstance(metadata, dict):
-            operation["usage"] = copy.deepcopy(metadata)
-            _retain_call_usage(execution_call, metadata)
-        objective["executor_capacity_reservation"] = execution_call["id"]
-        raise
-    except Exception as error:
-        execution_call["outcome"] = "failed"
-        operation["status"] = "FAILED"
-        if hasattr(error, "__urace_executor_metadata__"):
-            operation["usage"] = _current_route_usage(state, getattr(error, "__urace_executor_metadata__"), prior_route)
-            _retain_call_usage(execution_call, operation["usage"])
-        objective.pop("executor_capacity_reservation", None)
-        raise
-    finally:
-        operation["elapsed_seconds"] = time.monotonic() - _execution_started
-        execution_call["elapsed_seconds"] = operation["elapsed_seconds"]
-    objective.pop("executor_capacity_reservation", None)
-    route = prepared.get("__urace_route__") or state.get("executor_state", {}).get("provider_pool", {}).get("last_route") or {}
-    attribution = {
-        "executor_id": route.get("provider", "unknown"), "adapter": route.get("adapter", "unknown"),
-        "capability": route.get("capability", "execution"), "attempted_executors": route.get("attempted", []),
-        "logical_reservation": execution_call["id"],
-    }
-    execution_call["executor_attribution"] = attribution
-    operation["executor"] = attribution
-    operation["change_id"] = operation["id"]
-    operation["executor_source_summary"] = str(prepared.get("message", "")).strip()[:4000]
-    operation["usage"] = _current_route_usage(state, prepared.get("__urace_executor_metadata__", {}), prior_route)
-    operation["elapsed_seconds"] = time.monotonic() - _execution_started
-    execution_call["elapsed_seconds"] = operation["elapsed_seconds"]
-    _retain_call_usage(execution_call, operation["usage"])
-    try:
-        from urace.cost_model import receipt_from_operation, store_receipt
-        _receipt = receipt_from_operation(operation)
-        if _receipt is not None:
-            store_receipt(config, _receipt)
-    except Exception:
-        pass
-    if prepared["status"] == "NO_EFFECT":
-        execution_call["outcome"] = "no_effect"
-        operation["status"] = "OBSERVED_NO_EFFECT"
-        objective["status"] = "needs_reassessment"
-        return {"status": "NO_EFFECT", "operation": operation["id"]}
-    if prepared["status"] == "UPDATE_CONFLICT":
-        execution_call["outcome"] = "awaiting_operator_decision"
-        operation.update({"status": "AWAITING_OPERATOR_DECISION", "conflict": prepared["conflict"], "observed_at": now()})
-        objective.update({"status": "awaiting_operator_decision", "update_conflict": prepared["conflict"]})
-        state["lifecycle_state"] = "WAITING_FOR_AUTHORITATIVE_DECISION"
-        state["evidence"].append({
-            "id": identifier("evidence"), "at": now(), "kind": "update-customization-conflict",
-            "operation": operation["id"], "candidate": objective.get("update_candidate", {}).get("sha256"),
-            "explanation": prepared["conflict"], "disposition": "NO_FILES_APPLIED",
-            "next": "inspect the explanation, add attributable resolution context or revise/cancel the goal, then resume",
-        })
-        return {"status": "AWAITING_OPERATOR_DECISION", "operation": operation["id"], "conflict": prepared["conflict"]}
-    transaction_id = identifier("transaction")
-    after_contents = prepared["contents"]
-    # §78-BE: Check for concurrent external edits BEFORE scope validation — a stale
-    # base_hash means the file changed since the executor captured it; abort immediately
-    # without touching the file, regardless of scope.
-    conflicts = [
-        item for item in after_contents
-        if (ROOT / item).exists()
-        and hashlib.sha256((ROOT / item).read_bytes()).hexdigest() != prepared.get("base_hashes", {}).get(item)
-    ]
-    if conflicts:
-        execution_call.update({"outcome": "concurrent_change", "conflicting_files": conflicts})
-        operation.update({"status": "CONCURRENT_CHANGE", "conflicting_files": conflicts, "observed_at": now()})
-        objective["status"] = "needs_reassessment"
-        state["evidence"].append({
-            "id": identifier("evidence"), "at": now(), "kind": "concurrent-product-change",
-            "operation": operation["id"], "files": conflicts, "disposition": "CANDIDATE_NOT_APPLIED",
-        })
-        return {"status": "CONCURRENT_CHANGE", "operation": operation["id"], "conflicting_files": conflicts}
-    file_errors = independent_validation.candidate_file_errors(ROOT, scope, list(after_contents), config)
-    if set(after_contents) != set(prepared["changed_files"]):
-        file_errors.append("candidate contents differ from declared changed_files")
-    if file_errors:
-        operation["status"] = "REJECTED_SCOPE"
-        raise RuntimeError("candidate rejected before application: " + "; ".join(file_errors))
-    operation["changed_files"] = list(after_contents)
-    before_contents = {item: (ROOT / item).read_text(encoding="utf-8") for item in after_contents}
-    journal = {
-        "id": transaction_id,
-        "recovery_protocol": "atomic-v2",
-        "operation": operation["id"],
-        "created_at": now(),
-        "phase": "PREPARED",
-        "before": {relative: before_contents[relative] for relative in after_contents},
-        "after": after_contents,
-        "applied": [],
-    }
-    atomic_write_json(transaction_path(config), journal)
-    try:
-        journal["phase"] = "APPLYING"
-        atomic_write_json(transaction_path(config), journal)
-        for relative, content in after_contents.items():
-            atomic_write_text(ROOT / relative, content)
-            journal["applied"].append(relative)
-            atomic_write_json(transaction_path(config), journal)
-        after_metrics = document_metrics(config)
-        before_size = sum(len(content.encode("utf-8")) for content in before_contents.values())
-        after_size = sum(len(content.encode("utf-8")) for content in after_contents.values())
-        efficiency = config.get("efficiency", {})
-        allowed_growth = min(
-            before_size * (float(efficiency.get("max_product_growth_ratio_per_change", 1.25)) - 1.0),
-            float(efficiency.get("max_product_growth_bytes_per_change", 100000)),
-        )
-        if after_size - before_size > allowed_growth:
-            raise RuntimeError(f"prepared change exceeded Product growth budget: +{after_size - before_size} bytes > +{allowed_growth:g}")
-        guardrails_ok = (
-            after_metrics["normative_rules"] >= before_metrics["normative_rules"]
-            and after_metrics["behavioral_tests"] >= before_metrics["behavioral_tests"]
-        )
-        if not guardrails_ok:
-            raise RuntimeError("prepared change violated measurable blueprint guardrails")
-        integrity_errors = validate_product(config, before_metrics)
-        if integrity_errors:
-            raise RuntimeError("prepared change failed Product integrity: " + "; ".join(integrity_errors))
-        journal["phase"] = "APPLIED"
-        atomic_write_json(transaction_path(config), journal)
-        operation["applied_at"] = now()
-        _transition(state, "VALIDATING", operation["id"])
-    except Exception:
-        for relative, content in journal["before"].items():
-            atomic_write_text(ROOT / relative, content)
-        durable_unlink(transaction_path(config))
-        _ts = now(); operation["status"] = "REJECTED_ROLLED_BACK"; operation["rejected_at"] = _ts; operation["rolled_back_at"] = _ts; operation["updated_at"] = _ts
-        _transition(state, "REPAIRING", operation["id"])
-        raise
-    directions = {name: item["direction"] for name, item in state["progress_profiles"][0]["measures"].items()}
-    improved = sum(compare(directions.get(name, "increase"), value, before_metrics.get(name, value)) == "improved" for name, value in after_metrics.items())
-    regressed = sum(compare(directions.get(name, "increase"), value, before_metrics.get(name, value)) == "regressed" for name, value in after_metrics.items())
-
-    # --- Independent validation gate (spec §54, §60) ---
-    # Executor result is an Observation until independently validated.
-    try:
-        validation_result = independent_validation.validate_operation(
-            ROOT, operation, before_metrics, after_metrics, config, state
-        )
-    except Exception:
-        for relative, content in journal["before"].items():
-            atomic_write_text(ROOT / relative, content)
-        durable_unlink(transaction_path(config))
-        operation["status"] = "REJECTED_VALIDATION_ERROR"
-        _transition(state, "REPAIRING", operation["id"])
-        save_state(config, state)
-        raise
-    operation["independent_validation"] = validation_result
-    if validation_result["verdict"] == independent_validation.PENDING_CAPABILITY:
-        for relative, content in journal["before"].items():
-            atomic_write_text(ROOT / relative, content)
-        operation["status"] = "PENDING_VALIDATION"
-        objective["status"] = "awaiting_validation"
-        pending = independent_validation.pending_validation_record(operation, validation_result["basis"])
-        pending["candidate"] = {"contents": after_contents, "base_hashes": prepared["base_hashes"]}
-        state.setdefault("pending_validations", []).append(pending)
-        _transition(state, "WAITING_FOR_CONDITION", operation["id"])
-        save_state(config, state)
-        durable_unlink(transaction_path(config))
-        return {"status": "PENDING_VALIDATION", "operation": operation["id"], "changed_files": []}
-    if validation_result["verdict"] == independent_validation.REJECTED:
-        # Roll back: independent validation rejected the change.
-        for relative, content in journal["before"].items():
-            atomic_write_text(ROOT / relative, content)
-        durable_unlink(transaction_path(config))
-        _ts = now(); operation["status"] = "REJECTED_INDEPENDENT_VALIDATION"; operation["rejected_at"] = _ts; operation["updated_at"] = _ts
-        _transition(state, "REPAIRING", operation["id"])
-        _fails_r = {c.get("domain", ""): c.get("detail", "") for c in validation_result.get("fails", []) if "domain" in c}
-        for _dom_r in ("authority", "intent", "schema", "constraint"):
-            _status_r = "NON_COMPLIANT" if _dom_r in _fails_r else "UNKNOWN"
-            _detail_r = _fails_r.get(_dom_r)
-            _emit_compliance_record(state, _dom_r, _status_r, operation.get("id"), _detail_r, operation.get("scope"))
-        fail_summary = "; ".join(c["detail"] for c in validation_result["fails"])
-        raise RuntimeError(f"Independent validation rejected applied change: {fail_summary}")
-
-    # Emit ComplianceRecord per domain (spec §54 compliance recording contract, r48)
-    op_id = operation.get("id")
-    op_scope = operation.get("scope")
-    _iv = validation_result
-    _passes = {c["domain"] for c in _iv.get("passes", []) if "domain" in c}
-    _fails  = {c["domain"]: c.get("detail", "") for c in _iv.get("fails", []) if "domain" in c}
-    for _dom in ("authority", "intent", "schema", "constraint"):
-        if _dom in _fails:
-            _emit_compliance_record(state, _dom, "NON_COMPLIANT", op_id, _fails[_dom], op_scope)
-        elif _dom in _passes:
-            _emit_compliance_record(state, _dom, "COMPLIANT", op_id, None, op_scope)
-
-    journal["phase"] = "VALIDATED"
-    atomic_write_json(transaction_path(config), journal)
-    _transition(state, "ASSESSING", operation["id"])
-    _transition(state, "ACTIVE", operation["id"])
-    execution_call.update({"outcome": "accepted", "observed_metric_effect": {"improved": improved, "regressed": regressed}, "changed_files": prepared["changed_files"], "change_id": operation["id"]})
-    _accepted_ts = now(); operation.update({"status": "ACCEPTED", "accepted_at": _accepted_ts, "updated_at": _accepted_ts, "transaction": transaction_id, "changed_files": prepared["changed_files"], "before_metrics": before_metrics, "after_metrics": after_metrics, "observed_metric_effect": {"improved": improved, "regressed": regressed}, "decision": objective.get("title"), "decision_basis": objective.get("reason")})
-    # R7 — Compliance symmetric recording: emit ADVANCING record on ACCEPTED transitions
-    _emit_compliance_record(state, scope, "ADVANCING", operation.get("id"), "operation accepted — compliance advancing", scope)
-    explanation_mode = str(config.get("change_explanations", {}).get("mode", "disabled")).lower()
-    if explanation_mode == "enabled" or (explanation_mode == "auto" and (len(prepared["changed_files"]) > 1 or float(objective.get("risk", 0)) >= 0.5)):
-        operation["explanation"] = operation["executor_source_summary"] or f"Implemented {objective.get('title')} and passed validation."
-    objective["implementation_status"] = "accepted"
-    objective["status"] = "awaiting_outcome"
-    objective["outcome_status"] = "PENDING_OUTCOME"
-    objective["updated_at"] = operation["accepted_at"]
-    objective.pop("executor_capacity_reservation", None)
-    plan["status"] = "completed"; plan["completed_at"] = operation["accepted_at"]; plan["updated_at"] = operation["accepted_at"]
-    state["executor_state"]["last_operation_at"] = now()
-    # X2: Regression-scope checkpoint gate (§62c Quality Streak Mechanism)
-    if not _regression_checkpoint_gate_passes(state, scope):
-        _emit_gap(state, "regression-checkpoint-pending", "WARNING",
-                  f"Checkpoint for scope={scope} blocked: most recent QualityDelta is REGRESSION; "
-                  f"a CHECKPOINT_ACCEPTANCE DecisionRecord is required before acceptance.")
-    else:
-        state["checkpoints"].append({"id": identifier("checkpoint"), "at": now(), "kind": "accepted-product-change", "digest": product_digest(config), "operation": operation["id"], "transaction": transaction_id})
-
-    # --- Value trajectory recording (spec §60 continuous follow-up) ---
-    elapsed_seconds = time.monotonic() - _execution_started
-    operation["elapsed_seconds"] = elapsed_seconds
-    execution_call["elapsed_seconds"] = elapsed_seconds
-    # Structural measurements remain diagnostics and earn no outcome credit.
-    value_trajectory.record_checkpoint(state, operation, before_metrics, after_metrics, elapsed_seconds)
-    if not any(o.get("id") == objective["id"] for o in state["objectives"]):
-        state["objectives"].append(objective)
-    outcome_verification.refresh(ROOT, config, state)
-
-    # --- Rule Ledger: bind this accepted change to its governing rules (Change Schema) ---
-    ledger = state.get("rule_ledger")
-    if ledger is not None:
-        _exec = operation.get("executor", {})
-        rule_ledger_module.bind_change(
-            ledger,
-            operation["id"],
-            scope,
-            kind="ACCEPTED",
-            description=str(objective.get("title", "")),
-            state_before_digest=_product_digest_at(config, journal.get("before", {})),
-            state_after_digest=product_digest(config),
-            delta_to_rules=[],
-            executor={"id": _exec.get("executor_id", ""), "route": _exec.get("__urace_route__", {})},
-            validation={"verdict": "ACCEPTED", "checks": validation_result.get("checks", [])},
-            value_delta=float(operation.get("outcome_value_credited", 0.0)),
-        )
-
-    if scope in {"metrics", "runtime", "rebootstrap"}:
-        state["pending_runtime_activation"] = {"transaction": transaction_id, "scope": scope, "operation": operation["id"], "requested_at": now()}
-        state["restart_requested"] = True
-    journal["phase"] = "ACCEPTED"
-    atomic_write_json(transaction_path(config), journal)
-    save_state(config, state)
-    return {"status": "ACCEPTED", "operation": operation["id"], "changed_files": prepared["changed_files"],
-            "outcome_status": operation["outcome"]["status"], "real_user_value_verified": operation["outcome"]["real_user_value_verified"]}
-
-
-def core_fault_descriptor(error: BaseException, command: str) -> dict[str, str] | None:
-    """Describe only trusted control structure; never forward exception or Product content."""
-    if command != "auto" or not isinstance(error, (AssertionError, AttributeError, KeyError, TypeError)):
-        return None
-    return {"component": "lifecycle", "code": "UNEXPECTED_CONTROLLER_EXCEPTION", "operation": command, "exception_class": type(error).__name__}
-
-
-def runtime_version_digest(config: dict[str, Any]) -> str:
-    digest = hashlib.sha256()
-    for relative in sorted(runtime_files(config)):
-        path = ROOT / relative
-        digest.update(relative.encode()); digest.update(path.read_bytes())
-    return digest.hexdigest()
-
-
-def attempt_core_auto_repair(config: dict[str, Any], state: dict[str, Any], fault: dict[str, str] | None, confirmed_recurrence: bool = False) -> str:
-    """Deduplicate and execute a supervised repair for trusted core-controller faults."""
-    if fault is None or state.get("self_evolution_policy", {}).get("mode") == "DISABLED":
-        return "INELIGIBLE"
-    state["lifecycle_state"] = "REPAIRING"
-    save_state(config, state)
-    version = runtime_version_digest(config)
-    key = hashlib.sha256(json.dumps({"fault": fault, "runtime": version}, sort_keys=True).encode()).hexdigest()
-    registry = state.setdefault("system_repair_registry", {})
-    entry = registry.setdefault(key, {"fault": fault, "runtime_version": version, "count": 0, "status": "OBSERVED", "first_at": now()})
-    entry["count"] = int(entry.get("count", 0)) + 1; entry["last_at"] = now()
-    if confirmed_recurrence:
-        entry["count"] = max(2, entry["count"])
-    if entry["status"] not in {"OBSERVED", "RETRY_PENDING"}:
-        save_state(config, state); return "DEDUPLICATED"
-    if entry["count"] < 2:
-        entry["status"] = "RETRY_PENDING"; save_state(config, state); return "RETRY"
-    availability = intelligent_executor.availability(config.get("executor", {}))
-    if not availability.get("available") or not executor_execution_allowed(config, state):
-        entry["status"] = "DEFERRED_CAPABILITY_OR_BUDGET"; save_state(config, state); return "DEFERRED"
-    if state.get("self_evolution_policy", {}).get("mode") == "NECESSARY_ONLY":
-        state.setdefault("evidence", []).append({
-            "id": identifier("evidence"), "at": now(),
-            "kind": "self-evolution-necessity-justification",
-            "necessity": f"Trusted controller fault code {fault.get('code')} recurred in {fault.get('operation', fault.get('phase', 'unknown'))} with exception class {fault.get('exception_class')}",
-            "policy_mode": "NECESSARY_ONLY",
-            "disposition": "PROCEEDING_WITH_JUSTIFIED_REPAIR",
-        })
-    entry["status"] = "VALIDATING"
-    objective = {
-        "id": identifier("objective"), "title": "Repair a repeated core lifecycle controller fault",
-        "reason": f"Trusted controller fault code {fault['code']} recurred in {fault.get('operation', fault.get('phase', 'unknown'))} with exception class {fault['exception_class']}. No Product, cohort, candidate, peer, metric, Executor, connector, or exception-message content is included.",
-        "success_measure": "The failing lifecycle path has a regression test and the complete runtime suite passes",
-        "scope": "runtime", "target": "urace", "priority": 100, "status": "planned",
-        "expected_value": 1.0, "estimated_cost": 0.25, "risk": 0.25, "urgency": 1.0,
-        "necessity_evidence": f"The same trusted controller fault code occurred {entry['count']} times on runtime version {version[:12]}",
-        "lower_impact_route_sufficient": False, "created_at": now(), "updated_at": now(), "authority_basis": "delegated runtime self-evolution",
-        "repair_key": key,
-    }
-    state.setdefault("objectives", []).append(objective)
-    plan = plan_for(state, objective)
-    try:
-        result = execute_with_executor(config, state, objective, plan, persist_usage=True)
-        entry["status"] = "ACTIVATION_REQUESTED" if result.get("status") == "ACCEPTED" else result.get("status", "NO_EFFECT")
-    except Exception as repair_error:
-        entry["status"] = "FAILED_VALIDATION"
-        entry["failure_class"] = type(repair_error).__name__
-        save_state(config, state); return "FAILED"
-    state["lifecycle_state"] = "ASSESSING"
-    save_state(config, state)
-    return "ACTIVATE" if entry["status"] == "ACTIVATION_REQUESTED" else "COMPLETE"
-
-
-def _evaluate_wake_conditions(state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Dequeue any wake conditions whose scheduled_at has elapsed."""
-    current_ts = datetime.now(timezone.utc).timestamp()
-    due, remaining = [], []
-    for condition in state.get("wake_registry", []):
-        try:
-            if datetime.fromisoformat(condition["scheduled_at"]).timestamp() <= current_ts:
-                due.append(condition)
-                continue
-        except (KeyError, ValueError):
-            pass
-        remaining.append(condition)
-    state["wake_registry"] = remaining
-    return due
-
-
-def _run_onboard_gate(config: dict, state: dict) -> "dict | None":
-    """
-    Returns None if onboard gate passes (or already onboarded).
-    Returns a dict {"outcome": "onboarding", "reason": ...} to halt cycle when blocked.
-    SD=True — never touches executor.
-    """
-    product_name = config.get("product", "")
-    onboard_records = state.get("onboard_records", [])
-    # Find active record for current product
-    active_record = next(
-        (r for r in onboard_records
-         if r.get("product_name") == product_name and not r.get("superseded_at")),
-        None
-    )
-    if active_record:
-        # Check config digest staleness
-        current_digest = product_digest(config)
-        if active_record.get("config_digest") != current_digest:
-            detail = f"Config digest diverged from OnboardRecord {active_record['id']} — run `urace onboard confirm` to refresh"
-            if not any(g.get('kind') == 'onboard-record-config-diverged' and g.get('detail') == detail
-                       and not g.get('resolved') and g.get('active', True)
-                       for g in state.get('integrity_gaps', [])):
-                _emit_gap(state, "onboard-record-config-diverged", "WARNING", detail)
-            observation = state.setdefault('integrity_gap_observations', {}).setdefault(
-                'onboard:' + active_record['id'], {'observations': 0})
-            observation.update(last_observed_at=now(), config_digest=current_digest,
-                               observations=observation['observations'] + 1,
-                               condition_still_present=True)
-        return None  # Gate passes; autonomous cycles authorized
-
-    # No matching OnboardRecord — enter ONBOARDING
-    state["lifecycle_state"] = "ONBOARDING"
-    _emit_trace(state, "ONBOARD", "lifecycle → ONBOARDING (no OnboardRecord for product)")
-
-    # --- Gate 1: Config completeness ---
-    missing_fields = []
-    if not config.get("product"):
-        missing_fields.append("product")
-    if not config.get("intent", {}).get("purpose"):
-        missing_fields.append("intent.purpose")
-    if not config.get("capability_envelope"):
-        missing_fields.append("capability_envelope (or set capability_envelope_waived)")
-    if missing_fields:
-        _emit_gap(state, "onboard-config-incomplete", "BLOCKING",
-            f"Config missing required fields: {', '.join(missing_fields)}")
-
-    # --- Gate 2: product_files readable ---
-    import os as _os
-    product_files = config.get("product_files", [])
-    unreadable = [p for p in product_files if not _os.access(str(ROOT / p), _os.R_OK)]
-    if unreadable:
-        _emit_gap(state, "onboard-no-readable-product-files", "BLOCKING",
-            f"Unreadable product_files: {', '.join(unreadable)}")
-
-    # --- Gate 3: intent anchored ---
-    if not config.get("intent", {}).get("purpose"):
-        _emit_gap(state, "onboard-intent-unanchored", "BLOCKING",
-            "Config.intent.purpose is absent or empty — set a non-empty purpose to anchor autonomous evolution")
-
-    # --- Gate 4: capability_envelope declared (WARNING only) ---
-    if not config.get("capability_envelope"):
-        _emit_gap(state, "onboard-capability-envelope-missing", "WARNING",
-            "Config.capability_envelope is absent — capabilities will be unconstrained; declare envelope or set capability_envelope_waived")
-
-    # --- Gate 5: self_evolution_policy (INFO — default applied silently) ---
-    if not config.get("self_evolution_policy"):
-        state.setdefault("evidence", []).append({
-            "id": identifier("ev-"),
-            "kind": "onboard-policy-defaulted",
-            "at": now(),
-            "summary": "self_evolution_policy absent; NECESSARY_ONLY applied as default",
-        })
-
-    # --- Check if any BLOCKING gaps are active (gates 1-3) ---
-    active_blocking = [
-        g for g in state.get("integrity_gaps", [])
-        if g.get("active", True) and g.get("severity") == "BLOCKING"
-        and g.get("kind", "").startswith("onboard-")
-    ]
-    if active_blocking:
-        return {"outcome": "onboarding", "reason": f"ONBOARDING blocked: {', '.join(g['kind'] for g in active_blocking)} — run `urace onboard status` to see gate results"}
-
-    # Gates 1-3 pass — emit confirmation-pending
-    _emit_gap(state, "onboard-confirmation-pending", "BLOCKING",
-        "All BLOCKING onboard gates passed — run `urace onboard confirm` to authorize autonomous cycles")
-    return {"outcome": "onboarding", "reason": "awaiting operator confirmation — run `urace onboard confirm`"}
-
-
-def _verify_wake_registrations(config: dict[str, Any], state: dict[str, Any]) -> list[str]:
-    """§67 Wake Registration Verification Mechanism (r33): on restart, verify each
-    entry in wake_registry is still active. Returns list of wake-integrity-gap details.
-    Entries lacking required fields or lacking verified_at are treated as unverifiable.
-    Tracks liveness_failures per entry; after 3 failures marks stale_since. After
-    max_stale_hours (default 168) of STALE status escalates to BLOCKING gap
-    wake-registration-expired (§5505). SD=True — reads only local state.
-    """
-    max_stale_hours = float(config.get("wake", {}).get("max_stale_hours", 168))
-    current_ts = datetime.now(timezone.utc).timestamp()
-    gaps: list[str] = []
-    for reg in state.get("wake_registry", []):
-        reg_id = reg.get("id", "unknown")
-        unverifiable = not reg.get("kind") or not reg.get("scheduled_at") or not reg.get("verified_at")
-        if unverifiable:
-            # Increment liveness failure counter
-            reg["liveness_failures"] = reg.get("liveness_failures", 0) + 1
-            failures = reg["liveness_failures"]
-            # After 3 failures, mark stale if not already
-            if failures >= 3 and not reg.get("stale_since"):
-                reg["stale_since"] = now()
-            if reg.get("stale_since"):
-                stale_ts = datetime.fromisoformat(reg["stale_since"]).timestamp()
-                elapsed_hours = (current_ts - stale_ts) / 3600.0
-                if elapsed_hours >= max_stale_hours:
-                    # Escalate to BLOCKING — emit gap directly and record in gaps list
-                    _emit_gap(
-                        state,
-                        "wake-registration-expired",
-                        "BLOCKING",
-                        f"WakeRegistration {reg_id} STALE > {max_stale_hours:.0f}h; re-establish or remove",
-                    )
-                    gaps.append(
-                        f"WakeRegistration {reg_id} STALE for {elapsed_hours:.1f}h (>{max_stale_hours:.0f}h); "
-                        f"escalated to wake-registration-expired BLOCKING gap"
-                    )
-                else:
-                    if not reg.get("kind") or not reg.get("scheduled_at"):
-                        gaps.append(
-                            f"WakeRegistration {reg_id} missing required fields (kind or scheduled_at); "
-                            f"cannot verify as active (failures: {failures})"
-                        )
-                    else:
-                        gaps.append(
-                            f"WakeRegistration {reg_id} has no verified_at; "
-                            f"registration cannot be confirmed active in current environment (failures: {failures})"
-                        )
-            else:
-                if not reg.get("kind") or not reg.get("scheduled_at"):
-                    gaps.append(
-                        f"WakeRegistration {reg_id} missing required fields (kind or scheduled_at); "
-                        f"cannot verify as active"
-                    )
-                else:
-                    gaps.append(
-                        f"WakeRegistration {reg_id} has no verified_at; "
-                        f"registration cannot be confirmed active in current environment"
-                    )
-        else:
-            # Successful verification — reset failure tracking
-            reg["liveness_failures"] = 0
-            reg.pop("stale_since", None)
-            reg["verified_at"] = now()
-    return gaps
-
-
-def _emit_gap(state: dict[str, Any], kind: str, severity: str, detail: str, **extra: Any) -> None:
-    """Emit an IntegrityGap validated against IntegrityGapCatalog (§62l r39).
-    Unknown kinds also emit a meta-gap warning.
-    """
-    try:
-        from urace import primitives as _p
-        canonical_sev = _p.gap_severity(kind)
-        if canonical_sev is None:
-            state.setdefault("integrity_gaps", []).append({
-                "id": identifier("igap"),
-                "kind": "unknown-gap-kind",
-                "severity": "WARNING",
-                "detail": f"Unregistered IntegrityGap kind '{kind}' — register in IntegrityGapCatalog (§62l)",
-                "at": now(),
-                "resolved": False,
-            })
-        used_severity = canonical_sev or severity
-    except Exception:
-        used_severity = severity
-    state.setdefault("integrity_gaps", []).append({
-        "id": identifier("igap"),
-        "kind": kind,
-        "severity": used_severity,
-        "detail": detail,
-        "at": now(),
-        "resolved": False,
-        **extra,
-    })
-
-
-def _emit_trace(
-    state: dict,
-    kind: str,
-    summary: str,
-    *,
-    cycle_id: "str | None" = None,
-    operation_id: "str | None" = None,
-    decision_id: "str | None" = None,
-    detail: "str | None" = None,
-    recorded_by: str = "runtime",
-) -> None:
-    """Emit a TraceRecord into State.trace_records (§62r ObservabilityContract)."""
-    state.setdefault("trace_records", []).append({
-        "id": identifier("trace-"),
-        "at": now(),
-        "kind": kind,
-        "cycle_id": cycle_id,
-        "operation_id": operation_id,
-        "decision_id": decision_id,
-        "summary": summary,
-        "detail": detail,
-        "recorded_by": recorded_by,
-    })
-
-
-def _inspect_list(
-    records: list,
-    args: Any,
-    *,
-    fmt: "Callable[[dict], str]",
-    empty_msg: str = "No records.",
-    envelope: bool = False,
-    json_key: str = "records",
-    default_limit: int = 20,
-    time_field: "str | None" = "at",
-) -> int:
-    """InspectionContract shared pipeline: time-filter → paginate → output.
-    Domain-specific filters must be applied by the caller before passing records.
-    """
-    if time_field:
-        since = getattr(args, "since", None)
-        until = getattr(args, "until", None)
-        if since:
-            records = [r for r in records if (r.get(time_field) or "") >= since]
-        if until:
-            records = [r for r in records if (r.get(time_field) or "") <= until]
-    total = len(records)
-    offset = getattr(args, "offset", 0) or 0
-    limit = getattr(args, "limit", default_limit)
-    if limit is not None:
-        records = records[offset: offset + limit]
-    else:
-        records = records[offset:]
-    if getattr(args, "json", False):
-        if envelope:
-            print(json.dumps(
-                {"schema_version": "1.0", json_key: records, "total": total},
-                indent=2, sort_keys=True,
-            ))
-        else:
-            print(json.dumps(records, indent=2, sort_keys=True))
-    else:
-        if not records:
-            print(empty_msg)
-        else:
-            for r in records:
-                print(fmt(r))
-    return 0
-
-
-def _help_action(guide: str, args: Any) -> int:
-    """Shared SD=True help handler: print guide or emit {schema_version, guide} JSON."""
-    if getattr(args, "json", False):
-        print(json.dumps({"schema_version": "1.0", "guide": guide}, indent=2))
-    else:
-        print(guide)
-    return 0
-
-
-def _mutate_command(
-    config: dict,
-    args: Any,
-    *,
-    mutate: "Callable[[dict], tuple[dict, str]]",
-    trace_kind: str,
-    fmt: "Callable[[dict], str]",
-) -> int:
-    """Mutation pipeline: load → mutate+validate → trace → save → output.
-    mutate(state) raises ValueError on validation failure; returns (result_dict, trace_summary).
-    Guarantees TraceRecord emission per ObservabilityContract (§62l).
-    """
-    state = load_state(config)
-    try:
-        result, trace_summary = mutate(state)
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    _emit_trace(state, trace_kind, trace_summary)
-    save_state(config, state)
-    if getattr(args, "json", False):
-        print(json.dumps(result, indent=2, sort_keys=True))
-    else:
-        print(fmt(result))
-    return 0
-
-
-def _emit_compaction_event(state: dict[str, Any], record_type: str, dropped_count: int) -> None:
-    """Emit a CompactionEvent before governed truncation of a record list."""
-    event = {
-        "id": identifier("cevt"),
-        "record_type": record_type,
-        "dropped_count": dropped_count,
-        "compacted_at": now(),
-        "authorized_by": "RetentionPolicy",
-    }
-    state.setdefault("compaction_events", []).append(event)
-
-
-def _emit_compliance_record(state: dict[str, Any], domain: str, status: str,
-                             operation_id: str | None = None, violation_detail: str | None = None,
-                             scope: str | None = None) -> None:
-    """Emit a ComplianceRecord and update ComplianceState (spec §54 compliance recording contract, r48)."""
-    ts = now()
-    record: dict[str, Any] = {"id": identifier("cpl"), "domain": domain, "status": status,
-                               "evaluated_at": ts}
-    if operation_id:
-        record["operation_id"] = operation_id
-    if violation_detail:
-        record["violation_detail"] = violation_detail
-    if scope:
-        record["scope"] = scope
-    state.setdefault("compliance_records", []).append(record)
-    cs_map: dict[str, Any] = state.setdefault("compliance_state", {})
-    entry = cs_map.setdefault(domain, {"domain": domain, "status": "UNKNOWN",
-                                        "last_checked_at": ts, "violation_refs": [],
-                                        "consecutive_clean": 0})
-    entry["status"] = status
-    entry["last_checked_at"] = ts
-    if status == "COMPLIANT":
-        entry["consecutive_clean"] = int(entry.get("consecutive_clean", 0)) + 1
-    elif status == "NON_COMPLIANT":
-        entry["consecutive_clean"] = 0
-        entry.setdefault("violation_refs", []).append(record["id"])
-
-
-def _apply_effect_uncertainty_protocol(
-    state: dict[str, Any],
-    effect_id: str,
-    operation_id: str,
-    detail: str,
-) -> None:
-    """EffectUncertaintyProtocol (§62l r39): classify INDETERMINATE, block retry, surface blocker."""
-    existing = [e for e in state.get("unresolved_effects", []) if e.get("id") == effect_id]
-    if not existing:
-        state.setdefault("unresolved_effects", []).append({
-            "id": effect_id,
-            "operation_id": operation_id,
-            "status": "INDETERMINATE",
-            "reconciliation_required": True,
-            "uncertainty_detail": detail,
-            "recorded_at": now(),
-        })
-    _emit_gap(
-        state, "indeterminate-effect-unresolvable", "BLOCKING",
-        f"Effect {effect_id} (op {operation_id}) INDETERMINATE: {detail}",
-        effect_id=effect_id, operation_id=operation_id,
-    )
-
-
-def _apply_operator_gate(
-    state: dict[str, Any],
-    condition_kind: str,
-    reason: str,
-    scope: str = "*",
-) -> None:
-    """OperatorGateProtocol (§62l r39): surface named BLOCKING gap; clearance requires operator action."""
-    _emit_gap(
-        state, "operator-gate-open", "BLOCKING",
-        f"Operator gate [{condition_kind}]: {reason} (scope={scope}). "
-        f"Clear via authenticated lifecycle command; clearance recorded as durable event.",
-        gate_condition=condition_kind, gate_scope=scope,
-    )
-
-
-def _determine_revalidation_scope(change_class: str) -> str:
-    """Return minimum RevalidationScope for change_class (§62l r39)."""
-    try:
-        from urace import primitives as _p
-        return _p.determine_revalidation_scope(change_class)
-    except Exception:
-        return "FULL_LIFECYCLE"
-
-
-def _check_authority_closure(action_source: str) -> bool:
-    """Return True if action_source is a valid Authority origin (§62l AuthorityClosureInvariant r39)."""
-    try:
-        from urace import primitives as _p
-        return _p.check_authority_closure(action_source)
-    except Exception:
-        return True
-
-
-def _sha256_digest(records: list) -> str:
-    """Compute SHA-256 digest of a list of records (canonical JSON)."""
-    import hashlib, json as _json
-    return hashlib.sha256(_json.dumps(records, sort_keys=True, default=str).encode()).hexdigest()
-
-
-def _observe_retention_gaps(state: dict[str, Any], gaps: list[dict]) -> None:
-    """Keep one active retention warning per field; retain historical events."""
-    def identity(gap):
-        text = gap.get('description', gap.get('detail', ''))
-        return text.split(' has ', 1)[0]
-    existing = {identity(g): g for g in state.get('integrity_gaps', [])
-                if g.get('kind') == 'retention-policy-violated' and not g.get('resolved')
-                and g.get('active', True)}
-    observations = state.setdefault('integrity_gap_observations', {})
-    for gap in gaps:
-        key = identity(gap)
-        if key not in existing:
-            state.setdefault('integrity_gaps', []).append(gap)
-            existing[key] = gap
-        prior = observations.get('retention:' + key, {})
-        observations['retention:' + key] = {
-            'gap_id': existing[key]['id'], 'last_observed_at': now(),
-            'observations': prior.get('observations', 0) + 1,
-            'latest_detail': gap.get('description', gap.get('detail', ''))}
-
-
-def _validate_citizen_base_conformance(state: dict[str, Any]) -> None:
-    """Emit citizen-base-violation gaps for records missing CitizenBase required fields (A2 r54)."""
-    base_required = {"id", "created_at", "updated_at"}
-    list_fields = [
-        "goal_records", "intent_records", "constraint_records",
-        "decision_records", "evidence", "operations", "executor_records",
-        "compaction_events", "compliance_records", "assessment_records",
-        "metric_definitions", "wake_registry", "retention_policies",
-    ]
-    existing = {gap.get('detail', '').split(' missing CitizenBase fields:', 1)[0]: gap
-                for gap in state.get('integrity_gaps', [])
-                if gap.get('kind') == 'citizen-base-violation' and not gap.get('resolved')
-                and gap.get('active', True) and ' missing CitizenBase fields:' in gap.get('detail', '')}
-    observations = state.setdefault('integrity_gap_observations', {})
-    for field in list_fields:
-        for record in state.get(field, []):
-            if not isinstance(record, dict):
-                continue
-            missing = base_required - set(record.keys())
-            if missing:
-                prefix = f"{field} record {record.get('id', '?')}"
-                # Preserve every historical gap. Record repeated observations of
-                # the same unresolved entity instead of appending O(cycles) gaps.
-                if prefix not in existing:
-                    _emit_gap(state, "citizen-base-violation", "WARNING",
-                              prefix + " missing CitizenBase fields: " + repr(sorted(missing)))
-                    existing[prefix] = state['integrity_gaps'][-1]
-                prior = observations.get('citizen:' + prefix, {})
-                observations['citizen:' + prefix] = {
-                    'gap_id': existing[prefix]['id'], 'last_observed_at': now(),
-                    'observations': prior.get('observations', 0) + 1,
-                    'missing_fields': sorted(missing), 'condition_still_present': True}
-            else:
-                key = 'citizen:' + f"{field} record {record.get('id', '?')}"
-                if key in observations:
-                    observations[key]['condition_still_present'] = False
-
-
-_loaded_state_snapshot: dict[str, Any] | None = None
-
-
-def _validate_immutable_fields(current_state: dict[str, Any], previous_state: dict[str, Any] | None) -> None:
-    """Check that id and created_at haven't been mutated on existing records (A6 r54)."""
-    if not previous_state:
-        return
-    list_fields = ["goal_records", "intent_records", "constraint_records",
-                   "decision_records", "evidence", "operations"]
-    for field in list_fields:
-        prev_by_id = {r["id"]: r for r in previous_state.get(field, []) if isinstance(r, dict) and "id" in r}
-        for record in current_state.get(field, []):
-            if not isinstance(record, dict):
-                continue
-            rid = record.get("id")
-            if rid in prev_by_id:
-                prev = prev_by_id[rid]
-                if record.get("created_at") != prev.get("created_at"):
-                    _emit_gap(current_state, "citizen-base-violation", "WARNING",
-                        f"{field} record {rid} created_at mutated (immutability violation)")
-
-
-def _compact_with_chunking(state: dict[str, Any], field_path: str, records: list, policy: dict) -> list:
-    """Group records by (objective_id, objective_status) for OBJECTIVE_LIFECYCLE chunking (A3 r54)."""
-    from collections import defaultdict
-    groups: dict = defaultdict(list)
-    for r in records:
-        key = (r.get("objective_id", "__none__"), r.get("objective_status", "__none__"))
-        groups[key].append(r)
-
-    chunks = []
-    for (obj_id, obj_status), group_records in groups.items():
-        is_decompactable = obj_status in ("completed", "cancelled")
-        record_ids = [r["id"] for r in group_records if "id" in r]
-        digest = _sha256_digest(group_records)
-        chunk = {
-            "id": identifier("chunk-"),
-            "created_at": now(),
-            "updated_at": now(),
-            "field_path": field_path,
-            "objective_id": obj_id if obj_id != "__none__" else None,
-            "objective_status": obj_status if obj_status != "__none__" else None,
-            "record_ids": record_ids,
-            "time_range": {
-                "earliest": min((r.get("created_at", now()) for r in group_records), default=now()),
-                "latest": max((r.get("updated_at", now()) for r in group_records), default=now()),
-            },
-            "record_count": len(group_records),
-            "original_digest": digest,
-            "is_decompactable": is_decompactable,
-            "authorized_by": f"retention_policy:{policy.get('id', 'default')}",
-            "status": "ARCHIVED" if is_decompactable else "ACTIVE",
-            "archived_at": now() if is_decompactable else None,
-            "chunk_format": "OBJECTIVE_LIFECYCLE",
-        }
-        chunks.append(chunk)
-        _emit_compaction_event(state, field_path, len(group_records))
-
-    state.setdefault("chunks", []).extend(chunks)
-    return chunks
-
-
-def _validate_authority_basis_binding(state: dict[str, Any], objective: dict) -> None:
-    """Check that authority_basis references an active Rule Ledger entry (A7 r54)."""
-    authority_basis = objective.get("authority_basis")
-    if not authority_basis:
-        return
-    ledger = state.get("rule_ledger", {})
-    rules = ledger.get("rules") or []
-    active_ids = {r["id"] for r in rules if isinstance(r, dict) and r.get("status") not in ("SUPERSEDED", "DELETED")}
-    if authority_basis not in active_ids and not str(authority_basis).startswith("DIRECTIVE"):
-        _emit_gap(state, "authority-cache-stale", "WARNING",
-            f"authority_basis {authority_basis!r} references no active Rule Ledger entry")
-
-
-def _ledger_size_warning(state_path_val: Path) -> dict | None:
-    ledger = state_path_val.parent / "context_ledger.jsonl"
-    if not ledger.exists():
-        return None
-    size_mb = ledger.stat().st_size / (1024 * 1024)
-    if size_mb >= 50:
-        return {"warning": "ledger_large", "size_mb": round(size_mb, 1), "action": "run 'urace compact' to archive old entries"}
-    return None
-
-
-def _build_inspection_surface(state: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    """Build InspectionSurface-compliant output for urace check (§62l r39)."""
-    gaps = state.get("integrity_gaps", [])
-    blocking = [g for g in gaps if g.get("severity") == "BLOCKING" and not g.get("resolved", False)]
-    warning = [g for g in gaps if g.get("severity") == "WARNING" and not g.get("resolved", False)]
-    indeterminate = list(state.get("unresolved_effects", []))
-    operator_gates = [g for g in blocking if g.get("kind") == "operator-gate-open"]
-    spec_ver = _current_spec_version()
-    stale_items: list[dict] = []
-    for ref in list(state.get("derivation_refs", [])) + list(state.get("derived_manifest_refs", [])):
-        if isinstance(ref, dict) and ref.get("spec_version") != spec_ver:
-            stale_items.append({"kind": "stale-manifest", "manifest_id": ref.get("manifest_id"), "stale_version": ref.get("spec_version")})
-    cap_readiness: dict[str, str] = {}
-    for e in state.get("capability_states", []):
-        if isinstance(e, dict):
-            cap_id = e.get("capability_id") or e.get("id", "?")
-            cap_readiness[cap_id] = e.get("status", "ABSENT")
-    scheduled = [
-        {"id": r.get("id"), "kind": r.get("kind"), "scheduled_at": r.get("scheduled_at")}
-        for r in state.get("wake_registry", []) if isinstance(r, dict)
-    ]
-    policy_violations = [g for g in gaps if any(k in g.get("kind", "") for k in ("policy", "constraint", "governing-record"))]
-    open_pvs = [pv for pv in state.get("pending_validations", []) if isinstance(pv, dict) and not pv.get("resolved_at")]
-    n_block, n_warn = len(blocking), len(warning)
-    lc = state.get("lifecycle_state", "UNKNOWN")
-    if n_block:
-        summary = f"{lc}: {n_block} blocking gap(s), {n_warn} warning(s)"
-    elif n_warn:
-        summary = f"{lc}: {n_warn} warning(s), no blocking gaps"
-    else:
-        summary = f"{lc}: no gaps"
-    return {
-        "lifecycle_state": lc,
-        "assessed_at": (state.get("executor_state") or {}).get("last_discovery_at") or now(),
-        "blocking_gaps": blocking,
-        "warning_gaps": warning,
-        "indeterminate_effects": indeterminate,
-        "operator_gates": operator_gates,
-        "stale_items": stale_items,
-        "capability_readiness": cap_readiness,
-        "scheduled_conditions": scheduled,
-        "policy_violations": policy_violations,
-        "open_pending_validations": open_pvs,
-        "summary": summary,
-    }
-
-def _try_reconcile_effect(root: Path, effect: dict[str, Any]) -> bool:
-    """Attempt strongest-practical reconciliation for an indeterminate effect.
-
-    Returns True if the effect is confirmed complete (can be removed from
-    unresolved_effects). Returns False if outcome is still indeterminate.
-
-    Strategies used in order:
-      1. Check whether the changed files match the intended after-content hash.
-      2. Check whether the effect's transaction journal phase is VALIDATED or ACCEPTED.
-      3. Fall through to indeterminate (False).
-    """
-    # Strategy 1: file content hash check.
-    file_hashes = effect.get("expected_file_hashes", {})
-    if file_hashes:
-        import hashlib as _hashlib
-        all_match = all(
-            (root / relative).exists()
-            and _hashlib.sha256((root / relative).read_bytes()).hexdigest() == expected
-            for relative, expected in file_hashes.items()
-        )
-        if all_match:
-            return True
-
-    # Strategy 2: transaction journal phase.
-    journal_phase = effect.get("journal_phase")
-    if journal_phase in {"VALIDATED", "ACCEPTED"}:
-        return True
-
-    return False
-
-
-def _reconcile_unresolved_effects(root: Path, state: dict[str, Any]) -> list[dict[str, Any]]:
-    """Attempt reconciliation of all unresolved effects. Return those still unresolved."""
-    reconciled, still_unresolved = [], []
-    try:
-        for effect in state.get("unresolved_effects", []):
-            if _try_reconcile_effect(root, effect):
-                reconciled.append({**effect, "reconciled_at": now(), "outcome": "CONFIRMED_COMPLETE"})
-            else:
-                still_unresolved.append(effect)
-        if reconciled:
-            state.setdefault("evidence", []).append({
-                "id": identifier("evidence"), "at": now(),
-                "kind": "effect-reconciliation",
-                "reconciled_count": len(reconciled),
-                "reconciled": reconciled,
-            })
-        # R2 — Audit trail Evidence record after reconciliation completes
-        state.setdefault("evidence", []).append({
-            "id": identifier("evidence"),
-            "at": now(),
-            "kind": "unresolved-effects-reconciliation",
-            "summary": f"reconciled {len(reconciled)} unresolved effects",
-            "reconciled_count": len(reconciled),
-            "authority": "system",
-        })
-    except Exception as _reconcile_error:
-        _emit_gap(state, "unresolved-effects-reconciliation-failure", "WARNING",
-                  f"_reconcile_unresolved_effects raised exception: {type(_reconcile_error).__name__}: {_reconcile_error}")
-    return still_unresolved
-
-
-def _executor_independent_work(
-    config: dict[str, Any],
-    state: dict[str, Any],
-    observation: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Work that can proceed regardless of Executor availability.
-
-    Spec §55: Zero-executor cardinality is NOT equivalent to zero autonomy.
-    Executor-independent work (input processing, metric observation, wake
-    evaluation, pending-validation follow-up) remains eligible.
-    """
-    work_done = []
-
-    # Wake conditions are evaluated by cycle() before this function is called.
-
-    # 2. Surface pending-validation observations that have been waiting too long.
-    pending = state.get("pending_validations", [])
-    if pending:
-        work_done.append({
-            "kind": "pending_validation_surfaced",
-            "count": len(pending),
-            "note": "Validation capability was previously unavailable; re-evaluate when restored",
-        })
-
-    # 3. Deterministic discovery (regression / unresolved markers) — no executor needed.
-    det = discover(config, state, observation)
-    if det:
-        work_done.append({"kind": "deterministic_objective_discovered", "objective_id": det.get("id")})
-
-    # 4. Process any queued input files.
-    inbox = input_directory(config)
-    if inbox.exists():
-        pending_inputs = [p for p in inbox.glob("*.json") if p.exists()]
-        if pending_inputs:
-            work_done.append({"kind": "pending_inputs", "count": len(pending_inputs)})
-
-    return work_done
-
-
-def _check_scheduled_tasks(state: dict[str, Any], config: dict[str, Any]) -> None:
-    """AP18 — evaluate ScheduledTasks and trigger due ones."""
-    from urace._common import scheduled_task_due
-    import datetime as _dt
-    _now_ts = time.time()
-    for _task in state.get("scheduled_tasks", []):
-        if _task.get("status") != "ACTIVE":
-            continue
-        if scheduled_task_due(_task, _now_ts):
-            _task["last_run_at"] = now()
-            _task.setdefault("run_count", 0)
-            _task["run_count"] = int(_task["run_count"]) + 1
-            _sched = _task.get("schedule", {})
-            if _sched.get("kind") == "INTERVAL_SECONDS":
-                _interval = _sched.get("interval_seconds", 3600)
-                _next = _dt.datetime.fromtimestamp(_now_ts + _interval, tz=_dt.timezone.utc).isoformat()
-                _sched["next_run_at"] = _next
-            state.setdefault("evidence", []).append({
-                "id": identifier("evidence"),
-                "at": now(),
-                "kind": "scheduled-task-triggered",
-                "source": "cli:cycle",
-                "detail": f"task {_task.get('id')} ({_task.get('name')}) triggered: action={_task.get('action')}",
-            })
-
-
-def _record_quality_delta(
-    state: dict[str, Any],
-    operation_id: str,
-    scope: str,
-    score_before: "float | None",
-    score_after: float,
-    measured_at: str,
-) -> dict[str, Any]:
-    """Emit a QualityDelta and update QualityStateEntry in state.quality_state (AP9 — Monotone Accumulator).
-
-    r32: quality streak state lives in state.quality_state (Product-level), not executor_state.
-    This ensures streak history survives executor replacement (agnosticism-first principle).
-    """
-    delta = round(score_after - score_before, 6) if score_before is not None else 0.0
-    if delta > 0.0:
-        classification = "IMPROVEMENT"
-    elif delta < 0.0:
-        classification = "REGRESSION"
-    else:
-        classification = "NEUTRAL"
-    record: dict[str, Any] = {
-        "id": identifier("qdl"),
-        "operation_id": operation_id,
-        "scope": scope,
-        "score_after": score_after,
-        "delta": delta,
-        "classification": classification,
-        "measured_at": measured_at,
-    }
-    if score_before is not None:
-        record["score_before"] = score_before
-    state.setdefault("quality_deltas", []).append(record)
-
-    qs_map: dict[str, Any] = state.setdefault("quality_state", {})
-    entry = qs_map.setdefault(scope, {
-        "scope": scope,
-        "current_streak": 0,
-        "best_streak": 0,
-        "streak_started_at": None,
-        "last_evaluated_at": measured_at,
-    })
-    if classification == "IMPROVEMENT":
-        entry["current_streak"] = entry.get("current_streak", 0) + 1
-        if entry["current_streak"] == 1:
-            entry["streak_started_at"] = measured_at
-        if entry["current_streak"] > entry.get("best_streak", 0):
-            entry["best_streak"] = entry["current_streak"]
-    elif classification == "REGRESSION":
-        entry["current_streak"] = 0
-        entry["streak_started_at"] = None
-    entry["last_evaluated_at"] = measured_at
-    return record
-
-
-def _check_staleness(state: dict[str, Any], config: dict[str, Any]) -> list[str]:
-    """Staleness Detection Mechanism — §62c r33: SD=True, WARNING-only, three domains.
-    D2: per-scope decision windows. X6: stale decisions produce PendingValidation records.
-    """
-    import datetime as _dt
-    cfg = config.get("staleness_windows", {})
-    global_decision_window = cfg.get("decision_seconds", 86400 * 30)
-    evidence_window = cfg.get("evidence_seconds", 86400 * 7)
-    rules_window = cfg.get("rules_seconds", 86400 * 90)
-    by_scope: dict[str, int] = cfg.get("by_scope", {})
-    now_ts = _dt.datetime.now(_dt.timezone.utc).timestamp()
-    warnings: list[str] = []
-
-    # r55: CheckpointRecord baseline — use last accepted-product-change checkpoint for temporal baseline
-    _checkpoints = state.get("checkpoints", [])
-    _last_accepted_checkpoint = next(
-        (c for c in reversed(_checkpoints) if isinstance(c, dict) and c.get("kind") == "accepted-product-change"),
-        None,
-    )
-    if _last_accepted_checkpoint:
-        try:
-            _cp_ts = _dt.datetime.fromisoformat(_last_accepted_checkpoint["at"]).timestamp()
-            if now_ts - _cp_ts > evidence_window:
-                warnings.append(f"staleness:checkpoint-baseline — last accepted-product-change checkpoint age>{evidence_window}s")
-        except (ValueError, KeyError):
-            pass
-
-    # DOMAIN: Decisions — per-scope window resolution (D2) + PendingValidation production (X6)
-    decisions = state.get("decision_records", [])
-    pending_validations = state.setdefault("pending_validations", [])
-    existing_pv_sources = {pv.get("source_operation_id") for pv in pending_validations}
-    for rec in decisions:
-        if rec.get("provenance_status", "CURRENT") != "CURRENT":
-            continue
-        scope = rec.get("scope", "*")
-        window = by_scope.get(scope, global_decision_window)
-        ts_str = rec.get("decided_at") or rec.get("at") or rec.get("created_at") or ""
-        if not ts_str:
-            continue
-        try:
-            age = now_ts - _dt.datetime.fromisoformat(ts_str).timestamp()
-        except ValueError:
-            continue
-        if age > window:
-            rec_id = rec.get("id", "unknown")
-            warnings.append(
-                f"staleness:decisions — DecisionRecord {rec_id} scope={scope} age>{window}s"
-            )
-            # X6: produce PendingValidation if not already queued
-            if rec_id not in existing_pv_sources:
-                pv_id = identifier("pnv")
-                pending_validations.append({
-                    "id": pv_id,
-                    "source_operation_id": rec_id,
-                    "kind": "stale-decision-revalidation",
-                    "blocked_on_capability": "decision-revalidation",
-                    "queued_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-                    "stale_reason": f"decision_age exceeds staleness window ({window}s) for scope={scope}",
-                })
-                existing_pv_sources.add(rec_id)
-
-    # DOMAIN: Evidence
-    evidence = state.get("evidence", [])
-    if evidence:
-        latest = max((e.get("at") or "" for e in evidence), default="")
-        if latest:
-            try:
-                if now_ts - _dt.datetime.fromisoformat(latest).timestamp() > evidence_window:
-                    warnings.append(f"staleness:evidence — no new evidence in >{evidence_window}s")
-            except ValueError:
-                pass
-
-    # DOMAIN: Rules
-    rule_ledger = state.get("rule_ledger", {})
-    rules_list = rule_ledger.get("rules", []) if isinstance(rule_ledger, dict) else []
-    if rules_list:
-        latest = max((r.get("created_at") or r.get("at") or "" for r in rules_list), default="")
-        if latest:
-            try:
-                if now_ts - _dt.datetime.fromisoformat(latest).timestamp() > rules_window:
-                    warnings.append(f"staleness:rules — no rule changes in >{rules_window}s")
-            except ValueError:
-                pass
-
-    # R1 — Mutable metric baseline drift detection: scan ALL MetricDefinitions
-    evidence_list = state.get("evidence", [])
-    replaced_metric_ids = {
-        e.get("metric_id") for e in evidence_list
-        if isinstance(e, dict) and e.get("kind") == "metric-definition-replaced"
-    }
-    for mdef in state.get("metric_definitions", []):
-        if not isinstance(mdef, dict):
-            continue
-        authority = mdef.get("authority", "")
-        updated_at_str = mdef.get("updated_at", "")
-        created_at_str = mdef.get("created_at", "")
-        if not updated_at_str or not created_at_str:
-            continue
-        try:
-            updated_ts = _dt.datetime.fromisoformat(updated_at_str).timestamp()
-            created_ts = _dt.datetime.fromisoformat(created_at_str).timestamp()
-        except ValueError:
-            continue
-        if updated_ts > created_ts:
-            mdef_id = mdef.get("id", "unknown")
-            if authority == "DIRECTIVE":
-                # DIRECTIVE metrics already checked via existing contract; no new gap here
-                pass
-            else:
-                # Non-DIRECTIVE: emit WARNING if no metric-definition-replaced evidence exists
-                if mdef_id not in replaced_metric_ids:
-                    _emit_gap(state, "metric-definition-drift", "WARNING",
-                              f"MetricDefinition {mdef_id} name={mdef.get('name')} mutated without replacement evidence record")
-                    warnings.append(f"staleness:metric-definition — MetricDefinition {mdef_id} updated_at > created_at, no metric-definition-replaced evidence")
-
-    return warnings
-
-
-def _regression_checkpoint_gate_passes(state: dict[str, Any], scope: str) -> bool:
-    """X2 gate: if most recent QualityDelta for scope is REGRESSION, require a
-    CHECKPOINT_ACCEPTANCE DecisionRecord written after that regression before accepting
-    a new checkpoint. Returns True (gate passes) or False (gate blocks — PENDING).
-    Gate is a no-op when no quality history exists for the scope.
-    """
-    deltas = [
-        d for d in state.get("quality_deltas", [])
-        if d.get("scope") == scope
-    ]
-    if not deltas:
-        return True  # no quality history — gate is inactive for this scope
-    latest = max(deltas, key=lambda d: d.get("measured_at", ""))
-    if latest.get("classification") != "REGRESSION":
-        return True  # most recent delta is not a regression — gate passes
-    regression_at = latest.get("measured_at", "")
-    # Look for a CHECKPOINT_ACCEPTANCE DecisionRecord written after the regression
-    for rec in state.get("decision_records", []):
-        if rec.get("kind") != "CHECKPOINT_ACCEPTANCE":
-            continue
-        decided_at = rec.get("decided_at", "")
-        if decided_at >= regression_at and scope in str(rec.get("subject", "")):
-            return True
-    return False  # REGRESSION scope, no justifying DecisionRecord found
-
-
-def _apply_customizations(state: dict[str, Any], config: dict[str, Any]) -> None:
-    """AP19 — apply user customizations from config to state."""
-    customizations = config.get("user_customizations", [])
-    for cust in customizations:
-        scope = cust.get("scope")
-        key = cust.get("key")
-        value = cust.get("value")
-        if scope == "config" and key and value is not None:
-            pass  # config-scope customizations are already in config
-        elif scope == "runtime_behavior" and key:
-            state.setdefault("user_customizations_applied", {})[key] = value
-
-
-def _evaluate_sweet_spot(state: dict[str, Any], config: dict[str, Any]) -> None:
-    """Sweet Spot Evaluation Mechanism — §62c r34. SD=True: no executor credits.
-    Computes maturity level, capability completeness, value density, milestone status.
-    Writes SweetSpotAssessment and ValueDensityRecord to state.
-    """
-    envelope = config.get("capability_envelope")
-    if not envelope:
-        return
-
-    declared_caps: list[dict] = envelope.get("capabilities", [])
-    total = len(declared_caps)
-    if total == 0:
-        return
-
-    cap_states: list[dict] = state.setdefault("capability_states", [])
-    state_by_id = {e["capability_id"]: e for e in cap_states if isinstance(e, dict)}
-
-    # Capability completeness — §2600: CAPABLE status without passing TestRunRecord emits WARNING
-    _passing_trr_caps: set[str] = set()
-    for trr in state.get("test_run_records", []):
-        if (isinstance(trr, dict)
-                and trr.get("verdict") == "PASS"
-                and trr.get("kind") in {"CAPABILITY_GATE", "ACCEPTANCE"}):
-            for cid in (trr.get("capability_ids_covered") or []):
-                _passing_trr_caps.add(cid)
-    capable_count = 0
-    for cap in declared_caps:
-        cap_id = cap.get("id", "")
-        cap_status = state_by_id.get(cap_id, {}).get("status")
-        if cap_status in {"CAPABLE", "OVER_ENGINEERED"}:
-            capable_count += 1
-            if cap_id not in _passing_trr_caps:
-                _emit_gap(
-                    state,
-                    "capability-without-test-coverage",
-                    "WARNING",
-                    f"Capability '{cap_id}' has status {cap_status} but no passing CAPABILITY_GATE or ACCEPTANCE TestRunRecord covers it (§2600)",
-                )
-    completeness = capable_count / total
-
-    # Weighted completeness for value density
-    weighted = sum(
-        cap.get("value_weight", 0.0) * state_by_id.get(cap.get("id", ""), {}).get("completeness_fraction", 0.0)
-        for cap in declared_caps
-        if isinstance(cap, dict)
-    )
-
-    # Product surface measure (line count proxy)
-    surface = 0
-    root = ROOT.resolve()
-    for pf in config.get("product_files", []):
-        fpath = root / pf
-        if not fpath.resolve().is_relative_to(root):
-            _emit_gap(state, "product-surface-unavailable", "WARNING",
-                      "Product surface source escapes the Product root; assessment remains unverified")
-            return
-        try:
-            with fpath.open("r", encoding="utf-8", errors="ignore") as handle:
-                surface += sum(1 for _ in handle)
-        except OSError:
-            _emit_gap(state, "product-surface-unavailable", "WARNING",
-                      "A configured Product surface source is unreadable; assessment remains unverified")
-            return
-
-    value_density = weighted / max(surface, 1)
-
-    completeness_target = float(envelope.get("completeness_target", 1.0))
-    ceiling = envelope.get("complexity_ceiling")
-    density_floor = envelope.get("value_density_floor")
-
-    # Maturity level
-    history = state.get("value_density_history", [])
-    best_density = max((r.get("value_density", 0.0) for r in history), default=0.0)
-
-    if completeness < completeness_target:
-        maturity = "FORMING"
-    elif ceiling is not None and ceiling < surface:
-        maturity = "OVER_ENGINEERED"
-    elif density_floor is not None and value_density < density_floor:
-        maturity = "FORMING"
-    else:
-        maturity = "OPTIMIZED" if value_density > best_density + 1e-9 else "CAPABLE"
-
-    # Capability gaps and over-engineered caps
-    cap_gaps = [
-        cap["id"] for cap in declared_caps
-        if isinstance(cap, dict)
-        and state_by_id.get(cap.get("id", ""), {}).get("status", "ABSENT") not in {"CAPABLE", "OVER_ENGINEERED"}
-    ]
-    over_eng = [
-        cap["id"] for cap in declared_caps
-        if isinstance(cap, dict)
-        and state_by_id.get(cap.get("id", ""), {}).get("status") == "OVER_ENGINEERED"
-    ]
-
-    # Active milestone check
-    milestones: list[dict] = envelope.get("milestones", [])
-    active_milestone = next((m for m in milestones if isinstance(m, dict) and m.get("status") == "ACTIVE"), None)
-    milestone_status_out = None
-    milestone_id_out = None
-    if active_milestone:
-        milestone_id_out = active_milestone.get("id")
-        gates_ok = all(
-            state_by_id.get(gid, {}).get("status") in {"CAPABLE", "OVER_ENGINEERED"}
-            for gid in active_milestone.get("capability_gates", [])
-        )
-        qgates_ok = True
-        for qg in active_milestone.get("quality_gates", []):
-            scope = qg.get("scope", "*")
-            min_streak = qg.get("min_streak", 0)
-            qs_entry = state.get("quality_state", {}).get(scope, {})
-            if qs_entry.get("current_streak", 0) < min_streak:
-                qgates_ok = False
-                break
-        milestone_ceiling = active_milestone.get("complexity_ceiling")
-        if milestone_ceiling is None:
-            milestone_ceiling = ceiling
-        milestone_density_floor = active_milestone.get("value_density_floor")
-        if milestone_density_floor is None:
-            milestone_density_floor = density_floor
-        ceiling_ok = milestone_ceiling is None or surface <= milestone_ceiling
-        density_ok = milestone_density_floor is None or value_density >= milestone_density_floor
-        if gates_ok and qgates_ok and ceiling_ok and density_ok:
-            active_milestone["status"] = "ACHIEVED"
-            active_milestone["achieved_at"] = now()
-            milestone_status_out = "ACHIEVED"
-            _ach_at = now()
-            state.setdefault("evidence", []).append({
-                "id": identifier("evi"),
-                "kind": "milestone-achieved",
-                "at": _ach_at,
-                "milestone_id": milestone_id_out,
-                "version": active_milestone.get("version", ""),
-                "detail": f"ProductMilestone {milestone_id_out} achieved: "
-                          f"version={active_milestone.get('version', 'unversioned')} all gates passed",
-            })
-            # r35: create ProductVersion record
-            _next_mid = active_milestone.get("next_milestone_id")
-            pver = {
-                "id": identifier("pver"),
-                "version": active_milestone.get("version", "v0"),
-                "milestone_id": milestone_id_out,
-                "achieved_at": _ach_at,
-                "maturity_level": maturity,
-                "capability_completeness": round(completeness, 6),
-                "value_density": round(value_density, 8),
-                "product_surface_measure": surface,
-                "next_milestone_id": _next_mid,
-            }
-            state.setdefault("product_versions", []).append(pver)
-            # r35: chain-activate next milestone
-            if _next_mid:
-                for ms in milestones:
-                    if isinstance(ms, dict) and ms.get("id") == _next_mid:
-                        if ms.get("status") == "PENDING":
-                            ms["status"] = "ACTIVE"
-                            state.setdefault("evidence", []).append({
-                                "id": identifier("evi"),
-                                "kind": "milestone-activated",
-                                "at": _ach_at,
-                                "milestone_id": _next_mid,
-                                "triggered_by": milestone_id_out,
-                                "detail": f"Next milestone {_next_mid} activated by {milestone_id_out} achievement",
-                            })
-                        break
-        else:
-            milestone_status_out = "PENDING"
-
-    assessed_at = now()
-    ssa = {
-        "id": identifier("ssa"),
-        "assessed_at": assessed_at,
-        "maturity_level": maturity,
-        "capability_completeness": round(completeness, 6),
-        "value_density": round(value_density, 8),
-        "product_surface_measure": surface,
-        "active_milestone_id": milestone_id_out,
-        "milestone_status": milestone_status_out,
-        "capability_gaps": cap_gaps if cap_gaps else None,
-        "over_engineered_caps": over_eng if over_eng else None,
-    }
-    state.setdefault("sweet_spot_assessments", []).append(ssa)
-
-    prev_records = state.get("value_density_history", [])
-    prev_density = prev_records[-1]["value_density"] if prev_records else None
-    delta = round(value_density - prev_density, 8) if prev_density is not None else None
-    trend = None
-    if delta is not None:
-        trend = "IMPROVING" if delta > 1e-9 else ("DECLINING" if delta < -1e-9 else "NEUTRAL")
-
-    vdr = {
-        "id": identifier("vdr"),
-        "recorded_at": assessed_at,
-        "value_density": round(value_density, 8),
-        "surface_measure": surface,
-        "delta": delta,
-        "trend": trend,
-        "assessment_id": ssa["id"],
-    }
-    state.setdefault("value_density_history", []).append(vdr)
-
-    if maturity == "OVER_ENGINEERED":
-        _emit_gap(state, "over-engineered", "WARNING",
-                  f"Product surface {surface} exceeds complexity_ceiling {ceiling} at CAPABLE maturity")
-
-
-def _capability_envelope_gate_passes(state: dict[str, Any], config: dict[str, Any], post_change_surface: int, operation: dict[str, Any]) -> bool:
-    """Capability Envelope Gate (§62c r34): blocks surface growth beyond ceiling when CAPABLE/OPTIMIZED.
-    Returns True (gate passes) or False (gate blocks).
-    """
-    envelope = config.get("capability_envelope")
-    if not envelope:
-        return True
-    ceiling = envelope.get("complexity_ceiling")
-    if ceiling is None:
-        return True
-    assessments = state.get("sweet_spot_assessments", [])
-    if not assessments:
-        return True
-    latest = assessments[-1]
-    if latest.get("maturity_level") not in {"CAPABLE", "OPTIMIZED"}:
-        return True
-    if post_change_surface <= ceiling:
-        return True
-    # Check for authorized expansion DecisionRecord
-    op_created = operation.get("created_at", "")
-    scope = operation.get("scope", "*")
-    for rec in state.get("decision_records", []):
-        if rec.get("kind") != "CAPABILITY_SCOPE_EXPANSION":
-            continue
-        if rec.get("decided_at", "") >= op_created and scope in str(rec.get("subject", "")):
-            return True
-    return False
-
-
-def _derive_capabilities_from_patterns(
-    adopted_pattern_ids: list[str],
-    existing_cap_ids: set[str],
-) -> list[dict]:
-    """r35: Derive draft CapabilityStatements from AP pattern provides clauses.
-    Returns draft records (status=ABSENT) for provides-clause items not already declared.
-    """
-    try:
-        catalog = pattern_catalog_module.PATTERN_CATALOG
-    except Exception:
-        return []
-    drafts: list[dict] = []
-    seen_names: set[str] = set()
-    for pid in adopted_pattern_ids:
-        entry = catalog.get(pid)
-        if not entry:
-            continue
-        provides_raw = entry.get("provides", "")
-        # provides may be a list or a comma-delimited string
-        if isinstance(provides_raw, list):
-            provides_items = provides_raw
-        else:
-            provides_items = [s.strip() for s in str(provides_raw).split(",")]
-        for item in provides_items:
-            name = item.strip()
-            if not name or name in seen_names:
-                continue
-            seen_names.add(name)
-            # Check if already declared by name similarity (simple substring match)
-            already = any(name.lower()[:12] in cid.lower() for cid in existing_cap_ids)
-            if not already:
-                # Generate a cap- id from the name
-                slug = "".join(c if c.isalnum() else "" for c in name.lower())[:8].ljust(8, "0")
-                cap_id = f"cap-{slug[:10]}"
-                if cap_id not in existing_cap_ids:
-                    drafts.append({
-                        "id": cap_id,
-                        "name": name,
-                        "description": f"Derived from {pid} provides clause: {name}",
-                        "scope": "*",
-                        "tier": entry.get("tier", "FOUNDATIONAL"),
-                        "value_weight": 0.1,
-                        "_draft": True,
-                        "_source_pattern": pid,
-                    })
-    return drafts
-
-
-def _derive_milestone_from_state(state: dict, config: dict) -> "dict | None":
-    """r36: Draft a ProductMilestone from capability states — targets ABSENT/PARTIAL caps."""
-    envelope = config.get("capability_envelope", {})
-    declared_caps = envelope.get("capabilities", [])
-    if not declared_caps:
-        return None
-    cap_states = {c.get("id"): c.get("status", "ABSENT") for c in state.get("capability_states", [])}
-    gates = []
-    for cap in declared_caps:
-        cap_id = cap.get("id", "")
-        status = cap_states.get(cap_id, "ABSENT")
-        if status in ("ABSENT", "PARTIAL"):
-            gates.append(cap_id)
-    if not gates:
-        return None
-    return {
-        "id": identifier("mst"),
-        "name": "Derived milestone — capability completion target",
-        "description": f"Auto-drafted from {len(gates)} incomplete capabilities",
-        "version": "v-draft",
-        "capability_gates": gates,
-        "status": "PENDING",
-        "_draft": True,
-    }
-
-
-def _refresh_derived_refs(
-    state: dict,
-    refs_key: str,
-    id_field: str,
-    adopted_field: str,
-    build_fn,
-    new_ids_fn,
-    delta_key: str,
-    drv_kind: str,
-    drv_adopted_key: str,
-    artifact_result_key: str,
-    new_ref_builder,
-    state_update_fn,
-    error_id_field: str,
-    empty_msg: str,
-    not_found_msg_fn,
-    id_filter: "str | None",
-    show_delta: bool,
-) -> "list[dict]":
-    """Generic refresh loop shared by construct-set and pattern-manifest refresh."""
-    refs = list(state.get(refs_key, []))
-    if not refs:
-        return [{"status":"not_found","detail":not_found_msg_fn(id_filter)}] if id_filter else [{"status": "no_saved_refs", "detail": empty_msg}]
-    if id_filter:
-        refs = [r for r in refs if r.get(id_field) == id_filter]
-        if not refs:
-            return [{"status": "not_found", "detail": not_found_msg_fn(id_filter)}]
-    results = []
-    spec_ver = _current_spec_version()
-    for ref in refs:
-        old_ids = ref.get(adopted_field, [])
-        old_spec = ref.get("spec_version", "")
-        intent = ref.get("intent", "refreshed derive")
-        try:
-            new_artifact = build_fn(old_ids, intent, spec_ver)
-        except Exception as e:
-            results.append({error_id_field: ref.get(id_field), "status": "error", "detail": str(e)})
-            continue
-        new_ids = new_ids_fn(new_artifact)
-        delta: dict = {}
-        if show_delta:
-            added = [x for x in new_ids if x not in old_ids]
-            removed = [x for x in old_ids if x not in new_ids]
-            delta = {f"added_{delta_key}": added, f"removed_{delta_key}": removed,
-                     "spec_version_was": old_spec, "spec_version_now": spec_ver}
-        new_ref = new_ref_builder(ref, new_artifact, new_ids, spec_ver, intent)
-        state_update_fn(state, ref, new_ref)
-        state.setdefault("derivation_records", []).append({
-            "id": identifier("drv"), "kind": drv_kind,
-            id_field: new_ref[id_field],
-            drv_adopted_key: new_ids,
-            "spec_version": spec_ver,
-            "derived_at": new_ref["generated_at"],
-            "delta_summary": f"refreshed from spec {old_spec} -> {spec_ver}; {delta_key}: {len(old_ids)} -> {len(new_ids)}",
-        })
-        results.append({
-            f"old_{id_field}": ref.get(id_field),
-            f"new_{id_field}": new_ref[id_field],
-            artifact_result_key: new_artifact,
-            "status": "refreshed", "spec_was": old_spec, "spec_now": spec_ver, "delta": delta,
-        })
-    return results
-
-
-def _refresh_derived_construct_sets(
-    state: dict,
-    config: dict,
-    construct_set_id_filter: "str | None",
-    show_delta: bool,
-) -> "list[dict]":
-    """r45: Re-derive saved ConstructSetRefs with latest spec."""
-    def _build(old_ids, intent, spec_ver):
-        return pattern_catalog_module.build_derived_construct_set(
-            construct_ids=old_ids, intent=intent, spec_version=spec_ver)
-    def _new_ids(cset):
-        return [r["construct_id"] for r in cset.get("adopted_constructs", [])]
-    def _new_ref(ref, cset, new_ids, spec_ver, intent):
-        from .derived_artifacts import seal
-        return seal({
-            "id": ref.get("id") or identifier("csr"),
-            "construct_set_id": cset["construct_set_id"],
-            "spec_version": spec_ver, "generated_at": cset["generated_at"],
-            "adopted_construct_ids": new_ids, "kinds_present": cset.get("kinds_present", []),
-            "intent": intent,
-            "construct_digests": pattern_catalog_module.construct_digests_for_ids(new_ids),
-        },cset,config)
-    def _update(state, ref, new_ref):
-        state["construct_set_refs"] = [
-            r for r in state.get("construct_set_refs", [])
-            if r.get("construct_set_id") != ref.get("construct_set_id")
-        ] + [new_ref]
-    return _refresh_derived_refs(
-        state, "construct_set_refs", "construct_set_id", "adopted_construct_ids",
-        _build, _new_ids, "constructs", "CONSTRUCT_SET_REFRESH",
-        "construct_ids", "new_construct_set",
-        _new_ref, _update,
-        "construct_set_id",
-        "No saved ConstructSetRefs. Run `urace derive --kind ... --save` first.",
-        lambda f: f"No saved ref with construct_set_id={f}",
-        construct_set_id_filter, show_delta,
-    )
-
-
-def _refresh_derived_manifests(
-    state: dict,
-    config: dict,
-    manifest_id_filter: "str | None",
-    show_delta: bool,
-) -> "list[dict]":
-    """r36: Re-derive saved DerivedManifestRefs with latest spec. Returns result summaries."""
-    # merge derivation_refs + legacy derived_manifest_refs, deduplicated
-    refs = state.get("derivation_refs", [])
-    legacy = state.get("derived_manifest_refs", [])
-    merged = refs + [r for r in legacy if not any(x.get("manifest_id") == r.get("manifest_id") for x in refs)]
-    # temporarily write merged into state key for the generic loop
-    original = state.get("derivation_refs", [])
-    state["derivation_refs"] = merged
-    def _build(old_pids, intent, spec_ver):
-        return pattern_catalog_module.build_derived_manifest(
-            pattern_ids=old_pids, intent=intent, spec_version=spec_ver)
-    def _new_ids(manifest):
-        return [r["pattern_id"] for r in manifest.get("adopted_patterns", []) if isinstance(r, dict)]
-    def _new_ref(ref, manifest, new_pids, spec_ver, intent):
-        from .derived_artifacts import seal
-        return seal({
-            "id": ref.get("id") or identifier("dmr"),
-            "manifest_id": manifest["manifest_id"],
-            "spec_version": spec_ver, "generated_at": manifest["generated_at"],
-            "adopted_pattern_ids": new_pids, "intent": intent,
-            "pattern_digests": pattern_catalog_module.pattern_digests_for_ids(new_pids),
-        },manifest,config)
-    def _update(state, ref, new_ref):
-        state["derivation_refs"] = [
-            r for r in state.get("derivation_refs", [])
-            if r.get("manifest_id") != ref.get("manifest_id")
-        ] + [new_ref]
-        state["derived_manifest_refs"] = [
-            r for r in state.get("derived_manifest_refs", [])
-            if r.get("manifest_id") != ref.get("manifest_id")
-        ]
-    return _refresh_derived_refs(
-        state, "derivation_refs", "manifest_id", "adopted_pattern_ids",
-        _build, _new_ids, "patterns", "REFRESH",
-        "pattern_ids", "new_manifest",
-        _new_ref, _update,
-        "manifest_id",
-        "No saved DerivedManifestRefs found. Run `urace derive --constructs ... --save` first.",
-        lambda f: f"No saved ref with manifest_id={f}",
-        manifest_id_filter, show_delta,
-    )
-
-
-def _print_derive_update_suggestions(updates: dict) -> None:
-    """Print human-readable derive-update suggestions produced by _suggest_derive_updates."""
-    for item in updates.get("updated_constructs", []):
-        cids = ", ".join(item["updated_construct_ids"])
-        print(f"  construct update available: [{cids}] changed in your saved set {item['construct_set_id']!r} — run `urace derive --refresh` to adopt updates")
-    for item in updates.get("updated_patterns", []):
-        pids = ", ".join(item["updated_pattern_ids"])
-        print(f"  pattern update available: [{pids}] changed in your saved manifest {item['manifest_id']!r} — run `urace derive --refresh` to adopt updates")
-    for item in updates.get("new_construct_suggestions", []):
-        ids = ", ".join(s["construct_id"] for s in item["suggestions"])
-        print(f"  new construct match for '{item['intent']}': {ids} — run `urace derive '{item['intent']}' --kind {','.join(item['kinds'])} --suggest` to preview")
-    for item in updates.get("new_pattern_suggestions", []):
-        ids = ", ".join(s["pattern_id"] for s in item["suggestions"])
-        print(f"  new pattern match for '{item['intent']}': {ids} — run `urace derive '{item['intent']}' --suggest` to preview")
-
-
-def _suggest_derive_updates(state: dict) -> dict:
-    """r46: Return new-construct/pattern suggestions and update-detected entries for all saved sets."""
-    # Construct sets — new suggestions
-    cset_refs = state.get("construct_set_refs", [])
-    new_construct_suggestions = pattern_catalog_module.suggest_new_constructs_for_saved_sets(cset_refs, top_n=3)
-
-    # Construct sets — update detection (digest diff)
-    updated_constructs: list[dict] = []
-    for ref in cset_refs:
-        saved_digests = ref.get("construct_digests", {})
-        adopted_ids = ref.get("adopted_construct_ids", [])
-        if saved_digests and adopted_ids:
-            changed = pattern_catalog_module.diff_construct_digests(saved_digests, adopted_ids)
-            if changed:
-                updated_constructs.append({
-                    "construct_set_id": ref["construct_set_id"],
-                    "intent": ref.get("intent", ""),
-                    "updated_construct_ids": changed,
-                })
-
-    # Pattern manifests — new suggestions
-    all_manifest_refs = list(state.get("derivation_refs", [])) + [
-        r for r in state.get("derived_manifest_refs", [])
-        if not any(x.get("manifest_id") == r.get("manifest_id") for x in state.get("derivation_refs", []))
-    ]
-    new_pattern_suggestions = pattern_catalog_module.suggest_new_patterns_for_saved_manifests(all_manifest_refs, top_n=3)
-
-    # Pattern manifests — update detection
-    updated_patterns: list[dict] = []
-    seen_mids: set[str] = set()
-    for ref in all_manifest_refs:
-        mid = ref.get("manifest_id", "")
-        if mid in seen_mids:
-            continue
-        seen_mids.add(mid)
-        saved_pdigests = ref.get("pattern_digests", {})
-        adopted_pids = ref.get("adopted_pattern_ids", [])
-        if saved_pdigests and adopted_pids:
-            changed_p = pattern_catalog_module.diff_pattern_digests(saved_pdigests, adopted_pids)
-            if changed_p:
-                updated_patterns.append({
-                    "manifest_id": mid,
-                    "intent": ref.get("intent", ""),
-                    "updated_pattern_ids": changed_p,
-                })
-
-    return {
-        "new_construct_suggestions": new_construct_suggestions,
-        "updated_constructs": updated_constructs,
-        "new_pattern_suggestions": new_pattern_suggestions,
-        "updated_patterns": updated_patterns,
-    }
-
-
-def _csi_relevance_score(state: dict[str, Any], content: str) -> float:
-    """Heuristic relevance: token overlap between signal content and active intent+objectives."""
-    content_tokens = set(content.lower().split())
-    reference_text = " ".join(filter(None, [
-        str(state.get("intent", "")),
-        " ".join(o.get("title", "") for o in state.get("objectives", []) if o.get("status") in {"planned", "active"}),
-    ]))
-    reference_tokens = set(reference_text.lower().split())
-    if not reference_tokens or not content_tokens:
-        return 0.0
-    overlap = len(content_tokens & reference_tokens)
-    return min(1.0, round(overlap / max(len(reference_tokens), 1), 4))
-
-
-def _csi_confidence_score(state: dict[str, Any], source_ref: str | None, feed_id: str) -> float:
-    """Bounded confidence accumulator: increment per corroborating signal from distinct feeds."""
-    if not source_ref:
-        return 0.0
-    delta = 0.15
-    existing = [
-        s for s in state.get("community_signals", [])
-        if s.get("source_ref") == source_ref and s.get("feed_id") != feed_id
-    ]
-    return min(1.0, round(len(existing) * delta, 4))
-
-
-def _signal_quality(relevance: float, confidence: float) -> str:
-    """Compute SignalQuality from relevance and confidence scores."""
-    if relevance < 0.40:
-        return "FILTERED"
-    if relevance >= 0.75 and confidence >= 0.75:
-        return "HIGH"
-    if confidence >= 0.60:
-        return "MEDIUM"
-    return "LOW"
-
-
-def _run_csi(config: dict[str, Any], state: dict[str, Any]) -> None:
-    """§5509-5535 Community Signal Ingestion Mechanism (CSI).
-    Feeds are configured in Config.community_inbox.feeds (default []); an empty feed list
-    means CSI is off. State.community_feeds mirrors registered feeds for state inspection.
-    Skipped unless lifecycle_state ∈ {ACTIVE, ASSESSING, DORMANT-wake} (§5525).
-    """
-    if state.get("lifecycle_state") not in {"ACTIVE", "ASSESSING"}:
-        return
-    # Feed config lives in Config.community_inbox.feeds — not in state (§5513)
-    csi_config = config.get("community_inbox", {})
-    feeds = csi_config.get("feeds", [])
-    if not feeds:
-        return
-    # Mirror configured feeds into state.community_feeds for inspection (§4233)
-    state_feed_ids = {f.get("id") for f in state.get("community_feeds", []) if isinstance(f, dict)}
-    for feed in feeds:
-        if isinstance(feed, dict) and feed.get("id") not in state_feed_ids:
-            state.setdefault("community_feeds", []).append(feed)
-
-    relevance_floor = float(csi_config.get("relevance_floor", 0.40))
-    existing_refs: set[str] = {
-        s.get("source_ref") for s in state.get("community_signals", []) if s.get("source_ref")
-    }
-    # Re-score previously filtered signals if objectives changed
-    current_obj_ids = {o.get("id") for o in state.get("objectives", [])}
-    for sig in state.get("community_signals", []):
-        if sig.get("filtered") and sig.get("signal_quality") == "FILTERED":
-            new_rel = _csi_relevance_score(state, sig.get("content", ""))
-            if new_rel >= relevance_floor:
-                sig["relevance_score"] = new_rel
-                sig["filtered"] = False
-                sig["signal_quality"] = _signal_quality(new_rel, sig.get("confidence_score", 0.0))
-                sig["updated_at"] = now()
-
-    for feed in feeds:
-        if not isinstance(feed, dict) or not feed.get("active", True):
-            continue
-        feed_id = feed.get("id", "unknown")
-        if not feed.get("terms_accepted"):
-            if not any(
-                g.get("kind") == "community-feed-terms-not-accepted" and g.get("detail", "").endswith(feed_id)
-                for g in state.get("integrity_gaps", [])
-            ):
-                _emit_gap(
-                    state, "community-feed-terms-not-accepted", "WARNING",
-                    f"CommunityFeed {feed_id} has terms_accepted=false; ingestion disabled until accepted — {feed_id}",
-                )
-            continue
-
-        # Adapter dispatch: only RSS and POLLING are auto-fetchable; WEBHOOK/PUSH arrive via input queue
-        adapter_kind = feed.get("kind", "POLLING")
-        if adapter_kind in {"WEBHOOK", "PUSH"}:
-            # Signals from WEBHOOK/PUSH feeds arrive via the normal input pipeline — skip here
-            continue
-
-        # Attempt to fetch — real adapter would make HTTP call; here we model the contract
-        timeout = int(feed.get("adapter_timeout_seconds", 30))
-        retry_count = int(feed.get("adapter_retry_count", 3))
-        feed_failures = feed.get("_adapter_failures", 0)
-
-        if feed_failures >= retry_count:
-            if not any(
-                g.get("kind") == "community-feed-adapter-unavailable" and feed_id in g.get("detail", "")
-                for g in state.get("integrity_gaps", [])
-            ):
-                _emit_gap(
-                    state, "community-feed-adapter-unavailable", "WARNING",
-                    f"CommunityFeed {feed_id} adapter exhausted {retry_count} retries; feed suspended",
-                )
-            continue
-
-        # Model: inject signals from feed.pending_items if present (used by tests)
-        pending_items = feed.get("_pending_items", [])
-        for item in pending_items:
-            source_ref = item.get("source_ref")
-            if source_ref and source_ref in existing_refs:
-                continue  # deduplicate
-            content = item.get("content", "")
-            relevance = _csi_relevance_score(state, content)
-            confidence = _csi_confidence_score(state, source_ref, feed_id)
-            quality = _signal_quality(relevance, confidence)
-            filtered = relevance < relevance_floor
-            sig: dict[str, Any] = {
-                "id": identifier("csig"),
-                "created_at": now(),
-                "updated_at": now(),
-                "feed_id": feed_id,
-                "content": content,
-                "source_ref": source_ref,
-                "received_at": now(),
-                "relevance_score": relevance,
-                "confidence_score": confidence,
-                "signal_quality": quality,
-                "filtered": filtered,
-                "filter_reason": f"relevance_score {relevance} < relevance_floor {relevance_floor}" if filtered else None,
-            }
-            state.setdefault("community_signals", []).append(sig)
-            if source_ref:
-                existing_refs.add(source_ref)
-        # Clear processed items
-        feed.pop("_pending_items", None)
-
-
-def _run_ppm(config: dict[str, Any], state: dict[str, Any]) -> None:
-    """§5543-5564 Patch Proposal Pipeline Mechanism (PPP_M).
-    Synthesizes PatchProposals from HIGH/MEDIUM signals, routes by ApprovalMode,
-    enforces max_queue_depth and proposal_expiry_hours.
-    """
-    policy = state.get("self_evolution_policy", {})
-    if policy.get("mode", "NECESSARY_ONLY").upper() == "DISABLED":
-        if not any(g.get("kind") == "patch-pipeline-disabled" for g in state.get("integrity_gaps", [])):
-            _emit_gap(
-                state, "patch-pipeline-disabled", "BLOCKING",
-                "self_evolution_policy.mode=DISABLED; PPP_M halted until mode is changed",
-            )
-        return
-
-    # All PPP_M settings live under Config.community_inbox (§4157)
-    ppm_config = config.get("community_inbox", config.get("patch_proposal_pipeline", {}))
-    max_queue_depth = int(ppm_config.get("max_queue_depth", 50))
-    expiry_hours = float(ppm_config.get("proposal_expiry_hours", 168.0))
-    approval_mode = ppm_config.get("approval_mode", "SMART").upper()
-    confidence_threshold = float(ppm_config.get("confidence_threshold", 0.60))
-
-    current_ts = datetime.now(timezone.utc).timestamp()
-    proposals: list[dict] = state.setdefault("patch_proposals", [])
-
-    # Enforce expiry: PENDING proposals past expiry_hours → EXPIRED
-    for prop in proposals:
-        if prop.get("status") == "PENDING":
-            try:
-                created_ts = datetime.fromisoformat(prop["created_at"]).timestamp()
-                if (current_ts - created_ts) / 3600.0 >= expiry_hours:
-                    prop["status"] = "EXPIRED"
-                    prop["resolved_at"] = now()
-            except (KeyError, ValueError):
-                pass
-
-    # Enforce max_queue_depth via 3-step eviction (§5558)
-    pending_proposals = [p for p in proposals if p.get("status") == "PENDING"]
-    if len(pending_proposals) >= max_queue_depth:
-        # Step 1: evict CONFIDENCE_INSUFFICIENT
-        for p in proposals:
-            if p.get("status") == "CONFIDENCE_INSUFFICIENT" and len(pending_proposals) >= max_queue_depth:
-                p["status"] = "EXPIRED"
-                p["resolved_at"] = now()
-                pending_proposals = [p2 for p2 in proposals if p2.get("status") == "PENDING"]
-        # Step 2: evict oldest PENDING
-        if len(pending_proposals) >= max_queue_depth:
-            pending_by_age = sorted(pending_proposals, key=lambda p: p.get("created_at", ""))
-            for p in pending_by_age[:max(0, len(pending_proposals) - max_queue_depth + 1)]:
-                p["status"] = "EXPIRED"
-                p["resolved_at"] = now()
-
-    # Collect already-processed signal IDs
-    processed_signal_ids: set[str] = {p.get("signal_id") for p in proposals if p.get("signal_id")}
-
-    # Create proposals for unprocessed HIGH/MEDIUM signals
-    for sig in state.get("community_signals", []):
-        if sig.get("filtered") or sig.get("signal_quality") == "FILTERED":
-            continue
-        if sig.get("signal_quality") not in {"HIGH", "MEDIUM", "LOW"}:
-            continue
-        sig_id = sig.get("id")
-        if sig_id in processed_signal_ids:
-            continue
-        # Check queue depth before adding
-        live_pending = sum(1 for p in proposals if p.get("status") == "PENDING")
-        if live_pending >= max_queue_depth:
-            break
-
-        confidence = sig.get("confidence_score", 0.0)
-        if confidence < confidence_threshold:
-            status = "CONFIDENCE_INSUFFICIENT"
-        else:
-            status = "PENDING"
-
-        prop: dict[str, Any] = {
-            "id": identifier("pprop"),
-            "created_at": now(),
-            "updated_at": now(),
-            "signal_id": sig_id,
-            "proposed_diff": f"[Executor-synthesized patch for signal: {sig.get('content', '')[:120]}]",
-            "target": config.get("product_name", "URACE"),
-            "rationale": f"Signal quality {sig.get('signal_quality')} with relevance={sig.get('relevance_score')}, confidence={confidence}",
-            "status": status,
-            "approval_mode": approval_mode,
-            "confidence_score": confidence,
-            "resolved_at": None,
-            "resolved_by": None,
-            "rejection_reason": None,
-        }
-        proposals.append(prop)
-        processed_signal_ids.add(sig_id)
-
-    # Approval routing for PENDING proposals
-    for prop in proposals:
-        if prop.get("status") != "PENDING":
-            continue
-        confidence = prop.get("confidence_score", 0.0)
-        quality = next(
-            (s.get("signal_quality") for s in state.get("community_signals", []) if s.get("id") == prop.get("signal_id")),
-            "LOW",
-        )
-        if approval_mode == "AUTO":
-            if confidence >= 0.80:
-                prop["status"] = "AUTO_APPROVED"
-                prop["resolved_at"] = now()
-                prop["resolved_by"] = "auto"
-            # else: falls through to SMART evaluation
-        if approval_mode in {"AUTO", "SMART"} and prop.get("status") == "PENDING":
-            # AUTO proposals that didn't auto-approve, or SMART mode
-            if quality in {"LOW", "FILTERED"}:
-                prop["status"] = "REJECTED"
-                prop["resolved_at"] = now()
-                prop["rejection_reason"] = f"SMART mode: autonomously rejected {quality} quality signal"
-            # HIGH/MEDIUM remain PENDING for operator confirmation in SMART mode
-        # HUMAN mode: all remain PENDING until inbox apply
-
-
-def _run_feedback_accumulator(config: dict[str, Any], state: dict[str, Any]) -> None:
-    """Process unprocessed OutcomeFeedbackRecords (§62c FAC / §62u)."""
-    lifecycle = state.get("lifecycle_state", "")
-    if lifecycle not in {"ACTIVE", "ASSESSING"}:
-        return
-
-    feedback_records = state.setdefault("outcome_feedback_records", [])
-    for rec in feedback_records:
-        if rec.get("processed"):
-            continue
-        signal = rec.get("signal", "NEUTRAL")
-        target_kind = rec.get("target_kind", "")
-        target_id = rec.get("target_id", "")
-        if signal == "NEGATIVE":
-            if target_kind == "OBJECTIVE":
-                _emit_gap(state, "feedback-negative-objective", "INFO",
-                          f"NEGATIVE feedback for Objective {target_id}")
-            elif target_kind == "DECISION":
-                _emit_gap(state, "feedback-negative-decision", "INFO",
-                          f"NEGATIVE feedback for DecisionRecord {target_id}")
-        rec["processed"] = True
-
-    # Check feedback-overdue
-    window_hours = config.get("feedback", {}).get("window_hours", 168)
-    window_seconds = window_hours * 3600
-    objectives = state.get("objectives", [])
-    feedback_target_ids = {r.get("target_id") for r in feedback_records}
-    now_ts = now()
-    for obj in objectives:
-        if obj.get("status") not in {"ACCEPTED", "completed", "awaiting_outcome"}:
-            continue
-        obj_id = obj.get("id", "")
-        if obj_id in feedback_target_ids:
-            continue
-        accepted_at = obj.get("accepted_at") or obj.get("completed_at") or obj.get("updated_at") or obj.get("created_at")
-        if not accepted_at:
-            continue
-        try:
-            accepted_dt = datetime.fromisoformat(accepted_at.replace("Z", "+00:00"))
-            now_dt = datetime.fromisoformat(now_ts.replace("Z", "+00:00"))
-            elapsed = (now_dt - accepted_dt).total_seconds()
-        except Exception:
-            continue
-        if elapsed >= window_seconds:
-            if not any(g.get("kind") == "feedback-overdue" and obj_id in g.get("detail", "")
-                       and not g.get("resolved") for g in state.get("integrity_gaps", [])):
-                _emit_gap(state, "feedback-overdue", "INFO",
-                          f"Objective {obj_id} accepted >{window_hours}h ago with no feedback; "
-                          f"run `urace feedback submit {obj_id} --signal <POSITIVE|NEGATIVE|NEUTRAL>`")
-
-
-def _run_ram(config: dict[str, Any], state: dict[str, Any]) -> None:
-    """Account for each period once; distinguish estimated cost from verified return."""
-    if state.get("lifecycle_state") not in {"ACTIVE", "ASSESSING"}:
-        return
-    budget = config.get("product_budget")
-    if not budget:
-        return
-    current = datetime.now(timezone.utc)
-    period_hours = {"DAILY": 24, "WEEKLY": 168, "MONTHLY": 720}.get(
-        budget.get("period", "MONTHLY"), float(budget.get("period_hours", 720)))
-    if period_hours <= 0:
-        raise ValueError("product budget period must be positive")
-    start = state.setdefault("resource_period_start", state.get("created_at", current.isoformat()))
-    ledger = state.setdefault("resource_ledger", [])
-    snapshots = state.setdefault("roi_snapshots", [])
-    if (current - datetime.fromisoformat(start)).total_seconds() >= period_hours * 3600:
-        prior = next((entry for entry in reversed(ledger) if entry["period_start"] == start), None)
-        if prior:
-            snapshots.append({**prior, "id": identifier("rsnp"), "period_end": current.isoformat(),
-                              "computed_roi": prior.get("roi"), "below_floor": prior.get("roi") is not None and prior["roi"] < float(budget.get("roi_floor", 0))})
-        start = current.isoformat()
-        state["resource_period_start"] = start
-    start_time = datetime.fromisoformat(start)
-    def in_period(item: dict[str, Any], field: str) -> bool:
-        raw = item.get(field)
-        return not raw or start_time <= datetime.fromisoformat(raw) <= current
-    calls = [c for c in state.get("executor_state", {}).get("executor_calls", []) if in_period(c, "at")]
-    operations = [o for o in state.get("operations", []) if in_period(o, "attempted_at")]
-    def measured_cost(call: dict[str, Any]) -> float | None:
-        raw = call.get("usage", {}).get("reported_cost_usd")
-        if isinstance(raw, (int, float)) and not isinstance(raw, bool) and math.isfinite(raw) and raw >= 0:
-            return float(raw)
-        return None
-    costs = [measured_cost(c) for c in calls]
-    estimated_cost = float(budget.get("cost_per_executor_call", 0.01))
-    call_cost = sum(c if c is not None else estimated_cost for c in costs)
-    elapsed = sum(max(0.0, float(c.get("elapsed_seconds", 0))) for c in calls)
-    # Older operations may predate per-call timing. Avoid counting either twice.
-    timed_calls = {c.get("id") for c in calls if "elapsed_seconds" in c}
-    elapsed += sum(max(0.0, float(o.get("elapsed_seconds", 0))) for o in operations
-                   if isinstance(o.get("executor"), dict)
-                   and o.get("executor", {}).get("logical_reservation") not in timed_calls)
-    hours = elapsed / 3600
-    verified = [o for o in operations if o.get("outcome", {}).get("real_user_value_verified")]
-    trial_cost = sum(max(0.0, o["outcome"]["observed_cost"] - float(o.get("usage", {}).get("reported_cost_usd", 0))) for o in verified)
-    total_cost = call_cost + hours * float(budget.get("hourly_rate", 0)) + trial_cost
-    values = {f"{obs.get('source', 'unknown')}.{name}": float(value)
-              for obs in state.get("external_metric_state", {}).get("latest", [])
-              for name, value in obs.get("values", {}).items()
-              if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)}
-    baseline = state.setdefault("resource_metric_baseline", dict(values))
-    directions = budget.get("metric_directions", {})
-    changes = [(value - baseline[name]) * (1 if directions[name] == "nondecreasing" else -1)
-               for name, value in values.items() if name in baseline
-               and directions.get(name) in {"nondecreasing", "nonincreasing"}]
-    delta_metrics = sum(changes) if changes else None
-    all_costs_observed = bool(calls) and all(c is not None for c in costs)
-    if float(budget.get("hourly_rate", 0)):
-        all_costs_observed = all_costs_observed and all("elapsed_seconds" in c for c in calls)
-    gross = sum(o["outcome"]["net_benefit"] + o["outcome"]["observed_cost"] for o in verified)
-    roi = (gross - total_cost) / total_cost if verified and all_costs_observed and total_cost > 0 else None
-    entry = {"id": identifier("resc"), "recorded_at": current.isoformat(), "period_start": start,
-        "executor_calls": len(calls), "time_hours": hours, "total_cost": total_cost,
-        "cost_basis": "observed" if all_costs_observed else "estimated_or_incomplete",
-        "external_values": values, "delta_metrics": delta_metrics,
-        "metric_attribution": "UNATTRIBUTED_OBSERVATION", "delta_quality": 0.0,
-        "delta_capability": 0.0, "roi": roi, "roi_basis": "verified_real_user_outcomes" if roi is not None else "UNVERIFIED"}
-    ledger.append(entry)
-    exceeded = []
-    for key, actual in (("max_cost", total_cost), ("max_time_hours", hours), ("max_executor_calls", len(calls))):
-        if budget.get(key) is not None and actual > float(budget[key]):
-            exceeded.append(f"{key}: {actual:g} > {budget[key]}")
-    if exceeded and not any(g.get("kind") == "product-budget-exceeded" and not g.get("resolved") for g in state.get("integrity_gaps", [])):
-        _emit_gap(state, "product-budget-exceeded", "BLOCKING", "; ".join(exceeded))
-        if state.get("lifecycle_state") not in ("BLOCKED", "PAUSED"):
-            state["lifecycle_state"] = "BLOCKED"
-            _emit_trace(state, "TRANSITION", "lifecycle → BLOCKED (product-budget-exceeded)")
-    if roi is not None and roi < float(budget.get("roi_floor", 0)):
-        if not any(g.get("kind") == "product-roi-below-floor" and not g.get("resolved") for g in state.get("integrity_gaps", [])):
-            _emit_gap(state, "product-roi-below-floor", "BLOCKING", "Verified real-user ROI is below the configured floor")
-            if state.get("lifecycle_state") not in ("BLOCKED", "PAUSED"):
-                state["lifecycle_state"] = "BLOCKED"
-                _emit_trace(state, "TRANSITION", "lifecycle → BLOCKED (product-roi-below-floor)")
-
-
-def _try_p2p_feature(config: dict[str, Any], state: dict[str, Any]) -> dict[str, Any] | None:
-    """P2P-first gate: return a planned objective sourced from the peer network when the
-    recommendation score clears the ROI threshold AND authority/intent are respected.
-
-    The recommendation threshold adapts to resource pressure so P2P candidates
-    may be considered earlier when executor-call capacity or exchange credits
-    are constrained. This is a routing heuristic, not evidence that P2P is cheaper:
-        adjusted_threshold = BASE × (1 − 0.5 × budget_pressure)
-
-    Returns a 'planned' objective dict or None.  Never raises.
-    """
-    try:
-        if not config.get("p2p", {}).get("feature_borrow_enabled", True):
-            return None
-        from . import peer_exchange as _pe
-        exchange_root = state_path(config).parent / "exchange"
-        if not exchange_root.exists():
-            return None
-        exchange = _pe.Exchange(exchange_root)
-        policy = exchange.load()
-        if not policy.get("enabled"):
-            return None
-
-        from . import product_similarity as _ps
-        candidates = _ps.score_features(config, state, exchange, timeout_seconds=2.0)
-        if not candidates:
-            return None
-
-        # --- Enrichment 1: Credit-based budget pressure (combined with call-count pressure) ---
-        from . import credit_ledger as _cl
-        _exec_state = state.get("executor_state", {})
-        _calls_24h = [c for c in _exec_state.get("executor_calls", [])
-                      if _ts_age(c.get("at", now())) < 86400]
-        _limit = nullable_limit(config.get("executor", {}), "max_executor_calls_per_24h", 2)
-        call_pressure = min(1.0, len(_calls_24h) / _limit) if _limit else 0.0
-        _local_id = config.get("peer_id", "local")
-        _bal = _cl.balance(state_path(config).parent, _local_id)
-        _baseline = _cl.BASELINE_GRANT_UNITS
-        credit_pressure = max(0.0, min(1.0, 1.0 - _bal / max(1, _baseline * 10)))
-        budget_pressure = max(call_pressure, credit_pressure)
-
-        BASE_THRESHOLD = float(config.get("p2p", {}).get("p2p_roi_threshold", 0.55))
-        adjusted = BASE_THRESHOLD * (1.0 - 0.5 * budget_pressure)
-
-        # --- Enrichment 5: Cold-start confidence gate (select best then gate) ---
-        best = candidates[0]
-        if best.get("score", 0.0) < adjusted:
-            return None
-
-        if best.get("cold_start") and budget_pressure < 0.8:
-            _non_cold = [c for c in candidates if not c.get("cold_start") and c.get("score", 0) >= adjusted]
-            if not _non_cold:
-                return None
-            best = _non_cold[0]
-
-        feature_id = best["feature_id"]
-
-        # --- Enrichment 3: Intent affinity floor ---
-        _intent_floor = max(0.15, 0.30 * (1.0 - budget_pressure))
-        if best.get("intent_similarity", 0.0) < _intent_floor:
-            return None
-
-        # --- Enrichment 4: Credit affordability gate ---
-        _borrow_cost = _cl.feature_borrow_cost_units()
-        if _cl.balance(state_path(config).parent, _local_id) < _borrow_cost:
-            return None
-
-        _ts = now()
-        obj = {
-            "id": identifier("objective"),
-            "title": f"Apply peer-sourced feature: {feature_id}",
-            "reason": (
-                f"P2P recommendation score {best['score']:.3f} ≥ threshold {adjusted:.3f} "
-                f"(budget_pressure={budget_pressure:.0%}, peers={best['peer_count']}, "
-                f"confidence={best['confidence']})"
-            ),
-            "success_measure": f"Feature {feature_id!r} applied and qualifies locally",
-            "scope": "runtime",
-            "status": "planned",
-            "created_at": _ts, "updated_at": _ts,
-            "expected_value": best["score"],
-            # Ranking requires a 0..1 heuristic. Keep neutral and label the
-            # economic comparison unavailable; do not encode P2P as near-free.
-            "estimated_cost": 0.5,
-            "estimated_cost_basis": "UNVERIFIED_NEUTRAL_P2P_ROUTING_VALUE",
-            "risk": 0.1,
-            "urgency": 0.4,
-            "source": "p2p_recommendation",
-            "p2p_feature_id": feature_id,
-            "p2p_score": best["score"],
-            "input_links": ["p2p-recommendation"],
-            "necessity_evidence": best.get("rationale", ""),
-            "lower_impact_route_sufficient": True,
-        }
-        # Authority check: p2p feature objectives require delegated runtime authority
-        _validate_authority_basis_binding(state, obj)
-        state["objectives"].append(obj)
-        state.setdefault("evidence", []).append({
-            "id": identifier("evidence"), "at": _ts,
-            "kind": "p2p-feature-candidate",
-            "feature_id": feature_id,
-            "score": best["score"],
-            "adjusted_threshold": adjusted,
-            "budget_pressure": {
-                "combined": budget_pressure,
-                "call_pressure": call_pressure,
-                "credit_pressure": credit_pressure,
-            },
-        })
-        return obj
-    except Exception:
-        return None
-
-
-def _ts_age(ts_iso: str) -> float:
-    """Seconds since an ISO timestamp."""
-    try:
-        return datetime.now(timezone.utc).timestamp() - datetime.fromisoformat(ts_iso).timestamp()
-    except Exception:
-        return float("inf")
-
-
-def _routing_decision(config: dict[str, Any], state: dict[str, Any]) -> dict:
-    """Compute executor vs. network-hire routing score.
-
-    Returns peer_work_market.routing_score() result or a default executor dict.
-    Never raises — safe to call at any cycle point.
-    """
-    try:
-        from . import peer_exchange as _pe
-        from . import credit_ledger as _cl
-        from . import peer_work_market as _pwm
-
-        exchange_root = state_path(config).parent / "exchange"
-        if not exchange_root.exists():
-            return {'route': 'executor', 'confidence': 0.5, 'reason': 'no exchange dir'}
-        exchange = _pe.Exchange(exchange_root)
-        if not exchange.load().get("enabled"):
-            return {'route': 'executor', 'confidence': 0.5, 'reason': 'exchange disabled'}
-
-        _local_id = config.get("peer_id", "local")
-        balance = _cl.balance(state_path(config).parent, _local_id)
-        baseline = _cl.BASELINE_GRANT_UNITS
-        executor_cost = int(config.get("executor", {}).get("cost_per_call_units", _cl.UNIT))
-
-        # Derive spec complexity from current planned objective if available
-        _planned = [o for o in state.get("objectives", []) if o.get("status") == "planned"]
-        complexity = 0.4
-        if _planned:
-            _obj = _planned[0]
-            _loc_est = int(_obj.get("estimated_loc", 0))
-            complexity = min(1.0, 0.3 + _loc_est / 500.0) if _loc_est else 0.4
-
-        # Gather peers with combined_rep from exchange audit rows
-        peers = []
-        try:
-            for row in exchange.audit_rows():
-                if row.get('kind') == 'PEER_ANNOUNCE' and row.get('peer_id'):
-                    peers.append({
-                        'peer_id': row['peer_id'],
-                        'combined_rep': float(row.get('combined_rep', 0.0)),
-                    })
-        except Exception:
-            pass
-
-        return _pwm.routing_score(
-            exchange=exchange,
-            local_credit_balance=balance,
-            baseline_grant_units=baseline,
-            spec_complexity=complexity,
-            executor_cost_units=executor_cost,
-            available_peers=peers,
-        )
-    except Exception:
-        return {'route': 'executor', 'confidence': 0.5, 'reason': 'routing_score error'}
-
-
-def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool = True) -> dict[str, Any]:
-    global _loaded_state_snapshot
-    # --- r75: generate cycle_id for ObservabilityContract trace records ---
-    _cycle_id = identifier("cycle-")
-    # --- §62z: reset continuation confidence at cycle boundary ---
-    continuation_module.reset_confidence(state)
-    # --- r54: citizen-base conformance check on load ---
-    _validate_citizen_base_conformance(state)
-    # --- r75: emit CYCLE trace at cycle entry ---
-    _emit_trace(state, "CYCLE", "cycle started", cycle_id=_cycle_id)
-    if config.get("product_improvement_enabled") is False:
-        state["lifecycle_state"]="WAITING_FOR_CONDITION"
-        save_state(config,state);return {"outcome":"disabled_product","reason":"Owner disabled improvement for this product; no native call"}
-    # --- OnboardGate: block autonomous cycles until operator confirms (§62o) ---
-    _onboard_result = _run_onboard_gate(config, state)
-    if _onboard_result is not None:
-        save_state(config, state)
-        return _onboard_result
-    data_transport.auto_sync(state,config,state_path(config).parent)
-    # --- r54: capture immutable-field snapshot for pre-save mutation detection ---
-    import copy as _copy
-    _loaded_state_snapshot = _copy.deepcopy({
-        k: state.get(k, [])
-        for k in ["goal_records", "intent_records", "constraint_records",
-                  "decision_records", "evidence", "operations"]
-    })
-    # --- r54: authority_basis binding validation for all objectives ---
-    for _obj in state.get("objectives", []):
-        if isinstance(_obj, dict):
-            _validate_authority_basis_binding(state, _obj)
-
-    # --- Spec structural audit (§81): run when spec version changed ---
-    if spec_audit_due(state):
-        run_spec_audit(config, state)
-        # Validate any stored lexical formulas
-        lexical_formulas = state.get("lexical_formulas", [])
-        for lf in lexical_formulas:
-            try:
-                from urace import primitives as _prim
-                _prim.validate_lexical_formula(lf)
-            except Exception as _e:
-                _logger.warning("lexical_formula validation: %s", _e)
-
-    # --- Compaction startup check: verify manifest integrity ---
-    _compaction_gaps = compaction_module.verify_manifest_on_startup(str(state_path(config).parent))
-    if _compaction_gaps:
-        state.setdefault("integrity_gaps", []).extend(_compaction_gaps)
-
-    # --- Wake registration liveness verification (§5501/§5505) ---
-    _wake_gaps = _verify_wake_registrations(config, state)
-    for _wg in _wake_gaps:
-        _logger.warning("wake registration: %s", _wg)
-
-    # --- CRC: generate fresh cognitive resume context at cycle boundary ---
-    _crc = cognitive_resume_module.generate(state)
-    state["cognitive_resume_context"] = _crc
-
-    # --- Reconcile any indeterminate effects before assessing new work ---
-    if state.get("unresolved_effects"):
-        state["unresolved_effects"] = _reconcile_unresolved_effects(ROOT, state)
-    if state["unresolved_effects"]:
-        state["lifecycle_state"] = "BLOCKED"
-        _emit_trace(state, "TRANSITION", "lifecycle → BLOCKED (unresolved effects)", cycle_id=_cycle_id)
-        return {"outcome": "blocked", "reason": f"{len(state['unresolved_effects'])} unresolved external effects require reconciliation; file-hash and journal-phase reconciliation attempted"}
-
-    # --- Destination anchor integrity check ---
-    anchor_status = destination_anchor.check_anchor_integrity(state, config)
-    if anchor_status["status"] == "not_established":
-        state["destination_anchor"] = anchor_status["anchor"]
-    elif anchor_status["status"] == "changed":
-        state["lifecycle_state"] = "BLOCKED"
-        _emit_gap(state, "governance-anchor-drift", "BLOCKING",
-            "destination anchor drift detected — cycle blocked pending re-anchoring",
-            prior_digest=anchor_status.get("prior_digest"),
-            current_digest=anchor_status.get("current_digest"),
-        )
-        _emit_trace(state, "TRANSITION", "lifecycle → BLOCKED (governance-anchor-drift)", cycle_id=_cycle_id)
-        save_state(config, state)
-        return {"outcome": "blocked", "reason": "destination anchor drift detected — governance-anchor-drift BLOCKING gap emitted"}
-
-    # --- Evaluate due wake conditions ---
-    due_wake = _evaluate_wake_conditions(state)
-    for condition in due_wake:
-        state.setdefault("triggers", []).append({
-            "id": identifier("trigger"), "at": now(),
-            "kind": "SCHEDULED_WAKE",
-            "condition": condition,
-            "disposition": "REASSESS",
-            "provenance": "wake_registry",
-        })
-    if due_wake:
-        state.setdefault("executor_state", {})["discovery_trigger"] = {
-            "reason": "scheduled wake condition elapsed",
-            "signature": f"wake:{len(due_wake)}",
-        }
-        # R6 — Wake trigger atomic write: persist state immediately after recording wake conditions
-        save_state(config, state)
-
-    # --- Community Signal Ingestion + Patch Proposal Pipeline (§5509-5564) ---
-    # Activated only when Config.community_inbox.feeds is non-empty (default [])
-    if config.get("community_inbox", {}).get("feeds"):
-        _run_csi(config, state)
-        _run_ppm(config, state)
-    outcome_verification.refresh(ROOT, config, state)
-    _run_feedback_accumulator(config, state)
-    _run_ram(config, state)
-
-    state["lifecycle_state"] = "ASSESSING"
-    _emit_trace(state, "TRANSITION", "lifecycle → ASSESSING (cycle entry)", cycle_id=_cycle_id)
-    availability = refresh_executor_availability(config, state)
-    metric_settings = dict(config.get("external_metrics", {"mode": "DISABLED"}))
-    configured_sources = list(metric_settings.get("sources", []))
-    sources_by_id = {item["id"]: item for item in configured_sources}
-    for item in state.get("connector_sources", []):
-        if item.get("status") == "ACTIVE":
-            sources_by_id[item["id"]] = item
-        else:
-            sources_by_id.pop(item.get("id"), None)
-    metric_settings["sources"] = list(sources_by_id.values())
-    prior_external = state.get("external_metric_state", {})
-    last_collection = prior_external.get("last_collection")
-    next_collection = prior_external.get("next_collection_at")
-    collection_due = not next_collection or datetime.now(timezone.utc).timestamp() >= datetime.fromisoformat(next_collection).timestamp()
-    if collection_due:
-        runtime = state.setdefault("runtime_efficiency", {})
-        runtime["external_collections"] = int(runtime.get("external_collections", 0)) + 1
-    if collection_due:
-        try:
-            external = external_metrics.collect(ROOT, metric_settings, prior_external.get("last_known_good"))
-        except Exception as collection_error:
-            external = {"at": now(), "mode": metric_settings.get("mode", "DISABLED"), "observations": [], "errors": [{"source": "collection", "error": str(collection_error)}], "last_known_good": prior_external.get("last_known_good", {})}
-    else:
-        external = {"at": last_collection, "mode": metric_settings.get("mode", "DISABLED"), "observations": prior_external.get("latest", []), "errors": prior_external.get("errors", []), "cached": True}
-    external_state = state.setdefault("external_metric_state", {"mode": external["mode"], "last_collection": None, "latest": [], "errors": []})
-    previous_events = {
-        (event.get("kind"), event.get("id")): event.get("updated_at")
-        for observation in prior_external.get("latest", []) for event in observation.get("events", [])
-    }
-    changed_events = [
-        event for observation in external["observations"] for event in observation.get("events", [])
-        if previous_events.get((event.get("kind"), event.get("id"))) != event.get("updated_at")
-    ] if not external.get("cached") and previous_events else []
-    decision_links = [
-        {"operation": operation["id"], "attribution_status": "UNATTRIBUTED", "reason": "temporal proximity alone is not causal evidence"}
-        for operation in state.get("operations", []) if operation.get("status") == "ACCEPTED"
-    ][-10:]
-    metric_policy = config.get("external_metrics", {})
-    if not external.get("cached"):
-        failed_only = bool(external["errors"]) and not external["observations"]
-        failure_streak = int(prior_external.get("failure_streak", 0)) + 1 if failed_only else 0
-        base_interval = float(metric_settings.get("collection_interval_seconds", 300))
-        max_interval = float(metric_settings.get("max_collection_interval_seconds", 21600))
-        next_interval = min(max_interval, base_interval * (2 ** min(failure_streak, 10)))
-        next_collection_at = datetime.fromtimestamp(datetime.now(timezone.utc).timestamp() + next_interval, timezone.utc).isoformat()
-    else:
-        failure_streak = int(prior_external.get("failure_streak", 0))
-        next_collection_at = prior_external.get("next_collection_at")
-    external_state.update({
-        "mode": external["mode"],
-        "source": metric_policy.get("source", "bootstrap default"),
-        "provenance": metric_policy.get("provenance", "no attributable selection supplied"),
-        "last_collection": external["at"], "latest": external["observations"],
-        "errors": external["errors"], "candidate_decision_links": decision_links,
-        "failure_streak": failure_streak, "next_collection_at": next_collection_at,
-        "last_known_good": external.get("last_known_good", prior_external.get("last_known_good", {})),
-    })
-    from . import value_discovery
-    try:state['value_discovery']=value_discovery.refresh(config,state)
-    except (OSError,ValueError,RuntimeError,KeyError) as error:state['value_discovery']={'status':'EVIDENCE_UNAVAILABLE','reason':type(error).__name__+': '+str(error)[:300]}
-    from . import decision_feedback
-    try:state['decision_feedback_status']=decision_feedback.refresh(config,state)
-    except (OSError,ValueError,TypeError,KeyError) as error:state['decision_feedback_status']={'status':'EVIDENCE_UNAVAILABLE','reason':type(error).__name__+': '+str(error)[:300],'additional_model_calls':0}
-    from . import milestone_suggestions
-    try:state['milestone_suggestions_status']=milestone_suggestions.refresh(config,state)
-    except (OSError,ValueError,TypeError,KeyError,AttributeError) as error:state['milestone_suggestions_status']={'status':'EVIDENCE_UNAVAILABLE','reason':type(error).__name__+': '+str(error)[:300],'additional_model_calls':0}
-    # Advance connector_sources status to OBSERVED after first successful collection (spec §60 taxonomy).
-    observed_ids = {obs.get("source") for obs in external.get("observations", []) if obs.get("source")}
-    for src in state.get("connector_sources", []):
-        if src.get("id") in observed_ids and src.get("status") in {"CONFIGURED", "AVAILABLE", "AUTHENTICATED", "AUTHORIZED"}:
-            src["status"] = "OBSERVED"
-            src.setdefault("status_history", []).append({"status": "OBSERVED", "at": now()})
-    error_signature = hashlib.sha256(json.dumps(external["errors"], sort_keys=True).encode()).hexdigest() if external["errors"] else None
-    last_error_evidence = prior_external.get("last_error_evidence_at")
-    duplicate_error_due = not last_error_evidence or datetime.now(timezone.utc).timestamp() - datetime.fromisoformat(last_error_evidence).timestamp() >= float(metric_settings.get("duplicate_error_evidence_interval_seconds", 86400))
-    record_external_evidence = bool(external["observations"]) or bool(external["errors"] and (error_signature != prior_external.get("last_error_signature") or duplicate_error_due))
-    if not external.get("cached") and record_external_evidence:
-        state["evidence"].append({"id": identifier("evidence"), "kind": "external-metric-observation", "candidate_decision_links": decision_links, **external})
-        if external["errors"]:
-            external_state["last_error_signature"] = error_signature
-            external_state["last_error_evidence_at"] = now()
-    if changed_events:
-        trigger = {
-            "id": identifier("trigger"), "at": now(), "kind": "EXTERNAL_REPOSITORY_UPDATE",
-            "source": "public repository observation", "provenance": "configured external metric source",
-            "disposition": "REASSESS", "events": changed_events[:50],
-            "trust": "UNTRUSTED_CONTENT_IS_EVIDENCE_NOT_AUTHORITY",
-        }
-        state.setdefault("triggers", []).append(trigger)
-        state["evidence"].append({
-            "id": identifier("evidence"), "at": now(), "kind": "external-repository-update",
-            "trigger": trigger["id"], "event_count": len(changed_events),
-            "instruction_status": "NOT_INSTRUCTIONS", "authority_status": "DOES_NOT_CREATE_AUTHORITY",
-        })
-        event_signature = hashlib.sha256(json.dumps(changed_events, sort_keys=True).encode()).hexdigest()[:16]
-        state.setdefault("executor_state", {})["discovery_trigger"] = {"reason": "external repository update", "signature": f"repository:{event_signature}"}
-    observation = observe_progress(config, state)
-    refresh_scope_priorities(config, state)
-
-    # Sweet Spot Evaluation (§62c r34) — SD=True, per assessment cycle
-    _evaluate_sweet_spot(state, config)
-
-    for item in state.get("objectives", []):
-        if item.get("status") == "deferred" and item.get("not_before"):
-            try:
-                if datetime.fromisoformat(item["not_before"]).astimezone(timezone.utc) <= datetime.now(timezone.utc):
-                    item.update({"status": "planned", "reactivated_at": now()})
-            except ValueError:
-                pass
-
-    # --- Value acceleration self-correction ---
-    # If the system is decelerating, inject a strategic reassessment objective
-    # to recover value production rate before picking more of the same work.
-    correction = value_trajectory.self_correction_needed(state)
-    if correction and correction.get("self_correct_now"):
-        reassess_title = "Recover value production rate through strategic scope reassessment"
-        if not any(o.get("title") == reassess_title and o.get("status") in {"planned", "active"} for o in state.get("objectives", [])):
-            reassess_obj = {
-                "id": identifier("objective"),
-                "title": reassess_title,
-                "reason": (
-                    f"Value trajectory is decelerating "
-                    f"(amplification={correction.get('value_amplification')}, "
-                    f"yield={correction.get('yield_rate', 0):.0%}). "
-                    "Reassess scope priorities and objective quality to restore acceleration."
-                ),
-                "scope": "documentation",
-                "priority": 85,
-                "urgency": 0.8,
-                "expected_value": 0.7,
-                "estimated_cost": 0.3,
-                "risk": 0.2,
-                "status": "planned",
-                "created_at": now(),
-                "source": "value_trajectory_self_correction",
-            }
-            state["objectives"].append(reassess_obj)
-            state.setdefault("evidence", []).append({
-                "id": identifier("evidence"), "at": now(),
-                "kind": "value-deceleration-self-correction",
-                "correction": correction,
-                "objective_injected": reassess_obj["id"],
-            })
-
-    # Derive a project objective through the existing authority/planning pipeline.
-    if allow_execution:
-        auto_goals.select(config, state)
-    candidates = [item for item in state.get("objectives", []) if item.get("status") in {"planned", "policy_blocked"}]
-    for candidate in candidates:
-        if candidate.get("scope") in {"runtime", "rebootstrap"}:
-            candidate["status"] = "planned" if objective_is_eligible(state, candidate) else "policy_blocked"
-    # R5 — Self-evolution budget guard: self-evolution Objectives MUST NOT consume >20% of executor_calls budget
-    _exec_calls = state.get("executor_state", {}).get("executor_calls", [])
-    _current_ts = datetime.now(timezone.utc).timestamp()
-    _calls_24h = [c for c in _exec_calls if _current_ts - datetime.fromisoformat(c["at"]).timestamp() < 86400]
-    _max_24h = nullable_limit(config.get("executor",{}),"max_executor_calls_per_24h",2)
-    _remaining_budget = max(0,_max_24h-len(_calls_24h)) if _max_24h is not None else len(candidates)
-    _self_evo_budget_ceiling = max(1, int(_remaining_budget * 0.20))
-    _self_evo_calls_24h = [c for c in _calls_24h if c.get("stage") == "execution"]  # rough proxy
-    def _is_self_evolution_objective(obj: dict) -> bool:
-        return (
-            "self-evolution" in obj.get("tags", [])
-            or obj.get("kind") == "self-evolution"
-            or obj.get("source") == "self-evolution"
-            or obj.get("scope") in {"runtime", "rebootstrap"}
-        )
-    _self_evo_scheduled_count = sum(1 for c in candidates if _is_self_evolution_objective(c) and c.get("status") == "planned")
-    if _self_evo_scheduled_count > _self_evo_budget_ceiling:
-        import logging as _logging
-        _logging.getLogger("urace.cycle").debug(
-            "self-evolution budget guard: %d self-evolution candidates exceed 20%% ceiling (%d); deferring excess",
-            _self_evo_scheduled_count, _self_evo_budget_ceiling,
-        )
-        # Demote excess self-evolution candidates beyond the ceiling
-        _evo_seen = 0
-        for _cand in sorted(candidates, key=objective_score, reverse=True):
-            if _is_self_evolution_objective(_cand) and _cand.get("status") == "planned":
-                _evo_seen += 1
-                if _evo_seen > _self_evo_budget_ceiling:
-                    _cand["status"] = "deferred"
-                    _cand["defer_reason"] = "self-evolution budget guard: 20% ceiling"
-    ranked = [item for item in sorted(candidates, key=objective_score, reverse=True) if item.get("status") == "planned" and goal_is_schedulable(state, item)]
-    from .implementation_sequence import plan as implementation_plan,local_only
-    sequencing=implementation_plan(state.get("objectives",[]),scores={t["id"]:objective_score(t) for t in state.get("objectives",[])},eligible={t["id"]:goal_is_schedulable(state,t) for t in state.get("objectives",[])})
-    order={key:i for i,key in enumerate(sequencing["dispatch_order"])}
-    ranked.sort(key=lambda t:order.get(t["id"],len(order)))
-    state["implementation_sequence"]=sequencing
-    comparison = [{"id": item.get("id"), "title": item.get("title"), "scope": item.get("scope"), "score": objective_score(item), "score_breakdown": objective_score_breakdown(item)} for item in ranked[:5]]
-    objective = ranked[0] if ranked else None
-    if objective is None:
-        objective = discover(config, state, observation)
-    if objective is None:
-        # Routing: P2P-feature → network-hire → executor.
-        # 1. Check pre-existing P2P features (no new work needed).
-        # 2. Routing score decides: if network-hire is favoured, record evidence and
-        #    skip executor — hiring is done via peer_work_market (async, out-of-band).
-        # 3. Fall through to executor when neither gate fires.
-        _p2p_candidate = _try_p2p_feature(config, state)
-        if _p2p_candidate:
-            objective = _p2p_candidate
-        else:
-            _routing = _routing_decision(config, state)
-            if _routing.get('route') == 'network_hire' and _routing.get('network_hire_viable'):
-                # Record routing decision; actual work-request creation is caller's
-                # responsibility via peer_work_market.create_work_request().
-                state.setdefault("evidence", []).append({
-                    "id": identifier("evidence"),
-                    "at": now(),
-                    "kind": "network-hire-preferred",
-                    "route": _routing['route'],
-                    "confidence": _routing['confidence'],
-                    "reason": _routing['reason'],
-                    "avg_peer_rep": _routing.get('avg_peer_rep', 0.0),
-                    "executor_cost_factor": _routing.get('executor_cost_factor'),
-                    "credit_pressure": _routing.get('credit_pressure', 0.0),
-                })
-                # Do not invoke executor — leave objective=None so caller can post a
-                # WORK_REQUEST to the exchange at the appropriate scope.
-            else:
-                try:
-                    objective = discover_with_executor(config, state, persist_usage=True)
-                    if objective:
-                        refresh_scope_priorities(config, state)
-                except intelligent_executor.ExecutorUnavailable as error:
-                    defer_executor_capacity(config, state, error, "discovery")
-                    state["lifecycle_state"] = "WAITING_FOR_CAPACITY"
-                except RuntimeError as error:
-                    record_executor_failure(state, "discovery", str(error))
-                    continuation_module.handle_unspecified(
-                        state, str(error), context="intelligent discovery", cycle_id=_cycle_id)
-
-    # --- Executor-independent work (spec §55) ---
-    # When no Executor is available, URACE MUST NOT become fully dormant.
-    # Process wake conditions, pending validations, and deterministic work.
-    if not availability.get("available") and objective is None:
-        independent_done = _executor_independent_work(config, state, observation)
-        if independent_done:
-            state.setdefault("runtime_efficiency", {})["last_independent_work_at"] = now()
-
-    if objective:
-        # --- R4: Authority resolution cache TTL invalidation (3600s) ---
-        cached_auth = objective.get("authority_resolution")
-        if cached_auth:
-            cached_at = cached_auth.get("resolved_at", "")
-            if cached_at:
-                try:
-                    age_seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(cached_at)).total_seconds()
-                    if age_seconds > 3600:
-                        objective.pop("authority_resolution", None)
-                except (ValueError, TypeError):
-                    pass
-        # --- Authority resolution gate (spec §14-16) ---
-        if not objective.get("authority_resolution"):
-            auth_result = authority_resolver.resolve(objective, config, state)
-            objective["authority_resolution"] = auth_result
-            authority_resolver.record_resolution(state, objective, auth_result)
-            outcome_code = auth_result["outcome"]
-            if outcome_code == authority_resolver.DENIED:
-                objective["status"] = "policy_blocked"
-                objective["authority_resolution"] = auth_result
-                state.setdefault("evidence", []).append({
-                    "id": identifier("evidence"), "at": now(),
-                    "kind": "authority-resolution-denied",
-                    "objective": objective.get("id"),
-                    "basis": auth_result["basis"],
-                    "gate": auth_result["gate"],
-                })
-                _emit_compliance_record(state, "governance", "DECLINING",
-                    objective.get("id"), "authority denial — compliance record", objective.get("scope"))
-                objective = None
-            elif outcome_code == authority_resolver.REQUIRES_AUTHORITATIVE_DECISION:
-                objective["status"] = "awaiting_operator_decision"
-                state["lifecycle_state"] = "WAITING_FOR_AUTHORITATIVE_DECISION"
-                state.setdefault("evidence", []).append({
-                    "id": identifier("evidence"), "at": now(),
-                    "kind": "authority-resolution-escalated",
-                    "objective": objective.get("id"),
-                    "basis": auth_result["basis"],
-                    "gate": auth_result["gate"],
-                })
-                objective = None
-
-    if objective:
-        if not any(item["id"] == objective.get("id") for item in comparison):
-            comparison.append({"id": objective.get("id"), "title": objective.get("title"), "scope": objective.get("scope"), "score": objective_score(objective), "score_breakdown": objective_score_breakdown(objective)})
-        current_plan = state.get("current_plan")
-        plan = current_plan if isinstance(current_plan, dict) and current_plan.get("objective_reference") == objective["id"] and current_plan.get("status") == "ready" else plan_for(state, objective)
-        try:
-            execution = execute_with_executor(config, state, objective, plan, persist_usage=True) if allow_execution and (local_only(objective) or config.get("executor", {}).get("enabled") and availability["available"]) else None
-            execution_status = (execution or {}).get("status")
-            if execution_status == "PENDING_VALIDATION":
-                state["lifecycle_state"] = "WAITING_FOR_CONDITION"
-            elif execution_status == "AWAITING_OPERATOR_DECISION":
-                state["lifecycle_state"] = "WAITING_FOR_AUTHORITATIVE_DECISION"
-            else:
-                state["lifecycle_state"] = "ACTIVE"
-            outcome = {"outcome": "pending_validation" if execution_status == "PENDING_VALIDATION" else ("executed" if execution else "planned"), "objective": objective, "plan": plan, "execution": execution, "candidate_comparison": comparison}
-        except intelligent_executor.ExecutorUnavailable as error:
-            defer_executor_capacity(config, state, error, "execution")
-            objective["status"] = "planned"
-            state["lifecycle_state"] = "WAITING_FOR_CAPACITY"
-            outcome = {"outcome": "deferred_executor_capacity", "objective": objective, "retry_at": error.retry_at, "reason": "provider capacity unavailable; task remains planned"}
-        except RuntimeError as error:
-            if not local_only(objective):record_executor_failure(state, "execution", str(error))
-            record_blocker(state, objective["id"], str(error))
-            objective["status"] = "blocked"
-            continuation_module.handle_unspecified(
-                state, str(error), context="execution", cycle_id=_cycle_id)
-            state["lifecycle_state"] = "DORMANT"
-            outcome = {"outcome": "dormant", "objective": objective, "reason": str(error)}
-    else:
-        state["current_objective"] = None
-        state["current_plan"] = None
-        # Resolve the precise no-work lifecycle state per §64.
-        _exec_state = state.get("executor_state", {})
-        _budget_status = _exec_state.get("discovery_budget_status", "")
-        _unschedulable = [item for item in state.get("objectives", []) if item.get("status") == "planned" and not goal_is_schedulable(state, item)]
-        _has_capacity_wait = state.get("lifecycle_state") == "WAITING_FOR_CAPACITY"
-        if _unschedulable and not _has_capacity_wait:
-            # Planned objectives exist but a precondition is not yet met.
-            state["lifecycle_state"] = "WAITING_FOR_CONDITION"
-            _condition_desc = _unschedulable[0].get("blockers", [{}])[-1].get("reason", "precondition not yet satisfied") if _unschedulable[0].get("blockers") else "precondition not yet satisfied"
-            reason = f"waiting for condition: {_condition_desc}"
-        elif _budget_status == "LOCAL_CONTROLLER_ONLY":
-            state["lifecycle_state"] = "WAITING_FOR_CONDITION"
-            reason = "Only local orchestration remains; resolve its handler/condition without executor delegation"
-        elif _budget_status not in {"WITHIN_BUDGET", "DISCOVERY_YIELD_EXHAUSTED", "DEFERRED_PROPORTIONALITY", "DAILY_LIMIT_OR_RESERVE_REACHED", "MONTHLY_LIMIT_OR_RESERVE_REACHED", "SYSTEMATIC_FAILURE_COOLDOWN", "WAITING_PROVIDER_CAPACITY", ""} and not _has_capacity_wait:
-            # Discovery is deferred by schedule (backoff interval not yet elapsed).
-            state["lifecycle_state"] = "WAITING_FOR_SCHEDULE"
-            reason = f"waiting for scheduled discovery window; current status={_budget_status}"
-        elif not _has_capacity_wait:
-            state["lifecycle_state"] = "DORMANT"
-            _emit_trace(state, "TRANSITION", "lifecycle → DORMANT (cycle complete)", cycle_id=_cycle_id)
-            reason = "no justified authorized action; follow-up remains scheduled"
-        else:
-            reason = "executor unavailable; capacity or availability retry scheduled"
-        outcome = {"outcome": "dormant", "reason": reason}
-    # --- Retention violation check (§62f) ---
-    _retention_gaps = compaction_module.check_retention_violations(state)
-    if _retention_gaps:
-        _observe_retention_gaps(state, _retention_gaps)
-
-    # --- r54: objective-lifecycle chunking (A3) ---
-    _compaction_cfg = config.get("compaction", {})
-    if _compaction_cfg.get("chunking_enabled") and _compaction_cfg.get("chunk_by") == "OBJECTIVE_LIFECYCLE":
-        # r55: destination_anchor guard — skip compaction if BLOCKED on anchor drift
-        if state.get("lifecycle_state") == "BLOCKED":
-            _emit_gap(state, "compaction-blocked-on-anchor-drift", "WARNING",
-                "compaction skipped: lifecycle_state=BLOCKED (governance-anchor-drift)")
-        else:
-            for _fp in ["operations", "evidence", "decision_records"]:
-                _recs = state.get(_fp, [])
-                if _recs:
-                    _policy = {"id": "default", "compaction_mode": "ARCHIVE"}
-                    _compact_with_chunking(state, _fp, _recs, _policy)
-
-    # --- Technique applicability gate (§62h) ---
-    from urace._common import technique_applicability_gate
-    _applied_this_cycle: set = set()
-    for _tech in ["T1", "T2", "T3", "T4", "T5", "T6"]:
-        _ta_record = technique_applicability_gate(_tech, state, config, applied_this_cycle=_applied_this_cycle)
-        if _ta_record["verdict"] == "APPLY":
-            _applied_this_cycle.add(_tech)
-        state.setdefault("technique_application_log", []).append(_ta_record)
-    # Trim log to last 100 records
-    state["technique_application_log"] = state["technique_application_log"][-100:]
-
-    # --- r54: immutable field mutation detection before save ---
-    _validate_immutable_fields(state, _loaded_state_snapshot)
-
-    # --- r75: emit CYCLE trace at cycle exit ---
-    _emit_trace(state, "CYCLE", f"cycle ended: {outcome.get('outcome', 'unknown')}", cycle_id=_cycle_id)
-    state["last_cycle"] = {"at": now(), **outcome}
-    signature = f"{outcome['outcome']}:{outcome.get('reason') or outcome.get('objective', {}).get('scope', 'general')}"
-    patterns = state.setdefault("pattern_memory", {})
-    pattern = patterns.setdefault(signature, {"count": 0, "first_seen": now(), "last_seen": None, "recurring": False})
-    pattern.update({"count": pattern["count"] + 1, "last_seen": now()})
-    pattern["recurring"] = pattern["count"] >= 3
-    digest = product_digest(config)
-    last_checkpoint = state["checkpoints"][-1] if state["checkpoints"] else None
-    if last_checkpoint is None or last_checkpoint.get("digest") != digest:
-        state["checkpoints"].append({"id": identifier("checkpoint"), "at": now(), "kind": "assessment", "digest": digest})
-    # --- §62z: attach continuation_confidence to outcome ---
-    outcome["continuation_confidence"] = state.get("continuation_confidence", 1.0)
-    return outcome
-
-
-def emit_cycle_feedback(state: dict[str, Any], outcome: dict[str, Any], index: int, json_mode: bool, quiet: bool, verbose: bool = False) -> None:
-    recovery_manifest = state.get("executor_state", {}).get("recovery_manifest")
-    if json_mode:
-        print(render_cycle(state, outcome, index, True), flush=True)
-        if not quiet:
-            print(render_cycle(state, outcome, index, False, verbose), file=sys.stderr, flush=True)
-        elif recovery_manifest:
-            rm = recovery_manifest
-            print(
-                f"[recovery-pending] manifest={rm.get('manifest_id')} "
-                f"cause={rm.get('emission_cause')} "
-                f"progress={rm.get('progress_at_emit')} "
-                f"delta={rm.get('goal_delta', 'unknown')}",
-                file=sys.stderr, flush=True,
-            )
-    elif not quiet:
-        print(render_cycle(state, outcome, index, False, verbose), flush=True)
-    elif recovery_manifest:
-        rm = recovery_manifest
-        print(
-            f"[recovery-pending] manifest={rm.get('manifest_id')} "
-            f"cause={rm.get('emission_cause')} "
-            f"progress={rm.get('progress_at_emit')} "
-            f"delta={rm.get('goal_delta', 'unknown')}",
-            flush=True,
-        )
-
-
-def emit_auto_startup(json_mode: bool, quiet: bool) -> None:
-    if json_mode or quiet:
-        return
-    print("Second terminal ready — /auto is running.")
-    print("  /command for direct access  |  any text for free-form  |  /help for reference")
 
 
 # r62: Built-in FeatureBundle registry (§62j)
@@ -4661,13 +339,13 @@ def _preprocess_args(raw_args: list[str]) -> list[str]:
 
 def _handle_data_credential_command(args: Any, state: dict[str, Any], fmt: str) -> None:
     """Compatibility wrapper for the data-source credential handler."""
-    from .data_cli import handle_data_credential_command
+    from ..data_cli import handle_data_credential_command
     return handle_data_credential_command(args, state, fmt, identifier=identifier)
 
 
 def _handle_data_command(args: Any, state: dict, config: dict) -> int:
     """Compatibility wrapper; data command behavior lives in data_cli."""
-    from .data_cli import handle_data_command
+    from ..data_cli import handle_data_command
     return handle_data_command(args, state, config, identifier=identifier,
                                emit_gap=_emit_gap, state_path=state_path)
 
@@ -4821,18 +499,18 @@ def run(state: dict, cfg: dict) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
-    from .runtime_product import mutation_blocker
+    from ..runtime_product import mutation_blocker
     _blocked=mutation_blocker(SYSTEM_ROOT,raw_args)
     if _blocked:
         print(json.dumps({'status':'DEFERRED','reason':_blocked,'schema':'runtime-transaction-admission-v1'}));return 2
 
     if raw_args and raw_args[0] == "trial":
-        from .trial import main as trial_main
+        from ..trial import main as trial_main
         return trial_main(raw_args[1:])
     explicit_classifier=bool(raw_args and raw_args[0].lstrip("/")=="classify")
     raw_args = _preprocess_args(raw_args)
     if not raw_args:
-        from . import tui as _tui
+        from .. import tui as _tui
         try:_tui_cfg=load_config()
         except Exception:_tui_cfg={}
         return _tui.launch(_tui_cfg,SYSTEM_ROOT)
@@ -4875,14 +553,14 @@ def main(argv: list[str] | None = None) -> int:
     args.json = bool(_fmt)  # always set for handler backward compat
     if _fmt == "xml":
         sys.stdout = _XmlConvertStream(sys.stdout)
-    from . import preflight as _preflight_module
+    from .. import preflight as _preflight_module
     try:_pf_cfg=load_config()
     except Exception:_pf_cfg={}
     _preflight_hints=_preflight_module.hints(_pf_cfg,SYSTEM_ROOT)
     if not args.json and _preflight_hints:
         for _h in _preflight_hints:print(f"hint [{_h['level']}]: {_h['message']} — {_h['action']}",file=sys.stderr)
     if args.command=='features':
-        from . import runtime_features as _rf
+        from .. import runtime_features as _rf
         _feat_action=getattr(args,'action',None) or 'list'
         if _feat_action=='summary':
             _feat_data=_rf.summary()
@@ -4950,7 +628,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {_f['status']:<20} {_f['file']}")
         return 0
     if args.command == 'peer-review':
-        from . import peer_improvement as _pi
+        from .. import peer_improvement as _pi
         _pr_action = getattr(args, 'action', None) or 'list'
         if _pr_action == 'list':
             _bundles = _pi.list_quarantined(SYSTEM_ROOT)
@@ -5003,8 +681,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"promoted: {_result['bundle_id'][:18]} → input {_result['queued_input_id']}")
             return 0
     if args.command == 'similarity':
-        from . import product_similarity as _ps
-        from . import peer_exchange as _pe
+        from .. import product_similarity as _ps
+        from .. import peer_exchange as _pe
         try:
             _sim_config = load_config()
             _sim_state = load_state(_sim_config)
@@ -5040,7 +718,7 @@ def main(argv: list[str] | None = None) -> int:
         from pathlib import Path as _p2p_Path
         _p2p_action = getattr(args, 'action', None)
         if _p2p_action == 'keygen':
-            from .evolution_guard import p2p_keygen as _p2p_keygen
+            from ..evolution_guard import p2p_keygen as _p2p_keygen
             _out = _p2p_Path(args.out) if args.out else None
             _kg = _p2p_keygen(_out)
             if getattr(args, 'json', False):
@@ -5052,7 +730,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(_kg['instructions'])
             return 0
         if _p2p_action == 'build-update':
-            from .evolution_guard import build_p2p_update_bundle as _p2p_build_fn, RELEASE_AUTHORITY_KEYS as _ra_keys
+            from ..evolution_guard import build_p2p_update_bundle as _p2p_build_fn, RELEASE_AUTHORITY_KEYS as _ra_keys
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as _Ed
             from cryptography.hazmat.primitives.serialization import Encoding as _Enc, PublicFormat as _PF
             _sign_fns = []
@@ -5092,7 +770,7 @@ def main(argv: list[str] | None = None) -> int:
                     print("  opentimestamps: anchored to Bitcoin calendar")
             return 0
         if _p2p_action == 'publish-update':
-            from .peer_discovery import p2p_update_publish as _p2p_pub_fn
+            from ..peer_discovery import p2p_update_publish as _p2p_pub_fn
             _key_path = _p2p_Path(args.key)
             if not _key_path.exists():
                 print(f"error: key file not found: {_key_path}", file=sys.stderr); return 1
@@ -5116,19 +794,19 @@ def main(argv: list[str] | None = None) -> int:
                     return 1
             return 0
         if _p2p_action == 'check-update':
-            from .evolution_guard import RELEASE_AUTHORITY_PUB_KEY_HEX as _ra_key
+            from ..evolution_guard import RELEASE_AUTHORITY_PUB_KEY_HEX as _ra_key
             if not _ra_key:
                 print("error: RELEASE_AUTHORITY_PUB_KEY_HEX not configured in evolution_guard.py",
                       file=sys.stderr); return 1
             try:
                 _p2p_cfg  = load_config()
                 _p2p_state = load_state(_p2p_cfg)
-                from . import peer_exchange as _pex
+                from .. import peer_exchange as _pex
                 _p2p_exch = _pex.Exchange(SYSTEM_ROOT / "urace" / "p2p")
                 _p2p_exch.configure(enabled=True, network=True)
             except Exception as _e:
                 print(f"error: {_e}", file=sys.stderr); return 1
-            from .peer_discovery import p2p_update_check as _p2p_chk
+            from ..peer_discovery import p2p_update_check as _p2p_chk
             _chk = _p2p_chk(_p2p_exch, _ra_key)
             if getattr(args, 'json', False):
                 print(json.dumps(_chk, indent=2))
@@ -5147,7 +825,7 @@ def main(argv: list[str] | None = None) -> int:
             if not _bundle_path.exists():
                 print(f"error: bundle file not found: {_bundle_path}", file=sys.stderr); return 1
             _bundle = json.loads(_bundle_path.read_text())
-            from .evolution_guard import apply_p2p_update_bundle as _p2p_apply_fn, verify_release_signature as _vrs2
+            from ..evolution_guard import apply_p2p_update_bundle as _p2p_apply_fn, verify_release_signature as _vrs2
             _run_tests = not getattr(args, 'no_tests', False)
             _errors = _p2p_apply_fn(_bundle, SYSTEM_ROOT, _vrs2, run_tests=_run_tests)
             if _errors:
@@ -5165,26 +843,26 @@ def main(argv: list[str] | None = None) -> int:
             return 0
     if args.command=='product' and args.action=='create':
         if _unknown:parser.error('Unknown product creation arguments: '+' '.join(_unknown))
-        from .product_creation import create
+        from ..product_creation import create
         try:print(json.dumps(create(sys.modules[__name__],args.description,args.creation_name),indent=2));return 0
         except (ValueError,OSError) as error:parser.error(str(error))
     if args.command=='product' and args.action=='exchange':
         if _unknown:parser.error('Unrecognized exchange arguments: '+' '.join(_unknown))
-        from .exchange_cli import run as run_exchange
+        from ..exchange_cli import run as run_exchange
         try:return run_exchange(args,load_config())
         except (ValueError,OSError) as error:parser.error(str(error))
     if args.command=='exchange':
         if _unknown:parser.error('Unrecognized exchange arguments: '+' '.join(_unknown))
-        from .exchange_cli import run as run_exchange
+        from ..exchange_cli import run as run_exchange
         try:return run_exchange(args,load_config())
         except (ValueError,OSError) as error:parser.error(str(error))
     if args.command in {'executor-skills-config','context-guard-config'}:
-        from . import executor_capabilities as ec
+        from .. import executor_capabilities as ec
         if _unknown:parser.error('Unknown capability configuration arguments: '+' '.join(_unknown))
         key='executor_skills' if args.command=='executor-skills-config' else 'context_guard';changes={k:getattr(args,k) for k in ('enabled','mode','max_selected','max_instruction_bytes') if getattr(args,k,None) is not None}
         try:
             if getattr(args,'catalog_file',None):
-                from .exchange_cli import bounded_file
+                from ..exchange_cli import bounded_file
                 changes['catalog']=json.loads(bounded_file(args.catalog_file,262144))
             with state_lock(CONFIG_PATH) if changes else nullcontext():
                 config=load_config();value={**(ec.settings(config) if key=='executor_skills' else ec.context_settings(config)),**changes};ec.contract({**config,key:value})
@@ -5204,7 +882,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(updated,indent=2,sort_keys=True));return 0
         except (OSError,ValueError,TypeError) as error:parser.error(str(error))
     if args.command=='crypto':
-        from . import crypto_wallet as _cw
+        from .. import crypto_wallet as _cw
         command_surface.validate(args,raw_args,parser)
         if _unknown:parser.error('Unrecognized crypto arguments: '+' '.join(_unknown))
         try:
@@ -5381,7 +1059,7 @@ def main(argv: list[str] | None = None) -> int:
             _sec_check("compliance_mode", "OK" if _comp_mode else "INFO", "enabled" if _comp_mode else "disabled — enable with: urace controls set --compliance-mode true")
             # 4. Circuit breaker
             try:
-                from . import circuit_breaker as _cb
+                from .. import circuit_breaker as _cb
                 _exec_settings = config.get("executor", {})
                 _pool_state = load_state_for_read(config) or {}
                 _pool = _pool_state.get("executor_state", {}).get("provider_pool", {})
@@ -5394,7 +1072,7 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as _e:
                 _sec_check("circuit_breaker", "INFO", str(_e))
             # 5. Exchange certificate
-            from . import peer_exchange as _pe_sec
+            from .. import peer_exchange as _pe_sec
             _exch_root_path = _exch_cfg.get("root") or str(ROOT / "exchange")
             _cert_path = Path(_exch_root_path) / "identity-cert.pem"
             if _cert_path.exists():
@@ -5435,7 +1113,7 @@ def main(argv: list[str] | None = None) -> int:
                     print(f"  [{icon}] {c['check']:30s} {c['status']:6s}  {c['detail']}")
             return 0
     if args.command == "content":
-        from . import content_store as _cs
+        from .. import content_store as _cs
         verb = getattr(args, "action", None)
         if verb == "ref":
             result = _cs.content_ref(ROOT, args.path)
@@ -5448,7 +1126,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2))
         return 0
     if args.command=='github-workflow-config':
-        from . import portfolio_github as _pgh
+        from .. import portfolio_github as _pgh
         command_surface.validate(args,raw_args,parser)
         if _unknown:parser.error('Unrecognized github-workflow arguments: '+' '.join(_unknown))
         try:
@@ -5461,7 +1139,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(updated,indent=2,sort_keys=True));return 0
         except (OSError,ValueError,TypeError) as error:parser.error(str(error))
     if args.command=='auto-milestones-config':
-        from . import milestone_suggestions as ms
+        from .. import milestone_suggestions as ms
         command_surface.validate(args,raw_args,parser)
         if _unknown:parser.error('Unrecognized auto-milestones arguments: '+' '.join(_unknown))
         try:
@@ -5472,7 +1150,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(updated,indent=2,sort_keys=True));return 0
         except (OSError,ValueError,TypeError) as error:parser.error(str(error))
     if args.command=='decision-feedback-config':
-        from . import decision_feedback as df
+        from .. import decision_feedback as df
         command_surface.validate(args,raw_args,parser)
         if _unknown:parser.error('Unrecognized decision feedback arguments: '+' '.join(_unknown))
         try:
@@ -5483,7 +1161,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(updated,indent=2,sort_keys=True));return 0
         except (OSError,ValueError,TypeError) as error:parser.error(str(error))
     if args.command in {'value-discovery-config','value-status'} or (args.command=='product' and args.action=='value'):
-        from . import value_discovery as vd
+        from .. import value_discovery as vd
         command_surface.validate(args,raw_args,parser)
         if _unknown:parser.error('Unrecognized value command arguments: '+' '.join(_unknown))
         try:
@@ -5505,7 +1183,7 @@ def main(argv: list[str] | None = None) -> int:
             try:print(json.dumps(clarify(args.project,args.requirement_id,args.answer,SYSTEM_ROOT/'trial'),indent=2));return 0
             except (ValueError,OSError) as error:parser.error(str(error))
         if args.name not in ('init','run','status') or not args.project:parser.error('Use product work init|run|status --project PATH')
-        from .trial import main as trial_main
+        from ..trial import main as trial_main
         route=['work',args.name,'--project',args.project,'--template',args.template,'--executor',args.work_executor,'--execution-mode',args.execution_mode,'--max-seconds',str(args.max_seconds),'--adaptive',args.adaptive,'--json']
         if args.run_id:route+=['--run-id',args.run_id]
         return trial_main(route)
@@ -5547,14 +1225,14 @@ def main(argv: list[str] | None = None) -> int:
         else:print('improvement '+('enabled' if verb=='enable' else 'disabled')+' for product: '+product_id)
         return 0
     if args.command == "trial":
-        from .trial import main as trial_main
+        from ..trial import main as trial_main
         trial_args = raw_args[raw_args.index("trial") + 1:]
         if _fmt and trial_args[:2] in (["status", "resources"], ["status", "scores"]) and "--json" not in trial_args:
             trial_args.append("--json")
         return trial_main(trial_args)
     if getattr(args,'status_subject',None)=='scores':
         if _unknown:parser.error('unrecognized score arguments: '+' '.join(_unknown))
-        from .trial import main as trial_main
+        from ..trial import main as trial_main
         route=['status','scores','--compare',args.compare,'--executor',args.executor,'--limit',str(args.limit)]
         if args.version is not None:route.extend(['--version',str(args.version)])
         if args.history:route.append('--history')
@@ -5780,7 +1458,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         help_root=parser;help_path=list(args.operation)
         if help_path[0]=="portfolio":
-            from . import portfolio as _portfolio_help
+            from .. import portfolio as _portfolio_help
             help_root=_portfolio_help.parser();help_path=help_path[1:]
         try:operation=command_surface.help_parser(help_root,help_path)
         except ValueError as error:parser.error(str(error))
@@ -5798,7 +1476,7 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(args, "status_subject") and args.status_subject in {None, "runtime", "resources", "vitals"}:
         active_config = load_config()
         if active_config.get("execution_workflow", "core") == "specification-trial":
-            from .trial import main as trial_main
+            from ..trial import main as trial_main
             if getattr(args, "migration_dry_run", False) or getattr(args, "fail_on", None) or getattr(args, "since", None) or getattr(args, "until", None):
                 parser.error("These filters inspect the generic lifecycle; use check or vitals explicitly. Active trial resources support --scope trial|epoch|lifetime.")
             subject = "runtime" if args.status_subject in {None, "runtime"} else "resources"
@@ -5867,7 +1545,7 @@ def main(argv: list[str] | None = None) -> int:
             self_mode = {"NECESSARY_ONLY": "auto", "CONTINUOUS": "always", "DISABLED": "never"}.get(str(config.get("self_evolution_policy", {}).get("mode", "NECESSARY_ONLY")).upper(), "auto")
             payload = {"self-evolution": self_mode, "change-explanations": config.get("change_explanations", {}).get("mode", "disabled"), "external-metrics": config.get("external_metrics", {}).get("mode", "DISABLED").lower().replace("_", "-"), "analytics-export": config.get("analytics_export", {}).get("mode", "DISABLED").lower().replace("_", "-"), "executor-budget": {"daily": config.get("executor", {}).get("max_executor_calls_per_24h"), "monthly": config.get("executor", {}).get("max_executor_calls_per_30d")}, "evaluation": config.get("evaluation_system", {})}
             payload["workflow"] = config.get("execution_workflow", "core")
-            from .value_discovery import settings as value_settings
+            from ..value_discovery import settings as value_settings
             payload["value-discovery"] = value_settings(config)
             payload.update({"auto-goals":user_controls.auto_goals(config),"effort":{"global":config.get("resources",{}).get("effort","medium"),"per_executor":config.get("resources",{}).get("executor_effort",{})},"native-executors":config.get("executor",{}).get("native_options",{})})
             print(json.dumps(payload, indent=2, sort_keys=True) if args.json else "\n".join(f"{key}: {value}" for key, value in payload.items()))
@@ -6132,18 +1810,97 @@ Key options:
             for _mid in result.get("stale_derived_manifests", []):
                 print(f"  warning: derived manifest {_mid} is stale — re-run `urace derive --constructs ... --save` after update")
         return 0
+    if args.command == 'export':
+        try: _exp_cfg = load_config()
+        except Exception: _exp_cfg = {}
+        _exp_sp = state_path(_exp_cfg)
+        _session_file = _exp_sp.parent / "session_context.jsonl"
+        _rows = []
+        if _session_file.exists():
+            for _line in _session_file.read_text(encoding="utf-8").splitlines():
+                try: _rows.append(json.loads(_line))
+                except json.JSONDecodeError: pass
+        _out = Path(args.out)
+        _payload = {"schema": "urace-aps-v1", "exported_at": time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), "turns": _rows}
+        _out.write_text(json.dumps(_payload, indent=2), encoding="utf-8")
+        if args.json: print(json.dumps({"status": "ok", "file": str(_out), "turns": len(_rows)}))
+        else: print(f"Exported {len(_rows)} turn(s) to {_out}")
+        return 0
+    if args.command == 'import':
+        _src = Path(args.file)
+        if not _src.exists(): print(f"File not found: {_src}", file=sys.stderr); return 1
+        _payload = json.loads(_src.read_text(encoding="utf-8"))
+        _turns = _payload.get("turns", [])
+        try: _imp_cfg = load_config()
+        except Exception: _imp_cfg = {}
+        _imp_sp = state_path(_imp_cfg)
+        _session_file = _imp_sp.parent / "session_context.jsonl"
+        _session_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(_session_file, "w", encoding="utf-8", newline="\n") as _f:
+            for _t in _turns: _f.write(json.dumps(_t) + "\n")
+        if args.json: print(json.dumps({"status": "ok", "turns": len(_turns)}))
+        else: print(f"Imported {len(_turns)} turn(s) from {_src}")
+        return 0
+    if args.command == 'report' and getattr(args, 'action', None) is None:
+        try: _rep_cfg = load_config()
+        except Exception: _rep_cfg = {}
+        _rep_state_path = state_path(_rep_cfg)
+        _rep_state = {}
+        if _rep_state_path.exists():
+            try: _rep_state = json.loads(_rep_state_path.read_text(encoding="utf-8"))
+            except Exception: pass
+        _rep_out = Path(getattr(args, 'out', 'urace_report.html'))
+        _rep_rows = []
+        _rep_ledger = _rep_state_path.parent / "ledger.jsonl"
+        if _rep_ledger.exists():
+            for _line in _rep_ledger.read_text(encoding="utf-8").splitlines()[-100:]:
+                try: _rep_rows.append(json.loads(_line))
+                except Exception: pass
+        _rep_html = _render_report_html(_rep_state, _rep_rows)
+        _rep_out.write_text(_rep_html, encoding="utf-8", newline="\n")
+        if args.json: print(json.dumps({"status": "ok", "file": str(_rep_out)}))
+        else: print(f"Report written to {_rep_out}")
+        return 0
+    if args.command == 'audit':
+        try: _aud_cfg = load_config()
+        except Exception: _aud_cfg = {}
+        _aud_log = state_path(_aud_cfg).parent / "audit.jsonl"
+        if not _aud_log.exists():
+            if args.json: print(json.dumps({"status": "no_audit_log"}))
+            else: print("No audit log found.")
+            return 0
+        _aud_records = []
+        for _line in _aud_log.read_text(encoding="utf-8").splitlines():
+            try: _aud_records.append(json.loads(_line))
+            except Exception: pass
+        if getattr(args, 'verify', False):
+            from ..peer_exchange import verify_audit_chain
+            _ok, _broken = verify_audit_chain(_aud_records)
+            if args.json: print(json.dumps({"status": "ok" if _ok else "chain_broken", "broken_at": _broken, "records": len(_aud_records)}))
+            else: print(f"Audit chain: {'OK' if _ok else f'BROKEN at record {_broken}'} ({len(_aud_records)} records)")
+        else:
+            if args.json: print(json.dumps({"records": _aud_records[-20:], "total": len(_aud_records)}))
+            else:
+                for _r in _aud_records[-20:]:
+                    print(f"  {_r.get('kind','?')} | {_r.get('operation','?')} | {_r.get('at','?')}")
+        return 0
     config = load_config()
     path = state_path(config)
+    if getattr(args, 'resume', False):
+        _session_turns = _load_session_context(config)
+        config["_resume_session"] = True
+        if _session_turns:
+            _logger.debug("Resumed %d session turns", len(_session_turns))
     if args.command in {"auto", "autonomous"} and config.get("execution_workflow", "core") == "specification-trial":
         if getattr(args, "force_discovery", False): parser.error("specification-trial does not bypass acceptance, availability or allocation guards")
-        from .trial import run_workflow
+        from ..trial import run_workflow
         explicit_interval = any(a == "--interval" or a.startswith("--interval=") for a in raw_args)
         return run_workflow(args.cycles, dry_run=args.dry_run, interval=args.interval if explicit_interval else 5, json_mode=args.json, quiet=args.quiet)
     if args.command=="init" and getattr(args,'auto',False):
-        from . import bootstrap
+        from .. import bootstrap
         return bootstrap.auto_complete(sys.modules[__name__],config)
     if args.command=="init" and args.ready:
-        from . import bootstrap
+        from .. import bootstrap
         return bootstrap.complete(sys.modules[__name__],config)
     if args.command == "commands":
         catalog = command_catalog()
@@ -6330,7 +2087,7 @@ Key options:
                 print(_res.stderr, end="", file=__import__("sys").stderr)
         return _res.returncode
     if args.command == "daemon":
-        from . import _daemon
+        from .. import _daemon
         return _daemon.dispatch(args, config)
     if args.command == "m2m":
         import sys as _sys
@@ -6407,7 +2164,7 @@ Key options:
             print(json.dumps(result, indent=2) if args.json else f"blocker {args.blocker_id}: resolved")
             return 0
     if args.command == "decision":
-        from . import decision_feedback as df
+        from .. import decision_feedback as df
         if args.action=='assess':
             if not args.decision_id:parser.error('decision assess requires a decision ID')
             try:
@@ -6958,7 +2715,7 @@ Register and manage multiple Products in a single URACE installation.
             # Clone GitHub repo if --clone-to provided
             cloned_path = None
             if github_repo and clone_to:
-                from . import portfolio_github as _pgh
+                from .. import portfolio_github as _pgh
                 _rc, _out, _err = _pgh.clone_repo(github_repo, clone_to)
                 if _rc != 0:
                     result = {"status": "error", "error": f"git clone failed: {_err or _out}"}
@@ -7013,7 +2770,7 @@ Register and manage multiple Products in a single URACE installation.
             return 0
 
         if args.action == "git":
-            from . import portfolio_github as _pgh
+            from .. import portfolio_github as _pgh
             name = args.name
             git_args = list(getattr(args, 'git_args', []))
             if git_args and git_args[0] == '--':
@@ -7594,7 +3351,7 @@ Submit and inspect outcome feedback to close the learning loop.
 
     if args.command == "api":
         if args.action == "protocols":
-            from .protocol_catalog import describe
+            from ..protocol_catalog import describe
             print(json.dumps(describe(),indent=2));return 0
         if args.action == "help":
             return _help_action("""URACE External Interface Guide (EIP §62w)
@@ -7622,9 +3379,9 @@ Machine feedback:
             print(json.dumps(api_interface.metadata(parser),indent=2));return 0
         if args.action == "serve":
             if args.transport == "a2a":
-                from .a2a_server import serve as serve_a2a
+                from ..a2a_server import serve as serve_a2a
                 return serve_a2a(parser, policy_path=args.policy, port=args.port, token_env=args.token_env)
-            from .mcp_server import serve
+            from ..mcp_server import serve
             return serve(parser, policy_path=args.policy)
         if args.action == "call":
             if not args.api_command and not args.argv:
@@ -7794,7 +3551,7 @@ Commands:
                     print(f"  {bname:30s}  constructs: {', '.join(bids)}")
             return 0
 
-        from . import derived_artifacts
+        from .. import derived_artifacts
         _explicit_verify = getattr(args, "verify", False)
         _expected = getattr(args, "derive_expected_hash", None)
         if _explicit_verify or _expected:
@@ -8015,7 +3772,7 @@ Commands:
                     print()
                 # Also show P2P free-use features that match this intent (zero borrow cost)
                 try:
-                    from . import freeform_routing as _fr
+                    from .. import freeform_routing as _fr
                     _p2p_free = _fr._p2p_free_features(config)
                     if _p2p_free:
                         _intent_lower = intent_text.lower()
@@ -8393,7 +4150,7 @@ Commands:
         if state is None:
             return 2
         if args.action in {"graph","attention"}:
-            from .context_relations import from_state,related,attention
+            from ..context_relations import from_state,related,attention
             try:
                 graph=from_state(state)
                 if not 1<=args.limit<=100 or not 0<=args.depth<=3:raise ValueError("Context views require limit 1–100 and depth 0–3")
@@ -8527,7 +4284,7 @@ Commands:
             "deltas": deltas,
         }
         if config.get('execution_workflow')=='specification-trial':
-            from .value_discovery import execution_quality_views
+            from ..value_discovery import execution_quality_views
             payload['native_output_quality']=execution_quality_views(SYSTEM_ROOT/'trial')
         if args.json:
             print(json.dumps(payload, indent=2, sort_keys=True))
@@ -8615,11 +4372,11 @@ Commands:
         product_versions: list[dict] = list(reversed(state.get("product_versions", [])))
         latest_assessment = (state.get("sweet_spot_assessments") or [{}])[-1]
 
-        from .milestone_feedback import assess as assess_milestone
+        from ..milestone_feedback import assess as assess_milestone
         milestone_phases=[assess_milestone(config,state,m) for m in all_milestones if isinstance(m,dict)]
         active_phase=next((m for m in milestone_phases if active_ms and m['id']==active_ms.get('id')),None)
 
-        from .milestone_suggestions import suggestions as suggest_milestones
+        from ..milestone_suggestions import suggestions as suggest_milestones
         suggested=suggest_milestones(config,state)
         if args.json:
             gates_status: dict[str, str] = {}
@@ -8825,7 +4582,7 @@ Commands:
         print(f"Queued evaluation change {queued['id']}; it will be applied at the next cycle boundary or restart")
         return 0
     if args.command == "executor" and args.action == "circuit-breaker":
-        from . import circuit_breaker as _cb
+        from .. import circuit_breaker as _cb
         verb = getattr(args, 'cb_action', 'status')
         executor_settings = config.get("executor", {})
         pool_state = config.get("executor_pool_state", {})
@@ -8908,7 +4665,7 @@ Commands:
                 _out_err = json.dumps({'error': str(_fe)}) if args.json else f'error: {_fe}'
                 print(_out_err)
                 return 1
-        from .product_creation import explicit_creation,interpret,apply_interpreted
+        from ..product_creation import explicit_creation,interpret,apply_interpreted
         interpreted=interpret(args.text,config.get('product_registry',[]),config.get('active_product') or config.get('product'))
         if explicit_creation(args.text) or any(i['kind']=='new_product' for i in interpreted['intents']):
             if interpreted['status']=='INTERPRETED':
@@ -9249,45 +5006,9 @@ Commands:
                 for cid in change_ids:
                     print(f"  {cid}")
             return 0
-    if args.command == "export":
-        config = load_config()
-        sp = state_path(config)
-        ctx_path = sp.parent / "session_context.jsonl"
-        turns: list = []
-        if ctx_path.exists():
-            for line in ctx_path.read_text(encoding="utf-8").splitlines():
-                try: turns.append(json.loads(line))
-                except json.JSONDecodeError: pass
-        payload = {"schema": "urace-aps-v1", "exported_at": now(), "turns": turns}
-        out_path = Path(getattr(args, "out", None) or (sp.parent / "export.aps.json"))
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        result = {"status": "ok", "path": str(out_path), "turns": len(turns)}
-        print(json.dumps(result) if getattr(args, "_fmt", None) == "json" or args.json else f"exported {len(turns)} turns → {out_path}")
-        return 0
-    if args.command == "import":
-        src = Path(args.file)
-        if not src.exists():
-            print(f"urace: file not found: {src}", file=sys.stderr)
-            return 1
-        try:
-            payload = json.loads(src.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as e:
-            print(f"urace: {e}", file=sys.stderr)
-            return 1
-        config = load_config()
-        sp = state_path(config)
-        ctx_path = sp.parent / "session_context.jsonl"
-        ctx_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(ctx_path, "a", encoding="utf-8", newline="\n") as f:
-            for turn in payload.get("turns", []):
-                f.write(json.dumps(turn) + "\n")
-        result = {"status": "ok", "turns_imported": len(payload.get("turns", []))}
-        print(json.dumps(result) if getattr(args, "_fmt", None) == "json" or args.json else f"imported {result['turns_imported']} turns")
-        return 0
     if args.command in {"compact", "decompact", "amend", "why", "crc"}:
-        from . import compaction as _compaction_module
-        from . import cognitive_resume as _crc_module
+        from .. import compaction as _compaction_module
+        from .. import cognitive_resume as _crc_module
 
         def _resolve_product_targets(cfg: dict, product_single, products_multi):
             """Return [(name, state_root_str), ...] in dependency order, or None on error.
@@ -9435,7 +5156,7 @@ Commands:
                 return 0
 
         if args.command == "compact":
-            from .compaction import _DEFAULT_GOVERNANCE, _PROHIBITED_FIELDS, get_compaction_status
+            from ..compaction import _DEFAULT_GOVERNANCE, _PROHIBITED_FIELDS, get_compaction_status
             state = load_state_for_read(config) or {}
 
             if getattr(args, "status", False):
@@ -9649,7 +5370,7 @@ Commands:
             return 0
 
         if args.command == "why":
-            from . import decision_record as _dr_module
+            from .. import decision_record as _dr_module
             config = load_config()
             state = load_state_for_read(config) or {}
             try:
@@ -9689,7 +5410,7 @@ Commands:
                     print("URACE already initialized")
                     return 0
                 state = initial_state(config)
-                from .product_type_detector import detect_product_types, normalize_types
+                from ..product_type_detector import detect_product_types, normalize_types
                 raw_types = getattr(args, "product_type", None)
                 if raw_types:
                     product_types = normalize_types(raw_types)
@@ -9862,7 +5583,7 @@ Commands:
                 _dr_exch_cfg = _dr_cfg.get("exchange", {})
                 if _dr_exch_cfg.get("enabled", False):
                     try:
-                        from . import peer_exchange as _dr_pe
+                        from .. import peer_exchange as _dr_pe
                         _dr_xch = _dr_pe.Exchange(_dr_pe.directory(_dr_cfg))
                         _dr_id = _dr_xch.identity()
                         _dr_check("exchange_identity", "OK" if _dr_id.get("peer_id") else "WARN", "" if _dr_id.get("peer_id") else "no peer_id")
@@ -9921,7 +5642,7 @@ Commands:
                     # Route to P2P audit ledger search
                     _xch_dir = config.get("exchange", {}).get("root") or str(ROOT / "exchange")
                     try:
-                        from . import peer_exchange as _pxc
+                        from .. import peer_exchange as _pxc
                         _xch = _pxc.Exchange(_xch_dir)
                         _p2p_rows = _xch.audit_rows()
                         # include compressed archives
@@ -10132,6 +5853,15 @@ Commands:
             last_outcome = None
             index = 0
             last_persisted_at = datetime.fromisoformat(state.get("updated_at", now())).timestamp()
+            _report_enabled = args.command == "auto" and getattr(args, "report", False)
+            if _report_enabled:
+                _report_before = {
+                    "operations": len(state.get("operations", [])),
+                    "active_objectives": len([o for o in state.get("objectives", []) if o.get("status") == "active"]),
+                    "version": state.get("version", 0),
+                    "cache_hits": state.get("executor_state", {}).get("cache_hits", 0),
+                    "executor_calls": len(state.get("executor_state", {}).get("executor_calls", [])),
+                }
             while count == 0 or index < count:
                 if args.command == "auto" and count == 0 and time.monotonic() >= portfolio_restart_after and (portfolio_owner is None or portfolio_owner.poll() is not None):
                     portfolio_owner = start_default_portfolio_owner(config, quiet=args.quiet, json_mode=args.json)
@@ -10221,11 +5951,41 @@ Commands:
                 )
                 if state.get("restart_requested"):
                     return 75
+                try:
+                    from urace.telemetry import emit_cycle_span
+                    from urace.resource_usage import product_identity as _pid
+                    emit_cycle_span(
+                        outcome=str(last_outcome.get("outcome", "unknown")),
+                        index=index + 1,
+                        product_id=_pid(config),
+                        cycles_total=count,
+                        version=int(state.get("version", 0)),
+                        cache_hits=int(state.get("executor_state", {}).get("cache_hits", 0)),
+                        executor_calls=len(state.get("executor_state", {}).get("executor_calls", [])),
+                    )
+                except Exception:
+                    pass
                 index += 1
                 interval = getattr(args, "interval", 0)
                 if interval and (count == 0 or index < count):
                     time.sleep(interval)
             payload: Any = outcomes[0] if len(outcomes) == 1 else outcomes
+            if _report_enabled:
+                _report_after = {
+                    "operations": len(state.get("operations", [])),
+                    "active_objectives": len([o for o in state.get("objectives", []) if o.get("status") == "active"]),
+                    "version": state.get("version", 0),
+                    "cache_hits": state.get("executor_state", {}).get("cache_hits", 0),
+                    "executor_calls": len(state.get("executor_state", {}).get("executor_calls", [])),
+                }
+                _improvement_report = {
+                    "schema": "urace-improvement-report-v1",
+                    "cycles_completed": index,
+                    "before": _report_before,
+                    "after": _report_after,
+                    "delta": {k: _report_after[k] - _report_before[k] for k in _report_before},
+                }
+                print(json.dumps(_improvement_report, ensure_ascii=False))
             if args.json:
                 print(json.dumps({"type": "autonomous_run_complete", "cycles": len(outcomes), "outcomes": payload}, sort_keys=True))
             else:
