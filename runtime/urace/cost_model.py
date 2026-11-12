@@ -559,3 +559,24 @@ def summarize_receipts(receipts: list[dict]) -> dict:
             'reconcile against provider billing for a defensible cost claim'
         ),
     }
+
+
+PROVIDER_RATE_TABLE = {
+    'anthropic': {
+        'claude-sonnet-4-6': {'input_per_1m': 3.0, 'output_per_1m': 15.0},
+        'claude-haiku-4-5': {'input_per_1m': 0.8, 'output_per_1m': 4.0},
+    },
+    'openai': {
+        'gpt-4o': {'input_per_1m': 5.0, 'output_per_1m': 15.0},
+        'gpt-4-turbo': {'input_per_1m': 10.0, 'output_per_1m': 30.0},
+        'gpt-3.5-turbo': {'input_per_1m': 0.5, 'output_per_1m': 1.5},
+    },
+    'mistral': {
+        'mistral-large-latest': {'input_per_1m': 4.0, 'output_per_1m': 12.0},
+        'mistral-small-latest': {'input_per_1m': 1.0, 'output_per_1m': 3.0},
+    },
+}
+
+def provider_rate(provider, model):
+    """Return per-1M-token rates dict or None if unknown."""
+    return PROVIDER_RATE_TABLE.get(provider, {}).get(model)

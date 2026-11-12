@@ -1,6 +1,6 @@
 import unittest,tempfile,json
 from pathlib import Path
-from urace import authority,validation,cli,_common,command_surface
+from urace import authority,validation,cli,cli_state as _cli_state_m,_common,command_surface
 class UserBenefitCoreTests(unittest.TestCase):
  def test_local_code_requires_explicit_implementation_delegation(self):
   goal={'scope':'implementation','title':'Implement requested local workflow'}
@@ -20,5 +20,5 @@ class UserBenefitCoreTests(unittest.TestCase):
   from unittest.mock import patch
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);p=root/'urace/runtime/urace/new_component.py';p.parent.mkdir(parents=True);p.write_text('x=1');config={'executor':{'allowed_files_by_scope':{'runtime':[]}}}
-   with patch.object(cli,'ROOT',root):self.assertIn('urace/runtime/urace/new_component.py',cli.runtime_files(config))
+   with patch.object(cli,'ROOT',root),patch.object(_cli_state_m,'ROOT',root):self.assertIn('urace/runtime/urace/new_component.py',cli.runtime_files(config))
    self.assertTrue(validation.candidate_file_errors(root,'runtime',['urace/runtime/urace/new_component.py'],config))

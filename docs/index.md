@@ -57,6 +57,7 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 |---|---|
 | [Tokenomics](economics/tokenomics.md) | Full token model: supply, earn, spend, epoch |
 | [Price Mechanics](economics/price-mechanics.md) | Executor ceiling, momentum guard, wash trading prevention |
+| [Qualification Protocol](qualification-protocol.md) | What qualifies a P2P cost savings claim; cohort and reviewer requirements |
 
 ---
 
@@ -91,8 +92,11 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 
 ## Other Docs
 
+- [Benchmark Proof](benchmark-proof.md) — URACE vs direct executor: methodology, results, and how tests measure cost/improvement
+- [Benchmark Suite](benchmark-suite.md) — all 9 phases: what each measures, how it works, current results (15/15 KPIs passing), and accuracy assessment
 - [Runtime Improvement](runtime-improvement.md) — Runtime self-improvement workflows
 - [Peer Sharing](peer-sharing.md) — P2P bundle operations and quarantine
 - [Network Onboarding](network-onboarding.md) — Mainnet onboarding and settlement design
 - [Sharing Safeguards](sharing-safeguards.md) — Security mechanisms for peer sharing
 - [Post-Quantum Roadmap](post-quantum-roadmap.md) — Post-quantum cryptography roadmap
+- [Operational Readiness](deployment/operational-readiness.md) — Features code-complete but requiring external setup: EVM node, live peers, funded wallet, network pilot

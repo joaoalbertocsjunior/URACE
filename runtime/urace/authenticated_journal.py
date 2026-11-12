@@ -6,7 +6,12 @@ A crash can leave an uncovered tail; coverage reports it rather than inventing p
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-import fcntl,hashlib,json,os
+import hashlib,json,os
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 from .ledger_crypto import canonical
 from .signed_ledger import Ledger
 
@@ -19,9 +24,11 @@ def _ledger(path):return Ledger(Path(path).with_name(Path(path).name+'.pq')/'blo
 def _lock(path):
  root=path.with_name(path.name+'.pq');root.mkdir(parents=True,exist_ok=True,mode=0o700)
  if path.is_symlink() or root.is_symlink():raise ValueError('Journal symlink prohibited')
- os.chmod(root,0o700)
+ try: os.chmod(root,0o700)
+ except (AttributeError,NotImplementedError,OSError): pass
  with (root/'append.lock').open('a') as stream:
-  fcntl.flock(stream,fcntl.LOCK_EX);yield
+  if _HAS_FCNTL: _fcntl.flock(stream,_fcntl.LOCK_EX)
+  yield
 
 def _last(ledger):
  if not (ledger.root/'head.json').exists():return 0

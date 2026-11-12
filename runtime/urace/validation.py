@@ -11,6 +11,7 @@ before it is accepted. If any check fails, the caller is expected to roll back.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import fnmatch
 from pathlib import Path
 import math
 from typing import Any
@@ -26,13 +27,13 @@ PENDING_CAPABILITY = "PENDING_CAPABILITY"  # validation cannot run right now
 
 def candidate_file_errors(root: Path, scope: str, files: list[str], config: dict[str, Any]) -> list[str]:
     """Check the operation's own allowlist before any candidate is written."""
-    allowed = set(config.get("executor", {}).get("allowed_files_by_scope", {}).get(scope, []))
+    allowed = list(config.get("executor", {}).get("allowed_files_by_scope", {}).get(scope, []))
     errors = []
     if not files:
         errors.append("operation has no changed files")
     for relative in files:
         path = root / relative
-        if relative not in allowed:
+        if not any(fnmatch.fnmatch(relative, p) for p in allowed):
             errors.append(f"file outside authorized {scope} scope: {relative}")
         if Path(relative).is_absolute() or not path.resolve().is_relative_to(root.resolve()):
             errors.append(f"file escapes product root: {relative}")

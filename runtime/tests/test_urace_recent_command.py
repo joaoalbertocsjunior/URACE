@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import analytics, cli, cli_cycle as _cli_cycle_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -314,6 +314,8 @@ class R120DefaultContinuationSemanticsTests(unittest.TestCase):
     def test_discovery_error_degrades_and_finishes_cycle(self):
         with patch.object(cli, "discover", return_value=None), patch.object(
             cli, "discover_with_executor", side_effect=RuntimeError("unknown discovery response")
+        ), patch.object(_cli_cycle_m, "discover", return_value=None), patch.object(
+            _cli_cycle_m, "discover_with_executor", side_effect=RuntimeError("unknown discovery response")
         ):
             result = cli.cycle(self.config, self.state, allow_execution=False)
         self.assertEqual(result["outcome"], "dormant")
@@ -332,6 +334,10 @@ class R120DefaultContinuationSemanticsTests(unittest.TestCase):
             cli, "refresh_executor_availability", return_value={"available": True}
         ), patch.object(cli, "plan_for", return_value={"id": "plan-r120"}), patch.object(
             cli, "execute_with_executor", side_effect=RuntimeError("unknown execution response")
+        ), patch.object(_cli_cycle_m, "discover", return_value=objective), patch.object(
+            _cli_cycle_m, "refresh_executor_availability", return_value={"available": True}
+        ), patch.object(_cli_cycle_m, "plan_for", return_value={"id": "plan-r120"}), patch.object(
+            _cli_cycle_m, "execute_with_executor", side_effect=RuntimeError("unknown execution response")
         ) as execute:
             result = cli.cycle(self.config, self.state)
         execute.assert_called_once()

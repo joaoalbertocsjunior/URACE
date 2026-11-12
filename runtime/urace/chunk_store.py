@@ -233,7 +233,8 @@ class ChunkStore:
             enc = _encrypt_chunk(key, chunk_data, i)
             cpath = chunk_dir / f'chunk-{i:03d}.bin'
             cpath.write_bytes(enc)
-            os.chmod(cpath, 0o600)
+            try: os.chmod(cpath, 0o600)
+            except (AttributeError, NotImplementedError, OSError): pass
             chunk_hashes.append(hashlib.sha256(enc).hexdigest())
 
         manifest = {
@@ -311,7 +312,8 @@ class ChunkStore:
         cpath = chunk_dir / f'chunk-{chunk_idx:03d}.bin'
         if not cpath.exists():
             cpath.write_bytes(encrypted_chunk)
-            os.chmod(cpath, 0o600)
+            try: os.chmod(cpath, 0o600)
+            except (AttributeError, NotImplementedError, OSError): pass
 
     def manifest(self, artifact_sha256: str) -> dict | None:
         mp = self._manifest_path(artifact_sha256)

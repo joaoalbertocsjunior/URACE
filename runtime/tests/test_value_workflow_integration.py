@@ -30,7 +30,7 @@ class ValueWorkflowIntegration(unittest.TestCase):
    parent=Path(directory);root=parent/'product';root.mkdir();config={'state_path':str(root/'state/state.json')};s={'state_version':0,'checkpoints':[{'transaction':'t'}] if accepted else []};_common.atomic_write_json(Path(config['state_path']),s)
    (root/'guide.md').write_text('owner' if external else 'candidate');relative='../outside' if escape else 'guide.md';outside=parent/'outside';outside.write_text('keep')
    _common.atomic_write_json(_common.transaction_path(config),{'id':'t','phase':'APPLYING','applied':[relative],'recovery_protocol':'atomic-v2','before':{relative:'base'},'after':{relative:'candidate'}})
-   with patch.object(cli,'ROOT',root):
+   with patch.object(cli,'ROOT',root), patch('urace.cli_state.ROOT', root):
     if external or escape:
      with self.assertRaises(RuntimeError):cli.reconcile_transaction(config)
      self.assertEqual((root/'guide.md').read_text(),'owner' if external else 'candidate');self.assertEqual(outside.read_text(),'keep');self.assertTrue(_common.transaction_path(config).exists())

@@ -2,12 +2,13 @@ import contextlib,io,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from urace import cli,_common,user_controls,executor
+from helpers import patch_config_path
 class UserControlsTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.path=Path(self.tmp.name)/"config.json"
   self.path.write_text(json.dumps({"executor":{"providers":[{"id":"codex","adapter":"codex-cli"},{"id":"claude","adapter":"claude-cli"}]}}))
  def runcli(self,*args):
-  with patch.object(cli,"CONFIG_PATH",self.path),patch.object(_common,"CONFIG_PATH",self.path),contextlib.redirect_stdout(io.StringIO()) as output:
+  with patch_config_path(self.path),contextlib.redirect_stdout(io.StringIO()) as output:
    self.assertEqual(cli.main(list(args)),0)
   return json.loads(output.getvalue())
  def config(self):return json.loads(self.path.read_text())
@@ -17,7 +18,7 @@ class UserControlsTests(unittest.TestCase):
    self.assertEqual(result.exception.code,0)
   self.assertIn("configuration executor",out.getvalue())
   before=self.path.read_bytes()
-  with patch.object(cli,"CONFIG_PATH",self.path),patch.object(_common,"CONFIG_PATH",self.path),contextlib.redirect_stderr(io.StringIO()):
+  with patch_config_path(self.path),contextlib.redirect_stderr(io.StringIO()):
    self.assertEqual(cli.main(["configuration","effort","high","extra"]),1)
   self.assertEqual(self.path.read_bytes(),before)
  def test_medium_default_status_does_not_write(self):

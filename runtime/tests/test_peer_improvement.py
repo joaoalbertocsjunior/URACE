@@ -386,4 +386,117 @@ class NetworkConvergenceTests(unittest.TestCase):
                 thread.join(timeout=5)
 
 
+class SanitizeArtifactTests(unittest.TestCase):
+    def test_clean_text_passes(self):
+        from urace.peer_improvement import sanitize_quarantine_artifact
+        result = sanitize_quarantine_artifact("urace runtime feature improvement candidate")
+        self.assertEqual(result["verdict"], "PASS")
+        self.assertEqual(result["issues"], [])
+
+    def test_shell_metachar_injection_fails(self):
+        from urace.peer_improvement import sanitize_quarantine_artifact
+        result = sanitize_quarantine_artifact("do $(rm -rf /) please")
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertIn("shell_metachar_injection", result["issues"])
+
+    def test_elf_magic_bytes_fails(self):
+        from urace.peer_improvement import sanitize_quarantine_artifact
+        result = sanitize_quarantine_artifact("", artifact_bytes_raw=b'\x7fELF' + b'\x00' * 100)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertIn("elf_binary", result["issues"])
+
+    def test_pe_magic_bytes_fails(self):
+        from urace.peer_improvement import sanitize_quarantine_artifact
+        result = sanitize_quarantine_artifact("", artifact_bytes_raw=b'MZ' + b'\x00' * 100)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertIn("pe_binary", result["issues"])
+
+    def test_dangerous_import_subprocess_fails(self):
+        from urace.peer_improvement import sanitize_quarantine_artifact
+        result = sanitize_quarantine_artifact("import subprocess")
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertIn("dangerous_import", result["issues"])
+
+    def test_high_entropy_bytes_fails(self):
+        import os
+        from urace.peer_improvement import sanitize_quarantine_artifact
+        artifact_bytes_raw = os.urandom(500)
+        result = sanitize_quarantine_artifact("", artifact_bytes_raw=artifact_bytes_raw)
+        self.assertEqual(result["verdict"], "FAIL")
+        self.assertIn("high_entropy", result["issues"])
+
+    def test_promote_refuses_unsafe_artifact(self):
+        import hashlib, json, tempfile, time
+        from pathlib import Path
+        from unittest.mock import patch
+        from urace import peer_improvement as pi
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        qdir = root / "quarantine"
+        qdir.mkdir(parents=True)
+
+        malicious = "urace runtime $(rm -rf /)"
+        payload = {
+            "schema": "urace-peer-bundle-v1",
+            "sender": "a" * 64,
+            "recipient": "b" * 64,
+            "feature": "runtime-quality",
+            "dependencies": [],
+            "created_unix": time.time(),
+            "artifact": malicious,
+            "sha256": hashlib.sha256(malicious.encode()).hexdigest(),
+            "distribution_terms": "research",
+        }
+        bundle = {"payload": payload, "signature": {"alg": "test"}}
+        (qdir / "malicious-bundle.json").write_text(json.dumps(bundle))
+
+        with patch.object(pi, "quarantine_dir", return_value=qdir):
+            with self.assertRaises(ValueError) as ctx:
+                pi.promote(root, "malicious-bundle", {}, {})
+        self.assertIn("sanitization", str(ctx.exception).lower())
+
+    def test_sanitization_recorded_in_audit(self):
+        import hashlib, json, tempfile, time
+        from pathlib import Path
+        from unittest.mock import patch, MagicMock
+        from urace import peer_improvement as pi
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        qdir = root / "quarantine"
+        qdir.mkdir(parents=True)
+
+        clean = "urace runtime improvement candidate"
+        payload = {
+            "schema": "urace-peer-bundle-v1",
+            "sender": "a" * 64,
+            "recipient": "b" * 64,
+            "feature": "runtime-quality",
+            "dependencies": [],
+            "created_unix": time.time(),
+            "artifact": clean,
+            "sha256": hashlib.sha256(clean.encode()).hexdigest(),
+            "distribution_terms": "research",
+        }
+        bundle = {"payload": payload, "signature": {"alg": "test"}}
+        (qdir / "clean-bundle.json").write_text(json.dumps(bundle))
+
+        fake_entry = {"id": "input-abc123"}
+        state = {}
+
+        with patch.object(pi, "quarantine_dir", return_value=qdir), \
+             patch("urace._common.queue_input", return_value=fake_entry):
+            result = pi.promote(root, "clean-bundle", {}, state)
+
+        self.assertEqual(result["status"], "PROMOTED")
+        audit_rows = state.get("rollback_records", [])
+        self.assertEqual(len(audit_rows), 1)
+        row = audit_rows[0]
+        self.assertIn("sanitization", row)
+        self.assertEqual(row["sanitization"]["verdict"], "PASS")
+
+
 import sys

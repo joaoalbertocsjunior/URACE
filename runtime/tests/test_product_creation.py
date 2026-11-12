@@ -2,12 +2,12 @@ from pathlib import Path
 from unittest.mock import patch
 from contextlib import ExitStack,redirect_stdout
 import copy,io,json,tempfile,unittest
-from urace import cli,_common,product_creation as pc,api_interface,integration_bridge
+from urace import cli,_common,product_creation as pc,api_interface,integration_bridge,cli_state as _cli_state_m
 
 class ProductCreationTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.root=Path(self.tmp.name);self.system=self.root/'urace';self.system.mkdir();self.cfg=copy.deepcopy(cli.load_config());self.cfg['state_path']=str(self.root/'owner-state.json');self.cfg.pop('active_product',None);self.cfg['product_registry']=[];self.path=self.root/'config.json';self.path.write_text(json.dumps(self.cfg));self.stack=ExitStack();self.addCleanup(self.stack.close)
-  for module,name,value in ((cli,'CONFIG_PATH',self.path),(_common,'CONFIG_PATH',self.path),(cli,'ROOT',self.root),(_common,'ROOT',self.root),(cli,'SYSTEM_ROOT',self.system),(_common,'SYSTEM_ROOT',self.system)):self.stack.enter_context(patch.object(module,name,value))
+  for module,name,value in ((cli,'CONFIG_PATH',self.path),(_common,'CONFIG_PATH',self.path),(cli,'ROOT',self.root),(_common,'ROOT',self.root),(cli,'SYSTEM_ROOT',self.system),(_common,'SYSTEM_ROOT',self.system),(_cli_state_m,'ROOT',self.root)):self.stack.enter_context(patch.object(module,name,value))
  def call(self,args):
   output=io.StringIO()
   with redirect_stdout(output):code=cli.main(args)

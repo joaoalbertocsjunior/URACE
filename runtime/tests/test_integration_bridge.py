@@ -13,46 +13,79 @@ class MockExchange:
         self._rows.append(row)
 
 
+class TestChainAdapterInterface(unittest.TestCase):
+    """ChainAdapter base class raises NotImplementedError — documents the interface contract."""
+
+    def setUp(self):
+        from urace._chain_adapter_base import ChainAdapter
+        self.adapter = ChainAdapter()
+
+    def test_mint_nft_raises(self):
+        with self.assertRaises(NotImplementedError):
+            self.adapter.mint_nft('f', 'p', {})
+
+    def test_on_ramp_raises(self):
+        with self.assertRaises(NotImplementedError):
+            self.adapter.on_ramp('p', 1, '0x1')
+
+    def test_off_ramp_raises(self):
+        with self.assertRaises(NotImplementedError):
+            self.adapter.off_ramp('p', 1, '0x1')
+
+    def test_verify_raises(self):
+        with self.assertRaises(NotImplementedError):
+            self.adapter.verify('f')
+
+
 class TestNullAdapter(unittest.TestCase):
     def setUp(self):
-        from urace.integration_bridge import NullAdapter
+        from urace.integration_bridge import NullAdapter, ChainAdapter
         self.adapter = NullAdapter()
+        self.ChainAdapter = ChainAdapter
 
-    def test_mint_nft_returns_stub_status(self):
-        result = self.adapter.mint_nft('feat-1', 'alice', {})
-        self.assertEqual(result['status'], 'stub')
+    def test_null_adapter_is_chain_adapter_subclass(self):
+        self.assertIsInstance(self.adapter, self.ChainAdapter)
 
     def test_mint_nft_returns_expected_shape(self):
         result = self.adapter.mint_nft('feat-1', 'alice', {})
         self.assertIn('tx_hash', result)
         self.assertIn('token_id', result)
         self.assertIn('chain_id', result)
+        self.assertIn('status', result)
         self.assertIsNone(result['tx_hash'])
         self.assertIsNone(result['token_id'])
         self.assertIsNone(result['chain_id'])
 
-    def test_on_ramp_returns_stub_status(self):
+    def test_on_ramp_returns_expected_shape(self):
         result = self.adapter.on_ramp('alice', 1000, '0xABC')
-        self.assertEqual(result['status'], 'stub')
         self.assertIn('tx_hash', result)
         self.assertIn('amount_crypto', result)
         self.assertIn('crypto_symbol', result)
+        self.assertIn('status', result)
+        self.assertIsNone(result['tx_hash'])
 
-    def test_off_ramp_returns_stub_status(self):
+    def test_off_ramp_returns_expected_shape(self):
         result = self.adapter.off_ramp('bob', 500, '0xDEF')
-        self.assertEqual(result['status'], 'stub')
         self.assertIn('tx_hash', result)
         self.assertIn('amount_crypto', result)
         self.assertIn('crypto_symbol', result)
+        self.assertIn('status', result)
 
-    def test_verify_returns_stub_status(self):
+    def test_verify_returns_expected_shape(self):
         result = self.adapter.verify('feat-2')
-        self.assertEqual(result['status'], 'stub')
         self.assertIn('verified', result)
         self.assertIn('tx_hash', result)
         self.assertIn('block_number', result)
         self.assertIn('chain_id', result)
+        self.assertIn('status', result)
         self.assertIsNone(result['verified'])
+
+    def test_null_adapter_does_not_raise(self):
+        # NullAdapter must be safe to call without network/config
+        self.adapter.mint_nft('x', 'y', {})
+        self.adapter.on_ramp('p', 100, '0x0')
+        self.adapter.off_ramp('p', 100, '0x0')
+        self.adapter.verify('feat')
 
 
 class TestGetChainAdapter(unittest.TestCase):
@@ -200,6 +233,34 @@ class TestStubOnChainVerify(unittest.TestCase):
         self.assertIn('adapter_status', row)
         self.assertIsNone(row['tx_hash'])
         self.assertIsNone(row['chain_id'])
+
+
+class TestReceiptRecord(unittest.TestCase):
+    def test_receipt_record_has_expected_fields(self):
+        from urace.integration_bridge import ReceiptRecord
+        r = ReceiptRecord(feature_id='f1', status='ok', tx_hash='0xabc')
+        self.assertEqual(r.feature_id, 'f1')
+        self.assertEqual(r.status, 'ok')
+        self.assertEqual(r.tx_hash, '0xabc')
+        self.assertIsNone(r.block_number)
+
+    def test_receipt_record_default_status_is_stub(self):
+        from urace.integration_bridge import ReceiptRecord
+        r = ReceiptRecord()
+        self.assertEqual(r.status, 'stub')
+
+
+class TestEthSettlementAdapterIsChainAdapter(unittest.TestCase):
+    def test_eth_settlement_adapter_is_chain_adapter_subclass(self):
+        from urace.eth_settlement_adapter import EthSettlementAdapter
+        from urace._chain_adapter_base import ChainAdapter
+        self.assertTrue(issubclass(EthSettlementAdapter, ChainAdapter))
+
+    def test_eth_settlement_adapter_loads_via_get_chain_adapter(self):
+        from urace.integration_bridge import get_chain_adapter, NullAdapter
+        # Without rpc_provider_url, should still return NullAdapter
+        adapter = get_chain_adapter({'p2p': {'token_settlement': True}})
+        self.assertIsInstance(adapter, NullAdapter)
 
 
 if __name__ == '__main__':

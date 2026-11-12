@@ -20,35 +20,30 @@ def _fp(feature_id: str) -> str:
     return hashlib.sha256(feature_id.encode()).hexdigest()
 
 
-def _local_source_files(tags) -> list[dict]:
-    """Bind exact runtime-module tags to source files from this checkout."""
+def _has_tagged_sources(tags) -> bool:
+    """Return True if any tag resolves to an existing runtime module file."""
     source_root = Path(__file__).resolve().parent / "urace"
-    files = []
     for tag in tags:
         if not isinstance(tag, str) or not re.fullmatch(r"[a-zA-Z0-9_]{1,80}", tag):
             continue
         path = source_root / (tag + ".py")
-        if path.is_symlink() or not path.is_file():
-            continue
-        data = path.read_bytes()
-        files.append({"path": "runtime/urace/" + path.name,
-                      "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)})
-    return sorted({item["path"]: item for item in files}.values(), key=lambda item: item["path"])
+        if not path.is_symlink() and path.is_file():
+            return True
+    return False
 
 
 def add(feature_id: str, name: str, description: str, tags, kind_label: str, domain: str = 'software') -> None:
     if feature_id in _ids:
         raise ValueError(f"duplicate feature_id: {feature_id}")
     _ids.add(feature_id)
+    # Source binding (file content hashes) is NOT stored in the ledger entry.
+    # It is local/mutable and would diverge the network ledger on every code
+    # change.  compute_local_source_binding() derives it at runtime from tags.
+    # source_license_id is stable metadata and safe to store.
     artifact_discovery = {"kind": "runtime_bundle", "peer_exchange": True}
-    source_files = _local_source_files(tags)
-    if source_files:
-        source_contract = {"license_id": "Apache-2.0", "files": source_files}
-        artifact_discovery["local_source_files"] = source_files
+    if _has_tagged_sources(tags):
         artifact_discovery["source_license_id"] = "Apache-2.0"
-        artifact_discovery["source_manifest_sha256"] = hashlib.sha256(
-            json.dumps(source_contract, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    features.append({
+    record = {
         "feature_id": feature_id,
         "name": name,
         "description": description,
@@ -60,7 +55,17 @@ def add(feature_id: str, name: str, description: str, tags, kind_label: str, dom
         "owner": None,
         "initial_ledger": True,
         "canonical_fingerprint": _fp(feature_id),
-    })
+    }
+    # Exclude artifact_discovery from record_sha256: source binding (file content
+    # hashes) is local/mutable — it changes on every rebuild but does NOT change
+    # the semantic identity of the feature.  Network peers use record_sha256 as
+    # the stable identity key; including artifact_discovery would diverge the
+    # ledger from the network on every code change.
+    _stable = {k: v for k, v in record.items() if k != "artifact_discovery"}
+    record["record_sha256"] = hashlib.sha256(
+        json.dumps(_stable, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    features.append(record)
 
 
 # ===================== RUNTIME: a2a_server.py =====================
@@ -1778,7 +1783,84 @@ for _mod, _desc in _trial_tests:
 # ================ WRITE LEDGER ==================================
 # ================================================================
 
+def _is_source_repo() -> bool:
+    """Return True only when running from within the URACE source repository.
+
+    Publishing EQUITY_GRANT rows for initial-ledger features bypasses the
+    normal P2P quality gate (executor evaluation, qualification, etc.).
+    This privilege is intentional for the upstream source repo but must not
+    be exercisable from a pip-installed or otherwise distributed copy.
+    """
+    here = Path(__file__).resolve()
+    for parent in [here.parent] + list(here.parents):
+        if (parent / ".git").is_dir():
+            return True
+    return False
+
+
+def _publish_new_features(new_features: list[dict], exchange_root: Path) -> int:
+    """Emit EQUITY_GRANT rows for new initial-ledger features into the exchange audit.
+
+    Each row carries initial_ledger_blessed=True to signal that the normal
+    P2P quality gate was bypassed because the feature is part of the upstream
+    source repository.  Peers receiving these rows via apply_tail_payload can
+    verify that the source ledger snapshot_sha256 matches before trusting them.
+
+    Returns the count of rows emitted (0 if exchange not initialised).
+    """
+    import sys as _sys
+    # Dynamically locate peer_exchange without importing the whole runtime package
+    _rt = exchange_root.parent / "runtime" / "urace"
+    if str(_rt) not in _sys.path:
+        _sys.path.insert(0, str(_rt.parent))
+    try:
+        import time as _time
+        # Minimal audit append — avoids importing the entire peer_exchange module
+        audit_path = exchange_root / "audit.jsonl"
+        if not audit_path.exists():
+            return 0
+        import json as _json
+        # Read existing rows to find previous sha256 and already-published feature IDs
+        existing_rows_raw = [_json.loads(ln) for ln in audit_path.read_text().splitlines() if ln.strip()]
+        published_ids = {r.get("feature_id") for r in existing_rows_raw
+                         if r.get("kind") == "EQUITY_GRANT" and r.get("initial_ledger_blessed")}
+        previous_sha = existing_rows_raw[-1].get("sha256", "0" * 64) if existing_rows_raw else "0" * 64
+        emitted = 0
+        with audit_path.open("a") as _f:
+            for feat in new_features:
+                fid = feat.get("feature_id", "")
+                if not fid or fid in published_ids:
+                    continue
+                row: dict = {
+                    "schema": "urace-exchange-v1",
+                    "at_unix": _time.time(),
+                    "kind": "EQUITY_GRANT",
+                    "feature_id": fid,
+                    "name": feat.get("name", ""),
+                    "description": feat.get("description", ""),
+                    "tags": feat.get("tags", []),
+                    "borrow_price_units": 0,
+                    "owner": None,
+                    "initial_ledger": True,
+                    "initial_ledger_blessed": True,
+                    "record_sha256": feat.get("record_sha256", ""),
+                    "canonical_fingerprint": feat.get("canonical_fingerprint", ""),
+                    "previous": previous_sha,
+                }
+                row_bytes = _json.dumps(row, sort_keys=True, separators=(",", ":")).encode()
+                row["sha256"] = hashlib.sha256(row_bytes).hexdigest()
+                _f.write(_json.dumps(row, sort_keys=True) + "\n")
+                _f.flush()
+                previous_sha = row["sha256"]
+                emitted += 1
+        return emitted
+    except (OSError, KeyError, ValueError):
+        return 0
+
+
 def main() -> None:
+    import sys as _sys
+    publish = "--publish" in _sys.argv
     output = Path(__file__).resolve().parent.parent / "exchange" / "initial_ledger" / "initial_ledger.jsonl"
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1807,12 +1889,13 @@ def main() -> None:
     new_features = [f for f in features if f["feature_id"] not in existing_ids]
     all_features_count = len(existing_ids) + len(new_features)
 
-    # Refresh only source bindings on existing IDs; preserve other live/reference
-    # ledger fields and append new definitions in builder order.
-    header = json.dumps({"schema": "urace-initial-ledger-v1", "feature_count": all_features_count}, sort_keys=False)
+    # Update existing rows: refresh stable metadata; strip legacy source binding
+    # fields (local_source_files, source_manifest_sha256) that no longer belong
+    # in the network ledger.  source_license_id is stable and kept.
+    # Append new definitions in builder order.
     definitions = {feature["feature_id"]: feature for feature in features}
     body_lines = []
-    source_keys = ("local_source_files", "source_license_id", "source_manifest_sha256")
+    _strip_keys = ("local_source_files", "source_manifest_sha256")
     for original, row in existing_rows:
         definition = definitions.get(row["feature_id"])
         changed = False
@@ -1824,18 +1907,76 @@ def main() -> None:
             old_discovery = row.get("artifact_discovery", {})
             new_discovery = definition.get("artifact_discovery", {})
             updated = dict(old_discovery)
-            for key in source_keys:
-                updated.pop(key, None)
-                if key in new_discovery:
-                    updated[key] = new_discovery[key]
-            if updated != old_discovery:
+            # Strip legacy stored source binding fields; keep stable metadata
+            for key in _strip_keys:
+                if key in updated:
+                    updated.pop(key)
+                    changed = True
+            # Sync stable artifact_discovery keys from definition
+            for key in ("kind", "peer_exchange", "source_license_id"):
+                if new_discovery.get(key) != updated.get(key):
+                    if key in new_discovery:
+                        updated[key] = new_discovery[key]
+                    else:
+                        updated.pop(key, None)
+                    changed = True
+            if changed:
                 row["artifact_discovery"] = updated
-                changed = True
         if changed:
+            row.pop("record_sha256", None)
+            _stable = {k: v for k, v in row.items() if k not in ("record_sha256", "artifact_discovery")}
+            row["record_sha256"] = hashlib.sha256(
+                json.dumps(_stable, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            original = json.dumps(row, sort_keys=False)
+        elif "record_sha256" not in row:
+            _stable = {k: v for k, v in row.items() if k not in ("record_sha256", "artifact_discovery")}
+            row["record_sha256"] = hashlib.sha256(
+                json.dumps(_stable, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
             original = json.dumps(row, sort_keys=False)
         body_lines.append(original)
     new_lines = [json.dumps(f, sort_keys=False) for f in new_features]
+
+    # snapshot_sha256: hash of all record_sha256 values in ledger order.
+    # Changes only when semantic metadata or new features are added — NOT on
+    # code changes (source binding is excluded from record_sha256).
+    # Peers compare this on connect to detect ledger divergence / missing entries.
+    all_record_sha256 = []
+    for line in body_lines:
+        try:
+            obj = json.loads(line)
+            if obj.get("record_sha256"):
+                all_record_sha256.append(obj["record_sha256"])
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    for line in new_lines:
+        try:
+            obj = json.loads(line)
+            if obj.get("record_sha256"):
+                all_record_sha256.append(obj["record_sha256"])
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    snapshot_sha256 = hashlib.sha256(
+        json.dumps(all_record_sha256, separators=(",", ":")).encode()
+    ).hexdigest()
+
+    header = json.dumps({
+        "schema": "urace-initial-ledger-v1",
+        "feature_count": all_features_count,
+        "snapshot_sha256": snapshot_sha256,
+    }, sort_keys=False)
     output.write_text("\n".join([header] + body_lines + new_lines) + "\n", encoding="utf-8")
+
+    # Publish new features to exchange audit (--publish flag, source repo only)
+    published_count = 0
+    if publish:
+        if not _is_source_repo():
+            print("ERROR: --publish is only allowed from the URACE source repository "
+                  "(bypasses P2P quality gate; not permitted from installed copies)")
+            raise SystemExit(1)
+        exchange_root = output.parent.parent
+        published_count = _publish_new_features(new_features, exchange_root)
 
     # Summary
     from collections import Counter
@@ -1843,6 +1984,8 @@ def main() -> None:
     kinds = Counter(f["kind_label"] for f in all_features)
     action = f"appended {len(new_features)} new" if existing_ids else f"wrote {len(new_features)}"
     print(f"{action} features to {output} ({all_features_count} total)")
+    if publish:
+        print(f"published {published_count} new EQUITY_GRANT rows to exchange audit")
     print("Breakdown by kind_label (this build):")
     for kind, count in sorted(kinds.items(), key=lambda kv: -kv[1]):
         print(f"  {kind}: {count}")

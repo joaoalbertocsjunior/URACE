@@ -19,7 +19,14 @@ def _file_digest(path: str, size: int, mtime_ns: int) -> tuple[str, int]:
 
 
 def resolve_local_source_binding(feature: dict, repo_root: str | Path | None = None) -> dict:
-    """Verify ledger-bound module paths/hashes against this checkout; never import or execute them."""
+    """Verify a SourceBindingRecord's stored hashes against this checkout.
+
+    Used for SourceBindingRecord entries (signed ledger) where hashes were
+    recorded at publish time.  For initial_ledger entries (no stored hashes)
+    use compute_local_source_binding() instead.
+
+    Never imports or executes source files.
+    """
     root = (Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[2]).resolve(strict=True)
     discovery = feature.get('artifact_discovery') if isinstance(feature, dict) else None
     if not isinstance(discovery, dict):
@@ -28,7 +35,8 @@ def resolve_local_source_binding(feature: dict, repo_root: str | Path | None = N
     license_id = discovery.get('source_license_id')
     manifest_sha256 = discovery.get('source_manifest_sha256')
     if not isinstance(files, list) or not files:
-        return {'status': 'NO_LOCAL_SOURCE_BINDING', 'source_files': []}
+        # No stored binding — fall through to compute from tags
+        return compute_local_source_binding(feature, repo_root=root)
     if license_id != 'Apache-2.0' or not isinstance(manifest_sha256, str):
         return {'status': 'INVALID_LOCAL_SOURCE_BINDING', 'source_files': []}
     expected_tags = set(feature.get('tags', []))
@@ -65,3 +73,48 @@ def resolve_local_source_binding(feature: dict, repo_root: str | Path | None = N
     return {'status': 'VERIFIED_LOCAL_IMPLEMENTATION', 'source_files': files,
             'source_license_id': license_id, 'source_manifest_sha256': manifest_sha256,
             'executes_source': False}
+
+
+def compute_local_source_binding(feature: dict, repo_root: str | Path | None = None) -> dict:
+    """Compute a fresh source binding from feature tags without stored hashes.
+
+    Used for initial_ledger entries (which no longer store source hashes in
+    artifact_discovery).  Returns COMPUTED_LOCAL_BINDING when files are found,
+    NO_LOCAL_SOURCE_BINDING when no tagged files exist in this checkout.
+
+    Never imports or executes source files.
+    """
+    root = (Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[2]).resolve(strict=True)
+    base = (root / 'runtime' / 'urace').resolve(strict=True)
+    tags = feature.get('tags') if isinstance(feature, dict) else []
+    if not isinstance(tags, list):
+        return {'status': 'NO_LOCAL_SOURCE_BINDING', 'source_files': []}
+    files = []
+    seen: set[str] = set()
+    for tag in tags:
+        if not isinstance(tag, str) or not re.fullmatch(r'[a-zA-Z0-9_]{1,80}', tag):
+            continue
+        path = root / 'runtime' / 'urace' / (tag + '.py')
+        if path.is_symlink() or not path.is_file():
+            continue
+        resolved = path.resolve(strict=True)
+        if not resolved.is_relative_to(base):
+            continue
+        rel = f'runtime/urace/{tag}.py'
+        if rel in seen:
+            continue
+        seen.add(rel)
+        digest, size = _file_digest(str(resolved), resolved.stat().st_size, resolved.stat().st_mtime_ns)
+        files.append({'path': rel, 'sha256': digest, 'bytes': size})
+    if not files:
+        return {'status': 'NO_LOCAL_SOURCE_BINDING', 'source_files': []}
+    files = sorted(files, key=lambda item: item['path'])
+    source_contract = {'license_id': 'Apache-2.0', 'files': files}
+    manifest_sha256 = _sha(json.dumps(source_contract, sort_keys=True, separators=(',', ':')).encode())
+    return {
+        'status': 'COMPUTED_LOCAL_BINDING',
+        'source_files': files,
+        'source_license_id': 'Apache-2.0',
+        'source_manifest_sha256': manifest_sha256,
+        'executes_source': False,
+    }

@@ -4,7 +4,8 @@ Mint stake: creator locks tokens at grant time.
 Challenge window: any peer can challenge within N days.
 Resolution: upheld → stake slashed to challenger+base owner, grant revoked.
             rejected → challenger stake slashed, creator stake returned.
-Quorum resolution (cross-node) is a v3 stub — local + LLM-peer resolution only now.
+Quorum resolution (cross-node): fetch_quorum_verdicts() polls bootstrap peers and
+resolve_challenge() uses remote majority when bootstrap_peers is provided.
 """
 import hashlib, time
 from datetime import datetime, timezone
@@ -25,7 +26,7 @@ def _now():
 
 
 def _challenge_id(feature_id: str, challenger_peer_id: str, at_unix: float) -> str:
-    return hashlib.sha256(f'{feature_id}:{challenger_peer_id}:{at_unix}'.encode()).hexdigest()[:16]
+    return hashlib.sha256(f'{feature_id}:{challenger_peer_id}:{at_unix}'.encode()).hexdigest()
 
 
 def get_mint_stake_units(config: dict) -> int:
@@ -165,13 +166,35 @@ def file_challenge(exchange, feature_id: str, challenger_peer_id: str,
     return challenge_row
 
 
+def fetch_quorum_verdicts(exchange, feature_id: str, challenge_id: str, bootstrap_peers: list) -> list:
+    """Fetch APS_VERDICT rows for a challenge from bootstrap peers via HTTP GET."""
+    import urllib.request as _ur, json as _j, urllib.parse as _up
+    remote_verdicts = []
+    for endpoint in bootstrap_peers[:3]:
+        try:
+            params = _up.urlencode({'feature_id': feature_id, 'challenge_id': challenge_id})
+            url = f"{endpoint.rstrip('/')}/urace/rpc/v1/find-node?{params}"
+            req = _ur.Request(url, headers={"Accept": "application/json"})
+            with _ur.urlopen(req, timeout=10) as resp:
+                data = _j.loads(resp.read(65536))
+                # Expect {verdicts: [{verdict: "upheld"|"rejected", peer_id: ...}, ...]}
+                remote_verdicts.extend(data.get('verdicts', []))
+        except Exception:
+            pass  # peer unreachable — continue with local resolution
+    return remote_verdicts
+
+
 def resolve_challenge(exchange, challenge_id: str, verdict: str,
                       resolver_peer_id: str = 'local',
-                      resolver_type: str = 'local') -> dict:
+                      resolver_type: str = 'local',
+                      bootstrap_peers: list | None = None) -> dict:
     """Resolve a pending challenge. verdict = 'upheld' | 'rejected'.
 
     upheld: creator stake slashed, grant revoked, challenger stake returned + bounty.
     rejected: challenger stake slashed (stays deducted), creator stake released.
+
+    When bootstrap_peers is non-empty, fetch remote quorum verdicts and use majority
+    to override local verdict if remote majority disagrees.
     """
     rows = exchange.audit_rows()
     challenge_row = next((r for r in rows if r.get('kind') == 'PROVENANCE_CHALLENGE' and r.get('challenge_id') == challenge_id), None)
@@ -186,7 +209,21 @@ def resolve_challenge(exchange, challenge_id: str, verdict: str,
     lock_row = next((r for r in rows if r.get('kind') == 'MINT_STAKE_LOCKED' and r.get('feature_id') == feature_id), None)
     if not lock_row:
         raise ValueError(f'No MINT_STAKE_LOCKED for feature {feature_id!r}.')
-    return _resolve(exchange, challenge_id, feature_id, verdict, resolver_type,
+
+    final_verdict = verdict
+    final_resolver_type = resolver_type
+    if bootstrap_peers:
+        remote_verdicts = fetch_quorum_verdicts(exchange, feature_id, challenge_id, bootstrap_peers)
+        if remote_verdicts:
+            upheld_count = sum(1 for v in remote_verdicts if v.get('verdict') == 'upheld')
+            rejected_count = sum(1 for v in remote_verdicts if v.get('verdict') == 'rejected')
+            if upheld_count != rejected_count:  # not a tie
+                remote_majority = 'upheld' if upheld_count > rejected_count else 'rejected'
+                if remote_majority != verdict:
+                    final_verdict = remote_majority
+                    final_resolver_type = 'remote_quorum'
+
+    return _resolve(exchange, challenge_id, feature_id, final_verdict, final_resolver_type,
                     challenge_row.get('reference_feature_id', ''), lock_row,
                     challenge_row['challenger_peer_id'], challenge_row['challenger_stake_units'])
 

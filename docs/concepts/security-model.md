@@ -9,7 +9,8 @@ Defense in depth across transport, storage, delivery, market integrity, and netw
 ## Transport and identity
 
 - **TLS 1.3** on all peer connections + certificate pinning
-- **Post-quantum signatures**: ML-KEM-768 (key encapsulation) + Ed25519 (signing)
+- **Post-quantum signatures**: ML-KEM-768 (key encapsulation) + ML-DSA-65 + Ed25519 dual-signing (hybrid)
+- **Key lifecycle**: `key_lifecycle.py` — `rotate_identity()` generates new keypair with chain-of-custody proof signed by old key; `broadcast_revocation()` notifies known peers; `verify_rotation_proof()` validates key transitions before accepting updated peer identity
 - **RPC flood protection**: rate limiting per peer per method
 - **Quarantine model**: incoming artifacts are never auto-executed; require explicit owner authorization
 
@@ -76,6 +77,19 @@ A cluster of co-registered nodes attempting to hold availability-ransom over a f
 - **Price ceiling**: configured estimate based ceiling may be applied at listing; it is not a qualified cost savings claim
 - **Minimum viable price floor**: `ask_price ≥ production_cost + bandwidth + protocol_fee`
 - **Single-node cartel detection**: single peer holding disproportionate balance flagged in `credit_ledger.py`
+
+---
+
+## Artifact sanitization (quarantine pipeline)
+
+Artifacts fetched from peers are scanned before promotion: rejected if they contain shell injection patterns, binary executables, dangerous code patterns, or high-entropy payloads.
+
+- **Shell injection**: detects `$(…)`, backtick substitution, and inline shell commands (`rm`, `curl`, `wget`, `bash`, etc.)
+- **Dangerous code patterns**: rejects artifacts that reference `subprocess`, `os.system`, `eval`, `exec`, or `__import__`
+- **Binary executables**: ELF (Linux) and PE (Windows) magic bytes rejected outright
+- **Entropy spike**: payloads exceeding 7.5 bits/byte (consistent with packed or encrypted binaries) are rejected
+
+Sanitization runs automatically on every `promote` call. A failed scan surfaces the specific issues so the operator can review the artifact manually before retrying.
 
 ---
 

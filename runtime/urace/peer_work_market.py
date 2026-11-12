@@ -32,6 +32,7 @@ DECOMPOSE_MIN_BP    = 0.25  # minimum complexity per sub-task (prevents infinite
 
 # ── LLM-as-peer / executor node registration ──────────────────────────────────
 EXECUTOR_PEER_KIND = 'EXECUTOR_PEER_REGISTERED'
+REFERRAL_CREDIT_ISSUED = 'REFERRAL_CREDIT_ISSUED'
 
 SCHEMA = 'urace-work-market-v1'
 
@@ -112,7 +113,7 @@ _WORK_KINDS = frozenset({
     'WORK_REQUEST', 'WORK_BID', 'WORK_ACCEPTED',
     'WORK_DELIVERY', 'WORK_VERIFIED', 'WORK_DISPUTED', 'WORK_RESOLVED',
     'WORK_MERGED', 'WORK_OWNERSHIP_CLAIM', 'WORK_ARBITRATOR_ASSIGNED',
-    'WORK_PEER_REVIEW', EXECUTOR_PEER_KIND,
+    'WORK_PEER_REVIEW', EXECUTOR_PEER_KIND, REFERRAL_CREDIT_ISSUED,
 })
 
 
@@ -271,6 +272,7 @@ def create_work_request(
     root: str | None = None,
     work_mode: str = WORK_MODE_AGORA,
     cohort_rep_floor: float = 0.5,
+    referral_credit: dict | None = None,
 ) -> str:
     """Broadcast a WORK_REQUEST. Returns the request_id.
 
@@ -317,6 +319,7 @@ def create_work_request(
         'deposit_paid': deposit_paid,
         'mode': work_mode,
         'cohort_rep_floor': cohort_rep_floor if work_mode == WORK_MODE_COHORT else None,
+        'referral_credit': referral_credit,
         'at_unix': time.time(),
         'at': _now_iso(),
     })
@@ -388,6 +391,14 @@ def accept_bid(
         'at_unix': time.time(),
         'at': _now_iso(),
     })
+    referral_credit = req.get('referral_credit')
+    if referral_credit:
+        exchange.append_audit_row({
+            'kind': REFERRAL_CREDIT_ISSUED,
+            'request_id': request_id,
+            'referral_credit': referral_credit,
+            'at': _now_iso(),
+        })
 
 
 def submit_delivery(
@@ -457,6 +468,19 @@ def verify_delivery(
             total_budget = sum(amt for _, amt in hired)
             shares = equity_split_budget(hired, total_budget)
             _cl.escrow_release(root, request_id, shares)
+            # Custody reward: 3% of total budget credited to each hired node
+            from ._common import ESCROW_CUSTODY_REWARD_RATE
+            reward_pool = max(1, int(total_budget * ESCROW_CUSTODY_REWARD_RATE))
+            per_node = max(1, reward_pool // len(hired))
+            for bidder_id, _ in hired:
+                exchange.append_audit_row({
+                    'kind': 'CREDIT_DELTA',
+                    'direction': 'escrow_custody_earned',
+                    'peer': bidder_id,
+                    'amount_units': per_node,
+                    'request_id': request_id,
+                    'at_unix': time.time(),
+                })
         exchange.append_audit_row({
             'kind': 'WORK_VERIFIED',
             'request_id': request_id,
@@ -939,6 +963,37 @@ def submit_peer_review(
         'at': _now_iso(),
     })
 
+    # Broadcast quorum-reached event to bootstrap peers when quorum is newly hit
+    try:
+        cfg = exchange.load()
+        bootstrap_peers = cfg.get('bootstrap_peers', [])
+    except Exception:
+        bootstrap_peers = []
+    if bootstrap_peers:
+        st_after = escrow_state(request_id, exchange)
+        quorum_verdict = st_after.get('quorum')
+        if quorum_verdict is not None:  # quorum newly reached (was None before this review)
+            outcome = 'approved' if quorum_verdict else 'rejected'
+            _broadcast_quorum_reached(exchange, request_id, outcome, bootstrap_peers)
+
+
+def _broadcast_quorum_reached(exchange, request_id: str, outcome: str, bootstrap_peers: list) -> None:
+    """Notify bootstrap peers that quorum was reached for a work request."""
+    import urllib.request as _ur, json as _j
+    payload = _j.dumps({'kind': 'WORK_QUORUM_REACHED', 'request_id': request_id, 'outcome': outcome}).encode()
+    for endpoint in bootstrap_peers[:3]:
+        try:
+            req = _ur.Request(
+                f"{endpoint.rstrip('/')}/urace/rpc/v1/shamir-deliver",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+            with _ur.urlopen(req, timeout=10):
+                pass
+        except Exception:
+            pass  # best-effort broadcast
+
 
 def quorum_reached(request_id: str, exchange) -> bool | None:
     """Return quorum verdict for a work request.
@@ -964,12 +1019,24 @@ def quorum_auto_release(request_id: str, exchange, root: str | None = None) -> b
 
     if verdict is True and root is not None and st['state'] == 'VERIFICATION':
         from . import credit_ledger as _cl
+        from ._common import ESCROW_CUSTODY_REWARD_RATE
         hired = [(r['bidder_id'], float(r.get('budget_units', 0)))
                  for r in st['accepted_bids']]
         if hired:
             total_budget = sum(amt for _, amt in hired)
             shares = equity_split_budget(hired, total_budget)
             _cl.escrow_release(root, request_id, shares)
+            reward_pool = max(1, int(total_budget * ESCROW_CUSTODY_REWARD_RATE))
+            per_node = max(1, reward_pool // len(hired))
+            for bidder_id, _ in hired:
+                exchange.append_audit_row({
+                    'kind': 'CREDIT_DELTA',
+                    'direction': 'escrow_custody_earned',
+                    'peer': bidder_id,
+                    'amount_units': per_node,
+                    'request_id': request_id,
+                    'at_unix': time.time(),
+                })
         exchange.append_audit_row({
             'kind': 'WORK_VERIFIED',
             'request_id': request_id,

@@ -455,7 +455,8 @@ def queue_input(config: dict[str, Any], kind: str, payload: dict[str, Any]) -> d
     item = {"id": identifier("input"), "at": now(), "kind": kind, "payload": payload, "status": "QUEUED"}
     directory = input_directory(config)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-    os.chmod(directory, 0o700)
+    try: os.chmod(directory, 0o700)
+    except (AttributeError, NotImplementedError, OSError): pass
     _atomic_write_json(directory / f"{item['at'].replace(':', '-')}-{item['id']}.json", item)
     return item
 

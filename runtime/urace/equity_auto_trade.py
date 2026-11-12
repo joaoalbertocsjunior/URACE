@@ -675,6 +675,15 @@ def fill_listing(
 
     _fe.sell_equity(exchange, root, feature_id, seller_id, buyer_id, bp,
                     price_units=price)
+    # Cross-peer settlement: notify seller via RPC
+    try:
+        from .purchase_settlement import initiate_purchase as _init_purchase
+        _listing_price = int(lst.get('ask_price_units', price))
+        _seller_id = seller_id
+        if _seller_id and _seller_id != exchange.identity()['peer_id']:
+            _init_purchase(exchange, _seller_id, listing_id, _listing_price)
+    except Exception:
+        pass  # settlement is best-effort; never block local fill
     exchange.append_audit_row({
         'kind': 'EQUITY_LISTING_FILLED',
         'listing_id': listing_id,
@@ -1119,6 +1128,19 @@ def auto_mint_minimal_features(exchange, root: str, owner_id: str, config: dict 
             'complexity': complexity, 'quality_score': quality,
             'auto_minted': True,
             'executor_reference_price_units': executor_ref_price, 'root': root})
+        # Broadcast to known peers
+        try:
+            _p = exchange.load()
+            for _pid, _peer_data in _p.get('peers', {}).items():
+                if _peer_data.get('blocked'):
+                    continue
+                try:
+                    from .peer_exchange import request as _req
+                    _req(exchange, _pid, 'exchange.offers', {})
+                except Exception:
+                    pass
+        except Exception:
+            pass
         minted_ids.add(feature_id)
         minted_now.append({
             'feature_id': feature_id,

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import analytics, cli, cli_helpers as _cli_helpers_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -1129,7 +1129,7 @@ class R34AdditionsTests(unittest.TestCase):
                 "completeness_fraction": 1.0,
                 "last_assessed_at": "2026-01-01T00:00:00+00:00",
             }]
-            with patch.object(cli, "ROOT", _root):
+            with patch.object(cli, "ROOT", _root), patch.object(_cli_helpers_m, "ROOT", _root):
                 cli._evaluate_sweet_spot(state, config)
         ssa = state["sweet_spot_assessments"][-1]
         self.assertEqual(ssa["maturity_level"], "OVER_ENGINEERED")

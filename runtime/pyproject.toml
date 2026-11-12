@@ -1,6 +1,6 @@
 [project]
 name = "urace"
-version = "0.5.1"
+version = "0.6.0"
 description = "Persistent autonomous Product-evolution control plane"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -14,12 +14,18 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
 ]
 
 [project.optional-dependencies]
 peer-security = ["cryptography>=50,<51"]
 peer-discovery = ["zeroconf>=0.148,<1"]
-test = ["pytest>=8"]
+network = ["kademlia>=2.2,<3"]
+test = ["pytest>=8", "pytest-xdist>=3"]
+report = []
+telemetry = ["opentelemetry-sdk>=1.20", "opentelemetry-exporter-otlp-proto-grpc>=1.20"]
+all = ["urace[peer-security,peer-discovery,network,report,telemetry]"]
 
 [project.scripts]
 urace = "urace.launcher:main"
@@ -33,3 +39,7 @@ packages = ["urace"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+markers = [
+    "slow: tests using subprocess, real git, or real file I/O (use -m 'not slow' for fast runs)",
+    "integration: tests that require live network/DHT/mDNS (use -m 'not integration' for offline runs)",
+]

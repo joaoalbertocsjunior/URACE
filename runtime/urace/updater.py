@@ -68,7 +68,8 @@ def _atomic_bytes(path: Path, content: bytes) -> None:
         stream.write(content); stream.flush(); os.fsync(stream.fileno())
         temporary = Path(stream.name)
     temporary.replace(path)
-    os.chmod(path, 0o600)
+    try: os.chmod(path, 0o600)
+    except (AttributeError, NotImplementedError, OSError): pass
 
 
 _MIN_SPEC_BYTES = 10_240

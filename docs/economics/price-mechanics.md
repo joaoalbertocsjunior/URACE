@@ -26,6 +26,10 @@ ask_price ≤ (executor_reference_price − gas_overhead) × completeness × (1 
 
 This formula is a pricing heuristic, not a savings guarantee. The comparison remains unqualified when the baseline or any material cost is unknown. A cost advantage alone does not prove equivalent accepted value.
 
+### P2P cost qualification gate
+
+Listing prices capped against an owner estimate place an upper bound on the ask, but they do not establish that a borrower saves money compared to direct executor work. A qualified savings claim requires a live cohort study: at least 30 measured pairs across 6 task families, both arms accepted in every pair, complete comparable USD costs recorded, zero URACE units paid, on-chain settlement active, and two independent reviewers signing the cohort using `trial/p2p_cost_claim_review.py`. Until that study is complete and signed, no savings claim is valid — P2P borrows have $0 provider cost to the borrower, but that is not savings evidence. See [Qualification Protocol](../qualification-protocol.md) for the full requirements.
+
 **`gas_overhead` resolution (priority order):**
 1. Dynamic EVM: `gas_per_tx_gwei × gas_price_gwei × urace_units_per_gwei` (all three > 0)
 2. Static override: `gas_overhead_units` config key

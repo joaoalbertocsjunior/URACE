@@ -452,6 +452,19 @@ Freeform routing uses semantic synonym expansion — "visualization" matches "ch
 urace controls set --freeform-enabled true
 ```
 
+**Cancel the most recently queued item** by typing a cancel phrase as your next freeform input — no flags needed:
+
+```sh
+urace "cancel"
+urace "never mind"
+urace "abort"
+urace "scratch that"
+```
+
+Recognised phrases: `cancel`, `ignore`, `never mind`, `forget`, `forget it`, `forget that`, `abort`, `scratch that`, `no thanks`, `undo`. Only items queued within the last 10 minutes are eligible. No LLM call is made — the check is rule-based.
+
+**Clarification loop:** when the classifier is not confident about your intent, it asks one short question (max 2 turns) before queuing. Answer in plain text. If you no longer want to proceed, type any cancel phrase to exit the loop. In `--json` mode the clarifying question is returned as a `clarifying_question` field and no prompt is shown.
+
 ---
 
 ## API Server (A2A / M2M)
@@ -693,8 +706,9 @@ All `goal` subcommands accept `--json` for machine-readable output.
 | `urace classify TEXT --selection N` | Select the Nth candidate |
 | `urace classify --file PATH` | Classify text read from a file |
 | `urace classify TEXT --ledger-context auto\|always\|never` | Control ledger context injection |
+| `urace classify TEXT --json` | Return structured JSON; suppresses interactive clarification prompt (returns `clarifying_question` field instead) |
 
-Primarily used by freeform routing internally; useful for debugging command resolution.
+Primarily used by freeform routing internally; useful for debugging command resolution. Cancel phrases (`"cancel"`, `"never mind"`, etc.) are intercepted before classification — no LLM call is made.
 
 ---
 

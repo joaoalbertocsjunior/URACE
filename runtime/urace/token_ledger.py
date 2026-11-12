@@ -7,6 +7,8 @@ No separate mutable state file — the audit chain IS the ledger.
   Earn (propagation):  FEATURE_BORROWED events (BORROW_CREDIT_PER_PEER → creator_peer_id)
   Spend:               RECEIVE_RESERVED events (1 token charged per incoming bundle)
   Bootstrap:           baseline_grant free receives per peer (default 3)
+  Explicit deltas:     CREDIT_DELTA events (amount_units, positive=earn, negative=spend)
+                       Used for: purchase transactions, escrow refunds/clawbacks, custody rewards
 
 Propagation earn model: a feature only earns its creator tokens when other nodes
 actually borrow it with positive outcomes. Gibberish features can't pass real trials
@@ -86,7 +88,14 @@ def balance(exchange, peer_id: str) -> float:
         for r in rows
         if r.get('kind') == 'RECEIVE_RESERVED' and r.get('peer') == peer_id
     )
-    return round(grant + earned_improvement + earned_propagation - spent, 4)
+    # Explicit CREDIT_DELTA adjustments: purchase transactions, escrow operations, custody rewards.
+    # amount_units is in tokens (integer); positive=earn, negative=spend.
+    credit_delta = sum(
+        float(r.get('amount_units', 0))
+        for r in rows
+        if r.get('kind') == 'CREDIT_DELTA' and r.get('peer') == peer_id
+    )
+    return round(grant + earned_improvement + earned_propagation - spent + credit_delta, 4)
 
 
 def _trial_borrows_remaining(exchange, peer_id: str) -> int:

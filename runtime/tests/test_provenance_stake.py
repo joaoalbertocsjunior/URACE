@@ -1,6 +1,7 @@
 """Tests for Asset Provenance Staking (APS) — provenance_stake.py"""
 import time
 import unittest
+from unittest.mock import patch, MagicMock
 
 from urace import provenance_stake as ps
 
@@ -292,6 +293,61 @@ class FillListingGuardTests(unittest.TestCase):
             with self.assertRaises(ValueError) as ctx:
                 raise ValueError(f'Feature {_fl_feat_check!r} equity grant has been revoked (provenance challenge upheld) — cannot borrow.')
             self.assertIn('revoked', str(ctx.exception))
+
+
+# ── QuorumCrossNodeTests ──────────────────────────────────────────────────────
+
+class QuorumCrossNodeTests(unittest.TestCase):
+    def setUp(self):
+        self.ex = MockExchange()
+
+    def _setup_pending_challenge(self, feature_id='feat-1', creator='alice', challenger='bob'):
+        _fund(self.ex, creator, 10)
+        ps.lock_mint_stake(self.ex, feature_id, creator, 3, 30)
+        _fund(self.ex, challenger, 10)
+        row = ps.file_challenge(self.ex, feature_id, challenger, 'evidence', '', 2)
+        return row['challenge_id']
+
+    def test_fetch_quorum_verdicts_calls_bootstrap_peer(self):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = b'{"verdicts": [{"verdict": "upheld", "peer_id": "p1"}]}'
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        with patch('urllib.request.urlopen', return_value=mock_resp):
+            result = ps.fetch_quorum_verdicts(self.ex, 'feat1', 'chal1', ['https://bp.example.com'])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['verdict'], 'upheld')
+        self.assertEqual(result[0]['peer_id'], 'p1')
+
+    def test_fetch_quorum_verdicts_ignores_unreachable_peer(self):
+        with patch('urllib.request.urlopen', side_effect=OSError('connection refused')):
+            result = ps.fetch_quorum_verdicts(self.ex, 'feat1', 'chal1', ['https://bp.example.com'])
+        self.assertEqual(result, [])
+
+    def test_resolve_challenge_uses_remote_majority_when_available(self):
+        cid = self._setup_pending_challenge()
+        remote = [{'verdict': 'upheld', 'peer_id': 'p1'}, {'verdict': 'upheld', 'peer_id': 'p2'}]
+        with patch.object(ps, 'fetch_quorum_verdicts', return_value=remote):
+            # local verdict is 'rejected' but remote majority is 'upheld'
+            result = ps.resolve_challenge(self.ex, cid, 'rejected', bootstrap_peers=['https://bp.example.com'])
+        self.assertEqual(result['verdict'], 'upheld')
+        self.assertEqual(result['resolver_type'], 'remote_quorum')
+
+    def test_resolve_challenge_keeps_local_when_no_bootstrap_peers(self):
+        cid = self._setup_pending_challenge()
+        with patch.object(ps, 'fetch_quorum_verdicts') as mock_fqv:
+            result = ps.resolve_challenge(self.ex, cid, 'rejected', bootstrap_peers=[])
+        mock_fqv.assert_not_called()
+        self.assertEqual(result['verdict'], 'rejected')
+
+    def test_resolve_challenge_keeps_local_on_remote_tie(self):
+        cid = self._setup_pending_challenge()
+        remote = [{'verdict': 'upheld', 'peer_id': 'p1'}, {'verdict': 'rejected', 'peer_id': 'p2'}]
+        with patch.object(ps, 'fetch_quorum_verdicts', return_value=remote):
+            result = ps.resolve_challenge(self.ex, cid, 'rejected', bootstrap_peers=['https://bp.example.com'])
+        # tie → local verdict stands
+        self.assertEqual(result['verdict'], 'rejected')
+        self.assertNotEqual(result.get('resolver_type'), 'remote_quorum')
 
 
 if __name__ == '__main__':

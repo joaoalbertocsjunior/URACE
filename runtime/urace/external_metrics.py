@@ -160,4 +160,66 @@ def collect(root: Path, settings: dict[str, Any], last_known_good: dict[str, Any
         except Exception as error:
             prior_lkg = updated_lkg.get(source_id)
             errors.append({"source": source_id, "error": str(error), **({"last_known_good": prior_lkg} if prior_lkg else {})})
-    return {"at": observed_at, "mode": mode, "observations": observations, "errors": errors, "last_known_good": updated_lkg}
+    result: dict[str, Any] = {"at": observed_at, "mode": mode, "observations": observations, "errors": errors, "last_known_good": updated_lkg}
+    if settings.get("sink"):
+        result["sink_result"] = export_metrics_sink(root, settings, result.get("observations", []), result.get("at", ""))
+    return result
+
+
+def export_metrics_sink(root: Any, settings: dict, observations: list, cycle_at: str) -> dict:
+    """Export collected metrics to configured sink (file or HTTP POST)."""
+    sink = settings.get("sink", {})
+    if not sink:
+        return {"sink_kind": None, "status": "no_sink"}
+
+    kind = sink.get("kind")
+
+    if kind == "file":
+        import csv, io, json as _json
+        output_dir = Path(sink.get("output_dir", "generated/metrics"))
+        if not output_dir.is_absolute():
+            output_dir = Path(root) / output_dir
+        output_dir.mkdir(parents=True, exist_ok=True)
+        fmt = sink.get("format", "jsonl")
+        safe_at = cycle_at.replace(":", "-").replace("+", "")[:23]
+        filepath = output_dir / f"metrics-{safe_at}.{fmt}"
+        try:
+            if fmt == "jsonl":
+                content = "\n".join(_json.dumps(o) for o in observations) + "\n"
+                filepath.write_text(content, encoding="utf-8")
+            elif fmt == "json":
+                filepath.write_text(_json.dumps({"at": cycle_at, "observations": observations}, indent=2), encoding="utf-8")
+            elif fmt == "csv":
+                if observations:
+                    buf = io.StringIO()
+                    writer = csv.DictWriter(buf, fieldnames=list(observations[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(observations)
+                    filepath.write_text(buf.getvalue(), encoding="utf-8")
+                else:
+                    filepath.write_text("", encoding="utf-8")
+            return {"sink_kind": "file", "status": "ok", "path": str(filepath)}
+        except Exception as e:
+            return {"sink_kind": "file", "status": "error", "error": str(e)}
+
+    elif kind == "http_post":
+        import json as _json
+        url = sink.get("url", "")
+        if not url:
+            return {"sink_kind": "http_post", "status": "error", "error": "url not configured"}
+        payload = _json.dumps({"at": cycle_at, "observations": observations}).encode("utf-8")
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        cred_env = sink.get("credential_env")
+        if cred_env:
+            token = os.environ.get(cred_env, "")
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        try:
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            timeout = sink.get("timeout_seconds", 10)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return {"sink_kind": "http_post", "status": "ok", "http_status": resp.status}
+        except Exception as e:
+            return {"sink_kind": "http_post", "status": "error", "error": str(e)}
+
+    return {"sink_kind": kind, "status": "error", "error": f"unknown sink kind: {kind!r}"}

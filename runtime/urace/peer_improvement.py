@@ -151,6 +151,54 @@ def evaluate(root: Path, bundle_id: str) -> dict[str, Any]:
     }
 
 
+def sanitize_quarantine_artifact(artifact_text: str, artifact_bytes_raw: bytes | None = None) -> dict:
+    """Check quarantined artifact for security issues before promotion."""
+    import re, math
+    issues = []
+    checks = {}
+
+    # Shell metacharacter injection
+    _shell_re = re.compile(r'\$\(|\`[^`]+\`|;\s*(rm|curl|wget|bash|sh|python3?)\b', re.IGNORECASE)
+    if _shell_re.search(artifact_text):
+        issues.append("shell_metachar_injection")
+    checks["shell_metachar"] = "shell_metachar_injection" not in issues
+
+    # Dangerous Python imports
+    _dangerous_imports = re.compile(
+        r'\bimport\s+subprocess\b|os\.system\s*\(|os\.popen\s*\(|subprocess\.|'
+        r'\beval\s*\(|\bexec\s*\(|__import__\s*\(',
+        re.IGNORECASE
+    )
+    if _dangerous_imports.search(artifact_text):
+        issues.append("dangerous_import")
+    checks["dangerous_import"] = "dangerous_import" not in issues
+
+    if artifact_bytes_raw is not None:
+        # PE/ELF magic byte detection
+        if artifact_bytes_raw[:4] == b'\x7fELF':
+            issues.append("elf_binary")
+        elif artifact_bytes_raw[:2] == b'MZ':
+            issues.append("pe_binary")
+        checks["binary_magic"] = not any(i in issues for i in ("elf_binary", "pe_binary"))
+
+        # Shannon entropy spike (> 7.5 bits/byte → likely packed/encrypted)
+        if len(artifact_bytes_raw) > 0:
+            freq = {}
+            for b in artifact_bytes_raw:
+                freq[b] = freq.get(b, 0) + 1
+            entropy = -sum((c / len(artifact_bytes_raw)) * math.log2(c / len(artifact_bytes_raw))
+                          for c in freq.values())
+            if entropy > 7.5:
+                issues.append("high_entropy")
+            checks["entropy"] = entropy
+
+    return {
+        "verdict": "FAIL" if issues else "PASS",
+        "issues": issues,
+        "checks": checks,
+    }
+
+
 def promote(root: Path, bundle_id: str, config: dict[str, Any], state: dict[str, Any], exchange=None) -> dict[str, Any]:
     """Promote a quarantined artifact into the improvement workflow.
 
@@ -167,6 +215,15 @@ def promote(root: Path, bundle_id: str, config: dict[str, Any], state: dict[str,
     bundle = load_bundle(root, bundle_id)
     payload = bundle["payload"]
     artifact = payload.get("artifact", "")
+
+    # Sanitization check — must pass before promotion
+    _artifact_text = artifact if isinstance(artifact, str) else ""
+    _sanitize_result = sanitize_quarantine_artifact(_artifact_text)
+    if _sanitize_result["verdict"] == "FAIL":
+        raise ValueError(
+            f"Artifact failed sanitization: {_sanitize_result['issues']}. "
+            "Review the artifact manually before retrying."
+        )
     feature = payload.get("feature", "unknown")
     sender = payload.get("sender", "unknown")
     sender_prefix = sender[:16]
@@ -241,6 +298,7 @@ def promote(root: Path, bundle_id: str, config: dict[str, Any], state: dict[str,
         "verdict": report["verdict"],
         "queued_input_id": entry["id"],
         "peer_sender": sender,
+        "sanitization": _sanitize_result,
     })
 
     return {
@@ -394,6 +452,24 @@ def mark_qualified(
             relay_result = relay_qualified(exchange, bundle_id)
     except Exception:
         pass
+
+    # After successful qualification, deliver trial receipt to creator (best-effort).
+    try:
+        from .trial_receipt import create_receipt, deliver_receipt
+        _record = exchange.inspect(bundle_id)
+        _creator_id = _record["bundle"]["payload"].get("sender", "")
+        _local_id = exchange.identity()["peer_id"]
+        if _creator_id and _creator_id != _local_id:
+            _receipt = create_receipt(
+                exchange.crypto_identity(),
+                payload.get("feature", "unknown"),
+                _creator_id,
+                float(score_delta),
+                _local_id,
+            )
+            deliver_receipt(exchange, _creator_id, _receipt)
+    except Exception:
+        pass  # receipt delivery is best-effort; never block qualification
 
     result: dict[str, Any] = {
         "bundle_id": bundle_id,

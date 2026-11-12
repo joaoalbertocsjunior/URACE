@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import analytics, cli, cli_state as _cli_state_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -334,7 +334,7 @@ class BehavioralContractTests(unittest.TestCase):
             (root / "README.md").write_text("readme", encoding="utf-8")
             config = copy.deepcopy(self.config)
             config["state_path"] = str(root / ".urace" / "state.json")
-            with patch.object(cli, "ROOT", root):
+            with patch.object(cli, "ROOT", root), patch.object(_cli_state_m, "ROOT", root):
                 state = cli.initial_state(config)
                 cli.save_state(config, state)
                 # Simulate a crash mid-apply: file is partially written.

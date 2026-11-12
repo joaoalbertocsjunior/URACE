@@ -6,9 +6,20 @@ for intranet→internet bridge configuration.
 """
 from __future__ import annotations
 
+import logging
 import socket
 import struct
 import os
+
+_logger = logging.getLogger(__name__)
+
+# Ordered fallback list — tried in sequence until one responds.
+STUN_SERVERS: list[tuple[str, int]] = [
+    ("stun.l.google.com", 19302),
+    ("stun1.l.google.com", 19302),
+    ("stun.cloudflare.com", 3478),
+    ("stun.stunprotocol.org", 3478),
+]
 
 
 def get_public_address(
@@ -70,3 +81,17 @@ def get_public_address(
         i += 4 + padded
 
     return result or fallback
+
+
+def get_public_address_with_fallback(timeout: float = 5.0) -> dict | None:
+    """Try each server in STUN_SERVERS in order; return first successful result.
+
+    Returns {"ip": str, "port": int, "stun_server": str} on success, None if all fail.
+    """
+    for host, port in STUN_SERVERS:
+        result = get_public_address(stun_host=host, stun_port=port, timeout=timeout)
+        if result is not None:
+            return {**result, "stun_server": f"{host}:{port}"}
+        _logger.debug("STUN server %s:%d unreachable, trying next", host, port)
+    _logger.warning("All STUN servers unreachable — NAT traversal may fail")
+    return None

@@ -1,6 +1,6 @@
 # URACE
 
-**Your product improves itself while you sleep.**
+**Your product improves while you sleep.**
 
 Type what you want. URACE classifies it, discovers reusable peer features, executes improvements,
 enforces quality gates, and checkpoints verified results.
@@ -61,6 +61,7 @@ Use task-matched receipts to compare actual costs.
 | Challenger | Your APS challenge succeeds |
 | Ledger sealer | You seal a block |
 | LLM similarity peer | You submit a SIMILARITY_VERDICT |
+| Hired Node | You win a work-market bid and your delivery is verified |
 
 Funded by a protocol fee on every fill — not inflation.
 
@@ -89,8 +90,9 @@ Incoming artifacts are never auto-executed.
 | [P2P exchange](docs/exchange/overview.md) | [Token economy](docs/economics/tokenomics.md) |
 | [Price mechanics](docs/economics/price-mechanics.md) | [Node rewards](docs/concepts/node-rewards.md) |
 | [Security model](docs/concepts/security-model.md) | [Spec (`URACE.md`)](URACE.md) |
-| [Full docs index](docs/index.md) | |
+| [Ecosystem roadmap](docs/ecosystem-roadmap.md) | [RPC contract (`urace-rpc-v1`)](docs/reference/urace-rpc-v1.md) |
+| [Benchmark proof](docs/benchmark-proof.md) | [Full docs index](docs/index.md) |
 
 ---
 
-v0.5.1 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.6.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

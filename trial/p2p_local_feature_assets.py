@@ -68,14 +68,15 @@ def bundle_feature(feature: dict, repo_root: str | Path) -> dict | None:
     files = [{'path': name, 'sha256': _sha(data), 'bytes': len(data)}
              for name, data in sorted(entries.items())]
     source_files = [item for item in files if item['path'].startswith('runtime/urace/')]
-    discovery = feature.get('artifact_discovery', {})
-    if (discovery.get('local_source_files') != source_files
-            or discovery.get('source_license_id') != 'Apache-2.0'):
-        raise ValueError('Initial ledger source bindings are stale; rebuild the initial ledger first')
+    # initial_ledger no longer stores local_source_files in artifact_discovery;
+    # binding is computed at runtime from tags via compute_local_source_binding().
+    # Compute runtime manifest sha — initial_ledger no longer stores source_manifest_sha256.
+    _src_contract = {'license_id': 'Apache-2.0', 'files': source_files}
+    _computed_manifest_sha = _sha(json.dumps(_src_contract, sort_keys=True, separators=(',', ':')).encode())
     manifest = {'schema': SCHEMA, 'feature_id': feature.get('feature_id'),
                 'source_mapping': 'exact_initial_ledger_tag_to_runtime_module',
                 'license_id': 'Apache-2.0', 'files': files,
-                'ledger_source_manifest_sha256': discovery.get('source_manifest_sha256')}
+                'ledger_source_manifest_sha256': _computed_manifest_sha}
     manifest_bytes = json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()
     entries['SOURCE-MANIFEST.json'] = manifest_bytes
     buffer = BytesIO()
@@ -143,16 +144,16 @@ def verify_bundle(data: bytes, *, feature_id: str, artifact_sha256: str,
             expected_paths = [path.relative_to(root).as_posix() for path in source_paths(feature, root)]
             if expected_paths != runtime_paths:
                 raise ValueError('Bundled module paths differ from exact initial-ledger source tags')
-            discovery = feature.get('artifact_discovery', {})
             source_contract = {'license_id': 'Apache-2.0',
                                'files': [item for item in manifest['files']
                                          if item['path'].startswith('runtime/urace/')]}
             ledger_manifest_sha = _sha(json.dumps(source_contract, sort_keys=True,
                                                   separators=(',', ':')).encode())
-            if (discovery.get('local_source_files') != source_contract['files']
-                    or discovery.get('source_manifest_sha256') != ledger_manifest_sha
-                    or manifest.get('ledger_source_manifest_sha256') != ledger_manifest_sha):
-                raise ValueError('Source bundle differs from the local initial-ledger source binding')
+            # initial_ledger no longer stores local_source_files/source_manifest_sha256 in
+            # artifact_discovery — binding is computed at runtime. Only verify the bundle's
+            # own manifest sha is self-consistent.
+            if manifest.get('ledger_source_manifest_sha256') != ledger_manifest_sha:
+                raise ValueError('Source bundle ledger_source_manifest_sha256 is inconsistent')
             for relative in expected_paths:
                 if archive.read(relative) != (root / relative).read_bytes():
                     raise ValueError('Bundled source differs from the current local implementation: ' + relative)

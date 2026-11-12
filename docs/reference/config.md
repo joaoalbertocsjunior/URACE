@@ -40,6 +40,7 @@ Configured in the `executor` block of `config.json`.
 |-----|---------|-------------|
 | `max_tokens_per_cycle_warn` | `50000` | Token count above which a KPI warning is logged per cycle |
 | `freeform_max_tokens_per_24h` | `200000` | 24h freeform token budget before hard stop |
+| `freeform_max_tokens_per_call` | `0` (disabled) | Per-call input ceiling; estimated at ~1 token per 3 characters. `0` disables the check. Exceeding the limit returns an error without an LLM call. |
 
 ---
 
@@ -110,6 +111,35 @@ Used as starting point for `exchange ledger supply-calc`.
 |---------|---------|
 | Runtime release URL | Official URACE release endpoint |
 | Signature verification | Always on — updates rejected if signature fails |
+
+---
+
+## External Metrics Sink
+
+Configure an export destination for collected external metrics. Set the `sink` block inside your `external_metrics` settings section.
+
+When a sink is configured, every successful `collect()` call writes or posts the observation list to the sink. If the sink fails, the error is recorded in `sink_result.error` and the cycle continues — no data is lost.
+
+### File sink
+
+Writes one file per collection cycle to a local directory.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `sink.kind` | — | Set to `"file"` to enable file output |
+| `sink.output_dir` | `generated/metrics` | Directory for output files; relative paths are resolved from the project root |
+| `sink.format` | `jsonl` | Output format: `jsonl` (one JSON object per line), `json` (single JSON document), or `csv` |
+
+### HTTP POST sink
+
+POSTs the observation payload to an HTTP endpoint as JSON.
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `sink.kind` | — | Set to `"http_post"` to enable HTTP export |
+| `sink.url` | — | Full URL of the POST endpoint |
+| `sink.credential_env` | — | Name of an environment variable whose value is sent as a `Bearer` token in the `Authorization` header |
+| `sink.timeout_seconds` | `10` | Request timeout in seconds |
 
 ---
 

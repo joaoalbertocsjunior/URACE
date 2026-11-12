@@ -43,7 +43,10 @@ class P2PIntentMatchingTests(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[2]
         features = _p2p_free_features({'exchange': {'root': str(repo_root / 'exchange')}})
         candidate = next(feature for feature in features if feature['feature_id'] == 'rt-p2p-intent-match')
-        self.assertEqual(candidate['local_implementation_status'], 'VERIFIED_LOCAL_IMPLEMENTATION')
+        # initial_ledger entries use COMPUTED_LOCAL_BINDING (hashes derived at runtime from tags);
+        # signed ledger SourceBindingRecords use VERIFIED_LOCAL_IMPLEMENTATION (stored hashes).
+        self.assertIn(candidate['local_implementation_status'],
+                      ('VERIFIED_LOCAL_IMPLEMENTATION', 'COMPUTED_LOCAL_BINDING'))
         self.assertTrue(any(item['path'] == 'runtime/urace/p2p_matching.py'
                             for item in candidate['source_files']))
         self.assertEqual(candidate['source_license_id'], 'Apache-2.0')

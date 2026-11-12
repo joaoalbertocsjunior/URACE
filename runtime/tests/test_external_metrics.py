@@ -1,5 +1,6 @@
 import json,tempfile,unittest
 from pathlib import Path
+from unittest import mock
 from urace import external_metrics
 
 class CollectDisabledTests(unittest.TestCase):
@@ -51,3 +52,43 @@ class LastKnownGoodTests(unittest.TestCase):
    first=external_metrics.collect(root,settings);lkg=first['last_known_good'];data.unlink()
    second=external_metrics.collect(root,settings,last_known_good=lkg)
    self.assertIn('src',second['last_known_good']);self.assertEqual(second['errors'][0]['last_known_good']['value']['v'],5)
+
+class MetricsSinkTests(unittest.TestCase):
+ OBS=[{'metric':'x','value':1}]
+ AT='2026-01-01T00:00:00'
+
+ def test_file_sink_jsonl_writes_file(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   result=external_metrics.export_metrics_sink(Path(tmp),{'sink':{'kind':'file','format':'jsonl'}},self.OBS,self.AT)
+   self.assertEqual(result['sink_kind'],'file');self.assertEqual(result['status'],'ok')
+   p=Path(result['path']);self.assertTrue(p.exists())
+   for line in p.read_text().strip().splitlines():json.loads(line)
+
+ def test_file_sink_csv_writes_file(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   result=external_metrics.export_metrics_sink(Path(tmp),{'sink':{'kind':'file','format':'csv'}},self.OBS,self.AT)
+   self.assertEqual(result['status'],'ok')
+   content=Path(result['path']).read_text();self.assertIn('metric',content.splitlines()[0])
+
+ def test_file_sink_json_writes_file(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   result=external_metrics.export_metrics_sink(Path(tmp),{'sink':{'kind':'file','format':'json'}},self.OBS,self.AT)
+   self.assertEqual(result['status'],'ok')
+   data=json.loads(Path(result['path']).read_text());self.assertIn('observations',data)
+
+ def test_http_post_sink_calls_urlopen(self):
+  mock_resp=mock.MagicMock();mock_resp.__enter__=lambda s:s;mock_resp.__exit__=mock.Mock(return_value=False);mock_resp.status=200
+  with mock.patch('urllib.request.urlopen',return_value=mock_resp) as m:
+   result=external_metrics.export_metrics_sink('.',{'sink':{'kind':'http_post','url':'https://example.com/metrics'}},self.OBS,self.AT)
+   self.assertTrue(m.called)
+   call_req=m.call_args[0][0];self.assertIn('example.com',call_req.full_url)
+   self.assertEqual(result['sink_kind'],'http_post')
+
+ def test_http_post_sink_error_returns_error_status(self):
+  with mock.patch('urllib.request.urlopen',side_effect=Exception('connection refused')):
+   result=external_metrics.export_metrics_sink('.',{'sink':{'kind':'http_post','url':'https://example.com/metrics'}},self.OBS,self.AT)
+   self.assertEqual(result['status'],'error');self.assertIn('connection refused',result['error'])
+
+ def test_no_sink_configured_returns_no_sink(self):
+  result=external_metrics.export_metrics_sink('.',{},self.OBS,self.AT)
+  self.assertEqual(result['status'],'no_sink')

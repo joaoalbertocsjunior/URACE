@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import os
@@ -12,6 +11,12 @@ from contextlib import contextmanager
 from datetime import datetime as _datetime, timezone
 from pathlib import Path
 from typing import Any, Generator
+
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 
 
 RUNTIME_ROOT = Path(__file__).resolve().parents[1]
@@ -36,11 +41,14 @@ def atomic_write_text(path: Path, content: str) -> None:
         os.fsync(handle.fileno())
         temporary = Path(handle.name)
     temporary.replace(path)
-    directory = os.open(path.parent, os.O_RDONLY)
     try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError:
+        pass
 
 
 def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
@@ -50,11 +58,14 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
 def durable_unlink(path: Path) -> None:
     path.unlink(missing_ok=True)
     if path.parent.exists():
-        directory = os.open(path.parent, os.O_RDONLY)
         try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        except OSError:
+            pass
 
 
 def process_exists(pid: int) -> bool:
@@ -133,7 +144,8 @@ def state_lock(path: Path) -> Generator[None, None, None]:
     descriptor = os.open(guard, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if _HAS_FCNTL:
+                _fcntl.flock(descriptor, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise RuntimeError(f"state is locked by live process (kernel guard): {guard}") from error
         with _published_state_lock(path):
@@ -396,3 +408,66 @@ def integration_context() -> dict[str, str]:
         value=os.environ.get(env)
         if value and len(value)<=512 and all(ord(c)>=32 for c in value):result[key]=value
     return result if 'job_id' in result else {}
+
+
+# --- State accessor utilities ---
+
+def get_executor_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the executor_state sub-dict, guaranteed non-None.
+
+    Single access point for the executor_state key so that if the key path
+    ever changes, only this function needs updating.
+    """
+    return state.get("executor_state") or {}
+
+
+def get_executor_calls(state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return the executor_calls list from state, guaranteed non-None list."""
+    return get_executor_state(state).get("executor_calls") or []
+
+
+def load_json_path(path: Path) -> Any:
+    """Load JSON from path with a clear error on parse failure.
+
+    Prefer this over inline json.loads(path.read_text()) in new code so that
+    IOError and JSONDecodeError both surface with the offending path in the message.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
+
+
+# Re-export queue_input here so callers can do `from ._common import queue_input`
+# without a separate import of urace.inputs.
+from .inputs import queue_input as queue_input  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Named fee constants (P2.2 — single source of truth for economic rates)
+# ---------------------------------------------------------------------------
+MINT_STAKE_UNITS: int = 3
+COMPOSITION_REFERRAL_RATE: float = 0.20
+DELIVERY_FEE_FRACTION: float = 0.10
+PROTOCOL_FEE_FRACTION: float = 0.02
+ESCROW_CUSTODY_REWARD_RATE: float = 0.03  # fraction of ask_price paid to escrow holder on success
+
+
+# ---------------------------------------------------------------------------
+# Audit row helper (P2.3 — DRY: adds timestamps automatically)
+# ---------------------------------------------------------------------------
+def emit_audit_row(exchange, *, kind: str, **fields) -> dict:
+    """Append an audit row with auto-populated at_unix and at timestamps.
+
+    Usage: emit_audit_row(exchange, kind='SOME_EVENT', foo='bar', n=42)
+    Returns the emitted row dict.
+    """
+    import time as _time
+    row = {
+        'kind': kind,
+        **fields,
+        'at_unix': _time.time(),
+        'at': _datetime.now(timezone.utc).isoformat(),
+    }
+    exchange.append_audit_row(row)
+    return row

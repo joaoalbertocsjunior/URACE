@@ -6,7 +6,7 @@ The versioned protocol is in trial/qualification_protocol.py and is frozen in ea
 
 The existing repository study compares standalone and URACE-managed executor workflows. It is not a P2P-first-versus-direct-executor benchmark. The two P2P comparison arms are: `direct_executor`, solving the frozen task from scratch; and `p2p_borrow` (P2P-first), discovering/selecting an asset, fetching an eligible artifact into quarantine, integrating and validating it, and using executor calls for remaining work as needed. They must share the frozen task and independent acceptance contract, with counterbalanced order. Cohort plans embed the exact task and acceptance text, verify both hashes, and pin provider/model/client/native effort. `trial/p2p_pair_protocol.py` defines an evidence gate using task and acceptance hashes, matched provider/model/effort, transport receipts reconciled to authoritative files, signed acceptance outcomes (pass or fail), and the artifact digest. It validates open-asset transfer evidence, including buyer quarantine acknowledgement and seller attestation. Every attempted pair and measured acceptance failure remains visible; readiness requires at least 30 valid measured pairs and six in each frozen task family. Provider-token usage, P2P URACE units and other costs remain separate; total savings are not claimed until every material cost is measured and a defensible common valuation exists.
 
-The pair verifier and `trial/p2p_study_plan.py` are an evidence gate and frozen-plan generator, not a live study runner. The runtime supports authenticated remote catalog discovery and explicit open-use asset fetch into quarantine, but no runner yet executes both arms end-to-end (selection, fetch, integration, validation and provider invocation) or obtains independent acceptance and complete cost receipts. Paid remote listing/fill settlement is also not implemented. Local audit-chain validity is not global ledger consensus. Do not label the protocol a qualified benchmark until a runner produces complete evidence for both arms and the cohort passes the frozen gates.
+The pair verifier and `trial/p2p_study_plan.py` are an evidence gate and frozen-plan generator, not a live study runner. The runtime supports authenticated remote catalog discovery and explicit open-use asset fetch into quarantine. `p2p_cost_qualification.py` now implements the qualification runner (`run_qualification_round`, `bootstrap_complete`, `qualification_statistics`) with Wilson-lower-bound statistics and the 30-pair bootstrap requirement; executing a full 30-pair round requires real network peers but the runner code is complete. Cross-peer purchase settlement is implemented via `purchase_settlement.py`; production activation requires live mutually-pinned peers. Local audit-chain validity is not global ledger consensus. Do not label the protocol a qualified benchmark until a runner produces complete evidence for both arms and the cohort passes the frozen gates.
 
 Each provider/native-effort profile needs at least 30 compatible ordinary matched pairs with six in each of navigation, recovery, interruption, receipts and requirements_change. Failover is separately labeled simulation. Sampling prioritizes incomplete pairs, then the least represented profiles/families. Eligibility is independent per executor. Completed failures are counted rather than replaced because of their outcomes. Pair and arm launch records expose attrition and queue time.
 
@@ -28,3 +28,47 @@ Executor prompt JSON uses compact separators, preserving every decoded key/value
 
 
 Protocol v3 records cumulative active invocation intervals across resumes and requirement phases. The same 480-second allowance applies to both arms and includes active validation/publication processing. Inactive queue and controller-suspension gaps remain in end-to-end elapsed time and resource reports but do not consume active allowance. Prior-phase consumption cannot be reset. Incomplete hard-crash intervals are charged conservatively and flagged as uncertain, withholding qualification. Legacy incomplete checkpoints cannot acquire a fresh allowance. Completed historical results remain unchanged; v3 requires a separate frozen execution/measurement cohort. Actual publication is retained in history if total active processing overruns, while qualified delivery credit is withheld.
+
+---
+
+## P2P Cost Qualification Readiness
+
+This section describes what a user must do to qualify a P2P cost savings claim. It is distinct from the executor study above, which compares standalone versus URACE-managed workflows. A P2P cost claim compares borrowing a peer asset (P2P-first) against solving the same task from scratch with a direct executor.
+
+**A P2P cost claim is never qualified by synthetic data.** Only a live cohort study counts. Running the pair protocol against mock peers or offline fixtures does not satisfy any requirement here.
+
+### Minimum cohort requirements
+
+- At least **30 live pairs** across **6 task families** (navigation, recovery, interruption, receipts, requirements_change, and one additional family), with at least 5 pairs per family.
+- Both arms must be **accepted** in every pair — a failed acceptance in either arm removes that pair from qualification counting.
+- Every pair must use a frozen task and acceptance contract with hashes matching the cohort plan. Provider, model, and native effort must be pinned and identical across both arms.
+- Complete, comparable USD costs must be recorded for every pair. Zero URACE units paid is required; reputation credits are not a cost offset.
+- P2P value must be no lower than direct executor value in every qualifying pair.
+- The paired 95% bootstrap upper bound on the cost difference must be below zero.
+
+### Network and settlement requirements
+
+- `network_mode` must be set to `internet` or `hybrid` with at least one live bootstrap peer reachable during the study.
+- On-chain settlement must be active: `token_settlement=true`. Pairs run without on-chain settlement do not count toward a qualified claim.
+- Transport receipts (buyer quarantine acknowledgement and seller attestation) must be present and reconciled for every P2P-first arm.
+
+### Review and signing
+
+Two independent reviewers must sign the cohort using `trial/p2p_cost_claim_review.py`. Both reviewers must attest to:
+
+- Full evidence review (all pairs, receipts, and cost records)
+- Workload provenance review (the frozen task corpus and source digest)
+- Reviewer independence (neither reviewer may be the cohort operator)
+
+Their public keys must be pinned in the frozen cohort plan before the study begins. Review signatures after the fact, over a plan that was not pre-registered with those keys, do not qualify.
+
+### What is NOT a savings claim
+
+Until the above conditions are met:
+
+- P2P borrows have **$0 provider cost** to the borrower, but this is not evidence of savings versus executor work.
+- Listing prices capped against an owner estimate (see [Price Mechanics](economics/price-mechanics.md)) are a pricing heuristic, not a savings guarantee.
+- No reputation credit, token payout, or cohort with fewer than 30 qualifying pairs constitutes a qualified cost savings claim.
+- Synthetic pairs, unspecified evidence, and partial cohorts cannot qualify any savings claim for any scope.
+
+A qualified claim is cohort-specific. It does not prove a universal executor price ceiling or generalize to other task types, providers, or network conditions.

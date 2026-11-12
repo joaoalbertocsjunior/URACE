@@ -106,3 +106,59 @@ class RoutingCoverageAndReuseTests(unittest.TestCase):
   for command in ('api serve --transport stdio','watch events --follow'):
    text='Show status';batch=self.batch(text,[self.item('command',{'command':command,'args':[]},text)])
    rc,result,queued=self.runtext(text,batch,['--confirm']);self.assertEqual(rc,1);queued.assert_not_called()
+
+class CancelDetectionTests(unittest.TestCase):
+ def test_cancel_re_matches_all_cancel_words(self):
+  from urace.freeform_routing import _CANCEL_RE
+  for word in ('cancel','Cancel','CANCEL','ignore','never mind','nevermind','forget','forget it','forget that','abort','scratch that','no thanks','undo','cancel.','  cancel  '):
+   self.assertIsNotNone(_CANCEL_RE.match(word),f'Expected _CANCEL_RE to match {word!r}')
+
+ def test_cancel_re_does_not_match_normal_input(self):
+  from urace.freeform_routing import _CANCEL_RE
+  for word in ('cancellation task','ignore me later','do not abort','forgotten goal','undone work','cancel the sprint','abort the mission','I want to cancel'):
+   self.assertIsNone(_CANCEL_RE.match(word),f'Expected _CANCEL_RE NOT to match {word!r}')
+
+ def _run_cancel(self,text,state_override=None,extra=()):
+  import copy,io,tempfile
+  from unittest.mock import patch
+  config=copy.deepcopy(cli.load_config());config.pop('active_product',None)
+  with tempfile.TemporaryDirectory() as tmp:
+   config['state_path']=str(Path(tmp)/'state.json')
+   state=cli.initial_state(config)
+   if state_override:state.update(state_override)
+   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'run_routed_codex',side_effect=AssertionError('LLM must not be called for cancel')),contextlib.redirect_stdout(io.StringIO()) as out:
+    rc=cli.main(['classify',text,'--json',*extra])
+  return rc,json.loads(out.getvalue())
+
+ def test_cancel_with_nothing_queued_returns_zero_and_nothing_to_cancel(self):
+  rc,result=self._run_cancel('cancel')
+  self.assertEqual(rc,0);self.assertEqual(result.get('status'),'nothing_to_cancel')
+
+ def test_never_mind_with_nothing_queued_returns_zero(self):
+  rc,result=self._run_cancel('never mind')
+  self.assertEqual(rc,0);self.assertEqual(result.get('status'),'nothing_to_cancel')
+
+ def test_abort_with_nothing_queued_returns_zero(self):
+  rc,result=self._run_cancel('abort')
+  self.assertEqual(rc,0);self.assertEqual(result.get('status'),'nothing_to_cancel')
+
+ def test_cancel_with_recent_queued_in_state_cancels_it(self):
+  import time
+  recent=[{'kind':'goal','id':'inp-test-123','label':'Improve latency','at':time.time()}]
+  rc,result=self._run_cancel('cancel',state_override={'recently_queued':recent})
+  self.assertEqual(rc,0);self.assertIn(result.get('status'),('cancelled','nothing_to_cancel'))
+
+ def test_cancel_does_not_call_llm(self):
+  rc,result=self._run_cancel('cancel')
+  self.assertEqual(rc,0)
+
+ def test_cancel_plain_text_output(self):
+  import io,copy,tempfile
+  from unittest.mock import patch
+  config=copy.deepcopy(cli.load_config());config.pop('active_product',None)
+  with tempfile.TemporaryDirectory() as tmp:
+   config['state_path']=str(Path(tmp)/'state.json')
+   state=cli.initial_state(config)
+   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'run_routed_codex',side_effect=AssertionError('no LLM for cancel')),contextlib.redirect_stdout(io.StringIO()) as out:
+    rc=cli.main(['classify','cancel'])
+  self.assertEqual(rc,0);self.assertIn('cancel',out.getvalue().lower())

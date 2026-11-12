@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import analytics, cli, cli_lifecycle as _cli_lifecycle_m, cli_state as _cli_state_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -43,6 +43,9 @@ class UraceLifecycleTests(unittest.TestCase):
                 with patch.object(cli, "executor_discovery_due", return_value=True), \
                      patch.object(cli, "executor_execution_allowed", return_value=True), \
                      patch.object(cli, "document_metrics", return_value={}), \
+                     patch.object(_cli_lifecycle_m, "executor_discovery_due", return_value=True), \
+                     patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), \
+                     patch.object(_cli_lifecycle_m, "document_metrics", return_value={}), \
                      patch.object(executor, "discover", side_effect=[first, second]), \
                      patch.object(executor, "execute", side_effect=[first, second]):
                     for expected in (first, second):
@@ -91,7 +94,7 @@ class UraceLifecycleTests(unittest.TestCase):
         plan = {"id": "plan", "status": "ready"}
         state = {"executor_state": {"executor_calls": [], "provider_pool": {"last_route": {"provider": "claude-primary", "adapter": "claude-cli", "capability": "execution", "attempted": ["codex-primary", "claude-primary"]}}}, "operations": [], "evidence": [], "progress_profiles": [{"measures": {}}]}
         prepared = {"status": "NO_EFFECT", "changed_files": [], "message": "No safe change was needed."}
-        with patch.object(cli, "executor_execution_allowed", return_value=True), patch.object(cli, "document_metrics", return_value={}), patch.object(cli.intelligent_executor, "execute", return_value=prepared):
+        with patch.object(cli, "executor_execution_allowed", return_value=True), patch.object(cli, "document_metrics", return_value={}), patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), patch.object(_cli_lifecycle_m, "document_metrics", return_value={}), patch.object(cli.intelligent_executor, "execute", return_value=prepared):
             cli.execute_with_executor({"executor": {}}, state, objective, plan)
         operation = state["operations"][-1]
         self.assertEqual(operation["executor"]["executor_id"], "claude-primary")
@@ -104,7 +107,7 @@ class UraceLifecycleTests(unittest.TestCase):
         plan = {"id": "plan", "status": "ready"}
         state = {"executor_state": {"executor_calls": []}, "operations": [], "evidence": [], "progress_profiles": [{"measures": {}}]}
         prepared = {"status": "UPDATE_CONFLICT", "changed_files": [], "conflict": "URACE_UPDATE_CONFLICT: keep local policy or adopt new requirement"}
-        with patch.object(cli, "executor_execution_allowed", return_value=True), patch.object(cli, "document_metrics", return_value={}), patch.object(cli.intelligent_executor, "execute", return_value=prepared):
+        with patch.object(cli, "executor_execution_allowed", return_value=True), patch.object(cli, "document_metrics", return_value={}), patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), patch.object(_cli_lifecycle_m, "document_metrics", return_value={}), patch.object(cli.intelligent_executor, "execute", return_value=prepared):
             result = cli.execute_with_executor({"executor": {}}, state, objective, plan)
         self.assertEqual(result["status"], "AWAITING_OPERATOR_DECISION")
         self.assertEqual(objective["status"], "awaiting_operator_decision")
@@ -336,6 +339,8 @@ class UraceLifecycleTests(unittest.TestCase):
                     product.write_text("accepted", encoding="utf-8")
                     with patch.object(cli, "ROOT", root), patch.object(cli, "executor_execution_allowed", return_value=True), \
                          patch.object(cli, "document_metrics", return_value={}), \
+                         patch.object(_cli_lifecycle_m, "ROOT", root), patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), \
+                         patch.object(_cli_lifecycle_m, "document_metrics", return_value={}), \
                          patch.object(cli.intelligent_executor, "execute", side_effect=failure):
                         with self.assertRaisesRegex(RuntimeError, "candidate runtime tests failed"):
                             cli.execute_with_executor({"executor": {}}, state, objective, plan)
@@ -428,6 +433,8 @@ class UraceLifecycleTests(unittest.TestCase):
         state = {"executor_state": {"executor_calls": []}, "operations": [], "progress_profiles": [{"measures": {}}]}
         with patch.object(cli, "executor_execution_allowed", return_value=True), \
              patch.object(cli, "document_metrics", return_value={}), \
+             patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), \
+             patch.object(_cli_lifecycle_m, "document_metrics", return_value={}), \
              patch.object(cli.intelligent_executor, "execute", side_effect=error):
             with self.assertRaises(executor.ExecutorUnavailable):
                 cli.execute_with_executor({"executor": {}}, state, objective, {"id": "plan"})
@@ -448,6 +455,7 @@ class UraceLifecycleTests(unittest.TestCase):
                     error.__urace_executor_metadata__ = usage
                     raise error
                 with patch.object(cli, "executor_discovery_due", return_value=True), \
+                     patch.object(_cli_lifecycle_m, "executor_discovery_due", return_value=True), \
                      patch.object(cli.intelligent_executor, "discover", side_effect=fail):
                     with self.assertRaises(type(error)):
                         cli.discover_with_executor({"executor": {}}, state)
@@ -476,6 +484,8 @@ class UraceLifecycleTests(unittest.TestCase):
             return {"status": "NO_EFFECT", "changed_files": [], "message": "done", "__urace_executor_metadata__": usage}
         with patch.object(cli, "executor_execution_allowed", return_value=True), \
              patch.object(cli, "document_metrics", return_value={}), \
+             patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), \
+             patch.object(_cli_lifecycle_m, "document_metrics", return_value={}), \
              patch.object(cli.intelligent_executor, "execute", side_effect=execute):
             with self.assertRaises(executor.ExecutorUnavailable):
                 cli.execute_with_executor({"executor": {}}, state, objective, {"id": "plan"})
@@ -822,7 +832,7 @@ class UraceLifecycleTests(unittest.TestCase):
         objective = {"id": "objective-capacity", "title": "test", "reason": "test", "success_measure": "test", "scope": "documentation", "status": "planned"}
         plan = {"id": "plan-capacity", "status": "ready"}
         unavailable = executor.ExecutorUnavailable("PROVIDER_CAPACITY", (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat())
-        with patch.object(cli, "save_state"), patch.object(cli.intelligent_executor, "execute", side_effect=[unavailable, {"status": "NO_EFFECT", "changed_files": []}]):
+        with patch.object(cli, "save_state"), patch.object(_cli_lifecycle_m, "save_state"), patch.object(cli.intelligent_executor, "execute", side_effect=[unavailable, {"status": "NO_EFFECT", "changed_files": []}]):
             with self.assertRaises(executor.ExecutorUnavailable):
                 cli.execute_with_executor(self.config, self.state, objective, plan)
             result = cli.execute_with_executor(self.config, self.state, objective, plan)
@@ -862,7 +872,8 @@ class UraceLifecycleTests(unittest.TestCase):
     def test_system_repair_registry_is_version_keyed_and_replay_safe(self):
         self.state["self_evolution_policy"] = {"mode": "NECESSARY_ONLY"}
         fault = {"component": "portfolio", "code": "ACTIVE_COHORT_ACCOUNTING", "phase": "PLANNED", "exception_class": "SystemExit"}
-        with patch.object(cli, "runtime_version_digest", return_value="runtime-v1"), patch.object(cli, "save_state"), patch.object(cli.intelligent_executor, "availability", return_value={"available": True}), patch.object(cli, "executor_execution_allowed", return_value=True), patch.object(cli, "execute_with_executor", return_value={"status": "ACCEPTED"}) as execute:
+        with patch.object(cli, "runtime_version_digest", return_value="runtime-v1"), patch.object(cli, "save_state"), patch.object(cli.intelligent_executor, "availability", return_value={"available": True}), patch.object(cli, "executor_execution_allowed", return_value=True), patch.object(cli, "execute_with_executor", return_value={"status": "ACCEPTED"}), \
+             patch.object(_cli_lifecycle_m, "runtime_version_digest", return_value="runtime-v1"), patch.object(_cli_lifecycle_m, "save_state"), patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), patch.object(_cli_lifecycle_m, "execute_with_executor", return_value={"status": "ACCEPTED"}) as execute:
             self.assertEqual(cli.attempt_core_auto_repair(self.config, self.state, fault), "RETRY")
             self.assertEqual(cli.attempt_core_auto_repair(self.config, self.state, fault), "ACTIVATE")
             self.assertEqual(cli.attempt_core_auto_repair(self.config, self.state, fault), "DEDUPLICATED")
@@ -1254,7 +1265,7 @@ class UraceLifecycleTests(unittest.TestCase):
         def interrupted_discovery(*_args):
             raise RuntimeError("interrupted")
 
-        with patch.object(cli, "save_state", side_effect=observe_save), patch.object(cli.intelligent_executor, "discover", side_effect=interrupted_discovery):
+        with patch.object(cli, "save_state", side_effect=observe_save), patch.object(_cli_lifecycle_m, "save_state", side_effect=observe_save), patch.object(cli.intelligent_executor, "discover", side_effect=interrupted_discovery):
             with self.assertRaises(RuntimeError):
                 cli.discover_with_executor(self.config, self.state, persist_usage=True)
         self.assertEqual(observations[0]["outcome"], "attempted")
@@ -1287,6 +1298,7 @@ class UraceLifecycleTests(unittest.TestCase):
         plan = {"id": "plan-1"}
         prepared = {"status": "NO_EFFECT", "changed_files": [], "message": ""}
         with patch.object(cli, "executor_execution_allowed", return_value=True), \
+             patch.object(_cli_lifecycle_m, "executor_execution_allowed", return_value=True), \
              patch.object(cli.intelligent_executor, "execute", return_value=prepared):
             cli.execute_with_executor(self.config, self.state, objective, plan)
         new_call = next((c for c in self.state["executor_state"]["executor_calls"] if c.get("id")), None)
@@ -1603,7 +1615,7 @@ class UraceLifecycleTests(unittest.TestCase):
             (snapshot / "manifest.json").write_text('{"files":{"examples/old.py":"stale"}}', encoding="utf-8")
             config = copy.deepcopy(self.config)
             config["executor"]["allowed_files_by_scope"]["runtime"] = ["urace/runtime/README.md"]
-            with patch.object(cli, "runtime_stable_path", return_value=snapshot):
+            with patch.object(cli, "runtime_stable_path", return_value=snapshot), patch.object(_cli_state_m, "runtime_stable_path", return_value=snapshot):
                 cli.write_runtime_snapshot(config)
             self.assertFalse(obsolete.exists())
             self.assertFalse(obsolete.parent.exists())
@@ -1664,7 +1676,7 @@ class UraceLifecycleTests(unittest.TestCase):
             (root / "README.md").write_text("readme", encoding="utf-8")
             config = copy.deepcopy(self.config)
             config["state_path"] = str(root / ".urace" / "state.json")
-            with patch.object(cli, "ROOT", root):
+            with patch.object(cli, "ROOT", root), patch.object(_cli_state_m, "ROOT", root):
                 state = cli.initial_state(config)
                 cli.save_state(config, state)
                 (root / "URACE.md").write_text("partial-after", encoding="utf-8")
@@ -1684,7 +1696,7 @@ class UraceLifecycleTests(unittest.TestCase):
             (root / "README.md").write_text("readme", encoding="utf-8")
             config = copy.deepcopy(self.config)
             config["state_path"] = str(root / ".urace" / "state.json")
-            with patch.object(cli, "ROOT", root):
+            with patch.object(cli, "ROOT", root), patch.object(_cli_state_m, "ROOT", root):
                 state = cli.initial_state(config)
                 state["checkpoints"].append({"transaction": "transaction-2"})
                 cli.save_state(config, state)
@@ -1715,7 +1727,7 @@ class UraceLifecycleTests(unittest.TestCase):
             config = copy.deepcopy(self.config)
             config["state_path"] = str(root / "state" / "state.json")
             config["product_files"] = ["URACE.md", "README.md"]
-            with patch.object(cli, "ROOT", root):
+            with patch.object(cli, "ROOT", root), patch.object(_cli_state_m, "ROOT", root):
                 state = cli.initial_state(config)
                 cli.save_state(config, state)
                 cli.write_stable_snapshot(config)
@@ -1733,7 +1745,7 @@ class UraceLifecycleTests(unittest.TestCase):
             (root / "README.md").write_text(readme_text, encoding="utf-8")
             config = copy.deepcopy(self.config); config["state_path"] = str(root / "state/state.json")
             config["product_files"] = ["URACE.md", "README.md"]
-            with patch.object(cli, "ROOT", root):
+            with patch.object(cli, "ROOT", root), patch.object(_cli_state_m, "ROOT", root):
                 state = cli.initial_state(config); cli.write_stable_snapshot(config)
                 changed = readme_text + "External accepted guidance.\n"
                 (root / "README.md").write_text(changed, encoding="utf-8")

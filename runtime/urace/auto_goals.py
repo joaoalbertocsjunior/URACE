@@ -53,7 +53,7 @@ def select(config:dict[str,Any],state:dict[str,Any])->dict[str,Any]|None:
     candidates=[]
     replenishment_allowed = settings.get('replenish_backlog', True) is True
     previous_automatic_work = any(o.get('source') == 'auto_goals' for o in objectives)
-    for index,requirement in enumerate(requirements[:1000]):
+    for _index,requirement in enumerate(requirements[:1000]):
         if not isinstance(requirement,dict) or requirement.get('status','pending') not in {'pending','failed','in_progress'}:continue
         if not all(isinstance(requirement.get(k),str) and requirement[k].strip() for k in ('id','title','success_measure')):continue
         dependencies=requirement.get('dependencies',[])

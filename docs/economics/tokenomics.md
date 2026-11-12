@@ -266,6 +266,43 @@ urace exchange ledger transfer <peer_id> <amount_units>
 
 ---
 
+## On-chain settlement (opt-in)
+
+URACE can broadcast credit deltas as EVM transactions when configured with a JSON-RPC provider.
+
+**How to enable**: set `token_settlement: true`, `rpc_provider_url`, and `chain_id` in `exchange/policy.json` under the `p2p` key:
+
+```json
+{
+  "p2p": {
+    "token_settlement": true,
+    "rpc_provider_url": "https://polygon-mainnet.infura.io/v3/YOUR_KEY",
+    "chain_id": 137
+  }
+}
+```
+
+**Chain selection — gas economics matter**:
+
+| `chain_id` | Network | Gas per ERC-20 transfer | Economical for per-borrow? |
+|------------|---------|------------------------|---------------------------|
+| `1` | Ethereum mainnet | ~$4–7 at 20 Gwei | **No** — 600× a typical executor call |
+| `137` | Polygon PoS | ~$0.001 | **Yes** — recommended |
+| `8453` | Base | ~$0.001 | **Yes** |
+| `42161` | Arbitrum One | ~$0.001 | **Yes** |
+
+> **Warning**: `chain_id=1` (mainnet) makes per-borrow on-chain settlement economically broken. Use it only for large off-ramp withdrawals, not per-transaction settlement. Omit `chain_id` and it defaults to `1` for safety (explicit opt-in required for per-borrow settlement).
+
+**What happens**: when both fields are set, credit deltas (on-ramp, off-ramp, NFT mint) are signed and broadcast as EVM transactions (EIP-155 RLP-encoded, with real nonce, gas price, and ABI-encoded calldata) to the configured RPC endpoint instead of being processed as audit-only stubs. Cross-peer trial receipts (`trial_receipt.py`) are also delivered to the creator peer so that `receipt_verified=True` earn events require actual signed cross-peer acknowledgement — not just local audit rows. `handle_purchase_settlement` also fires `on_ramp` for the buyer when a `crypto_address` is included in the settlement payload.
+
+**Unit scaling**: internal URACE units (8-decimal satoshi model) are automatically converted to 18-decimal EVM amounts using the built-in `CHAIN_SCALE` factor (10^10). No manual conversion is required.
+
+**Supported providers**: any EVM-compatible JSON-RPC endpoint works — Alchemy, Infura, QuickNode, or a self-hosted node (e.g. `http://localhost:8545` for a local Hardhat or Anvil instance).
+
+**Disabled by default**: if `token_settlement` is absent or `false`, or if `rpc_provider_url` is not set, URACE uses the audit-only stub adapter and no network calls are made.
+
+---
+
 ## Security Guarantees
 
 | Threat | Defense |

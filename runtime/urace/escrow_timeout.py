@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     pass  # exchange type is duck-typed
 
 DEFAULT_ESCROW_TIMEOUT_HOURS: int = 48
+# Fraction of ask_price awarded to the escrow holder (seller) on successful DEK delivery.
+ESCROW_CUSTODY_REWARD_RATE: float = 0.03
 
 
 def check_escrow_timeouts(exchange) -> list[dict]:
@@ -126,5 +128,79 @@ def process_escrow_refunds(exchange) -> list[dict]:
 
         refund_record = {**item, "refund_emitted": True}
         processed.append(refund_record)
+
+    return processed
+
+
+def process_successful_deliveries(exchange) -> list[dict]:
+    """Emit ESCROW_CUSTODY_EARNED + CREDIT_DELTA rows for timely DEK deliveries.
+
+    A timely delivery is an EQUITY_LISTING_FILLED that has a matching
+    ARTIFACT_KEY_GRANT emitted within DEFAULT_ESCROW_TIMEOUT_HOURS.
+    Idempotent: listings with ESCROW_CUSTODY_EARNED already are skipped.
+    Returns list of processed reward dicts.
+    """
+    rows = exchange.audit_rows()
+    timeout_secs = DEFAULT_ESCROW_TIMEOUT_HOURS * 3600
+    now = time.time()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    filled = {r["listing_id"]: r for r in rows
+              if r.get("kind") == "EQUITY_LISTING_FILLED"}
+    granted: dict = {}
+    for r in rows:
+        if r.get("kind") == "ARTIFACT_KEY_GRANT":
+            lid = r.get("listing_id", "")
+            if lid and lid not in granted:
+                granted[lid] = r
+    rewarded = {r["listing_id"] for r in rows
+                if r.get("kind") == "ESCROW_CUSTODY_EARNED"}
+
+    processed: list[dict] = []
+    for listing_id, fill_row in filled.items():
+        if listing_id not in granted:
+            continue
+        if listing_id in rewarded:
+            continue
+        fill_time = float(fill_row.get("at_unix", 0))
+        if now - fill_time > timeout_secs:
+            continue  # delivery arrived but timeout already processed separately
+
+        listing_row = next(
+            (r for r in rows
+             if r.get("kind") == "EQUITY_LISTING"
+             and r.get("listing_id") == listing_id),
+            None,
+        )
+        price_units = int((listing_row or {}).get("ask_price_units", 0))
+        custody_reward = max(1, int(price_units * ESCROW_CUSTODY_REWARD_RATE))
+        seller_peer_id = fill_row.get("seller_peer_id", fill_row.get("seller_id", ""))
+
+        exchange.append_audit_row({
+            "kind": "ESCROW_CUSTODY_EARNED",
+            "listing_id": listing_id,
+            "feature_id": fill_row.get("feature_id", ""),
+            "seller_peer_id": seller_peer_id,
+            "custody_reward_units": custody_reward,
+            "ask_price_units": price_units,
+            "at_unix": now,
+            "at": now_iso,
+        })
+        exchange.append_audit_row({
+            "kind": "CREDIT_DELTA",
+            "direction": "escrow_custody_earned",
+            "peer": seller_peer_id,
+            "amount_units": custody_reward,
+            "listing_id": listing_id,
+            "feature_id": fill_row.get("feature_id", ""),
+            "at_unix": now,
+            "at": now_iso,
+        })
+        processed.append({
+            "listing_id": listing_id,
+            "seller_peer_id": seller_peer_id,
+            "custody_reward_units": custody_reward,
+            "reward_emitted": True,
+        })
 
     return processed

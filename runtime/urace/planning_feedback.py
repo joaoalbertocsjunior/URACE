@@ -16,7 +16,8 @@ _STAGNATION_CALLS = 8    # N calls with <30% success triggers stagnation penalty
 
 def _call_outcomes_by_objective(state: dict[str, Any]) -> dict[str, list[str]]:
     """Return {objective_id: [outcome, ...]} from executor_calls history."""
-    calls = state.get("executor_state", {}).get("executor_calls", [])
+    from ._common import get_executor_calls
+    calls = get_executor_calls(state)
     by_obj: dict[str, list[str]] = {}
     for call in calls:
         obj_id = call.get("objective_id") or call.get("change_id")

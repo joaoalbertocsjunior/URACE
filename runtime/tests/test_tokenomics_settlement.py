@@ -425,3 +425,107 @@ class TokenDecayTests(unittest.TestCase):
         d2 = tl.apply_token_decay(e, 'peer1')
         self.assertGreater(d1, 0.0)
         self.assertEqual(d2, 0.0)
+
+
+class EthSettlementAdapterTests(unittest.TestCase):
+    """Tests for EthSettlementAdapter and get_chain_adapter() EVM dispatch."""
+
+    def _make_mock_response(self, body: bytes):
+        import unittest.mock as mock
+        resp = mock.MagicMock()
+        resp.read.return_value = body
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = mock.MagicMock(return_value=False)
+        return resp
+
+    def test_on_ramp_calls_eth_send_raw_transaction(self):
+        from urace.eth_settlement_adapter import EthSettlementAdapter
+        import unittest.mock as mock
+        import tempfile, json
+        with tempfile.TemporaryDirectory() as wdir:
+            from urace import crypto_wallet as cw
+            cw.wallet_init(wallet_dir=wdir)
+            adapter = EthSettlementAdapter('http://localhost:8545', wallet_dir=wdir)
+            response_body = json.dumps({'jsonrpc': '2.0', 'result': '0xabc123', 'id': 1}).encode()
+            mock_resp = self._make_mock_response(response_body)
+            with mock.patch('urllib.request.urlopen', return_value=mock_resp) as mock_open:
+                result = adapter.on_ramp('peer1', 100, '0xABC')
+            mock_open.assert_called()
+            call_args = mock_open.call_args
+            req = call_args[0][0]
+            body = req.data.decode()
+            self.assertIn('eth_sendRawTransaction', body)
+
+    def test_on_ramp_uses_chain_units(self):
+        from urace.eth_settlement_adapter import EthSettlementAdapter
+        from urace import credit_ledger as cl
+        import unittest.mock as mock
+        import tempfile, json
+        with tempfile.TemporaryDirectory() as wdir:
+            from urace import crypto_wallet as cw
+            cw.wallet_init(wallet_dir=wdir)
+            adapter = EthSettlementAdapter('http://localhost:8545', wallet_dir=wdir)
+            response_body = json.dumps({'jsonrpc': '2.0', 'result': '0xdeadbeef', 'id': 1}).encode()
+            mock_resp = self._make_mock_response(response_body)
+            with mock.patch('urllib.request.urlopen', return_value=mock_resp):
+                result = adapter.on_ramp('peer1', 100, '0xABC')
+            expected_chain = cl.to_chain_units(100)
+            self.assertEqual(result['amount_crypto'], expected_chain)
+
+    def test_on_ramp_on_rpc_error_returns_error_status(self):
+        from urace.eth_settlement_adapter import EthSettlementAdapter
+        import unittest.mock as mock
+        import tempfile
+        with tempfile.TemporaryDirectory() as wdir:
+            from urace import crypto_wallet as cw
+            cw.wallet_init(wallet_dir=wdir)
+            adapter = EthSettlementAdapter('http://localhost:8545', wallet_dir=wdir)
+            with mock.patch('urllib.request.urlopen', side_effect=Exception('connection refused')):
+                result = adapter.on_ramp('peer1', 100, '0xABC')
+            self.assertEqual(result['status'], 'rpc_error')
+            self.assertIn('connection refused', result['error'])
+
+    def test_off_ramp_calls_rpc(self):
+        from urace.eth_settlement_adapter import EthSettlementAdapter
+        import unittest.mock as mock
+        import tempfile, json
+        with tempfile.TemporaryDirectory() as wdir:
+            from urace import crypto_wallet as cw
+            cw.wallet_init(wallet_dir=wdir)
+            adapter = EthSettlementAdapter('http://localhost:8545', wallet_dir=wdir)
+            response_body = json.dumps({'jsonrpc': '2.0', 'result': '0xabc', 'id': 1}).encode()
+            mock_resp = self._make_mock_response(response_body)
+            with mock.patch('urllib.request.urlopen', return_value=mock_resp) as mock_open:
+                result = adapter.off_ramp('peer1', 50, '0xDEF')
+            mock_open.assert_called()
+            self.assertEqual(result['status'], 'ok')
+            self.assertIn('tx_hash', result)
+
+    def test_mint_nft_calls_rpc(self):
+        from urace.eth_settlement_adapter import EthSettlementAdapter
+        import unittest.mock as mock
+        import tempfile, json
+        with tempfile.TemporaryDirectory() as wdir:
+            from urace import crypto_wallet as cw
+            cw.wallet_init(wallet_dir=wdir)
+            adapter = EthSettlementAdapter('http://localhost:8545', wallet_dir=wdir)
+            response_body = json.dumps({'jsonrpc': '2.0', 'result': '0xmint1', 'id': 1}).encode()
+            mock_resp = self._make_mock_response(response_body)
+            with mock.patch('urllib.request.urlopen', return_value=mock_resp) as mock_open:
+                result = adapter.mint_nft('feat-1', 'alice', {'key': 'val'})
+            mock_open.assert_called()
+            self.assertEqual(result['status'], 'ok')
+            self.assertIn('tx_hash', result)
+
+    def test_get_chain_adapter_returns_eth_adapter_when_configured(self):
+        from urace.integration_bridge import get_chain_adapter
+        from urace.eth_settlement_adapter import EthSettlementAdapter
+        config = {'p2p': {'token_settlement': True, 'rpc_provider_url': 'http://localhost:8545'}}
+        adapter = get_chain_adapter(config)
+        self.assertIsInstance(adapter, EthSettlementAdapter)
+
+    def test_get_chain_adapter_returns_null_when_settlement_false(self):
+        from urace.integration_bridge import get_chain_adapter, NullAdapter
+        config = {'p2p': {'token_settlement': False, 'rpc_provider_url': 'http://localhost:8545'}}
+        adapter = get_chain_adapter(config)
+        self.assertIsInstance(adapter, NullAdapter)

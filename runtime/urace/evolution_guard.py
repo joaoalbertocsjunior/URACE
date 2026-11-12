@@ -219,7 +219,8 @@ def p2p_keygen(output_path: "Path | None" = None) -> dict:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(priv_raw.hex() + "\n", encoding="utf-8")
-    output_path.chmod(0o600)
+    try: output_path.chmod(0o600)
+    except (AttributeError, NotImplementedError, OSError): pass
 
     return {
         "pub_key_hex":   pub_hex,

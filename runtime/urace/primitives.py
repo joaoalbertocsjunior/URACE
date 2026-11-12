@@ -792,6 +792,63 @@ def validate_archive_amendment(value: dict) -> None:
     validate_digest_value(value["after_digest"])
 
 
+def validate_source_binding_supersession(value: dict) -> None:
+    """§proto: SourceBindingSupersession — links an updated source binding to its predecessor.
+
+    Appended as SOURCE_BINDING_SUPERSESSION in the signed ledger when a runtime
+    source file changes, so peers can resolve the new binding without a full ledger rebuild.
+    """
+    if not isinstance(value, dict):
+        raise ValueError(f"SourceBindingSupersession must be dict, got {type(value).__name__}")
+    for req in ("feature_id", "superseded_manifest_sha256", "new_manifest_sha256",
+                "new_source_files", "reason"):
+        if req not in value:
+            raise ValueError(f"SourceBindingSupersession missing required field '{req}'")
+    if not isinstance(value["feature_id"], str) or not value["feature_id"].strip():
+        raise ValueError("SourceBindingSupersession.feature_id must be non-empty str")
+    validate_digest_value(value["superseded_manifest_sha256"])
+    validate_digest_value(value["new_manifest_sha256"])
+    if not isinstance(value["new_source_files"], list):
+        raise ValueError("SourceBindingSupersession.new_source_files must be list")
+    for item in value["new_source_files"]:
+        if not isinstance(item, dict) or not all(k in item for k in ("path", "sha256", "bytes")):
+            raise ValueError("SourceBindingSupersession.new_source_files entries must have path, sha256, bytes")
+        validate_digest_value(item["sha256"])
+        if not isinstance(item["bytes"], int) or item["bytes"] < 0:
+            raise ValueError("SourceBindingSupersession.new_source_files[*].bytes must be non-negative int")
+    if not isinstance(value["reason"], str) or not value["reason"].strip():
+        raise ValueError("SourceBindingSupersession.reason must be non-empty str")
+
+
+def validate_source_binding_record(value: dict) -> None:
+    """§proto: SourceBindingRecord — standalone decoupled source binding for a feature.
+
+    Decouples source file bindings from immutable feature records. A SourceBindingRecord
+    can be superseded by a newer one (via SourceBindingSupersession) when source files change,
+    allowing peers to sync the new binding without rebuilding the full initial ledger.
+    """
+    if not isinstance(value, dict):
+        raise ValueError(f"SourceBindingRecord must be dict, got {type(value).__name__}")
+    for req in ("feature_id", "manifest_sha256", "source_files", "license_id", "bound_at"):
+        if req not in value:
+            raise ValueError(f"SourceBindingRecord missing required field '{req}'")
+    if not isinstance(value["feature_id"], str) or not value["feature_id"].strip():
+        raise ValueError("SourceBindingRecord.feature_id must be non-empty str")
+    validate_digest_value(value["manifest_sha256"])
+    if not isinstance(value["source_files"], list):
+        raise ValueError("SourceBindingRecord.source_files must be list")
+    for item in value["source_files"]:
+        if not isinstance(item, dict) or not all(k in item for k in ("path", "sha256", "bytes")):
+            raise ValueError("SourceBindingRecord.source_files entries must have path, sha256, bytes")
+        validate_digest_value(item["sha256"])
+        if not isinstance(item["bytes"], int) or item["bytes"] < 0:
+            raise ValueError("SourceBindingRecord.source_files[*].bytes must be non-negative int")
+    if not isinstance(value["license_id"], str) or not value["license_id"].strip():
+        raise ValueError("SourceBindingRecord.license_id must be non-empty str")
+    if not isinstance(value["bound_at"], (int, float)) or value["bound_at"] < 0:
+        raise ValueError("SourceBindingRecord.bound_at must be a non-negative unix timestamp")
+
+
 _CRC_PHASES = frozenset({
     "ASSESSING", "PLANNING", "EXECUTING", "VALIDATING", "DORMANT"
 })
@@ -881,6 +938,9 @@ _VALIDATORS: dict[str, Any] = {
     # §62e r3
     "CompactionIndex":             validate_compaction_index,
     "ArchiveAmendment":            validate_archive_amendment,
+    # §proto
+    "SourceBindingRecord":         validate_source_binding_record,
+    "SourceBindingSupersession":   validate_source_binding_supersession,
     # §62h
     "TechniqueApplicationRecord":  validate_technique_application_record,
 }

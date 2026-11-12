@@ -86,7 +86,8 @@ def collect(config: dict[str, Any], root: Path) -> DashboardData:
                 except Exception:
                     pass
 
-        calls = state.get('executor_state', {}).get('executor_calls', [])
+        from ._common import get_executor_calls
+        calls = get_executor_calls(state)
         for c in reversed(calls[-MAX_EVENTS:]):
             at = (c.get('at') or '')[:19].replace('T', ' ')
             kind = (c.get('stage') or 'EXECUTOR_CALL').upper()

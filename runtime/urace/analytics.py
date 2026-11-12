@@ -56,11 +56,12 @@ def _rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def collect(root: Path, state: dict[str, Any], vitals: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    from ._common import get_executor_calls
     tables: dict[str, list[dict[str, Any]]] = {
         "overview": _rows([{"exported_at": _now(), "state_version": state.get("state_version"), "lifecycle": state.get("lifecycle_state"), "canonical_source": "durable URACE state", "control_dependency": "NONE"}]),
         "progress_metrics": _rows([{"name": name, **entry} for name, entry in vitals.get("progress_metrics", {}).items()]),
         "system_scorecard": _rows([{"name": name, **entry} for name, entry in vitals.get("system_scorecard", {}).get("dimensions", {}).items()]),
-        "executor_usage": _rows(state.get("executor_state", {}).get("executor_calls", [])),
+        "executor_usage": _rows(get_executor_calls(state)),
         "discovery_yield": _rows([vitals.get("executor_efficiency", {}).get("discovery_loop_yield", {})]),
         "objectives": _rows(state.get("objectives", [])),
         "work_evaluations": _rows(vitals.get("work_evaluations", {}).get("goals", []) + vitals.get("work_evaluations", {}).get("contexts", [])),

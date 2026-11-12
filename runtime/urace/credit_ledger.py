@@ -298,13 +298,25 @@ def _network_supply_factor(root, exchange) -> float:
 
     target_supply / total_supply clamped to [NETWORK_FACTOR_LOW, NETWORK_FACTOR_HIGH].
     Same computation by every peer, no coordination needed.
+
+    Network size: prefers exchange.load()['estimated_network_size'] as the primary
+    signal (set by peer_discovery), falling back to counting distinct peer audit rows.
     """
     try:
         rows = exchange.audit_rows()
     except Exception:
         return 1.0
+    # Primary: authoritative network size from peer-discovery metadata
+    try:
+        _meta = exchange.load()
+        _est = _meta.get('estimated_network_size', 0)
+        estimated_peer_count = max(1, int(_est)) if _est else 0
+    except Exception:
+        estimated_peer_count = 0
+    # Fallback: count distinct peers seen in local audit rows
     known_peers = {row.get('peer') for row in rows if row.get('peer')}
-    known_peer_count = max(1, len(known_peers))
+    fallback_peer_count = max(1, len(known_peers))
+    known_peer_count = estimated_peer_count if estimated_peer_count > 0 else fallback_peer_count
     total_supply = sum(balance(root, p) for p in known_peers)
     target_supply = BASE_CAP_UNITS * known_peer_count * TARGET_SUPPLY_RATIO
     raw = target_supply / max(1, total_supply)
@@ -935,9 +947,19 @@ def consensus_borrow_floor(exchange=None, estimated_network_size: int = 1) -> in
     No feature can be borrowed below max(formula_floor, consensus_median × 0.5).
     Falls back to formula floor when fewer than 5 data points.
     An AI cannot systematically underprice below what the network observes as normal.
+
+    Bootstrap guard: when the 30-pair qualification bootstrap has not completed,
+    returns the minimum floor value instead of a computed one.
     """
     if exchange is None:
         return UNIT // 10_000
+    # Bootstrap guard: require qualification bootstrap before computing dynamic floor
+    try:
+        from .p2p_cost_qualification import bootstrap_complete as _bootstrap_complete
+        if not _bootstrap_complete(exchange):
+            return UNIT // 10_000
+    except Exception:
+        pass
     try:
         rows = exchange.audit_rows()
     except Exception:

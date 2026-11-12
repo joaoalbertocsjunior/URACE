@@ -9,7 +9,7 @@ Observed 2026-10-29. Activity measures are not interchangeable with active human
 | Drips | Project reports almost 600 participants and >3,000 merged PRs across 200+ repositories in the first Stellar Wave (February 2026 retrospective) | Evidence of a funded contribution event; not current monthly retention. Current program pages also exist, but cumulative/event counts should not be relabeled DAU/MAU |
 | Gensyn | Current testnet documentation says RL Swarm and Gensyn-hosted nodes paused, BlockAssist/CodeAssist sunset, focus on Delphi | Historical participation cannot be counted as active present use of those services. No verified comparable current human-user total obtained |
 | SingularityNET | Current service marketplace and payment documentation verified | Offering exists; trustworthy current DAU/MAU/retention figures not verified in this review |
-| URACE | Owner trial, isolated engineering tests and incomplete matched cohorts | No independently verified external active-user base or market fit established |
+| URACE | Owner trial, isolated engineering tests, incomplete matched cohorts; [benchmark proof](benchmark-proof.md) shows 51% lower cost-per-improvement vs direct executor over 10 tasks and 50 cycles (mock mode) | No independently verified external active-user base or market fit established; mock benchmark confirms structural advantage, not real-world adoption |
 
 URACE has a credible product direction; a great competitive position is not established. Feature breadth, code size, tests, token holders and synthetic engineering results cannot substitute for retained user benefit.
 

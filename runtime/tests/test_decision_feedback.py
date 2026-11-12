@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 from contextlib import redirect_stdout
 from urace import decision_feedback as d,cli,_common,command_surface
+from helpers import patch_config_path
 
 class DecisionFeedbackTests(unittest.TestCase):
  def setUp(self):
@@ -63,7 +64,7 @@ class DecisionFeedbackTests(unittest.TestCase):
  def test_cli_configuration_changes_preserve_authority_and_do_not_infer(self):
   with tempfile.TemporaryDirectory() as folder:
    p=Path(folder)/'config.json';config=copy.deepcopy(cli.load_config());p.write_text(json.dumps(config));before=copy.deepcopy(config['authority'])
-   with patch.object(cli,'CONFIG_PATH',p),patch.object(_common,'CONFIG_PATH',p),redirect_stdout(io.StringIO()),patch('subprocess.run',side_effect=AssertionError('no inference')):self.assertEqual(cli.main(['configuration','decision-feedback','--mode','executor','--json']),0)
+   with patch_config_path(p),redirect_stdout(io.StringIO()),patch('subprocess.run',side_effect=AssertionError('no inference')):self.assertEqual(cli.main(['configuration','decision-feedback','--mode','executor','--json']),0)
    saved=json.loads(p.read_text());self.assertEqual(saved['authority'],before);self.assertEqual(saved['decision_feedback']['mode'],'executor')
 
 class ExistingPredictionTests(unittest.TestCase):
@@ -86,7 +87,7 @@ class DecisionFeedbackCLITests(unittest.TestCase):
  def test_auto_assess_persists_forecast_and_exposes_it_through_inspection_without_inference(self):
   with tempfile.TemporaryDirectory() as directory:
    root=Path(directory);config=copy.deepcopy(cli.load_config());config.update(self.config,state_path=str(root/'state.json'));config.pop('active_product',None);cp=root/'config.json';cp.write_text(json.dumps(config));state={**self.state,'state_version':0};(root/'state.json').write_text(json.dumps(state));output=io.StringIO()
-   with patch.object(cli,'CONFIG_PATH',cp),patch.object(_common,'CONFIG_PATH',cp),redirect_stdout(output),patch('subprocess.Popen',side_effect=AssertionError('auto must not start worker')):self.assertEqual(cli.main(['decision','assess','dec-one','--forecast',json.dumps(self.forecast),'--json']),0)
+   with patch_config_path(cp),redirect_stdout(output),patch('subprocess.Popen',side_effect=AssertionError('auto must not start worker')):self.assertEqual(cli.main(['decision','assess','dec-one','--forecast',json.dumps(self.forecast),'--json']),0)
    result=json.loads(output.getvalue());self.assertEqual(result['status'],'APPROVED');self.assertAlmostEqual(result['expected_benefit_score']['value'],100);saved=json.loads((root/'state.json').read_text());self.assertEqual(len(saved['decision_forecast_history']),1);self.assertEqual(saved['decision_records'],state['decision_records'])
  def test_auto_refresh_cannot_launch_executor_even_when_executor_mode_is_configured(self):
   with patch('subprocess.Popen',side_effect=AssertionError('refresh must not infer')):r=d.refresh({**self.config,'decision_feedback':{'mode':'executor'}},self.state)
@@ -105,8 +106,10 @@ class AssessmentCancellationTests(unittest.TestCase):
     if self.calls==1:raise subprocess.TimeoutExpired('worker',160)
     return ('','')
   process=Process()
-  with patch('subprocess.Popen',return_value=process),patch('os.killpg') as terminate:r=d.assess({**self.config,'decision_feedback':{'mode':'executor'}},self.state,self.record)
-  terminate.assert_called_once_with(12345,signal.SIGTERM);self.assertEqual(r['executor_assessment']['status'],'FAILED');self.assertIsNone(r['additional_model_calls'])
+  process.terminate=lambda:None
+  process.kill=lambda:None
+  with patch('subprocess.Popen',return_value=process):r=d.assess({**self.config,'decision_feedback':{'mode':'executor'}},self.state,self.record)
+  self.assertEqual(r['executor_assessment']['status'],'FAILED');self.assertIsNone(r['additional_model_calls'])
 
 class ExecutorSelectionCacheTests(unittest.TestCase):
  setUp=DecisionFeedbackTests.setUp

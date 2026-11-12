@@ -177,6 +177,24 @@ Audit trail is append-only and searchable via `urace compact search`.
 
 ---
 
+## NAT Traversal
+
+When a node is behind NAT, URACE attempts reachability in this order:
+
+1. **UPnP/NAT-PMP** — automatic port forwarding request on the local gateway (best-effort; silently skipped if the gateway does not support UPnP).
+2. **TCP hole punch** — simultaneous open via STUN-resolved external address.
+3. **DHT relay** — if direct connection fails, URACE auto-discovers relay peers advertising `relay=true` on the DHT and routes through them.
+
+STUN resolves the external address via multiple fallback servers (`stun.l.google.com`, `stun.cloudflare.com`, `stun.stunprotocol.org`). No STUN server is single-point-of-failure.
+
+---
+
+## Peer Reputation Persistence
+
+Peer delivery receipts (`QUALIFICATION_RECEIPT`) survive restarts. URACE persists them to `~/.urace/peer_reputation.jsonl` and reloads on startup. The reputation score uses a Wilson 90%-CI lower bound on failure rate — lower is better (0.0 = perfect record). Nodes are ranked by ascending failure rate when selecting peers for work requests.
+
+---
+
 ## Security Defaults
 
 - TLS 1.3 mandatory on all connections
@@ -189,8 +207,39 @@ See [Peer Security](../security/peer-security.md) for the full security model.
 
 ---
 
+## Bootstrap Peer RPC Endpoints
+
+When `network_mode` is `internet` or `hybrid`, URACE issues live HTTP calls to configured bootstrap peers. Three endpoints are used:
+
+### `GET /urace/rpc/v1/find-node`
+
+Peer routing lookup. Called when the local node needs to locate a specific peer by ID via the Kademlia DHT.
+
+Query parameter: `target_peer_id=<id>`
+
+Returns a JSON object with the routing result.
+
+### `POST /urace/rpc/v1/shamir-deliver`
+
+DEK share delivery. Called when a node needs to deliver an encrypted DEK share to a replica holder during a feature listing flow.
+
+Request body (JSON): `{"feature_id": "...", "holder_peer_id": "...", "share_index": <int>}`
+
+Returns a JSON object confirming delivery status.
+
+### `GET /urace/rpc/v1/ledger-tail`
+
+Fetch the current ledger tail from a full peer. Used by light peers to synchronize their sliding-window view of the audit chain without downloading the full history.
+
+Returns a JSON object with keys `seal` (the latest seal row or `null`) and `tail` (rows since the seal).
+
+These endpoints are only called when `network_mode` is set to `internet` or `hybrid`. In `intranet` mode all three return a local stub response without any network I/O.
+
+---
+
 ## Related
 
 - [Setup](setup.md) — enable networking first
 - [Peer Security](../security/peer-security.md) — TLS, post-quantum, quarantine
 - [Search Guide](../guides/search.md) — search P2P audit trail
+- [urace-rpc-v1](../reference/urace-rpc-v1.md) — full RPC contract reference

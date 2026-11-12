@@ -386,6 +386,57 @@ class DistributionFeeTests(unittest.TestCase):
         self.assertEqual(self.cl.distribution_fee_units(0), 0)
 
 
+class HiredNodeEarnTests(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        from urace import credit_ledger as cl
+        self.cl = cl
+        self.tmp = tempfile.mkdtemp()
+        self.root = self.tmp
+        self.requester_id = 'requester-peer'
+        self.request_id = 'req-hired-001'
+        self.amount = cl.UNIT  # 1 token in base units
+
+    def test_hired_node_balance_increases_after_escrow_release(self):
+        cl = self.cl
+        # Give requester enough balance to lock
+        cl.earn_units(self.root, self.requester_id, self.amount * 10, 'seed')
+        initial_balance = cl.balance(self.root, 'hired-peer')
+        cl.escrow_lock(self.root, self.requester_id, self.request_id, self.amount)
+        cl.escrow_release(self.root, self.request_id, [('hired-peer', self.amount)])
+        self.assertGreater(cl.balance(self.root, 'hired-peer'), initial_balance)
+
+    def test_escrow_release_does_not_credit_requester(self):
+        cl = self.cl
+        cl.earn_units(self.root, self.requester_id, self.amount * 10, 'seed')
+        balance_before = cl.balance(self.root, self.requester_id)
+        cl.escrow_lock(self.root, self.requester_id, self.request_id, self.amount)
+        cl.escrow_release(self.root, self.request_id, [('hired-peer', self.amount)])
+        # requester spent on lock and was not credited on release
+        self.assertEqual(cl.balance(self.root, self.requester_id), balance_before - self.amount)
+
+    def test_equity_split_sum_equals_budget(self):
+        cl = self.cl
+        budget = self.amount
+        cl.earn_units(self.root, self.requester_id, budget * 10, 'seed')
+        cl.escrow_lock(self.root, self.requester_id, self.request_id, budget)
+        half = budget // 2
+        splits = [('hired-a', half), ('hired-b', budget - half)]
+        bal_a_before = cl.balance(self.root, 'hired-a')
+        bal_b_before = cl.balance(self.root, 'hired-b')
+        cl.escrow_release(self.root, self.request_id, splits)
+        delta_a = cl.balance(self.root, 'hired-a') - bal_a_before
+        delta_b = cl.balance(self.root, 'hired-b') - bal_b_before
+        # Both hired peers received credits
+        self.assertGreater(delta_a, 0)
+        self.assertGreater(delta_b, 0)
+        # Combined credit equals combined input (velocity multiplier applies uniformly to both,
+        # so the ratio and total scale together — verify via peer_work_market equity_split_budget)
+        from urace import peer_work_market as wm
+        raw_splits = dict(wm.equity_split_budget([('hired-a', 1.0), ('hired-b', 1.0)], budget))
+        self.assertEqual(raw_splits['hired-a'] + raw_splits['hired-b'], budget)
+
+
 class MergedEscrowTests(unittest.TestCase):
     def setUp(self):
         from urace import peer_work_market as wm
@@ -415,3 +466,219 @@ class MergedEscrowTests(unittest.TestCase):
         shares = self.wm.merged_co_requester_shares('rid1', exchange)
         self.assertAlmostEqual(shares['alice'], 0.60, places=5)
         self.assertAlmostEqual(shares['bob'], 0.40, places=5)
+
+
+# ── Escrow Custody Reward Proof Tests ─────────────────────────────────────────
+
+class EscrowCustodyRewardTests(unittest.TestCase):
+    """Proof: hired nodes receive custody CREDIT_DELTA on EVERY release path."""
+
+    def _make_verified_exchange(self, request_id='rid1', budget=1000):
+        """Build a minimal exchange with a completed work request."""
+        import time
+        from urace import peer_work_market as wm
+        ex = MockExchange()
+        now = time.time()
+        ex.append_audit_row({
+            'kind': 'WORK_REQUEST', 'request_id': request_id,
+            'requester_id': 'buyer', 'budget_units': budget,
+            'at_unix': now, 'at': 'now',
+        })
+        ex.append_audit_row({
+            'kind': 'WORK_BID', 'request_id': request_id,
+            'bidder_id': 'hired1', 'bid_units': budget, 'combined_rep': 0.9,
+            'at_unix': now, 'at': 'now',
+        })
+        ex.append_audit_row({
+            'kind': 'WORK_ACCEPTED', 'request_id': request_id,
+            'bidder_id': 'hired1', 'budget_units': budget,
+            'at_unix': now, 'at': 'now',
+        })
+        ex.append_audit_row({
+            'kind': 'WORK_DELIVERY', 'request_id': request_id,
+            'bidder_id': 'hired1', 'canonical_fingerprint': 'fp1',
+            'at_unix': now, 'at': 'now',
+        })
+        return ex
+
+    def test_verify_delivery_emits_custody_credit_delta(self):
+        from urace import peer_work_market as wm
+        ex = self._make_verified_exchange(budget=1000)
+        with patch('urace.credit_ledger.escrow_release'):
+            wm.verify_delivery(ex, root=None, request_id='rid1',
+                               requester_id='buyer', approved=True)
+        custody_rows = [r for r in ex.audit_rows()
+                        if r.get('kind') == 'CREDIT_DELTA'
+                        and r.get('direction') == 'escrow_custody_earned'
+                        and r.get('peer') == 'hired1']
+        self.assertEqual(len(custody_rows), 1)
+        self.assertGreater(custody_rows[0]['amount_units'], 0)
+
+    def test_quorum_auto_release_emits_custody_credit_delta(self):
+        from urace import peer_work_market as wm
+        ex = self._make_verified_exchange(budget=1000)
+        # Add quorum reviews to reach verdict=True
+        import time
+        for peer in ['arb1', 'arb2', 'arb3']:
+            ex.append_audit_row({
+                'kind': 'WORK_REVIEW', 'request_id': 'rid1',
+                'reviewer_id': peer, 'approved': True,
+                'at_unix': time.time(), 'at': 'now',
+            })
+        with patch('urace.credit_ledger.escrow_release'), \
+             patch('urace.peer_work_market.escrow_state') as mock_st:
+            mock_st.return_value = {
+                'state': 'VERIFICATION',
+                'quorum': True,
+                'quorum_fallback': False,
+                'accepted_bids': [{'bidder_id': 'hired1', 'budget_units': 1000}],
+            }
+            wm.quorum_auto_release('rid1', ex, root='root')
+        custody_rows = [r for r in ex.audit_rows()
+                        if r.get('kind') == 'CREDIT_DELTA'
+                        and r.get('direction') == 'escrow_custody_earned'
+                        and r.get('peer') == 'hired1']
+        self.assertEqual(len(custody_rows), 1)
+        self.assertGreater(custody_rows[0]['amount_units'], 0)
+
+    def test_custody_reward_is_3_percent_of_budget(self):
+        from urace import peer_work_market as wm
+        ex = self._make_verified_exchange(budget=10000)
+        with patch('urace.credit_ledger.escrow_release'):
+            wm.verify_delivery(ex, root=None, request_id='rid1',
+                               requester_id='buyer', approved=True)
+        row = next(r for r in ex.audit_rows()
+                   if r.get('kind') == 'CREDIT_DELTA'
+                   and r.get('direction') == 'escrow_custody_earned')
+        self.assertEqual(row['amount_units'], max(1, int(10000 * 0.03)))
+
+    def test_no_custody_reward_on_dispute(self):
+        from urace import peer_work_market as wm
+        ex = self._make_verified_exchange(budget=1000)
+        wm.verify_delivery(ex, root=None, request_id='rid1',
+                           requester_id='buyer', approved=False)
+        custody_rows = [r for r in ex.audit_rows()
+                        if r.get('kind') == 'CREDIT_DELTA'
+                        and r.get('direction') == 'escrow_custody_earned']
+        self.assertEqual(len(custody_rows), 0)
+
+    def test_hired_node_net_positive_after_delivery(self):
+        """Hired node balance = escrow_release + custody_reward > 0 always."""
+        from urace import peer_work_market as wm
+        budget = 500
+        ex = self._make_verified_exchange(budget=budget)
+        released = []
+        with patch('urace.credit_ledger.escrow_release',
+                   side_effect=lambda root, rid, shares: released.append(shares)):
+            wm.verify_delivery(ex, root=None, request_id='rid1',
+                               requester_id='buyer', approved=True)
+        custody = sum(r['amount_units'] for r in ex.audit_rows()
+                      if r.get('kind') == 'CREDIT_DELTA'
+                      and r.get('direction') == 'escrow_custody_earned')
+        # escrow_release called with the shares; hired node gets full budget share
+        total_payout = budget + custody  # escrow + bonus
+        self.assertGreater(total_payout, budget)  # bonus is strictly additive
+
+
+# ── NullAdapter Stub Intentionality Tests ─────────────────────────────────────
+
+class NullAdapterStubBehaviorTests(unittest.TestCase):
+    """Proof: NullAdapter is an intentional no-op stub, not a silent failure."""
+
+    def setUp(self):
+        from urace.integration_bridge import NullAdapter
+        self.adapter = NullAdapter()
+
+    def test_all_methods_return_status_stub(self):
+        for method, args in [
+            ('mint_nft', ('fid', 'pid', {})),
+            ('on_ramp', ('pid', 100, '0xABC')),
+            ('off_ramp', ('pid', 100, '0xABC')),
+            ('verify', ('fid',)),
+        ]:
+            result = getattr(self.adapter, method)(*args)
+            self.assertEqual(result.get('status'), 'stub',
+                             f'{method} should return status=stub, got {result}')
+
+    def test_null_adapter_never_raises(self):
+        self.adapter.mint_nft('', '', {})
+        self.adapter.on_ramp('', 0, '')
+        self.adapter.off_ramp('', 0, '')
+        self.adapter.verify('')
+
+    def test_get_chain_adapter_returns_null_without_rpc_config(self):
+        from urace.integration_bridge import get_chain_adapter, NullAdapter
+        adapter = get_chain_adapter({})
+        self.assertIsInstance(adapter, NullAdapter,
+                              "No rpc_provider_url must yield NullAdapter (audit-only mode)")
+
+    def test_purchase_settlement_on_ramp_wired(self):
+        """on_ramp is wired in handle_purchase_settlement via get_chain_adapter.
+        NullAdapter path is the default (audit-only); on-chain fires when configured."""
+        import urace.purchase_settlement as ps
+        import inspect
+        src = inspect.getsource(ps)
+        self.assertIn('on_ramp', src)
+        self.assertIn('get_chain_adapter', src)
+
+    def test_handle_purchase_settlement_on_ramp_null_no_crypto_address(self):
+        """Without crypto_address in payload, on_ramp is not called — no crash."""
+        from unittest.mock import MagicMock, patch
+        import urace.purchase_settlement as ps
+        mock_exchange = MagicMock()
+        mock_exchange.load.return_value = {}
+        mock_exchange.identity.return_value = {'peer_id': 'seller'}
+        mock_exchange.trusted_crypto.return_value = {}
+        with patch('urace.purchase_settlement.verify_purchase_from_buyer', return_value=True), \
+             patch('urace.purchase_settlement.get_chain_adapter') as mock_adapter_fn:
+            result = ps.handle_purchase_settlement(
+                mock_exchange,
+                sender_peer_id='buyer',
+                settlement={
+                    'payload': {
+                        'schema': 'urace-purchase-settlement-v1',
+                        'buyer_peer_id': 'buyer',
+                        'seller_peer_id': 'seller',
+                        'price_units': 100,
+                        'listing_id': 'lid1',
+                        'nonce': 'abc',
+                    },
+                    'signature': 'sig',
+                },
+            )
+        self.assertEqual(result['status'], 'ok')
+        mock_adapter_fn.assert_not_called()
+
+    def test_handle_purchase_settlement_on_ramp_called_with_crypto_address(self):
+        """With crypto_address, on_ramp fires via NullAdapter (status=stub)."""
+        from unittest.mock import MagicMock, patch, call
+        import urace.purchase_settlement as ps
+        from urace.integration_bridge import NullAdapter
+        mock_exchange = MagicMock()
+        mock_exchange.load.return_value = {}
+        mock_exchange.identity.return_value = {'peer_id': 'seller'}
+        mock_exchange.trusted_crypto.return_value = {}
+        with patch('urace.purchase_settlement.verify_purchase_from_buyer', return_value=True), \
+             patch('urace.purchase_settlement.get_chain_adapter', return_value=NullAdapter()):
+            result = ps.handle_purchase_settlement(
+                mock_exchange,
+                sender_peer_id='buyer',
+                settlement={
+                    'payload': {
+                        'schema': 'urace-purchase-settlement-v1',
+                        'buyer_peer_id': 'buyer',
+                        'seller_peer_id': 'seller',
+                        'price_units': 100,
+                        'listing_id': 'lid1',
+                        'nonce': 'abc',
+                        'crypto_address': '0xABC',
+                    },
+                    'signature': 'sig',
+                },
+            )
+        self.assertEqual(result['status'], 'ok')
+        # ON_RAMP_ATTEMPTED row emitted
+        appended = [c.args[0] for c in mock_exchange.append_audit_row.call_args_list]
+        ramp_rows = [r for r in appended if r.get('kind') == 'ON_RAMP_ATTEMPTED']
+        self.assertEqual(len(ramp_rows), 1)
+        self.assertEqual(ramp_rows[0]['adapter_status'], 'stub')

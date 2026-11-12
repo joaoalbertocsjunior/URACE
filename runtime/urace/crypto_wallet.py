@@ -177,7 +177,8 @@ def wallet_rotate(wallet_dir: "str | Path | None" = None, backup_dir: "str | Pat
     ts = int(_t.time())
     backup_path = _backup_dir / f"key_retired_{ts}.json"
     backup_path.write_text(json.dumps({**old_data, "retired_at": ts}, indent=2), encoding="utf-8")
-    backup_path.chmod(0o600)
+    try: backup_path.chmod(0o600)
+    except (AttributeError, NotImplementedError, OSError): pass
 
     # Generate new keypair
     new_result = wallet_init(wallet_dir=_wdir, overwrite=True)

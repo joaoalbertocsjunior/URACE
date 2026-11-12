@@ -8,12 +8,33 @@ jobs:
   dco:
     name: DCO Sign-off Check
     runs-on: ubuntu-latest
+    # Dependabot commits are machine-generated and cannot carry a DCO sign-off.
+    # Bot PRs are exempt; all human contributor commits must be signed off.
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Check DCO sign-off
-        uses: christophebedard/dco-check@v0.1.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify DCO sign-off on every commit in this PR
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=""
+          while IFS= read -r sha; do
+            body=$(git log -1 --format="%B" "$sha")
+            if ! echo "$body" | grep -qE '^Signed-off-by: .+ <.+@.+>'; then
+              missing="$missing\n  $sha  $(git log -1 --format='%s' $sha)"
+            fi
+          done < <(git rev-list "$BASE_SHA..$HEAD_SHA")
+
+          if [ -n "$missing" ]; then
+            echo "ERROR: The following commits are missing a DCO Signed-off-by line:"
+            printf "%b\n" "$missing"
+            echo ""
+            echo "To fix, amend each commit:  git commit --amend -s"
+            echo "Or re-sign the whole branch: git rebase --signoff origin/main"
+            exit 1
+          fi
+          echo "All commits carry a valid DCO sign-off."

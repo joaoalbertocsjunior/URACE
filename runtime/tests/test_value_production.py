@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 from urace import cli, inspection, outcome_verification as outcomes, validation, value_trajectory
+from urace import cli_state as _cli_state_m, cli_lifecycle as _cli_lifecycle_m
 
 
 class ValueProductionTests(unittest.TestCase):
@@ -27,7 +28,7 @@ class ValueProductionTests(unittest.TestCase):
                            efficiency={"max_product_growth_ratio_per_change": 2, "max_product_growth_bytes_per_change": 10000})
         self.config["executor"].update(allowed_files_by_scope={"runtime": ["calculator.py"], "documentation": ["guide.md"]},
                                       max_executor_calls_per_24h=100, max_executor_calls_per_30d=100)
-        for obj in (cli, inspection):
+        for obj in (cli, inspection, _cli_state_m, _cli_lifecycle_m):
             patcher = patch.object(obj, "ROOT", self.root)
             patcher.start(); self.addCleanup(patcher.stop)
         self.state = cli.initial_state(self.config)

@@ -12,6 +12,14 @@ URACE runs inside your existing project directory. There is no server to manage,
 - pip 22+
 - An existing software product directory (URACE attaches to it)
 
+**Platform support:**
+
+| Platform | Status |
+|----------|--------|
+| Linux | Primary — full feature set including TUI |
+| macOS | Fully supported |
+| Windows | Best-effort — CLI works; TUI and some P2P discovery features unavailable |
+
 ---
 
 ## Install
@@ -44,6 +52,19 @@ Run the test suite:
 cd runtime
 pytest tests/
 ```
+
+---
+
+## Optional Extras
+
+```sh
+pip install "urace[peer-security]"    # P2P cryptographic signatures (secp256k1)
+pip install "urace[peer-discovery]"   # LAN peer discovery via mDNS/Zeroconf
+pip install "urace[telemetry]"        # OpenTelemetry tracing (OTLP export to Jaeger, Grafana Tempo, Datadog, etc.)
+pip install "urace[all]"              # All of the above
+```
+
+Telemetry is opt-in and requires `OTEL_EXPORTER_OTLP_ENDPOINT` to be set; without it the dependency is installed but no spans are emitted. Set `OTEL_SDK_DISABLED=true` to suppress all telemetry even when the endpoint is configured.
 
 ---
 

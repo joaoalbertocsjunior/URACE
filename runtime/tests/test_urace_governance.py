@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import analytics, cli, cli_lifecycle as _cli_lifecycle_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -966,7 +966,7 @@ class SpecAuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as _d:
             _root = Path(_d)
             (_root / "URACE.md").write_text(synthetic)
-            with patch.object(cli, "ROOT", _root):
+            with patch.object(cli, "ROOT", _root), patch.object(_cli_lifecycle_m, "ROOT", _root):
                 current = sa.extract_spec_version(synthetic)
                 state = {"spec_audit_state": {"spec_version": current}}
                 self.assertFalse(cli.spec_audit_due(state))
@@ -980,7 +980,7 @@ class SpecAuditTests(unittest.TestCase):
             (_root / "URACE.md").write_text(synthetic)
             config = isolated_test_config(self)
             state = {"evidence": [], "spec_audit_state": {}}
-            with patch.object(cli, "ROOT", _root):
+            with patch.object(cli, "ROOT", _root), patch.object(_cli_lifecycle_m, "ROOT", _root):
                 cli.run_spec_audit(config, state)
         kinds = [e["kind"] for e in state["evidence"]]
         self.assertIn("spec-structural-audit", kinds)
@@ -994,7 +994,7 @@ class SpecAuditTests(unittest.TestCase):
             (_root / "URACE.md").write_text(synthetic)
             config = isolated_test_config(self)
             state = {"evidence": [], "spec_audit_state": {}}
-            with patch.object(cli, "ROOT", _root):
+            with patch.object(cli, "ROOT", _root), patch.object(_cli_lifecycle_m, "ROOT", _root):
                 cli.run_spec_audit(config, state)
             expected = sa.extract_spec_version(synthetic)
             self.assertEqual(state["spec_audit_state"]["spec_version"], expected)

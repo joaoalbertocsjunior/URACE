@@ -82,7 +82,7 @@ _FEATURES: list[dict] = [
         'test_coverage': 'partial',
         'tags': ['core', 'security'],
         'blockers': [],
-        'notes': 'Returns False correctly on current call. Integrity gap emitted. Lifecycle does not BLOCK on gap — gate is advisory not enforcement.',
+        'notes': 'Transitions lifecycle → BLOCKED on unresolved capability-envelope-breach gaps. AUTHORITY_GRANT required to clear.',
     },
     {
         'id': 'compaction',
@@ -150,7 +150,7 @@ _FEATURES: list[dict] = [
         'test_coverage': 'partial',
         'tags': ['observability', 'integration'],
         'blockers': [],
-        'notes': 'self_measurement kind wired in — collects test_pass_rate, import_health, spec_quality from self_metrics.py without external users.',
+        'notes': 'self_measurement kind wired in — collects test_pass_rate, import_health, spec_quality from self_metrics.py without external users. File sink (JSONL/JSON/CSV) and HTTP POST sink available via settings.sink config key.',
     },
     {
         'id': 'feedback-loop',
@@ -322,7 +322,29 @@ _FEATURES: list[dict] = [
         'notes': 'No destination write confirmation. No schema validation on source reads.',
     },
 
+    {
+        'id': 'eth-settlement-adapter',
+        'name': 'EVM Token Settlement Adapter',
+        'module': 'eth_settlement_adapter.py:EthSettlementAdapter',
+        'status': 'active',
+        'description': 'Broadcasts signed ERC-20 and NFT transactions to configured JSON-RPC endpoint when token_settlement=True.',
+        'test_coverage': 'full',
+        'tags': ['integration', 'delivery'],
+        'blockers': [],
+    },
+
     # ── Peer Network ─────────────────────────────────────────────────────────
+    {
+        'id': 'kademlia-phase-c',
+        'name': 'Kademlia Phase C (Iterative Lookup)',
+        'module': 'kademlia.py:IterativeFinder',
+        'status': 'active',
+        'description': 'XOR-routing iterative node lookup via kademlia PyPI package; gated on network_mode=internet/hybrid. Falls back to local routing table.',
+        'test_coverage': 'partial',
+        'tags': ['integration', 'delivery'],
+        'blockers': [],
+        'notes': 'Requires urace[network] extra. Local routing table used for intranet mode.',
+    },
     {
         'id': 'peer-exchange',
         'name': 'Peer Exchange (Protocol)',
@@ -354,7 +376,17 @@ _FEATURES: list[dict] = [
         'test_coverage': 'partial',
         'tags': ['delivery', 'self-improvement'],
         'blockers': [],
-        'notes': 'urace peer-review [list|evaluate <id>|promote <id>]. Quarantine → safety evaluate → goal queue. Peer identities are SHA256 fingerprints (opaque). Artifact content not auto-sanitized.',
+        'notes': 'urace peer-review [list|evaluate <id>|promote <id>]. Quarantine → safety evaluate → sanitize → goal queue. Peer identities are SHA256 fingerprints (opaque).',
+    },
+    {
+        'id': 'peer-artifact-sanitization',
+        'name': 'Artifact Auto-Sanitization',
+        'module': 'peer_improvement.py:sanitize_quarantine_artifact',
+        'status': 'complete',
+        'description': 'Security scan of quarantined artifacts before promotion: shell injection, binary magic bytes, dangerous Python imports, entropy spike.',
+        'test_coverage': 'full',
+        'tags': ['security', 'delivery'],
+        'blockers': [],
     },
 
     # ── Self-Improvement ─────────────────────────────────────────────────────

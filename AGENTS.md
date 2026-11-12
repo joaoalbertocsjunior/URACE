@@ -1,6 +1,6 @@
 # AGENTS.md — URACE Executor and Agent Onboarding
 
-**Runtime version: 0.5.1**
+**Runtime version: 0.6.0**
 
 This document is the authoritative onboarding reference for any automated agent, AI executor, or programmatic client operating on a URACE runtime. Read this before issuing any `urace` command.
 
@@ -11,6 +11,8 @@ This document is the authoritative onboarding reference for any automated agent,
 URACE is a runtime for **governed autonomous improvement**. It accepts objectives, runs executors (LLMs or other automation) to produce changes, and gates those changes through a qualification protocol before accepting them. Every accepted change earns a reputation token on a P2P ledger.
 
 **Executor role**: You are a contractor. You receive a well-scoped objective, produce a deliverable (code diff, document, analysis), and submit it for qualification. URACE measures whether the deliverable improved the product score. Acceptance = score_delta > 0.
+
+**Executor scope (important)**: Executor compute runs **locally** — URACE does not delegate inference or code execution to remote peers. The P2P layer distributes *artifacts* (pre-built deliverables, feature bundles), not compute tasks. `peer_work_market` escrow hires remote peers to deliver artifacts; it does not stream tokens or run code on the buyer's behalf. If you need remote compute, that is out of scope for the current runtime.
 
 ---
 
@@ -70,6 +72,8 @@ URACE/urace/
 │   │   ├── freeform_routing.py    ← freeform intent routing
 │   │   ├── p2p_matching.py        ← post-classification intent-to-asset ranking
 │   │   ├── local_feature_sources.py ← verify initial-ledger source bindings
+│   │   ├── ledger_sync.py         ← ledger sliding-window sync; includes fetch_tail_from_peer() HTTP helper (Phase 2.1)
+│   │   ├── eth_settlement_adapter.py ← EVM settlement adapter (EthSettlementAdapter) — active when token_settlement=True
 │   │   └── ...
 │   └── tests/                     ← acceptance suite split by feature into test_*.py modules
 ├── trial/                         ← qualification harness (separate process)
@@ -377,9 +381,38 @@ urace freeform-text --path ./docs/ --json
 
 Freeform routing searches reachable pinned-peer catalogs before executor classification when P2P context is enabled. It only suggests assets by default. `urace freeform-text "<intent>" --p2p-asset <asset_id> --json` explicitly fetches a currently advertised open-use asset into quarantine and skips executor classification; it does not apply or execute the asset. `--ledger-context never` disables this route. Transfer, integration, validation, and any residual executor work remain costs even when the license usage price is zero.
 
+**Cancel detection (rule-based, zero LLM cost):**
+
+Sending a cancel phrase as the freeform input cancels the most recently queued item (within the last 10 minutes) without any LLM call:
+
+```sh
+urace "cancel"          # → {"status": "cancelled", "cancelled": "goal title"}
+urace "never mind"      # same
+urace "abort"           # same
+```
+
+Recognised phrases: `cancel`, `ignore`, `never mind`, `forget`, `forget it`, `forget that`, `abort`, `scratch that`, `no thanks`, `undo`. If nothing is eligible: `{"status": "nothing_to_cancel"}`. Agents driving freeform workflows should check for this status and not retry.
+
+**Clarification loop (interactive mode only):**
+
+When the classifier confidence is below 0.8 for any item, freeform routing returns a `clarifying_question` field (max one question) rather than queuing immediately. In JSON mode (`--json`) this question is returned in the response and no stdin prompt is shown — the agent must handle the follow-up turn itself:
+
+```json
+{
+  "status": "clarification_needed",
+  "clarifying_question": "Should this apply only to the checkout flow or the whole API?"
+}
+```
+
+Re-submit with the original text plus the answer appended to resolve it. Max 2 clarification turns per input; after that the best-match classification proceeds.
+
+**Per-call token ceiling:**
+
+`freeform_max_tokens_per_call` (executor config, default `0` = disabled) blocks inputs estimated to exceed the ceiling before any LLM call. Returns `rc=1` (hard error, not a deferral). Agents should not retry automatically — the input must be shortened.
+
 **Security limits:**
-- Query capped at 4,096 bytes
-- Null bytes rejected
+- Query capped at 65,536 bytes (64 KiB) per call
+- Null bytes and blank inputs rejected before classification
 - Known prompt injection patterns stripped before routing
 - PII detected and warned before any minting
 

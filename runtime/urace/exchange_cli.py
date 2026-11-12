@@ -174,8 +174,8 @@ def grammar(children):
  p=verbs.add_parser('routing-table',help='show Kademlia DHT routing table (v3 chunk discovery readiness)');output_options(p)
  p=verbs.add_parser('port-to-internet',help='analyze intranet features/reputation and guide migration to hybrid/internet mode');output_options(p);p.add_argument('--auto',action='store_true',help='use smart defaults, no prompts');p.add_argument('--dry-run',action='store_true',dest='dry_run',help='analyze and report, no changes made');p.add_argument('--features',default=None,dest='features',help='comma-separated feature IDs to port (overrides auto-selection)');p.add_argument('--min-kpi-score',type=float,default=0.5,dest='min_kpi_score',help='minimum KPI score for auto-selection (default 0.5)');p.add_argument('--min-ratings',type=int,default=2,dest='min_ratings',help='minimum ratings needed for auto-selection (default 2)')
  p=verbs.add_parser('find-node',help='Kademlia find_node RPC stub (v3)');output_options(p);p.add_argument('target_peer_id')
- p=verbs.add_parser('shamir-deliver',help='deliver Shamir DEK share to replica holder (v3 stub)');output_options(p);p.add_argument('feature_id');p.add_argument('--holder',required=True,dest='holder_peer_id');p.add_argument('--share-index',type=int,required=True,dest='share_index')
- p=verbs.add_parser('tail-sync',help='pull ledger seal+tail from full peer (v3 stub)');output_options(p);p.add_argument('--from-peer',required=True,dest='from_peer_id')
+ p=verbs.add_parser('shamir-deliver',help='deliver Shamir DEK share to replica holder (internet mode: RPC; intranet: local audit row)');output_options(p);p.add_argument('feature_id');p.add_argument('--holder',required=True,dest='holder_peer_id');p.add_argument('--share-index',type=int,required=True,dest='share_index')
+ p=verbs.add_parser('tail-sync',help='pull ledger seal+tail from full peer (internet mode: fetches via bootstrap peers; intranet: no-op)');output_options(p);p.add_argument('--from-peer',required=True,dest='from_peer_id')
  # ── Work market ──────────────────────────────────────────────────────────────
  wm=groups.add_parser('work',help='P2P work request market and escrow');wm_v=wm.add_subparsers(dest='exchange_verb',required=True)
  p=wm_v.add_parser('list',help='list work requests');output_options(p);p.add_argument('--state',default=None)
@@ -808,17 +808,60 @@ def run(args,config):
    return 0
   elif verb=='find-node':
    import time as _tfn
+   _settings=exchange.load()
+   _net_mode=_settings.get('network_mode','intranet')
+   result={'status':'stub','note':'local only — set network_mode=internet to enable'}
+   if _net_mode in ('internet','hybrid'):
+    _bp=_settings.get('bootstrap_peers',[])
+    for _ep in _bp[:3]:
+     try:
+      import urllib.request as _ur,urllib.parse as _up,json as _j
+      _url=_ep.rstrip('/')+'/urace/rpc/v1/find-node?'+_up.urlencode({'target_peer_id':args.target_peer_id})
+      _req=_ur.Request(_url,headers={'Accept':'application/json'})
+      with _ur.urlopen(_req,timeout=10) as _resp:
+       result=_j.loads(_resp.read(65536))
+      break
+     except Exception as _e:
+      result={'status':'rpc_error','endpoint':_ep,'error':str(_e)}
    exchange.append_audit_row({'kind':'FIND_NODE_REQUESTED','target_peer_id':args.target_peer_id,'requester_peer_id':local_id,'at_unix':_tfn.time(),'note':'v3 stub — Kademlia find_node RPC not yet wired to network transport'})
-   result={'status':'stub','note':'v3 — Kademlia find_node network RPC not yet implemented; routing table lookup is local only'}
   elif verb=='shamir-deliver':
    import time as _tsd
-   exchange.append_audit_row({'kind':'SHAMIR_DELIVER_REQUESTED','feature_id':args.feature_id,'holder_peer_id':args.holder_peer_id,'share_index':args.share_index,'requester_peer_id':local_id,'at_unix':_tsd.time()})
-   result={'status':'stub','note':'v3 — Shamir share delivery RPC not yet implemented; share commitment recorded in LISTING_DEK_SHARE rows'}
+   _sd_settings=exchange.load();_sd_net=_sd_settings.get('network_mode','intranet')
+   result={'status':'stub','note':'local only — set network_mode=internet to enable'}
+   if _sd_net in ('internet','hybrid'):
+    _sd_bp=_sd_settings.get('bootstrap_peers',[])
+    for _sd_ep in _sd_bp[:3]:
+     try:
+      import urllib.request as _sd_ur,json as _sd_j
+      _sd_url=_sd_ep.rstrip('/')+'/urace/rpc/v1/shamir-deliver'
+      _sd_body=_sd_j.dumps({'feature_id':args.feature_id,'holder_peer_id':args.holder_peer_id,'share_index':args.share_index}).encode()
+      _sd_req=_sd_ur.Request(_sd_url,data=_sd_body,headers={'Content-Type':'application/json'})
+      with _sd_ur.urlopen(_sd_req,timeout=10) as _sd_resp:result=_sd_j.loads(_sd_resp.read(65536))
+      break
+     except Exception as _sd_e:result={'status':'rpc_error','endpoint':_sd_ep,'error':str(_sd_e)}
+   exchange.append_audit_row({'kind':'SHAMIR_DELIVER_REQUESTED','feature_id':args.feature_id,'holder_peer_id':args.holder_peer_id,'share_index':args.share_index,'at_unix':_tsd.time()})
   elif verb=='tail-sync':
-   from . import ledger_sync as _ls
-   result=_ls.request_tail_payload(exchange)
-   result['status']='local_only'
-   result['note']='v3 — cross-node tail sync RPC not yet implemented; returned local tail payload'
+   import time as _tts
+   _ts_settings=exchange.load();_ts_net=_ts_settings.get('network_mode','intranet')
+   result={'status':'stub','note':'local only — set network_mode=internet to enable'}
+   if _ts_net in ('internet','hybrid'):
+    from . import ledger_sync as _ls
+    _ts_bp=_ts_settings.get('bootstrap_peers',[])
+    for _ts_ep in _ts_bp[:3]:
+     try:
+      import hashlib as _tsh,json as _tsj
+      _tail_data=_ls.fetch_tail_from_peer(_ts_ep)
+      _ts_rows=exchange.audit_rows()
+      _ts_result=_ls.apply_tail_payload(_ts_rows,_tail_data)
+      _ts_attest=_ls.build_sync_attestation(args.from_peer_id,_tsh.sha256(_tsj.dumps(_tail_data,sort_keys=True).encode()).hexdigest(),len(_ts_result['merged']),_ts_result['added'])
+      try:
+       from .signed_ledger import Ledger as _SL
+       _SL(exchange.root/'signed-audit').append('LEDGER_SYNC_ATTESTED',_ts_attest)
+      except Exception:pass
+      exchange.event('LEDGER_SYNC_COMPLETED',peer=args.from_peer_id,added=_ts_result['added'],skipped=_ts_result['skipped'])
+      result={'status':'ok','added':_ts_result['added'],'skipped':_ts_result['skipped'],'attestation':_ts_attest}
+      break
+     except Exception as _ts_e:result={'status':'rpc_error','endpoint':_ts_ep,'error':str(_ts_e)}
   else:
    if not 0<=args.port<=65535:raise ValueError('Port must be 0–65535')
    with pe.server(exchange,args.host,args.port) as server:

@@ -177,3 +177,85 @@ class RoutingTable:
             return cls(own_peer_id, k)
         data = json.loads(p.read_text())
         return cls.from_dict(data, k)
+
+
+# ── Kademlia Phase C: Iterative lookup via kademlia PyPI package ──────────────
+
+try:
+    from kademlia.network import Server as _KademliaServer
+    _KADEMLIA_AVAILABLE = True
+except ImportError:
+    _KademliaServer = None
+    _KADEMLIA_AVAILABLE = False
+
+
+class IterativeFinder:
+    """XOR-routing iterative node lookup.
+
+    Uses the kademlia PyPI package when available and network_mode is online.
+    Falls back to local routing table for intranet mode or when package is absent.
+    """
+
+    def __init__(self, local_node_id: str, routing_table=None, network_mode: str = 'intranet'):
+        self._local_id = local_node_id
+        self._routing_table = routing_table  # existing local RoutingTable instance
+        self._network_mode = network_mode
+        self._server = None
+
+    def _use_network(self) -> bool:
+        return _KADEMLIA_AVAILABLE and self._network_mode in ('internet', 'hybrid')
+
+    async def lookup(self, key: str) -> list:
+        """Find nodes closest to key. Returns list of NodeInfo."""
+        if not self._use_network() or self._server is None:
+            # Local fallback
+            if self._routing_table is not None:
+                target_id = int(hashlib.sha256(key.encode()).hexdigest(), 16)
+                return self._routing_table.find_closest(target_id)
+            return []
+        # Network path: use kademlia server
+        try:
+            result = await self._server.get(key)
+            if result is None:
+                return []
+            if isinstance(result, list):
+                return result
+            return [result]
+        except Exception:
+            # Fallback to local on network error
+            if self._routing_table is not None:
+                target_id = int(hashlib.sha256(key.encode()).hexdigest(), 16)
+                return self._routing_table.find_closest(target_id)
+            return []
+
+    def start_server(self, port: int = 8469) -> bool:
+        """Start the kademlia server on given port. Returns True if started."""
+        if not _KADEMLIA_AVAILABLE or self._network_mode not in ('internet', 'hybrid'):
+            return False
+        try:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            self._server = _KademliaServer()
+            loop.run_until_complete(self._server.listen(port))
+            return True
+        except Exception:
+            self._server = None
+            return False
+
+    def stop_server(self) -> None:
+        if self._server is not None:
+            try:
+                self._server.stop()
+            except Exception:
+                pass
+            self._server = None
+
+
+def get_or_start_server(exchange, config: dict) -> 'IterativeFinder | None':
+    """Factory: return an IterativeFinder if network_mode allows, else None."""
+    net_mode = config.get('network_mode', 'intranet')
+    if net_mode not in ('internet', 'hybrid'):
+        return None
+    local_id = config.get('peer_id', 'local')
+    finder = IterativeFinder(local_id, network_mode=net_mode)
+    return finder

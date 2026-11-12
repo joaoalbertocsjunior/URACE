@@ -64,8 +64,9 @@ def observed_calls(config, state):
                     receipt = json.loads(row)
                     if receipt.get('product_id') in (None,product_identity(config),config.get('product')):
                         calls[receipt['id']] = receipt
+    from ._common import get_executor_calls
     calls.update({r.get('id', 'legacy-'+str(i)): r for i, r in enumerate(
-        state.get('executor_state', {}).get('executor_calls', []))
+        get_executor_calls(state))
         if r.get('product_id') in (None,product_identity(config),config.get('product'))})
     if config.get('state_path'):
         from ._common import state_path
@@ -93,7 +94,8 @@ def product_identity(config):
 
 def archive_calls(config, state):
     """Retain stable native identities beyond the controller's state retention window."""
-    calls = [c for c in state.get('executor_state', {}).get('executor_calls', [])
+    from ._common import get_executor_calls
+    calls = [c for c in get_executor_calls(state)
              if c.get('id') and c.get('stage') != 'specification_adapter']
     if not calls:
         return
@@ -128,10 +130,10 @@ def summary(config, state):
 def write_projection(config,state):
     """Small receipt read model; stale/corrupt projections fall back to full state."""
     import hashlib
-    from ._common import state_path,atomic_write_json
+    from ._common import state_path,atomic_write_json,get_executor_calls
     source=state_path(config).resolve();info=source.stat()
     calls=[]
-    for call in state.get('executor_state',{}).get('executor_calls',[]):
+    for call in get_executor_calls(state):
         if call.get('stage')=='specification_adapter':continue
         calls.append({k:call[k] for k in ('id','at','stage','usage','elapsed_seconds','trial_id','product_id','executor_attribution','outcome','integration_context') if k in call})
     calls=json_safe(calls);digest=hashlib.sha256(json.dumps(calls,sort_keys=True,allow_nan=False).encode()).hexdigest()

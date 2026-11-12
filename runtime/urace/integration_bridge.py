@@ -4,11 +4,35 @@ No inference is performed by this adapter. Authorized CLI/API operations retain
 native executor governance and accounting. Receipts describe bridge work only.
 """
 from __future__ import annotations
-import argparse,contextlib,copy,fcntl,hashlib,io,json,os,re,selectors,signal,stat,subprocess,sys,threading,time,uuid
+import argparse,contextlib,copy,hashlib,io,json,os,re,selectors,signal,stat,subprocess,sys,threading,time,uuid
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
+_O_NOFOLLOW = getattr(os, 'O_NOFOLLOW', 0)
+_O_NONBLOCK = getattr(os, 'O_NONBLOCK', 0)
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from . import api_interface,command_surface
 from ._common import atomic_write_json,state_lock,SYSTEM_ROOT
+from ._chain_adapter_base import ChainAdapter  # re-exported for callers
+from dataclasses import dataclass as _dataclass, field as _field
+
+
+@_dataclass
+class ReceiptRecord:
+    """Typed record returned by ChainAdapter methods for type-safe callers."""
+    feature_id: str = ''
+    tx_hash: 'str | None' = None
+    block_number: 'int | None' = None
+    chain_id: 'str | None' = None
+    token_id: 'int | None' = None
+    amount_crypto: 'float | None' = None
+    crypto_symbol: 'str | None' = None
+    verified: 'bool | None' = None
+    status: str = 'stub'
+    extra: dict = _field(default_factory=dict)
 
 SCHEMA='urace-integration-v1'
 from .version import BRIDGE_VERSION,MIN_BRIDGE_CLIENT_VERSION
@@ -26,16 +50,20 @@ def pid_ticks(pid):
     try:
         fields=(Path('/proc')/str(pid)/'stat').read_text().rsplit(')',1)[1].split()
         return fields[19] if fields[0]!='Z' else None
-    except (OSError,IndexError):return None
+    except (OSError,FileNotFoundError,IndexError):return None
 
 def descendants(pid):
     children={};identities={}
-    for path in Path('/proc').glob('[0-9]*'):
+    try:
+        proc_entries = list(Path('/proc').glob('[0-9]*'))
+    except (OSError,FileNotFoundError):
+        return {}
+    for path in proc_entries:
         try:
             fields=(path/'stat').read_text().rsplit(')',1)[1].split();child=int(path.name)
             if fields[0]=='Z':continue
             children.setdefault(int(fields[1]),[]).append(child);identities[child]=fields[19]
-        except (OSError,ValueError,IndexError):continue
+        except (OSError,FileNotFoundError,ValueError,IndexError):continue
     result={};pending=[pid]
     while pending:
         child=pending.pop()
@@ -51,11 +79,13 @@ def receipt_lock(path):
     independent metadata and may wait briefly without replaying an operation.
     Never unlink the kernel guard inode.
     """
-    descriptor=os.open(path.with_suffix('.lock.guard'),os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+    descriptor=os.open(path.with_suffix('.lock.guard'),os.O_CREAT|os.O_RDWR|_O_NOFOLLOW,0o600)
     try:
         deadline=time.monotonic()+2
         while True:
-            try:fcntl.flock(descriptor,fcntl.LOCK_EX|fcntl.LOCK_NB);break
+            try:
+                if _HAS_FCNTL: _fcntl.flock(descriptor,_fcntl.LOCK_EX|_fcntl.LOCK_NB)
+                break
             except BlockingIOError:
                 if time.monotonic()>=deadline:raise BridgeError('Receipt busy; retry the same request/job ID') from None
                 time.sleep(.01)
@@ -206,7 +236,7 @@ def load_policy(parser,path=None):
     if path:
         p=Path(path)
         if p.resolve().is_relative_to(Path(root).resolve()):raise BridgeError('Operator policy must be outside the delegated project tree')
-        with os.fdopen(os.open(p,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK),'rb') as f:
+        with os.fdopen(os.open(p,os.O_RDONLY|_O_NOFOLLOW|_O_NONBLOCK),'rb') as f:
             if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):raise BridgeError('Policy must be a regular file')
             data=f.read(262145)
         if len(data)>262144:raise BridgeError('Policy exceeds256KiB')
@@ -234,7 +264,8 @@ class Jobs:
         self.private_env=frozenset(private_env)
         self.policy=policy;self.pause_check=pause_check;self.command_factory=command_factory or self.command;self.pool=ThreadPoolExecutor(max_workers=policy.limits['parallel_jobs'],thread_name_prefix='urace-integration');self.events={};self.futures={};self.lock=threading.RLock();self.closed=False
         policy.storage.mkdir(parents=True,exist_ok=True,mode=0o700)
-        os.chmod(policy.storage,0o700)
+        try: os.chmod(policy.storage,0o700)
+        except (AttributeError,NotImplementedError,OSError): pass
     def command(self,argv):
         bootstrap='import sys,runpy;sys.path.insert(0,'+repr(str(Path(__file__).resolve().parent.parent))+');runpy.run_module("urace.integration_bridge",run_name="__main__")'
         return [sys.executable,'-c',bootstrap,'--worker',json.dumps(argv)]
@@ -304,8 +335,8 @@ class Jobs:
                     try:os.kill(pid,sig)
                     except ProcessLookupError:pass
         if child.poll() is None:
-            try:os.killpg(child.pid,signal.SIGTERM)
-            except ProcessLookupError:pass
+            try:child.terminate()
+            except (ProcessLookupError,OSError):pass
         send(signal.SIGTERM)
         deadline=time.monotonic()+2
         while time.monotonic()<deadline and any(pid_ticks(pid)==ticks for pid,ticks in targets.items()):time.sleep(.02)
@@ -320,7 +351,8 @@ class Jobs:
             if stamp()>=row['deadline_unix']:status='TIMED_OUT';return
             environment={k:v for k,v in os.environ.items() if k not in self.private_env};environment.update({'URACE_BRIDGE_DEPTH':str(row['depth']),'URACE_BRIDGE_DEADLINE':str(row['deadline_unix']),'URACE_BRIDGE_ROOT_REQUEST':row['root_request_id'],'URACE_BRIDGE_JOB':row['job_id'],'URACE_BRIDGE_PROJECT':row['project_id'],'URACE_BRIDGE_EXECUTOR':row['executor_id'],'URACE_BRIDGE_OUTPUT_BYTES':str(self.policy.limits['output_bytes'])})
             if self.policy.raw.get('active_product'):environment['URACE_ACTIVE_PRODUCT']=self.policy.raw['active_product']
-            with self.lock:child=subprocess.Popen(self.command_factory(argv),cwd=self.policy.root,env=environment,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True)
+            _popen_kw = {"start_new_session": True} if sys.platform != "win32" else {"creationflags": 0x00000200}
+            with self.lock:child=subprocess.Popen(self.command_factory(argv),cwd=self.policy.root,env=environment,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,**_popen_kw)
             self.update(row['job_id'],status='RUNNING',started_unix=stamp(),child_pid=child.pid)
             with selectors.DefaultSelector() as selector:
                 for pipe,key in [(child.stdout,'out'),(child.stderr,'err')]:os.set_blocking(pipe.fileno(),False);selector.register(pipe,selectors.EVENT_READ,key)
@@ -376,28 +408,6 @@ if __name__=='__main__':
 # on-chain is optional attestation layer only.
 
 
-class ChainAdapter:
-    """Protocol for optional on-chain attestation. Implement a subclass and set
-    config p2p.chain_adapter to its dotted import path to go live on-chain.
-    NullAdapter (default) emits audit rows only — no network calls.
-    """
-    def mint_nft(self, feature_id: str, creator_peer_id: str, metadata: dict) -> dict:
-        """Mint NFT attestation. Returns {tx_hash, token_id, chain_id, status}."""
-        raise NotImplementedError
-
-    def on_ramp(self, peer_id: str, amount_units: int, crypto_address: str) -> dict:
-        """Convert crypto to URACE units. Returns {tx_hash, amount_crypto, crypto_symbol, status}."""
-        raise NotImplementedError
-
-    def off_ramp(self, peer_id: str, amount_units: int, crypto_address: str) -> dict:
-        """Convert URACE units to crypto. Returns {tx_hash, amount_crypto, crypto_symbol, status}."""
-        raise NotImplementedError
-
-    def verify(self, feature_id: str) -> dict:
-        """Verify on-chain attestation. Returns {verified, tx_hash, block_number, chain_id}."""
-        raise NotImplementedError
-
-
 class NullAdapter(ChainAdapter):
     """Default stub adapter — emits audit rows, makes no network calls."""
 
@@ -417,8 +427,21 @@ class NullAdapter(ChainAdapter):
 def get_chain_adapter(config: dict) -> ChainAdapter:
     """Load ChainAdapter from config p2p.chain_adapter (dotted import path).
     Defaults to NullAdapter. Example: 'mypackage.eth.EthereumAdapter'
+
+    When token_settlement=True and rpc_provider_url is set in config p2p,
+    returns EthSettlementAdapter instead of NullAdapter.
     """
-    adapter_path = config.get('p2p', {}).get('chain_adapter', '')
+    p2p = config.get('p2p', {})
+    if p2p.get('token_settlement') and p2p.get('rpc_provider_url'):
+        from .eth_settlement_adapter import EthSettlementAdapter
+        return EthSettlementAdapter(
+            p2p['rpc_provider_url'],
+            wallet_dir=p2p.get('wallet_dir'),
+            erc20_contract=p2p.get('erc20_contract', ''),
+            nft_contract=p2p.get('nft_contract_address', ''),
+            chain_id=int(p2p.get('chain_id', 1)),
+        )
+    adapter_path = p2p.get('chain_adapter', '')
     if not adapter_path:
         return NullAdapter()
     try:
@@ -499,8 +522,17 @@ def stub_crypto_off_ramp(exchange, peer_id: str, amount_units: int, crypto_addre
 def stub_on_chain_verify(exchange, feature_id: str, config: dict = None) -> dict:
     """Emit ON_CHAIN_VERIFY_REQUESTED audit row via adapter; return adapter result."""
     import time as _t, datetime as _dt
+    # Look up tx_hash from a prior NFT_MINT_REQUESTED audit row
+    tx_hash = None
+    try:
+        for row in (exchange.audit_rows() or []):
+            if row.get('kind') == 'NFT_MINT_REQUESTED' and row.get('feature_id') == feature_id:
+                tx_hash = row.get('tx_hash')
+                break
+    except Exception:
+        pass
     adapter = get_chain_adapter(config or {})
-    result = adapter.verify(feature_id)
+    result = adapter.verify(tx_hash if tx_hash is not None else feature_id)
     exchange.append_audit_row({
         'kind': 'ON_CHAIN_VERIFY_REQUESTED',
         'feature_id': feature_id,

@@ -1,6 +1,8 @@
 """Tests for peer_discovery: bencode, compact peers, DHT client, LAN announce,
 and DiscoverySession lifecycle. Network-dependent tests require URACE_NETWORK_TESTS=1.
 """
+import pytest
+pytestmark = pytest.mark.slow
 import os
 import socket
 import struct
@@ -323,12 +325,14 @@ class LiveDHTTests(unittest.TestCase):
         finally:
             c.close()
 
+    @pytest.mark.integration
     def test_dht_announce_real_network(self):
         from urace import peer_discovery as pd
         e = _make_exchange(self.tmp.name)
         result = pd.dht_announce(e, 8443)
         self.assertEqual(result["status"], "ANNOUNCED")
 
+    @pytest.mark.integration
     def test_dht_discover_finds_or_empty(self):
         """May return empty if no other URACE nodes are on DHT yet — that's OK."""
         from urace import peer_discovery as pd

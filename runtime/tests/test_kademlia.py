@@ -13,6 +13,8 @@ from urace.kademlia import (
     KBucket,
     NodeInfo,
     RoutingTable,
+    IterativeFinder,
+    get_or_start_server,
     bucket_index,
     peer_id_to_node_id,
     xor_distance,
@@ -216,6 +218,58 @@ class RoutingTableTests(unittest.TestCase):
         target_id = peer_id_to_node_id(target_peer)
         expected = rt.find_closest(target_id, count=3)
         self.assertEqual([n.peer_id for n in result], [n.peer_id for n in expected])
+
+
+class IterativeFinderTests(unittest.TestCase):
+    def test_iterative_finder_local_fallback_when_intranet(self):
+        """IterativeFinder uses local routing table when network_mode=intranet."""
+        finder = IterativeFinder("node1", network_mode='intranet')
+        self.assertFalse(finder._use_network())
+
+    def test_get_or_start_server_returns_none_when_intranet(self):
+        finder = get_or_start_server(None, {'network_mode': 'intranet', 'peer_id': 'p1'})
+        self.assertIsNone(finder)
+
+    def test_get_or_start_server_returns_finder_when_online(self):
+        finder = get_or_start_server(None, {'network_mode': 'internet', 'peer_id': 'p1'})
+        self.assertIsNotNone(finder)
+        self.assertIsInstance(finder, IterativeFinder)
+
+    def test_kademlia_available_flag(self):
+        # _KADEMLIA_AVAILABLE should be a bool regardless of whether package is installed
+        from urace.kademlia import _KADEMLIA_AVAILABLE
+        self.assertIsInstance(_KADEMLIA_AVAILABLE, bool)
+
+    def test_lookup_local_fallback_returns_list(self):
+        import asyncio
+        finder = IterativeFinder("node1", network_mode='intranet')
+        result = asyncio.run(finder.lookup("some-key"))
+        self.assertIsInstance(result, list)
+
+    def test_lookup_with_routing_table_returns_nodes(self):
+        import asyncio
+        rt = RoutingTable('node1')
+        for i in range(5):
+            rt.add(f'peer-{i}', endpoint=f'127.0.0.1:{9000+i}')
+        finder = IterativeFinder("node1", routing_table=rt, network_mode='intranet')
+        result = asyncio.run(finder.lookup("some-key"))
+        self.assertIsInstance(result, list)
+        self.assertGreater(len(result), 0)
+
+    def test_lookup_no_routing_table_returns_empty(self):
+        import asyncio
+        finder = IterativeFinder("node1", routing_table=None, network_mode='intranet')
+        result = asyncio.run(finder.lookup("some-key"))
+        self.assertEqual(result, [])
+
+    def test_start_server_returns_false_when_intranet(self):
+        finder = IterativeFinder("node1", network_mode='intranet')
+        self.assertFalse(finder.start_server(port=18469))
+
+    def test_stop_server_no_op_when_not_started(self):
+        finder = IterativeFinder("node1", network_mode='intranet')
+        # Should not raise
+        finder.stop_server()
 
 
 if __name__ == '__main__':

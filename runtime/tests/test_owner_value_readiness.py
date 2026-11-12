@@ -179,7 +179,7 @@ class ProductSurface(unittest.TestCase):
                     link = root / 'linked.txt'
                     if not link.exists(): link.symlink_to(outside)
                     config, state = self.fixture(root, [source])
-                    with patch.object(cli, 'ROOT', root):
+                    with patch('urace.cli_helpers.ROOT', root):
                         cli._evaluate_sweet_spot(state, config)
                     self.assertFalse(state.get('sweet_spot_assessments'))
                     self.assertFalse(state.get('value_density_history'))
@@ -189,7 +189,7 @@ class ProductSurface(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             config, state = self.fixture(root, ['missing.txt'])
-            with patch.object(cli, 'ROOT', root):
+            with patch('urace.cli_helpers.ROOT', root):
                 cli._evaluate_sweet_spot(state, config)
             self.assertFalse(state.get('sweet_spot_assessments'))
 
@@ -201,7 +201,7 @@ class ProductSurface(unittest.TestCase):
                     config, state = self.fixture(root, ['README.md'])
                     milestone = {'id': 'fixture-milestone', 'status': 'ACTIVE', **limit}
                     config['capability_envelope']['milestones'] = [milestone]
-                    with patch.object(cli, 'ROOT', root):
+                    with patch('urace.cli_helpers.ROOT', root):
                         cli._evaluate_sweet_spot(state, config)
                     self.assertEqual(milestone['status'], 'ACTIVE')
                     self.assertFalse(state.get('product_versions'))
@@ -213,7 +213,7 @@ class ProductSurface(unittest.TestCase):
             config, state = self.fixture(root, ['README.md'])
             milestone = {'id': 'fixture-milestone', 'status': 'ACTIVE', 'value_density_floor': 0}
             config['capability_envelope'].update(value_density_floor=1, milestones=[milestone])
-            with patch.object(cli, 'ROOT', root):
+            with patch('urace.cli_helpers.ROOT', root):
                 cli._evaluate_sweet_spot(state, config)
             self.assertEqual(milestone['status'], 'ACHIEVED')
 
@@ -229,7 +229,7 @@ class ProductSurface(unittest.TestCase):
                                               'complexity_ceiling': 2}}
             state = {'capability_states': [{'capability_id': 'fixture', 'status': 'CAPABLE', 'completeness_fraction': 1}],
                      'integrity_gaps': []}
-            with patch.object(cli, 'ROOT', root):
+            with patch('urace.cli_helpers.ROOT', root):
                 cli._evaluate_sweet_spot(state, config)
             self.assertEqual(state['sweet_spot_assessments'][-1]['maturity_level'], 'OVER_ENGINEERED')
             self.assertEqual(state['value_density_history'][-1]['surface_measure'], 3)

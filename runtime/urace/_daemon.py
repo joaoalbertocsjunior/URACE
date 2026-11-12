@@ -1,7 +1,13 @@
 """OS-agnostic foreground improvement daemon. No OS service manager dependency."""
 from __future__ import annotations
 import json, os, signal, sys, time
+import socket as _socket
+import threading as _threading
 from pathlib import Path
+
+RPC_TCP_HOST = "127.0.0.1"
+RPC_TCP_PORT = 7474
+_RPC_SCHEMA = "urace-rpc-v1"
 
 
 def _pid_path(config: dict) -> Path:
@@ -38,6 +44,63 @@ def _is_running(pid: int) -> bool:
         return True
     except OSError:
         return False
+
+
+def _rpc_socket_server(config):
+    """Return a bound TCP server socket."""
+    srv = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    srv.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    srv.bind((RPC_TCP_HOST, RPC_TCP_PORT))
+    srv.listen(8)
+    return srv
+
+def _handle_rpc_client(conn, config, stopped):
+    import json as _json
+    try:
+        conn.settimeout(10.0)
+        data = b""
+        while b"\n" not in data:
+            chunk = conn.recv(1024)
+            if not chunk:
+                return
+            data += chunk
+        msg = _json.loads(data.split(b"\n")[0].decode("utf-8"))
+        method = msg.get("method", "")
+        if method == "status":
+            pid = _read_pid(config)
+            running = pid is not None and _is_running(pid)
+            resp = {"schema": _RPC_SCHEMA, "status": "running" if running else "stopped", "pid": pid}
+        elif method == "stop":
+            stopped[0] = True
+            resp = {"schema": _RPC_SCHEMA, "status": "stopping"}
+        elif method == "ping":
+            resp = {"schema": _RPC_SCHEMA, "pong": True}
+        else:
+            resp = {"schema": _RPC_SCHEMA, "error": f"unknown method: {method}"}
+        conn.sendall((_json.dumps(resp) + "\n").encode("utf-8"))
+    except Exception:
+        pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+def _run_rpc_server(config, stopped):
+    try:
+        srv = _rpc_socket_server(config)
+    except OSError:
+        return  # port in use — degrade gracefully
+    srv.settimeout(2.0)
+    while not stopped[0]:
+        try:
+            conn, _ = srv.accept()
+            t = _threading.Thread(target=_handle_rpc_client, args=(conn, config, stopped), daemon=True)
+            t.start()
+        except _socket.timeout:
+            continue
+        except OSError:
+            break
+    try: srv.close()
+    except Exception: pass
 
 
 def dispatch(args, config: dict) -> int:
@@ -95,6 +158,8 @@ def dispatch(args, config: dict) -> int:
 
     _write_pid(config)
     stopped = [False]
+    _rpc_thread = _threading.Thread(target=_run_rpc_server, args=(config, stopped), daemon=True)
+    _rpc_thread.start()
 
     def _handle_signal(signum, frame):
         stopped[0] = True

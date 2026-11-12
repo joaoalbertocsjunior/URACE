@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 from urace import milestone_feedback as m,primitives,cli,_common
+from helpers import patch_config_path
 
 class MilestoneFeedbackTests(unittest.TestCase):
  def setUp(self):
@@ -27,7 +28,7 @@ class MilestoneFeedbackTests(unittest.TestCase):
  def test_existing_cli_exposes_phases_and_statuses(self):
   with tempfile.TemporaryDirectory() as directory:
    root=Path(directory);config=copy.deepcopy(cli.load_config());config.pop('active_product',None);config.update(self.config,state_path=str(root/'state.json'));cp=root/'config.json';cp.write_text(json.dumps(config));state=cli.initial_state(config);state.update(self.state);(root/'state.json').write_text(json.dumps(state));output=io.StringIO()
-   with patch.object(cli,'CONFIG_PATH',cp),patch.object(_common,'CONFIG_PATH',cp),redirect_stdout(output):self.assertEqual(cli.main(['milestone','--json']),0)
+   with patch_config_path(cp),redirect_stdout(output):self.assertEqual(cli.main(['milestone','--json']),0)
    payload=json.loads(output.getvalue());self.assertEqual(payload['phase_feedback']['phase'],'IMPLEMENTATION');self.assertEqual(payload['milestones'][0]['canonical_status'],'ACTIVE');self.assertIn('active_milestone',payload)
 class ZeroStreakContractTests(unittest.TestCase):
  setUp=MilestoneFeedbackTests.setUp
@@ -55,7 +56,7 @@ class AutomaticSuggestionTests(unittest.TestCase):
  def test_configuration_cli_defaults_toggle_and_inspection_are_persistent(self):
   with tempfile.TemporaryDirectory() as directory:
    cp=Path(directory)/'config.json';cfg=copy.deepcopy(cli.load_config());cfg.pop('auto_milestones',None);cp.write_text(json.dumps(cfg))
-   with patch.object(cli,'CONFIG_PATH',cp),patch.object(_common,'CONFIG_PATH',cp):
+   with patch_config_path(cp):
     for args,expected in [([],True),(['--enabled','false'],False),([],False),(['--enabled','true'],True)]:
      output=io.StringIO()
      with redirect_stdout(output):self.assertEqual(cli.main(['configuration','auto-milestones',*args,'--json']),0)

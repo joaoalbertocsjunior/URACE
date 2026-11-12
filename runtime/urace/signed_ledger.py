@@ -4,10 +4,22 @@ All writers serialize with flock. Blocks are immutable and the head is a cache;
 recovery adopts a fully verified next block after an interrupted head update.
 An independently retained checkpoint is required to detect whole-history rollback.
 """
+
+LEDGER_SCHEMA_VERSION = "urace-signed-block-v1"
+_KNOWN_SCHEMA_VERSIONS = frozenset({LEDGER_SCHEMA_VERSION})
+
+
+def can_read_schema(schema: str) -> bool:
+    """Return True if this runtime can interpret the given ledger block schema version."""
+    return schema in _KNOWN_SCHEMA_VERSIONS
 from contextlib import contextmanager
 from pathlib import Path
-import fcntl
 import hashlib
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 import json
 import os
 import re
@@ -39,9 +51,11 @@ class Ledger:
  def lock(self):
   self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
   if self.root.is_symlink():raise ValueError("Ledger symlink prohibited")
-  os.chmod(self.root,0o700)
+  try: os.chmod(self.root,0o700)
+  except (AttributeError,NotImplementedError,OSError): pass
   with (self.root/"writer.lock").open("a") as f:
-   fcntl.flock(f,fcntl.LOCK_EX);yield
+   if _HAS_FCNTL: _fcntl.flock(f,_fcntl.LOCK_EX)
+   yield
  def identity(self):
   if not hasattr(self,"_identity"):self._identity=Identity(self.root/"identity.json")
   public=self._identity.public();path=self.root/"public.json"
@@ -49,7 +63,9 @@ class Ledger:
    if path.is_symlink() or json.loads(path.read_text())!=public:raise ValueError("Historical signing identity changed")
   else:
    from ._common import atomic_write_json
-   atomic_write_json(path,public);os.chmod(path,0o600)
+   atomic_write_json(path,public)
+   try: os.chmod(path,0o600)
+   except (AttributeError,NotImplementedError,OSError): pass
   return self._identity
  def public(self):
   path=self.root/"public.json"
@@ -60,7 +76,8 @@ class Ledger:
   # Public audit needs neither private keys nor a write/recovery operation.
   if self.root.is_symlink():raise ValueError("Ledger symlink prohibited")
   with (self.root/"writer.lock").open("rb") as f:
-   fcntl.flock(f,fcntl.LOCK_SH);yield
+   if _HAS_FCNTL: _fcntl.flock(f,_fcntl.LOCK_SH)
+   yield
  def _head(self):
   p=self.root/"head.json"
   return json.loads(p.read_text()) if p.exists() else {"sequence":0,"hash":ZERO,"author":public_id(self.public())}
@@ -71,12 +88,14 @@ class Ledger:
   raw=unpack(p.read_bytes());block=json.loads(raw)
   if canonical(block)!=raw or set(block)!={"payload","signature"}:raise ValueError("Noncanonical block")
   b=block["payload"]
-  if b.get("schema")!="urace-signed-block-v1" or b.get("sequence")!=n or b.get("previous")!=previous or b.get("author")!=author or public_id(self.public())!=author:raise ValueError("Ledger sequence, fork or identity mismatch")
+  if not can_read_schema(b.get("schema","")) or b.get("sequence")!=n or b.get("previous")!=previous or b.get("author")!=author or public_id(self.public())!=author:raise ValueError("Ledger sequence, fork or identity mismatch")
   verify(self.public(),b,block["signature"],"ledger-block")
   return block,hashlib.sha384(raw).hexdigest()
  def _save_head(self,head):
   from ._common import atomic_write_json
-  atomic_write_json(self.root/"head.json",head);os.chmod(self.root/"head.json",0o600)
+  atomic_write_json(self.root/"head.json",head)
+  try: os.chmod(self.root/"head.json",0o600)
+  except (AttributeError,NotImplementedError,OSError): pass
  def _recover(self):
   head=self._head();own=public_id(self.identity().public())
   if head.get("author")!=own:raise ValueError("Ledger author changed")
@@ -96,12 +115,15 @@ class Ledger:
   if not isinstance(kind,str) or not re.fullmatch("[A-Z][A-Z0-9_]{0,63}",kind) or not isinstance(details,dict):raise ValueError("Typed event required")
   with self.lock():
    identity=self.identity();head=self._recover()
-   payload={"schema":"urace-signed-block-v1","author":head["author"],"sequence":head["sequence"]+1,"previous":head["hash"],"at_unix":time.time(),"kind":kind,"details":details}
+   payload={"schema":LEDGER_SCHEMA_VERSION,"author":head["author"],"sequence":head["sequence"]+1,"previous":head["hash"],"at_unix":time.time(),"kind":kind,"details":details}
    block={"payload":payload,"signature":identity.sign(payload,"ledger-block")};raw=canonical(block);stored=pack(raw)
    target=self._path(payload["sequence"])
    # A killed writer may leave a pending file, never a partly published block.
    with tempfile.NamedTemporaryFile(prefix="pending-",dir=self.root,delete=False) as f:
-    pending=Path(f.name);os.chmod(pending,0o600);f.write(stored);f.flush();os.fsync(f.fileno())
+    pending=Path(f.name)
+    try: os.chmod(pending,0o600)
+    except (AttributeError,NotImplementedError,OSError): pass
+    f.write(stored);f.flush();os.fsync(f.fileno())
    os.link(pending,target);pending.unlink()
    # Persist directory entry before publishing the new head.
    fd=os.open(self.root,os.O_RDONLY)
@@ -119,6 +141,11 @@ class Ledger:
    if previous!=head["hash"]:raise ValueError("Ledger terminal hash mismatch")
    if checkpoint and (checkpoint.get("author")!=head["author"] or checkpoint.get("sequence",0)>head["sequence"]):raise ValueError("Checkpoint indicates missing history")
    return {"status":"VERIFIED_LOCAL_CHAIN","head":head,"blocks":head["sequence"],"stored_bytes":stored,"logical_bytes":logical,"external_checkpoint_checked":checkpoint is not None,"global_consensus":False,"remote_claims_proven":False,"pending_files":sum(1 for _ in self.root.glob("pending-*")),"unpublished_next_block":self._path(head["sequence"]+1).exists(),"public":self.public()}
+ def append_source_supersession(self,feature_id,superseded_manifest_sha256,new_manifest_sha256,new_source_files,reason):
+  from .primitives import validate
+  details={"feature_id":feature_id,"superseded_manifest_sha256":superseded_manifest_sha256,"new_manifest_sha256":new_manifest_sha256,"new_source_files":new_source_files,"reason":reason}
+  validate("SourceBindingSupersession",details)
+  return self.append("SOURCE_BINDING_SUPERSESSION",details)
  def page(self,offset=0,limit=50):
   if type(offset) is not int or offset<0 or type(limit) is not int or not 1<=limit<=100:raise ValueError("Bounded pagination required")
   with self.read_lock():

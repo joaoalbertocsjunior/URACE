@@ -1,6 +1,6 @@
 # URACE comparative strengths and gap analysis
 
-Observed 2026-10-29. This is an architectural/documentation comparison, not a benchmark proving competitive superiority. Distinguish deployed URACE, the isolated candidate and future designs. External descriptions come from primary project documentation; they are not independent audits. No exact competitor offering URACE's entire proposed combination was established, but a limited search cannot prove uniqueness, novelty, patentability or lack of competition.
+Observed 2026-10-29. For measured cost/improvement results see [Benchmark Proof](benchmark-proof.md). This document is an architectural/documentation comparison, not a benchmark proving competitive superiority. Distinguish deployed URACE, the isolated candidate and future designs. External descriptions come from primary project documentation; they are not independent audits. No exact competitor offering URACE's entire proposed combination was established, but a limited search cannot prove uniqueness, novelty, patentability or lack of competition.
 
 ## Principal finding
 

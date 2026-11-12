@@ -33,12 +33,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import socket
 import struct
 import threading
 import time
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -741,17 +744,7 @@ class _DHTClient:
 
     def bootstrap(self, timeout: float = 4.0) -> int:
         """Ping bootstrap nodes; collect tokens for later announce_peer calls.
-
-        Rate-limited: skips if last bootstrap was within 300s to prevent DHT flooding.
-        Jitter (0–30s) is added per-node to spread load on shared bootstrap servers.
         """
-        try:
-            _policy = self._exchange.load()
-            _last_boot = _policy.get('dht_bootstrap_last_unix', 0)
-            if time.time() - _last_boot < 300:
-                return 0  # Too soon — use cached DHT state
-        except Exception:
-            pass
         contacted = 0
         import random as _random
         for host, port in _DHT_BOOTSTRAP:
@@ -764,16 +757,6 @@ class _DHTClient:
                                     b"q": b"ping", b"a": {b"id": self._id}})
             contacted += 1
 
-        try:
-            from ._common import atomic_write_json as _awj
-            with self._exchange.lock():
-                _p = self._exchange.load()
-                _p['dht_bootstrap_last_unix'] = time.time()
-                _awj(self._exchange.root / 'policy.json', _p)
-                import os as _os
-                _os.chmod(self._exchange.root / 'policy.json', 0o600)
-        except Exception:
-            pass
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             msg, addr = self._recv(0.5)
@@ -971,9 +954,10 @@ class DiscoverySession:
                     if changed:
                         _awj(self._exchange.root / 'policy.json', policy)
                         import os as _os
-                        _os.chmod(self._exchange.root / 'policy.json', 0o600)
-            except Exception:
-                pass
+                        try: _os.chmod(self._exchange.root / 'policy.json', 0o600)
+                        except (AttributeError, NotImplementedError, OSError): pass
+            except Exception as _exc:
+                _logger.debug("network size estimation update failed: %s", _exc)
 
     @property
     def dht_key(self) -> str:
@@ -1010,6 +994,17 @@ class DiscoverySession:
             self._thread = threading.Thread(target=self._reannounce_loop, daemon=True,
                                             name="urace-dht-announce")
             self._thread.start()
+        # P1.2 — UPnP port forwarding (best-effort, after WAN announce)
+        self._upnp_result: dict = attempt_upnp_port_forward(self._port)
+        # P1.3 — Relay fallback if both STUN and UPnP failed
+        _stun_addr = getattr(self, '_stun_address', None)
+        _upnp_ok = self._upnp_result.get('status') == 'upnp_success'
+        if _stun_addr is None and not _upnp_ok:
+            _dht = getattr(self, '_dht_client', None)
+            if _dht is None:
+                self._relay_candidates: list = []
+            else:
+                self._relay_candidates = discover_relay_peers(_dht)
         return self
 
     def stop(self) -> None:
@@ -1313,3 +1308,44 @@ def _connect_peer(
 
 # Attach connect_peer to DiscoverySession
 DiscoverySession.connect_peer = _connect_peer
+
+
+# ---------------------------------------------------------------------------
+# P1.2 — UPnP Optional Port Forwarding
+# ---------------------------------------------------------------------------
+
+def attempt_upnp_port_forward(port: int) -> dict:
+    """Try UPnP IGD port mapping.  Returns status dict."""
+    try:
+        import miniupnpc  # optional dependency
+    except ImportError:
+        result: dict = {'status': 'upnp_unavailable', 'reason': 'miniupnpc not installed'}
+        _logger.info("UPnP port forward attempt: status=%s", result['status'])
+        return result
+    try:
+        upnp = miniupnpc.UPnP()
+        upnp.discoverdelay = 200
+        upnp.discover()
+        upnp.selectigd()
+        upnp.addportmapping(port, 'TCP', upnp.lanaddr, port, 'urace', '')
+        result = {'status': 'upnp_success', 'external_port': port}
+    except Exception as _e:
+        result = {'status': 'upnp_unavailable', 'reason': str(_e)}
+    _logger.info("UPnP port forward attempt: status=%s", result['status'])
+    return result
+
+
+# ---------------------------------------------------------------------------
+# P1.3 — Relay Discovery via DHT
+# ---------------------------------------------------------------------------
+
+def advertise_as_relay(exchange, dht_client) -> None:
+    """Announce relay capability when this node has >= 10 completed peer exchanges."""
+    rows = [r for r in exchange.audit_rows() if r.get('kind') == 'PEER_EXCHANGE_COMPLETED']
+    if len(rows) >= 10:
+        getattr(dht_client, 'announce', lambda **kw: None)(relay=True)
+
+
+def discover_relay_peers(dht_client) -> list:
+    """Query DHT for peers advertising relay=True.  Returns list of peer dicts."""
+    return getattr(dht_client, 'query_relay_nodes', lambda: [])()

@@ -178,16 +178,17 @@ def assess(config,state,record,*,invoke=None):
     if invoke is None:
         worker=Path(__file__).resolve().parents[2]/'trial/decision_assessor.py'
         def invoke(value):
-            import os,signal
-            proc=subprocess.Popen([sys.executable,str(worker)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True)
+            import sys as _sys
+            _popen_kw = {"start_new_session": True} if _sys.platform != "win32" else {"creationflags": 0x00000200}
+            proc=subprocess.Popen([sys.executable,str(worker)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,**_popen_kw)
             try:
                 stdout,stderr=proc.communicate(json.dumps(value),timeout=160)
                 return json.loads(stdout)
             except BaseException:
                 if proc.poll() is None:
-                    os.killpg(proc.pid,signal.SIGTERM)
+                    proc.terminate()
                     try:proc.communicate(timeout=10)
-                    except subprocess.TimeoutExpired:os.killpg(proc.pid,signal.SIGKILL);proc.communicate()
+                    except subprocess.TimeoutExpired:proc.kill();proc.communicate()
                 raise
     try:advice=invoke(payload)
     except (OSError,ValueError,subprocess.TimeoutExpired) as error:advice={'status':'FAILED','failure':type(error).__name__,'inference_calls':None}

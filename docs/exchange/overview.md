@@ -32,7 +32,7 @@ The exchange connects software teams working on similar problems. Instead of eve
 2. A peer can expose an authenticated catalog of explicitly open-use assets and seller-local paid listing asks.
 3. Freeform routing searches pinned catalogs before executor implementation and ranks plausible task matches.
 4. An explicitly selected open-use asset can be fetched into quarantine; applying and executing it remain separate operator-controlled steps.
-5. Paid remote asks are discovery-only. Cross-peer purchase settlement is not implemented.
+5. Paid remote asks support cross-peer purchase settlement via `purchase_settlement.py` (`initiate_purchase`, `handle_purchase_settlement`, `settlement_state`). Both peers must be live and mutually pinned. Activation requires `token_settlement=True` in exchange config.
 
 The closed-network ledger records URACE reputation units. Those units do not have a verified exchange rate to provider tokens or fiat, so ledger activity alone cannot prove economic savings.
 

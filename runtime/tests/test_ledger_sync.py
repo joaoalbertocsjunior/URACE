@@ -1,9 +1,12 @@
+import pytest
+pytestmark = pytest.mark.slow
 import hashlib
 import json
 import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from urace import ledger_sync as ls
 
@@ -334,6 +337,44 @@ class RequestTailPayloadTests(unittest.TestCase):
         # tail should contain at least the POST_SEAL_EVENT
         tail_kinds = [r.get('kind') for r in result['tail']]
         self.assertIn('POST_SEAL_EVENT', tail_kinds)
+
+
+# ── FetchTailFromPeerTests ────────────────────────────────────────────────────
+
+class FetchTailFromPeerTests(unittest.TestCase):
+
+    def _fake_urlopen_response(self, payload: bytes):
+        resp = MagicMock()
+        resp.read = MagicMock(return_value=payload)
+        resp.__enter__ = MagicMock(return_value=resp)
+        resp.__exit__ = MagicMock(return_value=False)
+        return resp
+
+    def test_fetch_tail_calls_correct_url(self):
+        from unittest.mock import MagicMock, patch
+        payload = json.dumps({'seal': None, 'tail': []}).encode()
+        resp_mock = self._fake_urlopen_response(payload)
+        with patch('urllib.request.urlopen', return_value=resp_mock) as mock_open:
+            ls.fetch_tail_from_peer('https://peer.example.com')
+            call_req = mock_open.call_args[0][0]
+            self.assertTrue(call_req.full_url.endswith('/urace/rpc/v1/ledger-tail'))
+
+    def test_fetch_tail_returns_parsed_payload(self):
+        from unittest.mock import patch
+        payload = b'{"seal": null, "tail": []}'
+        resp_mock = self._fake_urlopen_response(payload)
+        with patch('urllib.request.urlopen', return_value=resp_mock):
+            result = ls.fetch_tail_from_peer('https://peer.example.com')
+            self.assertIn('tail', result)
+            self.assertIsNone(result['seal'])
+            self.assertEqual(result['tail'], [])
+
+    def test_fetch_tail_on_error_propagates(self):
+        import urllib.error
+        from unittest.mock import patch
+        with patch('urllib.request.urlopen', side_effect=urllib.error.URLError('test')):
+            with self.assertRaises(urllib.error.URLError):
+                ls.fetch_tail_from_peer('https://peer.example.com')
 
 
 if __name__ == '__main__':

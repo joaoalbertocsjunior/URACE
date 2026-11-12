@@ -1,13 +1,22 @@
 """Opt-in, product-scoped signed artifact exchange. Incoming artifacts are quarantined, never executed."""
 from pathlib import Path
 from contextlib import contextmanager
-import base64, fcntl, gzip, hashlib, hmac, http.client, http.server, ipaddress, json, os, re, ssl, subprocess, tempfile, time, urllib.parse, datetime
+import base64, gzip, hashlib, hmac, http.client, http.server, ipaddress, json, logging, os, re, ssl, subprocess, tempfile, time, urllib.parse, datetime
+
+_logger = logging.getLogger(__name__)
+try:
+    import fcntl as _fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 
 SCHEMA='urace-exchange-v2'
 PROTOCOL_VERSION=2
 LIMIT=524288
 ARTIFACT_INLINE_LIMIT=65536
 ARTIFACT_STORE_LIMIT=104857600
+RELAY_CREDIT_ISSUED = 'RELAY_CREDIT_ISSUED'
+AUDIT_CHAIN_RECORD = 'AUDIT_CHAIN_RECORD'
 ID=re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$')
 
 def encoded(value):return json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
@@ -109,7 +118,8 @@ class Exchange:
   if self.root.is_symlink():raise ValueError('Exchange directory cannot be a symlink')
   os.chmod(self.root,0o700)
   with (self.root/'exchange.lock').open('a') as f:
-   fcntl.flock(f,fcntl.LOCK_EX);yield
+   if _HAS_FCNTL: _fcntl.flock(f,_fcntl.LOCK_EX)
+   yield
  def audit_rows(self):
   p=self.root/'audit.jsonl';rows=[];previous='0'*64
   if p.exists():
@@ -490,8 +500,8 @@ def auto_pin(exchange, certificate: str, endpoint: str, *, default_rules: dict |
             if isinstance(allowed, bool):
                 try:
                     exchange.rule(peer_id, feature_name, direction, allowed)
-                except Exception:
-                    pass  # feature not declared yet — silently skip
+                except Exception as _exc:
+                    _logger.debug("rule not applied for feature %r: %s", feature_name, _exc)
 
     return {'status': status, 'peer_id': peer_id, 'endpoint': endpoint}
 
@@ -668,6 +678,33 @@ def server(exchange,host='127.0.0.1',port=0):
  context=tls_context(exchange,True)
  class Handler(http.server.BaseHTTPRequestHandler):
   def log_message(self,*args):pass
+  def do_GET(self):
+   self.connection.settimeout(5)
+   try:
+    if self.path != '/urace/rpc/v1/ledger-tail':
+     self.send_error(404, 'Not found')
+     return
+    peer = hashlib.sha256(self.connection.getpeercert(binary_form=True)).hexdigest()
+    p = exchange.load()
+    if not p['network'] or not p['enabled'] or peer not in p['peers'] or p['peers'][peer]['blocked']:
+     self.send_error(403, 'Peer admission denied')
+     return
+    from .ledger_sync import request_tail_payload
+    payload = request_tail_payload(exchange)
+    body = json.dumps(payload, sort_keys=True).encode()
+    self.send_response(200)
+    self.send_header('Content-Type', 'application/json')
+    self.send_header('Content-Length', str(len(body)))
+    self.end_headers()
+    self.wfile.write(body)
+   except (ValueError, TypeError, KeyError, OSError) as _get_err:
+    try:
+     _rpc_peer = hashlib.sha256(self.connection.getpeercert(binary_form=True)).hexdigest() if self.connection else None
+     if _rpc_peer:
+      exchange.event('RPC_REJECTED', peer=_rpc_peer, reason=str(_get_err)[:120])
+    except Exception:
+     pass
+    self.send_error(400, 'Exchange GET request rejected')
   def do_POST(self):
    self.connection.settimeout(5)
    try:
@@ -721,6 +758,28 @@ def server(exchange,host='127.0.0.1',port=0):
      target=rpc['params']['target_peer_id'];p2=exchange.load()
      if target not in p2['peers'] or p2['peers'][target]['blocked']:raise ValueError('Target peer unknown or blocked')
      result=request(exchange,target,rpc['params']['method'],rpc['params']['params'])
+    elif rpc['method']=='exchange.shamir_deliver' and isinstance(rpc['params'],dict) and set(rpc['params'])=={'feature_id','share_index','requester_peer_id'}:
+     from .shamir_delivery import handle_share_request
+     result=handle_share_request(exchange,peer,rpc['params']['feature_id'],rpc['params']['share_index'],rpc['params']['requester_peer_id'])
+    elif rpc['method']=='exchange.work_accepted' and isinstance(rpc['params'],dict) and {'request_id','hired_peer_id','escrow_snapshot'}.issubset(set(rpc['params'])):
+     from .work_market_rpc import handle_work_accepted_notification
+     result=handle_work_accepted_notification(exchange,peer,rpc['params'])
+    elif rpc['method']=='exchange.work_delivery' and isinstance(rpc['params'],dict) and {'request_id','delivery_hash','hired_peer_id'}.issubset(set(rpc['params'])):
+     from .work_market_rpc import handle_work_delivery_notification
+     result=handle_work_delivery_notification(exchange,peer,rpc['params'])
+    elif rpc['method']=='exchange.trial_receipt' and isinstance(rpc['params'],dict) and {'receipt'}.issubset(set(rpc['params'])):
+     from .trial_receipt import handle_receipt_delivery
+     result=handle_receipt_delivery(exchange,peer,rpc['params']['receipt'])
+    elif rpc['method']=='exchange.purchase_settlement' and isinstance(rpc['params'],dict) and {'settlement'}.issubset(set(rpc['params'])):
+     from .purchase_settlement import handle_purchase_settlement
+     result=handle_purchase_settlement(exchange,peer,rpc['params']['settlement'])
+    elif rpc['method']=='exchange.seal_vote' and isinstance(rpc['params'],dict) and {'seal_hash','voter_signature','voter_peer_id'}.issubset(set(rpc['params'])):
+     from .consensus import handle_seal_vote
+     result=handle_seal_vote(exchange,peer,rpc['params'])
+    elif rpc['method']=='exchange.checkpoint' and isinstance(rpc['params'],dict) and set(rpc['params'])==set():
+     from .ledger_sync import request_tail_payload
+     payload=request_tail_payload(exchange)
+     result={'schema':'urace-ledger-sync-v1','head_sha':payload['tail'][-1]['sha256'] if payload['tail'] else (payload['seal']['sha256'] if payload['seal'] else '0'*64),'row_count':len(payload['tail'])}
     else:raise ValueError('Unsupported RPC method')
     rpc_result={'jsonrpc':'2.0','id':rpc['id'],'result':result};signed={'rpc':rpc_result,'signature':exchange.crypto_identity().sign(rpc_result,'peer-rpc-response')}
     body=encoded({'encrypted':encrypt(exchange.trusted_crypto(p,peer),encoded(signed),{**context,'direction':'response'})})
@@ -761,3 +820,95 @@ def discover(exchange,seconds=3):
   try:time.sleep(seconds)
   finally:browser.cancel()
  return {'candidates':list(rows.values()),'auto_trusted':False,'auto_connected':False}
+
+
+def issue_relay_credit(exchange, request_id, relay_peer_id, credit_units):
+    """Credit a relay node for routing a hop."""
+    row = {
+        'kind': RELAY_CREDIT_ISSUED,
+        'request_id': request_id,
+        'relay_peer_id': relay_peer_id,
+        'credit_units': credit_units,
+        'at': time.time(),
+    }
+    exchange.append(row)
+    return row
+
+
+def emit_audit_record(exchange, operation, actor_id, payload_digest, prior_hash=None):
+    """Append a signed audit chain record. prior_hash chains records together."""
+    import hashlib as _hl
+    record = {
+        'kind': AUDIT_CHAIN_RECORD,
+        'operation': operation,
+        'actor_id': actor_id,
+        'payload_digest': payload_digest,
+        'prior_hash': prior_hash,
+        'at': time.time(),
+    }
+    record['record_hash'] = _hl.sha256(
+        json.dumps(record, sort_keys=True, separators=(',', ':')).encode()
+    ).hexdigest()
+    exchange.append(record)
+    return record
+
+
+def verify_audit_chain(records):
+    """Verify audit chain integrity. Returns (ok, first_broken_index)."""
+    import hashlib as _hl
+    chain_records = [r for r in records if r.get('kind') == AUDIT_CHAIN_RECORD]
+    for i, rec in enumerate(chain_records):
+        expected_hash = rec.get('record_hash')
+        check = {k: v for k, v in rec.items() if k != 'record_hash'}
+        actual = _hl.sha256(
+            json.dumps(check, sort_keys=True, separators=(',', ':')).encode()
+        ).hexdigest()
+        if actual != expected_hash:
+            return False, i
+    return True, -1
+
+
+# ---------------------------------------------------------------------------
+# P1.4 — TCP Hole Punch Attempt
+# ---------------------------------------------------------------------------
+
+import socket as _socket
+
+
+def attempt_tcp_hole_punch(
+    remote_ip: str,
+    remote_port: int,
+    local_port: int,
+    timeout: float = 3.0,
+) -> bool:
+    """Attempt a TCP hole-punch connection.  Returns True on success."""
+    sock = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    try:
+        if local_port:
+            sock.bind(('', local_port))
+        sock.settimeout(timeout)
+        _logger.debug(
+            "TCP hole punch attempt: %s:%s from local %s",
+            remote_ip, remote_port, local_port,
+        )
+        sock.connect((remote_ip, remote_port))
+        sock.close()
+        return True
+    except (_socket.timeout, ConnectionRefusedError, OSError):
+        try:
+            sock.close()
+        except OSError:
+            pass
+        return False
+
+
+def hole_punch_connect(exchange, peer_id: str, endpoint: dict) -> bool:
+    """Try TCP hole punch for *peer_id*; logs relay fallback hint on failure."""
+    remote_ip = endpoint.get('ip') or endpoint.get('host', '')
+    remote_port = int(endpoint.get('port', 0))
+    local_port = int(endpoint.get('local_port', 0))
+    success = attempt_tcp_hole_punch(remote_ip, remote_port, local_port)
+    if not success:
+        _logger.debug("Hole punch failed for %s, relay fallback needed", peer_id)
+    return success
