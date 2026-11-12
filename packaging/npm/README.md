@@ -344,4 +344,4 @@ USD is priced at the published provider rate for the observed model (`provider_p
 
 ## License
 
-v0.5.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.6.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
