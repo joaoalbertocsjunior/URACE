@@ -29,6 +29,9 @@ def _has_tagged_sources(tags) -> bool:
         path = source_root / (tag + ".py")
         if not path.is_symlink() and path.is_file():
             return True
+        pkg = source_root / tag / "__init__.py"
+        if not pkg.is_symlink() and pkg.is_file():
+            return True
     return False
 
 
