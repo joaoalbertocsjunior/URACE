@@ -184,6 +184,33 @@ urace exchange work verify <request_id> --approve true
 urace exchange work decompose "Large refactor" --budget 1000 --complexity 0.9
 ```
 
+## External Metrics
+
+Feed third-party signals into the decision feedback loop:
+
+```sh
+# Push an external metric
+urace metrics push latency_p99 42.3 --unit ms
+
+# List recent metrics
+urace metrics list --limit 20
+
+# Attach a metric to a cycle
+urace metrics attach <metric_id> --cycle <cycle_id>
+```
+
+## Telemetry (OpenTelemetry)
+
+URACE emits spans and traces via the OpenTelemetry SDK. Enable by installing the `telemetry` extra and setting the exporter endpoint:
+
+```sh
+pip install "urace[telemetry]"
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+urace daemon start
+```
+
+Traces cover cycle execution, P2P RPC calls, ledger sync, and DHT bootstrap events.
+
 ## Rules and Access Control
 
 ```sh
