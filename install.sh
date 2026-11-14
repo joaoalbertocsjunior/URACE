@@ -48,9 +48,16 @@ find_python() {
 
 # ── install via pipx (cleanest — handles PEP 668 automatically) ───────────────
 try_pipx() {
-  if command -v pipx >/dev/null 2>&1; then
-    info "Installing via pipx..."
-    pipx install "urace==${URACE_VERSION}" || pipx upgrade urace
+  # curl|sh runs non-interactive — .bashrc/.zshrc not sourced, ~/.local/bin may be missing
+  PIPX_CMD=""
+  for _p in pipx "${HOME}/.local/bin/pipx" /usr/bin/pipx /usr/local/bin/pipx; do
+    if command -v "$_p" >/dev/null 2>&1; then
+      PIPX_CMD="$_p"; break
+    fi
+  done
+  if [ -n "$PIPX_CMD" ]; then
+    info "Installing via pipx (${PIPX_CMD})..."
+    "$PIPX_CMD" install "urace==${URACE_VERSION}" 2>/dev/null || "$PIPX_CMD" upgrade urace
     return 0
   fi
   return 1
@@ -59,7 +66,12 @@ try_pipx() {
 # ── install into a dedicated venv at ~/.urace ─────────────────────────────────
 install_venv() {
   info "Creating dedicated venv at ${VENV_DIR}..."
-  "$PYTHON_CMD" -m venv "${VENV_DIR}"
+  if ! "$PYTHON_CMD" -m venv "${VENV_DIR}" 2>/dev/null; then
+    die "python3-venv not available. Install it first:
+  sudo apt install python3-venv python3-full   (Debian/Ubuntu)
+  sudo dnf install python3                     (Fedora)
+  brew install python                          (macOS)"
+  fi
   "${VENV_DIR}/bin/pip" install --quiet "urace==${URACE_VERSION}"
 
   # Wire up the launcher
