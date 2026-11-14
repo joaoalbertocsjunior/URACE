@@ -1,3 +1,3 @@
 """URACE persistent lifecycle control plane."""
 
-__version__ = "0.3.1"
+__version__ = "0.8.1"
