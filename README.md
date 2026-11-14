@@ -2,9 +2,10 @@
 
 **Autonomous improvement. P2P feature market. Token rewards for every contribution.**
 
-Type a goal — URACE executes, verifies, and checkpoints. Borrow proven features from peers instead
-of building from scratch. Mint yours and earn when others borrow them. Run a node and earn for
-every delivery, relay, or block you seal.
+Type a goal — URACE executes, verifies, and checkpoints.
+Borrow proven features from peers instead of building from scratch.
+Mint yours and earn when others borrow them.
+Run a node and earn for every delivery, relay, or block you seal.
 
 Open-source, community-governed.
 
@@ -102,8 +103,10 @@ Inside the shell:
 Peers mint, list, and borrow verified software features.
 
 P2P borrows have `$0` provider cost in the current runtime; buyers pay URACE units at the listing ask.
-No URACE↔USD exchange rate exists. 
-Polygon is planned to be used as mainnet since it support EVM smart contracts and have lower gas fees than Ethereum.
+
+No URACE↔USD exchange rate exists.
+
+Polygon is planned as mainnet — EVM-compatible, lower gas fees than Ethereum.
 
 → [P2P exchange](docs/exchange/overview.md) · [Token economy](docs/economics/tokenomics.md)
 
