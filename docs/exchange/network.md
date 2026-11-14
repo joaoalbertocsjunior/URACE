@@ -183,12 +183,12 @@ Every node auto-detects its capabilities on first run (`urace init --auto`) and 
 
 | Role | Description | Requirement |
 |------|-------------|-------------|
-| `bootstrap` | Announces stable address so new peers can join the network | Public IP or stable port-forward; cone or direct NAT |
-| `relay` | Forwards traffic between peers that cannot connect directly | Cone NAT + UPnP success, or direct public IP |
+| `bootstrap` | Announces stable address so new peers can join the network | Public IP, port-forward, or SSH tunnel (auto-configured) |
+| `relay` | Forwards traffic between peers that cannot connect directly | Same as bootstrap — tunnel satisfies this automatically |
 | `consumer` | Borrows features and commissions work | Outbound only — always available |
 | `creator` | Publishes features for other peers to adopt | Outbound only — always available |
 
-Roles can be combined. `bootstrap + relay` is the most useful combination for a home server. `consumer + creator` is the default for nodes behind strict NAT.
+Default roles for all new nodes are `bootstrap + relay`. When direct inbound is blocked by NAT, `urace start` automatically establishes a localhost.run SSH tunnel so the node can serve as bootstrap and relay without router configuration.
 
 Check and set roles:
 
@@ -201,12 +201,12 @@ urace exchange node roles --set bootstrap,relay  # override auto-assigned roles
 
 Auto-detection logic:
 
-| NAT type | UPnP | Auto-assigned roles | `network_mode` |
-|----------|------|---------------------|---------------|
-| Direct (VPS/server) | n/a | bootstrap + relay + consumer + creator | internet |
-| Cone NAT + UPnP success | yes | relay + consumer + creator | hybrid |
-| Cone NAT, no UPnP | no | consumer + creator | hybrid |
-| Symmetric NAT | no | consumer + creator | hybrid |
+| NAT type | Tunnel needed | Effective roles | `network_mode` |
+|----------|--------------|-----------------|---------------|
+| Direct (VPS/server) | no | bootstrap + relay + consumer + creator | internet |
+| Cone NAT + UPnP | no | bootstrap + relay + consumer + creator | hybrid |
+| Cone NAT, no UPnP | auto (localhost.run SSH) | bootstrap + relay + consumer + creator | hybrid |
+| Symmetric NAT | auto (localhost.run SSH) | bootstrap + relay + consumer + creator | hybrid |
 | No internet | — | consumer + creator | intranet |
 
 ---
@@ -215,10 +215,11 @@ Auto-detection logic:
 
 When a node is behind NAT, URACE attempts reachability in this order:
 
-1. **UPnP** — automatic port-mapping request to the local gateway; runs on startup when `relay` role is assigned. Requires router UPnP enabled and `miniupnpc` (included in base install).
+1. **UPnP** — automatic port-mapping request to the local gateway. Requires router UPnP enabled and `miniupnpc` (included in base install).
 2. **STUN probe** — determines public IP and NAT type (cone vs symmetric) via `stun.l.google.com`, `stun.cloudflare.com`, `stun.stunprotocol.org`. No single-point-of-failure.
-3. **Manual port-forward** — configure TCP external:7301 → local:7301 on the router for stable inbound without UPnP.
-4. **DHT relay** — if direct inbound is unavailable, URACE routes through relay-role peers automatically.
+3. **SSH tunnel (auto)** — when direct inbound is unavailable, `urace start` automatically creates a localhost.run reverse tunnel (no account, no install required — uses built-in SSH). The public URL is registered as the bootstrap endpoint.
+4. **Manual port-forward** — configure TCP external:7301 → local:7301 on the router for a stable tunnel-free URL.
+5. **DHT relay** — traffic routed through relay-role peers for symmetric NAT where tunnels are also insufficient.
 
 Check your current reachability:
 
@@ -226,7 +227,7 @@ Check your current reachability:
 urace exchange network reachability --json
 ```
 
-Output includes `nat_type` (`direct`/`cone`/`symmetric`/`unknown`), `upnp_available`, `can_bootstrap`, `can_relay`, and `recommended_roles`.
+Output includes `nat_type` (`direct`/`cone`/`symmetric`/`unknown`), `upnp_available`, `can_bootstrap`, `can_relay`, `recommended_roles`, and — when a tunnel is active — `active_tunnel_endpoint` with updated `can_bootstrap: true` / `can_relay: true`.
 
 ---
 
