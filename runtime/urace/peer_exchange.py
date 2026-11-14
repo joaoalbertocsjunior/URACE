@@ -560,10 +560,18 @@ def tls_context(exchange,server=False):
  if not p['enabled'] or not p['network']:raise ValueError('Network exchange disabled')
  identity=exchange.identity();ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER if server else ssl.PROTOCOL_TLS_CLIENT);ctx.minimum_version=ssl.TLSVersion.TLSv1_3
  if not server:ctx.check_hostname=False # Exact out-of-band certificate fingerprint is checked instead.
- ctx.verify_mode=ssl.CERT_REQUIRED
  certs='\n'.join(v['certificate'] for v in p['peers'].values() if not v['blocked'])
- if not certs:raise ValueError('No permitted pinned peer certificates')
- ctx.load_verify_locations(cadata=certs);ctx.load_cert_chain(str(exchange.root/'identity-cert.pem'),str(exchange.root/'identity-key.pem'));return ctx
+ if certs:
+  ctx.verify_mode=ssl.CERT_REQUIRED;ctx.load_verify_locations(cadata=certs)
+ elif not server:
+  raise ValueError('No permitted pinned peer certificates')
+ else:
+  # Bootstrap/relay mode: no peers pinned yet. Accept connections (CERT_OPTIONAL)
+  # but all will be rejected at application layer until their cert is added via
+  # `urace exchange peer add`. This lets the node start, advertise its endpoint,
+  # and share its certificate out-of-band before first peers are pinned.
+  ctx.verify_mode=ssl.CERT_OPTIONAL
+ ctx.load_cert_chain(str(exchange.root/'identity-cert.pem'),str(exchange.root/'identity-key.pem'));return ctx
 
 def _consensus_min(exchange) -> int:
     """Dynamic peer-consensus threshold using persistent all-time-max network size.
@@ -694,7 +702,9 @@ def server(exchange,host='127.0.0.1',port=0):
     if self.path != '/urace/rpc/v1/ledger-tail':
      self.send_error(404, 'Not found')
      return
-    peer = hashlib.sha256(self.connection.getpeercert(binary_form=True)).hexdigest()
+    _raw_cert=self.connection.getpeercert(binary_form=True)
+    if not _raw_cert:self.send_error(403,'Peer certificate required');return
+    peer = hashlib.sha256(_raw_cert).hexdigest()
     p = exchange.load()
     if not p['network'] or not p['enabled'] or peer not in p['peers'] or p['peers'][peer]['blocked']:
      self.send_error(403, 'Peer admission denied')
@@ -722,7 +732,9 @@ def server(exchange,host='127.0.0.1',port=0):
     if self.path!='/rpc' or self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or (_req_enc and _req_enc!='gzip'):raise ValueError('Invalid RPC envelope')
     size=int(self.headers.get('Content-Length','0'))
     if not 0<size<=LIMIT*2:raise ValueError('Invalid request size')
-    peer=hashlib.sha256(self.connection.getpeercert(binary_form=True)).hexdigest();p=exchange.load()
+    _raw_cert=self.connection.getpeercert(binary_form=True)
+    if not _raw_cert:raise ValueError('Peer certificate required')
+    peer=hashlib.sha256(_raw_cert).hexdigest();p=exchange.load()
     if not p['network'] or not p['enabled'] or peer not in p['peers'] or p['peers'][peer]['blocked']:raise ValueError('Peer admission denied')
     with exchange.lock():
      all_rows=exchange.audit_rows()

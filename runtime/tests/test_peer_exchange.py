@@ -1,7 +1,7 @@
 """Real local cryptography/TLS, with isolated fixture nodes; no external peers or native calls."""
 from pathlib import Path
 from unittest.mock import patch
-import copy,json,tempfile,threading,unittest
+import copy,json,ssl,tempfile,threading,unittest
 from urace import peer_exchange as pe,exchange_cli,cli,api_interface,command_surface,integration_bridge
 
 class ExchangeTests(unittest.TestCase):
@@ -255,3 +255,24 @@ class BandwidthProfileTests(unittest.TestCase):
     result=pe.send(self.a,bid)
     self.assertEqual(result['status'],'QUARANTINED')
    finally:server.shutdown();thread.join(timeout=5)
+
+
+class BootstrapServerTests(unittest.TestCase):
+ def setUp(self):
+  self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+  self.node=pe.Exchange(Path(self.tmp.name)/'node')
+ def test_server_starts_with_zero_peers(self):
+  self.node.configure(enabled=True,network=True)
+  self.node.identity()
+  ctx=pe.tls_context(self.node,server=True)
+  self.assertEqual(ctx.verify_mode,ssl.CERT_OPTIONAL)
+ def test_client_still_requires_peers(self):
+  self.node.configure(enabled=True,network=True)
+  self.node.identity()
+  with self.assertRaises(ValueError):
+   pe.tls_context(self.node,server=False)
+ def test_server_port_binds_with_zero_peers(self):
+  self.node.configure(enabled=True,network=True)
+  self.node.identity()
+  with pe.server(self.node) as srv:
+   self.assertGreater(srv.server_port,0)
