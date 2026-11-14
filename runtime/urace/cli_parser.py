@@ -509,6 +509,7 @@ def _build_parser_template() -> argparse.ArgumentParser:
     update_command.add_argument("reference", nargs="?", help="download source, candidate hash prefix, or local candidate path")
     update_command.add_argument("--source", dest="update_source", help="explicit specification source for orchestrated update")
     update_command.add_argument("--yes", action="store_true", help="authorize queueing the reviewed migration without interactive confirmation")
+    update_command.add_argument("--force", action="store_true", help="apply even when local customizations are detected (overrides customization gate)")
     update_command.add_argument("--decision", help="attributable operator decision for a checkpointed update conflict")
     update_command.add_argument("--opt-in-constructs", "--opt-in-patterns", default=None, dest="opt_in_constructs", help="comma-separated construct or AP IDs to limit update scope (e.g. AP8,AP14 or QSM,GoalRecord); default: all. --opt-in-patterns is a backward-compat alias")
     update_command.add_argument("--hash", dest="expected_hash", default=None, help="expected SHA-256 hex digest of the downloaded artifact (§62k --hash)")

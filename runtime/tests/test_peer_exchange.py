@@ -13,10 +13,8 @@ class ExchangeTests(unittest.TestCase):
  def bundle(self):
   result=self.a.prepare(self.bid,'featureA','reviewed fixture patch',True);return self.a.inspect(result['bundle_id'])['bundle']
  def test_default_network_is_off_read_only_and_creates_nothing(self):
-  # P2P-first default: exchange enabled=True but network=False (TCP requires explicit opt-in)
-  self.assertTrue(self.a.summary()['settings']['enabled']);self.assertFalse(self.a.summary()['settings']['network']);self.assertFalse(self.a.root.exists())
-  with self.assertRaises(ValueError):pe.server(self.a)  # server() raises because network=False
-  self.assertFalse(self.a.root.exists())
+  # Defaults: enabled=True, network=True, feature_borrow=False, token_settlement=False — no disk write until configure/identity is called
+  p=self.a.load();self.assertTrue(p['enabled']);self.assertTrue(p['network']);self.assertFalse(p['feature_borrow_enabled']);self.assertFalse(p['token_settlement']);self.assertFalse(self.a.root.exists())
  def test_explicit_export_and_import_are_distinct_and_never_apply(self):
   self.pair();bundle=self.bundle();self.assertEqual(self.a.summary()['counts']['EXPORTED'],1);result=self.b.receive(bundle);self.assertEqual(result['status'],'QUARANTINED');self.assertFalse(result['applied']);self.assertEqual(self.b.receive(bundle)['status'],'ALREADY_QUARANTINED');self.assertEqual(self.b.summary()['applied'],0)
  def test_no_permission_no_export(self):
@@ -72,7 +70,7 @@ class ExchangeTests(unittest.TestCase):
   self.a.append_audit_row({'kind':'EQUITY_GRANT','feature_id':'featureA','peer_id':self.aid,
                            'visibility':'public','description':'open fixture component','tags':['fixture'],
                            'artifact_ref':sha,'artifact_size_bytes':len(raw),
-                           'content_type':'application/octet-stream'})
+                           'content_type':'text/plain'})
   with pe.server(self.a) as server:
    thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
    try:
@@ -109,12 +107,13 @@ class ExchangeTests(unittest.TestCase):
     with self.assertRaises((ValueError,OSError)):pe.request(self.a,self.bid,'exchange.info',{})
    finally:server.shutdown();thread.join(timeout=5)
  def test_settings_advertise_dependency_and_invalid_endpoints(self):
-  # P2P-first default: enabled=True, so network=True is allowed without explicit enable.
-  # The remaining dependency: advertise=True requires network=True first.
+  # advertise=True requires network=True; network=True requires enabled=True.
+  self.a.configure(enabled=True,network=False)  # explicitly disable network first
   with self.assertRaises(ValueError):self.a.configure(advertise=True)  # network=False → error
   for endpoint in ('http://localhost','https://user:secret@localhost','https://localhost/path','https://localhost/#x'):
    with self.assertRaises(ValueError):pe.validate_endpoint(endpoint)
- def test_discovery_is_off_by_default(self):
+ def test_discovery_requires_network_enabled(self):
+  self.a.configure(enabled=True,network=False)
   with self.assertRaises(ValueError):pe.discover(self.a)
  def test_private_file_and_symlink_export_prohibited(self):
   root=Path(self.tmp.name);p=root/'credential.txt';p.write_text('secret')

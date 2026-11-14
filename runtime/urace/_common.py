@@ -22,7 +22,15 @@ except ImportError:
 RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_ROOT = RUNTIME_ROOT.parent
 ROOT = SYSTEM_ROOT.parent
-CONFIG_PATH = Path(__file__).with_name("config.json")
+# Package config (shipped with pip, overwritten on upgrade — not for user data)
+_PACKAGE_CONFIG_PATH = Path(__file__).with_name("config.json")
+# User-data config dir (~/.urace/config.json) survives pip upgrades.
+# Only preferred when running from a production venv install under ~/.urace/,
+# NOT when running from a development source tree (where package config IS the project config).
+_USER_CONFIG_PATH = Path.home() / ".urace" / "config.json"
+_RUN_FROM_PROD_VENV = str(_PACKAGE_CONFIG_PATH).startswith(str(Path.home() / ".urace"))
+CONFIG_PATH = (_USER_CONFIG_PATH if (_RUN_FROM_PROD_VENV and _USER_CONFIG_PATH.exists())
+               else _PACKAGE_CONFIG_PATH)
 
 
 def now() -> str:
@@ -156,7 +164,19 @@ def state_lock(path: Path) -> Generator[None, None, None]:
 
 
 def load_config() -> dict[str, Any]:
-    cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    # CONFIG_PATH is already resolved to user-data dir when available (module-level).
+    # Auto-migrate from package config to user-data dir on first run with real data.
+    _read_path = CONFIG_PATH
+    if _read_path == _PACKAGE_CONFIG_PATH and not _USER_CONFIG_PATH.exists():
+        try:
+            _pkg = json.loads(_PACKAGE_CONFIG_PATH.read_text(encoding="utf-8"))
+            if _pkg.get("product_registry") or not str(_pkg.get("state_path", "")).startswith("/tmp/"):
+                _USER_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+                _USER_CONFIG_PATH.write_text(_PACKAGE_CONFIG_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+                _read_path = _USER_CONFIG_PATH
+        except (OSError, json.JSONDecodeError):
+            pass
+    cfg = json.loads(_read_path.read_text(encoding="utf-8"))
     env_product = os.environ.get("URACE_ACTIVE_PRODUCT")
     if env_product:
         cfg["active_product"] = env_product
@@ -174,9 +194,18 @@ def copy_mapping(value):
 
 
 def save_config(config: dict[str, Any]) -> None:
+    # Prefer user-data dir to avoid pip upgrade overwriting config. When CONFIG_PATH
+    # was externally patched (test fixtures), that patch is used as-is.
+    if CONFIG_PATH == _PACKAGE_CONFIG_PATH:
+        # First save on a fresh install: migrate to user-data dir.
+        _dest = _USER_CONFIG_PATH
+        _dest.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        _dest = CONFIG_PATH  # already user-data dir, or externally patched for tests
     overlay=config.get('_product_overlay_name')
     if overlay:
-        base=json.loads(CONFIG_PATH.read_text());registry=config.get('product_registry',base.get('product_registry',[]))
+        _base_src = _dest if _dest.exists() else _PACKAGE_CONFIG_PATH
+        base=json.loads(_base_src.read_text());registry=config.get('product_registry',base.get('product_registry',[]))
         if config.get('active_product')==overlay:
             entry=next((e for e in registry if e.get('name')==overlay and e.get('kind')=='bootstrapped'),None)
             if entry is None:raise ValueError('Active isolated product disappeared')
@@ -184,8 +213,8 @@ def save_config(config: dict[str, Any]) -> None:
             from .product_creation import validate_entry
             validate_entry(entry,ROOT)
         else:base['active_product']=config.get('active_product')
-        base['product_registry']=registry;atomic_write_json(CONFIG_PATH,base);return
-    atomic_write_json(CONFIG_PATH,config)
+        base['product_registry']=registry;atomic_write_json(_dest,base);return
+    atomic_write_json(_dest,config)
 
 
 def state_path(config: dict[str, Any]) -> Path:

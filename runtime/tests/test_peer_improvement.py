@@ -323,7 +323,7 @@ class NetworkConvergenceTests(unittest.TestCase):
     def test_network_disabled_returns_early(self):
         from urace import peer_exchange as pe, peer_improvement as pi
         e = pe.Exchange(self.root / "node")
-        e.configure(enabled=True)
+        e.configure(enabled=True, network=False)
         result = pi.network_convergence(e, "a" * 64)
         self.assertEqual(result["status"], "NETWORK_DISABLED")
         self.assertIsNone(result["ratio"])

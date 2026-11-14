@@ -196,6 +196,40 @@ operations and confirms zero spurious alerts.
 
 ---
 
+## Phase 10 — Performance benchmarks
+
+**What it measures:** Throughput, latency, cache-hit effectiveness, and thread-safety of core
+runtime paths that execute on every classification request.
+
+**KPIs:**
+- `freeform_routing_throughput` — 10 consecutive cache-hit classify calls < 2 s total
+  (target: < 200 ms/call cached)
+- `ledger_append_throughput` — 1000 event dispatch calls complete < 10 s
+  (target: > 100 appends/sec through dispatch pipeline)
+- `cache_effectiveness` — second classify call with identical text must hit cache: 0 LLM calls
+- `concurrent_sessions` — 3 concurrent classify threads complete without error
+
+**Result (mock):** All 4 KPIs passing. Cache-hit mean latency ~40 ms, dispatch pipeline
+~440 appends/sec, all 3 concurrent sessions complete without error.
+
+**Files:** `trial/benchmark_performance.py`, `trial/tests/test_benchmark_performance.py`
+
+**How it works:**
+- *FreeformRoutingThroughput:* Pre-populates the routing cache with the exact contract sha256
+  computed by `_route`, then calls `_route` 10 times. No executor invocations. Measures dispatch
+  pipeline speed (JSON validation, feature scoring, response serialization).
+- *LedgerAppendThroughput:* Creates an Exchange instance with a stubbed signed-ledger append
+  and mocked fsync, then calls `Exchange.event()` 1000 times. Measures the event-dispatch and
+  JSON-serialization path without post-quantum signing overhead.
+- *CacheEffectiveness:* Calls `_route` twice with identical text. First call invokes the mock
+  executor and writes the cache. Second call reads the cache and returns
+  `routing_source == 'VALIDATED_CACHE'` with 0 additional executor calls.
+- *ConcurrentSessions:* Launches 3 threads, each calling `_route` with a unique text and
+  mock executor. All threads must complete without error, exercising the thread-safety of
+  routing state paths.
+
+---
+
 ## Phase 9 — KPI dashboard
 
 **What it measures:** Single-command run of all phases; unified pass/fail report.

@@ -1,16 +1,7 @@
 """Tests for integration_bridge.py adapter pattern and on-chain attestation stubs."""
 import unittest
 
-
-class MockExchange:
-    def __init__(self):
-        self._rows = []
-
-    def audit_rows(self):
-        return list(self._rows)
-
-    def append_audit_row(self, row):
-        self._rows.append(row)
+from conftest import MockExchange
 
 
 class TestChainAdapterInterface(unittest.TestCase):

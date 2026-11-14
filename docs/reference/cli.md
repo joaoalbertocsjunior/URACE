@@ -525,7 +525,7 @@ Recognised phrases: `cancel`, `ignore`, `never mind`, `forget`, `forget it`, `fo
 
 Requires `URACE_A2A_TOKEN` in the launch environment. Use an owner-managed TLS reverse proxy for remote access.
 
-→ [Agent Integrations](../agent-integrations.md) for full A2A and MCP reference.
+→ [Agent Integrations](agent-integrations.md) for full A2A and MCP reference.
 
 ---
 
@@ -778,7 +778,7 @@ Primarily used by freeform routing internally; useful for debugging command reso
 
 Requires `URACE_A2A_TOKEN` for A2A transport. Use `--token-env VAR` to select a different env variable.
 
-→ [Agent Integrations](../agent-integrations.md) for full A2A and MCP reference.
+→ [Agent Integrations](agent-integrations.md) for full A2A and MCP reference.
 
 ---
 

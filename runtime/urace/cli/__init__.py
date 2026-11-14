@@ -1801,7 +1801,19 @@ Key options:
                         if config.get('self_evolution_policy',{}).get('mode','DISABLED').upper()=='DISABLED':raise ValueError('Migration requires enabled self-evolution policy')
                         payload=updater.migration_payload(ROOT,update_state_root,downloaded['sha256'])
                         if _opt_in:payload['opted_in_patterns']=_opt_in
-                        queued=queue_input(config,'goal',payload);result={'status':'QUEUED','input':queued['id'],'candidate_sha256':payload['update_candidate']['sha256'],'next':'The autonomous owner validates and activates at a safe boundary'}
+                        # Gate: customizations detected without --force
+                        _orch_cust=payload.get('local_customizations',{})
+                        if _orch_cust.get('status')=='LOCAL_CUSTOMIZATIONS_PRESENT' and not getattr(args,'force',False):
+                            result={'status':'CUSTOMIZATION_REVIEW_REQUIRED','local_customizations':_orch_cust,'next':"re-run with --force to apply over local customizations, or run 'urace update explain' to review"}
+                        else:
+                            # Pre-apply backup
+                            _orch_sp=state_path(config)
+                            if _orch_sp.exists():
+                                import datetime as _dt2
+                                _bd2=_orch_sp.parent/'backups';_bd2.mkdir(exist_ok=True)
+                                _ts2=_dt2.datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+                                (_bd2/f'state-pre-update-{_ts2}.json').write_bytes(_orch_sp.read_bytes())
+                            queued=queue_input(config,'goal',payload);result={'status':'QUEUED','input':queued['id'],'candidate_sha256':payload['update_candidate']['sha256'],'next':'The autonomous owner validates and activates at a safe boundary'}
                 print(json.dumps(result,indent=2,sort_keys=True));return 0
             except (OSError,RuntimeError,ValueError) as error:
                 print(json.dumps({'status':'error','error':str(error)}) if args.json else 'Update failed: '+str(error),file=sys.stdout if args.json else sys.stderr);return 2
@@ -1902,6 +1914,30 @@ Key options:
                             return 2
                 if _opt_in:
                     payload["opted_in_patterns"] = _opt_in
+                # Gate on local customizations: warn and require --force when drift detected
+                _update_local_cust = payload.get("local_customizations", {})
+                if _update_local_cust.get("status") == "LOCAL_CUSTOMIZATIONS_PRESENT" and not getattr(args, "force", False) and not getattr(args, "yes", False):
+                    _n_changed = len(_update_local_cust.get("changed", []))
+                    _n_missing = len(_update_local_cust.get("missing", []))
+                    _n_added = len(_update_local_cust.get("added", []))
+                    if args.json:
+                        print(json.dumps({"status": "CUSTOMIZATION_REVIEW_REQUIRED", "local_customizations": _update_local_cust, "next": "re-run with --force to apply over local customizations, or run 'urace update explain' to review"}, indent=2, sort_keys=True))
+                        return 1
+                    print(f"WARNING: {_n_changed} changed, {_n_missing} missing, {_n_added} added local files detected.")
+                    print("The migration candidate may overwrite these. Run 'urace update explain' to review.")
+                    print("Re-run with --force to apply anyway.")
+                    return 1
+                # Pre-apply backup: snapshot state.json before queuing the migration
+                _pre_apply_state_path = state_path(config)
+                if _pre_apply_state_path.exists():
+                    import datetime as _dt
+                    _backup_dir = _pre_apply_state_path.parent / "backups"
+                    _backup_dir.mkdir(exist_ok=True)
+                    _backup_ts = _dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    _backup_target = _backup_dir / f"state-pre-update-{_backup_ts}.json"
+                    _backup_target.write_bytes(_pre_apply_state_path.read_bytes())
+                    if not args.json:
+                        print(f"Pre-update backup: {_backup_target}")
                 # Stale manifest + construct set detection on apply
                 _apply_state = load_state_for_read(config)
                 _stale_apply: list[dict] = []
@@ -5721,7 +5757,7 @@ Commands:
                         "decompress_enabled": _ctrl_caps.get("decompress_enabled", True),
                         "p2p_mint_enabled": _ctrl_caps.get("p2p_mint_enabled", False),
                         "p2p_sell_enabled": _ctrl_caps.get("p2p_sell_enabled", False),
-                        "p2p_borrow_enabled": _ctrl_caps.get("p2p_borrow_enabled", True),
+                        "p2p_borrow_enabled": _ctrl_caps.get("p2p_borrow_enabled", False),
                         "context_mint_enabled": _ctrl_caps.get("context_mint_enabled", False),
                         "context_mint_objectives": _ctrl_caps.get("context_mint_objectives", False),
                         "context_mint_evidence": _ctrl_caps.get("context_mint_evidence", False),

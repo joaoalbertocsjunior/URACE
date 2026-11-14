@@ -119,16 +119,17 @@ Self-evolution is governed by a strict authority boundary — see [Authority Bou
 
 Once you have a quality improvement, you can mint it to the P2P network so other peers can borrow it (and earn tokens from every adoption).
 
-Enable minting:
+Enable minting (off by default):
 
 ```sh
 urace controls set --p2p-mint-enabled true
 ```
 
-Enable the exchange and networking:
+The exchange and networking are **on by default** — no command needed. To verify or change:
 
 ```sh
-urace exchange settings set --enabled true --network true
+urace exchange settings show   # check current settings
+# exchange is enabled and network-connected out of the box
 ```
 
 Create your peer identity:

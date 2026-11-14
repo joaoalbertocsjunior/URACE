@@ -112,7 +112,7 @@ class Exchange:
  def __init__(self,root):self.root=Path(root)
  def load(self):
   p=self.root/'policy.json'
-  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':False,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':True,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[],'compress_wire':False,'bandwidth_profile':'auto','transfer_chunk_size':0,'relay_credit_per_kb':1,'node_roles':[],'urace_credit_usd_rate':1000,'bootstrap_credit_per_connection':5}
+  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':True,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':False,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[],'compress_wire':False,'bandwidth_profile':'auto','transfer_chunk_size':0,'relay_credit_per_kb':1,'node_roles':[],'urace_credit_usd_rate':1000,'bootstrap_credit_per_connection':5}
  @contextmanager
  def lock(self):
   self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -401,6 +401,15 @@ class Exchange:
   with self.lock():
    p=self.load();b=self.verify(bundle,p)
    if authenticated_peer is not None and b['sender']!=authenticated_peer:raise ValueError('TLS peer differs from signer')
+   # Enforce MIME policy at receive time — reject bundles with non-allowed types
+   # before writing any attacker-supplied bytes to the ledger.
+   # Missing content_type is treated as application/octet-stream (WEAK, blocked by default).
+   _bct=b.get('content_type','') or 'application/octet-stream'
+   from . import mime_policy as _mmp
+   _bct_ok,_bct_reason=_mmp.is_network_allowed(_bct)
+   if not _bct_ok:
+    self.event('RECEIVE_REJECTED_MIME_POLICY',peer=b.get('sender',''),feature=b.get('feature',''),content_type=_bct,reason=_bct_reason)
+    return self.counter_receipt('0'*64,b,'REJECTED_MIME_POLICY')
    bid=digest(bundle);folder=self.root/'quarantine';folder.mkdir(exist_ok=True);target=folder/(bid+'.json')
    _art_ref=b.get('artifact_ref') or b.get('sha256','')
    _art_inline=b.get('artifact')

@@ -3,28 +3,14 @@ import time
 import pytest
 
 from urace import mime_priority as mp
-
-
-class MockExchange:
-    def __init__(self, peer_id='node-1'):
-        self._rows = []
-        self._peer_id = peer_id
-
-    def audit_rows(self):
-        return list(self._rows)
-
-    def append_audit_row(self, row):
-        self._rows.append(row)
-
-    def local_peer_id(self):
-        return self._peer_id
+from conftest import MockExchange
 
 
 def _grant(fid, ct):
     return {'kind': 'EQUITY_GRANT', 'feature_id': fid, 'content_type': ct}
 
 
-def _borrow(fid, peer='node-1'):
+def _borrow(fid, peer='test-peer'):
     return {'kind': 'FEATURE_BORROWED', 'feature_id': fid, 'peer_id': peer}
 
 
@@ -71,14 +57,16 @@ def test_weights_sum_to_one():
 # ── should_replicate ──────────────────────────────────────────────────────────
 
 def test_should_replicate_bootstrap_fewer_than_5_types():
-    # Only 2 unique types seen → bootstrap mode → replicate everything
+    # Only 2 unique types seen → bootstrap mode → replicate everything (within policy)
     ex = MockExchange()
     ex.append_audit_row(_grant('f1', 'text/csv'))
     ex.append_audit_row(_grant('f2', 'application/json'))
     ex.append_audit_row(_borrow('f1'))
     ex.append_audit_row(_borrow('f2'))
-    # Even a type never seen should replicate
-    assert mp.should_replicate('application/pdf', ex) is True
+    # A policy-allowed type never seen should still replicate in bootstrap mode
+    assert mp.should_replicate('text/x-python', ex) is True
+    # A policy-blocked type (PDF — no APS outcome delta) is never replicated regardless
+    assert mp.should_replicate('application/pdf', ex) is False
 
 
 def test_should_replicate_above_threshold():

@@ -159,40 +159,85 @@ class OfficeFingerprintTests(unittest.TestCase):
 
 class MimePolicyTests(unittest.TestCase):
 
+    # ── quality_gate_only (default) ───────────────────────────────────────────
+
+    def test_default_allows_source_code(self):
+        for ct in ('text/x-python', 'application/json', 'text/plain', 'text/csv', 'text/markdown'):
+            allowed, reason = mp.is_allowed(ct, {})
+            self.assertTrue(allowed, f'{ct}: {reason}')
+
+    def test_default_allows_text_wildcard_subtypes(self):
+        # text/* subtypes with MEDIUM ALE protection are accepted (e.g. text/x-go, text/x-rust)
+        allowed, _ = mp.is_allowed('text/x-go', {})
+        self.assertTrue(allowed)
+
+    def test_default_blocks_html(self):
+        # text/html has ALE protection but no reliable APS outcome delta
+        allowed, reason = mp.is_allowed('text/html', {})
+        self.assertFalse(allowed)
+        self.assertIn('quality_gate_only', reason)
+
+    def test_default_blocks_image(self):
+        # Images cannot be objectively scored by APS
+        allowed, reason = mp.is_allowed('image/jpeg', {})
+        self.assertFalse(allowed)
+        self.assertIn('quality_gate_only', reason)
+
+    def test_default_blocks_pdf(self):
+        allowed, reason = mp.is_allowed('application/pdf', {})
+        self.assertFalse(allowed)
+        self.assertIn('quality_gate_only', reason)
+
+    def test_default_blocks_docx(self):
+        ct = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        allowed, reason = mp.is_allowed(ct, {})
+        self.assertFalse(allowed)
+
+    def test_default_blocks_octet_stream(self):
+        allowed, reason = mp.is_allowed('application/octet-stream', {})
+        self.assertFalse(allowed)
+
+    # ── hard_protected_only ───────────────────────────────────────────────────
+
     def test_hard_protected_allows_image(self):
-        allowed, _ = mp.is_allowed('image/jpeg', {})
+        config = {'p2p': {'mime_policy': 'hard_protected_only'}}
+        allowed, _ = mp.is_allowed('image/jpeg', config)
         self.assertTrue(allowed)
 
     def test_hard_protected_allows_csv(self):
-        allowed, _ = mp.is_allowed('text/csv', {})
+        config = {'p2p': {'mime_policy': 'hard_protected_only'}}
+        allowed, _ = mp.is_allowed('text/csv', config)
         self.assertTrue(allowed)
 
     def test_hard_protected_allows_json(self):
-        allowed, _ = mp.is_allowed('application/json', {})
+        config = {'p2p': {'mime_policy': 'hard_protected_only'}}
+        allowed, _ = mp.is_allowed('application/json', config)
         self.assertTrue(allowed)
 
     def test_hard_protected_allows_pdf(self):
-        allowed, _ = mp.is_allowed('application/pdf', {})
-        self.assertTrue(allowed)
-
-    def test_hard_protected_allows_docx(self):
-        ct = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        allowed, _ = mp.is_allowed(ct, {})
+        config = {'p2p': {'mime_policy': 'hard_protected_only'}}
+        allowed, _ = mp.is_allowed('application/pdf', config)
         self.assertTrue(allowed)
 
     def test_hard_protected_blocks_octet_stream(self):
-        allowed, reason = mp.is_allowed('application/octet-stream', {})
+        config = {'p2p': {'mime_policy': 'hard_protected_only'}}
+        allowed, reason = mp.is_allowed('application/octet-stream', config)
         self.assertFalse(allowed)
         self.assertIn('weak', reason)
 
     def test_hard_protected_blocks_unknown(self):
-        allowed, reason = mp.is_allowed('application/x-custom-binary', {})
+        config = {'p2p': {'mime_policy': 'hard_protected_only'}}
+        allowed, reason = mp.is_allowed('application/x-custom-binary', config)
         self.assertFalse(allowed)
+
+    # ── all_allowed ───────────────────────────────────────────────────────────
 
     def test_all_allowed_permits_octet_stream(self):
         config = {'p2p': {'mime_policy': 'all_allowed'}}
         allowed, _ = mp.is_allowed('application/octet-stream', config)
         self.assertTrue(allowed)
+
+    # ── custom ────────────────────────────────────────────────────────────────
 
     def test_custom_policy_explicit_allowlist(self):
         config = {'p2p': {'mime_policy': 'custom', 'allowed_asset_mime_types': ['application/octet-stream', 'image/*']}}
@@ -206,6 +251,13 @@ class MimePolicyTests(unittest.TestCase):
         self.assertTrue(mp.is_allowed('image/webp', config)[0])
         self.assertFalse(mp.is_allowed('application/json', config)[0])
 
+    def test_custom_policy_empty_allowlist_blocks_all(self):
+        config = {'p2p': {'mime_policy': 'custom', 'allowed_asset_mime_types': []}}
+        allowed, _ = mp.is_allowed('image/jpeg', config)
+        self.assertFalse(allowed)
+
+    # ── protection level (ALE classification, independent of policy) ──────────
+
     def test_protection_level_image(self):
         self.assertEqual(mp.protection_level('image/png'), 'strong')
 
@@ -218,10 +270,34 @@ class MimePolicyTests(unittest.TestCase):
     def test_protection_level_unknown(self):
         self.assertEqual(mp.protection_level('application/x-mystery'), 'unknown')
 
-    def test_custom_policy_empty_allowlist_blocks_all(self):
-        config = {'p2p': {'mime_policy': 'custom', 'allowed_asset_mime_types': []}}
-        allowed, _ = mp.is_allowed('image/jpeg', config)
+    # ── is_network_allowed — network-enforced gate, ignores user config ───────
+
+    def test_network_allowed_source_code(self):
+        allowed, reason = mp.is_network_allowed('text/x-python')
+        self.assertTrue(allowed)
+        self.assertIn('quality_gate_only', reason)
+
+    def test_network_allowed_structured_data(self):
+        for ct in ('application/json', 'text/csv', 'text/plain'):
+            allowed, _ = mp.is_network_allowed(ct)
+            self.assertTrue(allowed, ct)
+
+    def test_network_blocks_image_regardless_of_config(self):
+        # Even if user set hard_protected_only, network gate rejects images
+        allowed, reason = mp.is_network_allowed('image/jpeg')
         self.assertFalse(allowed)
+        self.assertIn('quality_gate_only', reason)
+
+    def test_network_blocks_pdf_regardless_of_config(self):
+        allowed, _ = mp.is_network_allowed('application/pdf')
+        self.assertFalse(allowed)
+
+    def test_network_blocks_octet_stream(self):
+        allowed, _ = mp.is_network_allowed('application/octet-stream')
+        self.assertFalse(allowed)
+
+    def test_network_policy_constant_is_quality_gate_only(self):
+        self.assertEqual(mp.NETWORK_MIME_POLICY, 'quality_gate_only')
 
 
 if __name__ == '__main__':

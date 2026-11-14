@@ -63,8 +63,7 @@ def should_replicate(content_type: str, exchange, threshold: float = 0.05) -> bo
     # Policy gate first — never replicate what policy blocks regardless of priority
     try:
         from . import mime_policy as _mp
-        config = exchange.load() if hasattr(exchange, 'load') else {}
-        allowed, _ = _mp.is_allowed(content_type, config)
+        allowed, _ = _mp.is_network_allowed(content_type)
         if not allowed:
             return False
     except Exception:

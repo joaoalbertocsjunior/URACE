@@ -1162,9 +1162,9 @@ def run(args,config):
    # MIME type policy enforcement (ALE network guarantee)
    if _art_path:
     from . import mime_policy as _mp
-    _mime_allowed,_mime_reason=_mp.is_allowed(_art_ct,config)
+    _mime_allowed,_mime_reason=_mp.is_network_allowed(_art_ct)
     if not _mime_allowed:
-     raise ValueError(f'Asset MIME type {_art_ct!r} rejected by node MIME policy: {_mime_reason}. Configure p2p.mime_policy or p2p.allowed_asset_mime_types to override.')
+     raise ValueError(f'Asset MIME type {_art_ct!r} rejected by network MIME policy: {_mime_reason}. Update mime_policy.NETWORK_MIME_POLICY to expand allowed types.')
     _grant_meta['ale_protection_level']=_mp.protection_level(_art_ct)
    # Asset quality validation (non-blocking warning)
    if _art_path and _art_raw is not None:

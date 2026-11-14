@@ -8,7 +8,7 @@
 | **Committer** | Review and approve PRs | Nominated after 5+ merged contributions |
 | **Contributor** | Open issues, submit PRs | Open to anyone |
 
-Current Maintainers: see [MAINTAINERS](MAINTAINERS) file.
+Current Maintainers: see [MAINTAINERS.md](MAINTAINERS.md).
 
 ## Bootstrap Period
 
@@ -16,7 +16,7 @@ URACE is currently in a **bootstrap period**: the founding maintainer (`joaoalbe
 
 - All decisions still follow the rules below, but quorum is waived where it requires more than one Maintainer.
 - The founding maintainer has no special override authority beyond what the governance rules grant to any Maintainer.
-- The bootstrap period ends when two Maintainers are listed in the [MAINTAINERS](MAINTAINERS) file and at least one has merged a non-trivial PR independently.
+- The bootstrap period ends when two Maintainers are listed in [MAINTAINERS.md](MAINTAINERS.md) and at least one has merged a non-trivial PR independently.
 
 This is a time-bounded transitional state, not permanent single-vendor control.
 

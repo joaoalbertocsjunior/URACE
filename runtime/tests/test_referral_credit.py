@@ -2,14 +2,7 @@
 import time
 import unittest
 
-
-class MockExchange:
-    def __init__(self):
-        self.rows = []
-    def audit_rows(self):
-        return []
-    def append_audit_row(self, row):
-        self.rows.append(row)
+from conftest import MockExchange
 
 
 class TestReferralCreditConstant(unittest.TestCase):
@@ -36,7 +29,7 @@ class TestCreateWorkRequestReferral(unittest.TestCase):
                 ex, 'requester-1', 'do something', 100,
                 referral_credit={'referrer_id': 'ref-1', 'amount': 5}
             )
-        req_row = next(r for r in ex.rows if r.get('kind') == 'WORK_REQUEST')
+        req_row = next(r for r in ex._rows if r.get('kind') == 'WORK_REQUEST')
         self.assertIsNotNone(req_row['referral_credit'])
         self.assertEqual(req_row['referral_credit']['referrer_id'], 'ref-1')
 
@@ -47,7 +40,7 @@ class TestCreateWorkRequestReferral(unittest.TestCase):
         with patch('urace.peer_work_market._check_rate_limit'), \
              patch('urace.credit_ledger.consensus_escrow_floor', return_value=0):
             create_work_request(ex, 'requester-2', 'spec', 100)
-        req_row = next(r for r in ex.rows if r.get('kind') == 'WORK_REQUEST')
+        req_row = next(r for r in ex._rows if r.get('kind') == 'WORK_REQUEST')
         self.assertIsNone(req_row['referral_credit'])
 
     def test_referral_credit_kind_value(self):

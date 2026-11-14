@@ -22,24 +22,13 @@ URACE runs inside your existing project directory. There is no server to manage,
 
 ---
 
-## Quick Start
+## Install
 
 ```sh
-# one-liner (Linux / macOS / WSL):
-curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
-
-# pip:
 pip install urace
-
-# npm:
-npm install -g urace-cli
-
-# Homebrew:
-brew install urace
-
-# conda:
-conda install -c conda-forge urace
 ```
+
+→ All install methods (one-liner, npm, Homebrew, conda) and update commands: [README.md](../../README.md#install)
 
 ```sh
 export ANTHROPIC_API_KEY=...
@@ -48,18 +37,6 @@ urace          # open interactive shell
 ```
 
 Run `urace --version` to verify the install.
-
----
-
-## Update
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
-pip install --upgrade urace
-npm install -g urace-cli@latest
-brew upgrade urace
-conda update -c conda-forge urace
-```
 
 ---
 

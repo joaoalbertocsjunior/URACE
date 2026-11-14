@@ -7,6 +7,8 @@
 | Set up and run tests | [Quick Start](#quick-start) |
 | Run only fast tests | [Test Profiles](#test-profiles) |
 | Add a new command | [Adding a New Command](#adding-a-new-command) |
+| Update a cross-cutting protocol constant | [Protocol Single Source of Truth](#protocol-single-source-of-truth) |
+| Add a network I/O code path | [Network-Gated Code](#network-gated-code) |
 | Build an IDE plugin or dashboard | [Ecosystem Contributions](#ecosystem-contributions) |
 | Understand the spec invariant | [§62z](#spec-evolution-invariant-62z) |
 | Submit a PR | [Branch and PR Conventions](#branch-and-pr-conventions) |
@@ -38,14 +40,17 @@ pytest tests/ -x -q
 # Single test
 pytest tests/ -k "test_name" -x -q
 
-# P2P evidence protocol (separate suite under trial/)
-cd urace
-PYTHONPATH=runtime python3 -m pytest trial/test_p2p_pair_protocol.py trial/test_p2p_cost_claim_review.py -q
+# Trial evidence suite (P2P evidence protocol, synthetic cohorts)
+# Run from URACE/urace/
+PYTHONPATH=runtime:trial python3 -m pytest trial/ --ignore=trial/core-state --ignore=trial/tests -m "not slow" -x -q
+
+# Trial performance benchmarks
+PYTHONPATH=runtime:trial python3 -m pytest trial/tests/ -x -q
 ```
 
 **Slow tests** (`@pytest.mark.slow`) use real subprocesses, real git operations, or real network discovery. They run in CI but are excluded from the fast dev loop.
 
-The P2P trial suite makes no provider calls and no live network requests. Synthetic cohort results validate evidence plumbing only — MUST NOT be reported as observed product value or economic savings.
+Trial suite makes no provider calls and no live network requests. Synthetic cohort results validate evidence plumbing only — never report as observed product value.
 
 All PRs must maintain or improve test coverage. No green CI = no merge.
 
@@ -93,6 +98,47 @@ Signed-off-by: Your Name <email@example.com>
 
 ---
 
+## Protocol Single Source of Truth
+
+URACE uses a **domain-module ownership** pattern: each cross-cutting protocol constant lives in its authoritative module. All other code imports from that module — never duplicates the value.
+
+### Where constants live
+
+| Concern | Authoritative module | Key constants / functions |
+|---------|---------------------|--------------------------|
+| MIME type policy | `mime_policy.py` | `NETWORK_MIME_POLICY`, `DEFAULT_ALLOWED`, `is_network_allowed()`, `is_allowed()` |
+| Token economics | `credit_ledger.py` | `DECIMALS`, `UNIT`, `BASE_CAP_UNITS`, `CHAIN_SCALE`, `mint_per_adoption()` |
+| Protocol version | `peer_exchange.py` | `SCHEMA`, `PROTOCOL_VERSION` |
+| Quality gate thresholds | `aps_scorer.py` / `evolution_guard.py` | score delta thresholds, `quality_gate_pass()` |
+| Initial feature catalog | `build_initial_ledger.py` | generates `initial_ledger.jsonl` — a **static catalog** read directly by the runtime (not imported into live exchange audit); rebuild it when adding new built-in features |
+| CLI command dispatch | `cli/__init__.py` | `_KNOWN_TOP_COMMANDS`, `main()` — all commands are thin wrappers |
+
+### NETWORK_* vs configurable constants
+
+| Prefix | Meaning | Who uses it |
+|--------|---------|-------------|
+| `NETWORK_*` | Network-enforced — ignores per-node user config | Protocol gates: `receive()`, mint, `should_replicate()` |
+| _(no prefix)_ | User-configurable default — can be overridden via `p2p.*` config | CLI validation, local filtering, display |
+
+A `NETWORK_*` constant is used when ALL nodes in the network must agree on the value for protocol correctness. A user changing their local config must not be able to bypass it.
+
+**To relax a network-enforced rule** (e.g., expand allowed MIME types when APS gains new quality-gate support):
+1. Update the `NETWORK_*` constant in its authoritative module — one line change.
+2. All protocol gates pick it up automatically via their `is_network_*()` function call.
+3. No other files need updating; no grep-and-replace.
+
+### What should NOT be in a central hub
+
+The following do NOT belong in a central `protocol.py` and should NOT be moved there:
+- Configuration defaults — owned by their domain module
+- CLI flags and argument parsers — owned by `cli/`
+- Test fixtures and mocks — test-local only
+- Operational state (PID files, exchange state) — runtime-managed
+
+Adding a central hub would create circular import risk and over-engineering. Import chain: `cli/` → domain modules → no upward imports.
+
+---
+
 ## Network-Gated Code
 
 HTTP RPC calls in `exchange_cli.py` (and any future transport module) must always be gated on `network_mode`:
@@ -112,7 +158,7 @@ else:
 
 ## Adding a New Command
 
-1. Implement handler in `runtime/urace/cli.py`.
+1. Implement handler in `runtime/urace/cli/` (add to the appropriate submodule and register in `cli/__init__.py`).
 2. Register in `_KNOWN_TOP_COMMANDS` to prevent freeform routing.
 3. Add entry to `docs/reference/cli.md`.
 4. Add at least one test in `tests/`.
@@ -122,13 +168,9 @@ else:
 
 ## Ecosystem Contributions
 
-New IDE plugins, dashboard clients, mobile apps, and other UI-layer tools build against
-the [urace-rpc-v1 socket contract](docs/reference/urace-rpc-v1.md) — not against URACE internals.
-See [docs/roadmap/ecosystem-roadmap.md](docs/roadmap/ecosystem-roadmap.md) for what contracts exist, what can
-be built on top, and why this boundary was chosen.
+UI-layer tools (IDE plugins, dashboards, mobile apps) build against the [urace-rpc-v1 socket contract](docs/reference/urace-rpc-v1.md) — not against URACE internals. See [ecosystem roadmap](docs/roadmap/ecosystem-roadmap.md) for buildable surfaces.
 
-New contracts (RPC methods, row kinds, export formats) must be implemented in the runtime
-first (§62z) before being added to docs.
+New RPC methods, row kinds, or export formats: implement in runtime first (§62z), then document.
 
 ---
 

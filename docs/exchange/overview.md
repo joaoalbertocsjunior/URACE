@@ -81,11 +81,11 @@ Artifact content is stored in a **content-addressed store** (`exchange_root/bund
 |-------|-------------|
 | `artifact_ref` | SHA-256 of artifact bytes — content-addressed pointer |
 | `artifact_size_bytes` | Size of the artifact (not limited to text) |
-| `content_type` | MIME type (`text/x-python`, `application/octet-stream`, `application/zip`, etc.) |
+| `content_type` | MIME type — network accepts source code and structured data types by default (`text/x-python`, `application/json`, `text/csv`, etc.) |
 | `artifact` | Inline text (backward compat; only for ≤64 KiB text artifacts) |
 | `spec_context` | Language-agnostic behavior spec — what it does, not how |
 
-This means bundles can carry **any artifact type**: Python files, compiled binaries, datasets, model weights, ZIP archives, patches, or any binary payload. The audit log stays lean regardless of artifact size.
+The network currently accepts source code and structured data types (quality-gate enforceable); the audit log stays lean regardless of artifact size.
 
 ### Delivery Routing
 

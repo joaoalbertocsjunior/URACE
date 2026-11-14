@@ -4,7 +4,7 @@
 
 set -e
 
-URACE_VERSION="0.7.0"
+URACE_VERSION="0.7.1"
 VENV_DIR="${HOME}/.urace"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=11
@@ -65,6 +65,21 @@ try_pipx() {
 
 # ── install into a dedicated venv at ~/.urace ─────────────────────────────────
 install_venv() {
+  # If venv already exists and urace is at the target version, only upgrade pip package.
+  # Avoid recreating the venv on upgrade — venv recreation never touches user data
+  # directories inside ~/.urace/, but it does update pyvenv.cfg and symlinks.
+  if [ -f "${VENV_DIR}/bin/pip" ]; then
+    _installed=$("${VENV_DIR}/bin/pip" show urace 2>/dev/null | grep "^Version:" | awk '{print $2}')
+    if [ "${_installed}" = "${URACE_VERSION}" ]; then
+      info "urace ${URACE_VERSION} already installed in ${VENV_DIR} — nothing to do."
+      URACE_BIN="${VENV_DIR}/bin/urace"
+      return 0
+    fi
+    info "Upgrading urace ${_installed} → ${URACE_VERSION} in existing venv..."
+    "${VENV_DIR}/bin/pip" install --quiet --upgrade "urace==${URACE_VERSION}"
+    URACE_BIN="${VENV_DIR}/bin/urace"
+    return 0
+  fi
   info "Creating dedicated venv at ${VENV_DIR}..."
   if ! "$PYTHON_CMD" -m venv "${VENV_DIR}" 2>/dev/null; then
     die "python3-venv not available. Install it first:

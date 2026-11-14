@@ -162,3 +162,134 @@ class CancelDetectionTests(unittest.TestCase):
    with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'run_routed_codex',side_effect=AssertionError('no LLM for cancel')),contextlib.redirect_stdout(io.StringIO()) as out:
     rc=cli.main(['classify','cancel'])
   self.assertEqual(rc,0);self.assertIn('cancel',out.getvalue().lower())
+
+
+class ClarificationLoopTests(unittest.TestCase):
+ setUp=FreeformRoutingTests.setUp
+ item=FreeformRoutingTests.item
+ batch=FreeformRoutingTests.batch
+ runtext=FreeformRoutingTests.runtext
+ def test_json_mode_surfaces_clarifying_question_without_prompting(self):
+  # JSON mode: clarifying_question returned in result, no interactive prompt
+  text='Improve something';item=self.item('goal',{'title':'Improve something','success_measure':'better'},text,confidence=0.4)
+  b={**self.batch(text,[item]),'clarifying_question':'What specifically should be improved?'}
+  rc,result,queued=self.runtext(text,b)
+  self.assertEqual(rc,2);self.assertEqual(result['status'],'interpretation_required')
+  self.assertEqual(result['clarifying_question'],'What specifically should be improved?')
+  self.assertEqual(len(result['deferred']),1);queued.assert_not_called()
+ def test_interactive_clarification_resolves_ambiguous_goal(self):
+  import copy,io,tempfile
+  text='Improve something';cq='What specifically?'
+  enriched=text+' ['+cq+': performance]'
+  low=self.item('goal',{'title':'Improve something','success_measure':'better'},text,confidence=0.4)
+  resolved={'type':'goal','subtype':None,'parameters':{'title':'Improve performance','success_measure':'lower p95 latency','priority':70,'expected_value':0.7,'estimated_cost':0.5,'risk':0.3,'urgency':0.5,'dependencies':[],'target':'product'},'raw_text':text,'confidence':0.95,'reasoning':'clarified'}
+  first_b={'items':[low],'raw_text':text,'compound':False,'logic':'and','clarifying_question':cq}
+  second_b={'items':[resolved],'raw_text':enriched,'compound':False,'logic':'and'}
+  config=copy.deepcopy(cli.load_config());config.pop('active_product',None);config['executor']['enabled']=True
+  with tempfile.TemporaryDirectory() as tmp:
+   config['state_path']=str(Path(tmp)/'state.json')
+   state=cli.initial_state(config)
+   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':True}),patch.object(cli.intelligent_executor,'run_routed_codex',side_effect=[{'message':json.dumps(first_b)},{'message':json.dumps(second_b)}]),patch('builtins.input',return_value='performance'),patch.object(cli,'queue_input',return_value={'id':'q1'}) as queued,patch.object(freeform_routing,'_p2p_free_features',return_value=[]),patch.object(freeform_routing,'_p2p_paid_features',return_value=[]),patch('urace.remote_assets.discover',return_value={'open_assets':[],'paid_listings':[],'peer_failures':[]}),contextlib.redirect_stdout(io.StringIO()):
+    rc=cli.main(['classify',text,'--confirm'])
+  self.assertEqual(rc,0)
+  kinds=[c.args[1] for c in queued.call_args_list]
+  self.assertIn('goal',kinds);self.assertIn('context_input',kinds)
+ def test_clarification_cancel_mid_loop_queues_nothing(self):
+  import copy,io,tempfile
+  text='Improve something';cq='What specifically?'
+  low=self.item('goal',{'title':'Improve something','success_measure':'better'},text,confidence=0.4)
+  b={'items':[low],'raw_text':text,'compound':False,'logic':'and','clarifying_question':cq}
+  config=copy.deepcopy(cli.load_config());config.pop('active_product',None);config['executor']['enabled']=True
+  with tempfile.TemporaryDirectory() as tmp:
+   config['state_path']=str(Path(tmp)/'state.json')
+   state=cli.initial_state(config)
+   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':True}),patch.object(cli.intelligent_executor,'run_routed_codex',return_value={'message':json.dumps(b)}),patch('builtins.input',return_value='cancel'),patch.object(cli,'queue_input',return_value={'id':'q1'}) as queued,patch.object(freeform_routing,'_p2p_free_features',return_value=[]),patch.object(freeform_routing,'_p2p_paid_features',return_value=[]),contextlib.redirect_stdout(io.StringIO()):
+    rc=cli.main(['classify',text,'--confirm'])
+  # cancel in clarification loop breaks out; low-confidence item defers, nothing queued
+  queued.assert_not_called()
+
+
+class TokenBudgetTests(unittest.TestCase):
+ def _run_over_budget(self,limit,tokens):
+  import copy,io,tempfile
+  from datetime import datetime,timezone
+  config=copy.deepcopy(cli.load_config());config.pop('active_product',None)
+  config.setdefault('executor',{}).update({'freeform_max_tokens_per_24h':limit,'enabled':True})
+  with tempfile.TemporaryDirectory() as tmp:
+   config['state_path']=str(Path(tmp)/'state.json')
+   state=cli.initial_state(config)
+   state.setdefault('executor_state',{})['executor_calls']=[{'kind':'freeform-routing','tokens':tokens,'at':datetime.now(timezone.utc).isoformat()}]
+   Path(config['state_path']).write_text(json.dumps(state))  # state file must exist for load_state_for_read to be called
+   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':True}),patch.object(cli.intelligent_executor,'run_routed_codex',side_effect=AssertionError('budget must block call')),contextlib.redirect_stdout(io.StringIO()) as out:
+    rc=cli.main(['classify','improve latency','--json'])
+  return rc,json.loads(out.getvalue())
+ def test_exceeded_24h_budget_blocks_inference_with_helpful_error(self):
+  rc,result=self._run_over_budget(limit=100,tokens=200)
+  self.assertEqual(rc,1);self.assertIn('token budget exceeded',result['error'])
+ def test_within_24h_budget_allows_inference(self):
+  import copy,io,tempfile
+  from datetime import datetime,timezone
+  config=copy.deepcopy(cli.load_config());config.pop('active_product',None)
+  config.setdefault('executor',{}).update({'freeform_max_tokens_per_24h':10000,'enabled':True})
+  text='Improve latency';b={'items':[{'type':'goal','subtype':None,'parameters':{'title':'Improve latency','success_measure':'latency','priority':70,'expected_value':0.7,'estimated_cost':0.5,'risk':0.3,'urgency':0.5,'dependencies':[],'target':'product'},'raw_text':text,'confidence':0.99,'reasoning':'ok'}],'raw_text':text,'compound':False,'logic':'and'}
+  with tempfile.TemporaryDirectory() as tmp:
+   config['state_path']=str(Path(tmp)/'state.json')
+   state=cli.initial_state(config)
+   state.setdefault('executor_state',{})['executor_calls']=[{'kind':'freeform-routing','tokens':50,'at':datetime.now(timezone.utc).isoformat()}]
+   Path(config['state_path']).write_text(json.dumps(state))
+   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':True}),patch.object(cli.intelligent_executor,'run_routed_codex',return_value={'message':json.dumps(b)}),patch.object(cli,'queue_input',return_value={'id':'q1'}),contextlib.redirect_stdout(io.StringIO()) as out:
+    rc=cli.main(['classify',text,'--json','--confirm'])
+  self.assertEqual(rc,0)
+
+
+class LedgerContextTests(unittest.TestCase):
+ setUp=FreeformRoutingTests.setUp
+ item=FreeformRoutingTests.item
+ batch=FreeformRoutingTests.batch
+ runtext=FreeformRoutingTests.runtext
+ def test_ledger_context_never_disables_p2p_discovery_and_suggestions(self):
+  text='Improve latency';item=self.item('goal',{'title':'Improve latency','success_measure':'low p95'},text)
+  with patch.object(freeform_routing,'_p2p_free_features',side_effect=AssertionError('no catalog lookup with never')),patch('urace.remote_assets.discover',side_effect=AssertionError('no peer lookup with never')):
+   rc,result,queued=self.runtext(text,self.batch(text,[item]),extra=['--ledger-context','never','--confirm'])
+  self.assertEqual(result['remote_p2p_discovery']['status'],'DISABLED_BY_REQUEST')
+  self.assertEqual(result['p2p_suggestions'],[])
+  self.assertIn('p2p_candidates_disabled',result['value_route'])
+ def test_ledger_context_auto_searches_when_exchange_network_enabled(self):
+  text='Improve latency';item=self.item('goal',{'title':'Improve latency','success_measure':'lower latency'},text)
+  exchange=type('ExchangeFixture',(),{'load':lambda self:{'enabled':True,'network':True}})()
+  with patch('urace.peer_exchange.Exchange',return_value=exchange),patch.object(freeform_routing,'_p2p_free_features',return_value=[]),patch.object(freeform_routing,'_p2p_paid_features',return_value=[]),patch('urace.remote_assets.discover',return_value={'open_assets':[],'paid_listings':[],'peer_failures':[]}) as disc:
+   rc,result,queued=self.runtext(text,self.batch(text,[item]))
+  self.assertEqual(result['remote_p2p_discovery']['status'],'SEARCHED_PINNED_PEERS')
+  disc.assert_called_once()
+ def test_ledger_context_auto_skips_when_exchange_network_disabled(self):
+  text='Improve latency';item=self.item('goal',{'title':'Improve latency','success_measure':'lower latency'},text)
+  exchange=type('ExchangeFixture',(),{'load':lambda self:{'enabled':True,'network':False}})()
+  with patch('urace.peer_exchange.Exchange',return_value=exchange),patch.object(freeform_routing,'_p2p_free_features',return_value=[]),patch.object(freeform_routing,'_p2p_paid_features',return_value=[]):
+   rc,result,queued=self.runtext(text,self.batch(text,[item]))
+  self.assertEqual(result['remote_p2p_discovery']['status'],'NETWORK_DISABLED')
+
+
+class LowConfidenceDeferralTests(unittest.TestCase):
+ setUp=FreeformRoutingTests.setUp
+ item=FreeformRoutingTests.item
+ batch=FreeformRoutingTests.batch
+ runtext=FreeformRoutingTests.runtext
+ def test_low_confidence_goal_deferred_with_question_in_json_result(self):
+  text='Improve something';item=self.item('goal',{'title':'Improve something','success_measure':'better'},text,confidence=0.5)
+  b={**self.batch(text,[item]),'clarifying_question':'What aspect should be improved?'}
+  rc,result,queued=self.runtext(text,b)
+  self.assertEqual(rc,2);self.assertEqual(result['status'],'interpretation_required')
+  self.assertEqual(len(result['deferred']),1);self.assertEqual(result['clarifying_question'],'What aspect should be improved?')
+  queued.assert_not_called()
+ def test_low_confidence_intent_deferred_in_json_mode(self):
+  text='Preserve something';item=self.item('intent',{'statement':'Preserve something'},text,'directive',confidence=0.5)
+  rc,result,queued=self.runtext(text,self.batch(text,[item]))
+  self.assertEqual(rc,2);self.assertEqual(len(result['deferred']),1);queued.assert_not_called()
+ def test_low_confidence_prohibition_deferred_in_json_mode(self):
+  text='Never do that';item=self.item('constraint',{'statement':'Never do that'},text,'prohibition',confidence=0.4)
+  rc,result,queued=self.runtext(text,self.batch(text,[item]))
+  self.assertEqual(rc,2);self.assertEqual(len(result['deferred']),1);queued.assert_not_called()
+ def test_high_confidence_goal_queues_with_confirm(self):
+  text='Improve latency';item=self.item('goal',{'title':'Improve latency','success_measure':'p95 under 200ms'},text,confidence=0.95)
+  rc,result,queued=self.runtext(text,self.batch(text,[item]),['--confirm'])
+  self.assertEqual(rc,0);self.assertEqual(result['status'],'classified');queued.assert_called_once()

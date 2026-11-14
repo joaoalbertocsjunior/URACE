@@ -1,5 +1,7 @@
 # Automation, feature economics and feature bundles: retained design requirements
 
+[← Documentation](../index.md)
+
 Recorded 2026-10-29. These requirements arrived during release qualification. This document preserves them without falsely claiming their full implementation. The qualified release already supplies some foundations; a decentralized token economy and production settlement are not implemented by documenting them.
 
 ## Core direction and defaults

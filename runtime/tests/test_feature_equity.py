@@ -1,13 +1,7 @@
 """Tests for feature_equity.py — equity model, trading, mint splits."""
 import unittest, time
 
-class MockExchange:
-    def __init__(self):
-        self._rows = []
-    def audit_rows(self):
-        return list(self._rows)
-    def append_audit_row(self, row):
-        self._rows.append(row)
+from conftest import MockExchange
 
 class EquityGrantTests(unittest.TestCase):
     def setUp(self):

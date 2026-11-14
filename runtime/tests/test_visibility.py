@@ -2,20 +2,7 @@
 import time
 import unittest
 
-
-class MockExchange:
-    def __init__(self, root=None):
-        self._rows = []
-        self.root = root or '/tmp/test_visibility'
-
-    def audit_rows(self):
-        return list(self._rows)
-
-    def append_audit_row(self, row):
-        self._rows.append(row)
-
-    def identity(self):
-        return {'peer_id': 'test-peer'}
+from conftest import MockExchange
 
 
 def _grant_row(feature_id, peer_id, visibility='public'):

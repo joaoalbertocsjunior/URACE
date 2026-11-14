@@ -3,6 +3,59 @@ import json
 import sys
 from pathlib import Path
 
+
+# ---------------------------------------------------------------------------
+# Shared MockExchange — canonical superset used across all 13 test modules.
+# Each test file does ``from conftest import MockExchange`` or simply imports
+# it at module level; pytest makes conftest names available without import in
+# the same directory.
+# ---------------------------------------------------------------------------
+
+class MockExchange:
+    """Minimal in-memory exchange mock for unit tests.
+
+    Accepts optional ``peer_id`` and ``root`` kwargs so it is a drop-in for
+    every variant found across the test suite.
+    """
+
+    def __init__(self, peer_id='test-peer', root=None):
+        self._rows = []
+        self._peer_id = peer_id
+        self.root = root or '/tmp/test_mock_exchange'
+        self._state = {'token_settlement': False, 'token_baseline_grant': 3, 'peers': {}}
+
+    # ── core audit log ───────────────────────────────────────────────────────
+
+    def audit_rows(self):
+        return list(self._rows)
+
+    def append_audit_row(self, row):
+        self._rows.append(row)
+
+    # ── additional methods used by specific modules ───────────────────────────
+
+    def load(self):
+        return dict(self._state)
+
+    def identity(self):
+        return {'peer_id': self._peer_id}
+
+    def local_peer_id(self):
+        return self._peer_id
+
+    def crypto_identity(self):
+        m = type('CI', (), {'sign': lambda s, d, t: 'mock-sig'})()
+        return m
+
+    def event(self, kind, **fields):
+        self._rows.append({'kind': kind, **fields})
+
+    def record(self, kind, fields):
+        self._rows.append({'kind': kind, **fields})
+
+
+
+
 from urace._common import CONFIG_PATH, ROOT
 
 try:

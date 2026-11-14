@@ -490,7 +490,7 @@ def _try_p2p_feature(config: dict[str, Any], state: dict[str, Any]) -> dict[str,
     Returns a 'planned' objective dict or None.  Never raises.
     """
     try:
-        if not config.get("p2p", {}).get("feature_borrow_enabled", True):
+        if not config.get("p2p", {}).get("feature_borrow_enabled", False):
             return None
         from . import peer_exchange as _pe
         exchange_root = state_path(config).parent / "exchange"

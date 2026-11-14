@@ -102,7 +102,8 @@ Inside the shell:
 Peers mint, list, and borrow verified software features.
 
 P2P borrows have `$0` provider cost in the current runtime; buyers pay URACE units at the listing ask.
-No URACE↔USD exchange rate exists.
+No URACE↔USD exchange rate exists. 
+Polygon is planned to be used as mainnet since it support EVM smart contracts and have lower gas fees than Ethereum.
 
 → [P2P exchange](docs/exchange/overview.md) · [Token economy](docs/economics/tokenomics.md)
 
@@ -125,14 +126,12 @@ No URACE↔USD exchange rate exists.
 
 ## Docs
 
-| | |
-|---|---|
-| [Quick start](docs/getting-started/quick-start.md) | [5-min guide](docs/reference/ux-guide.md) |
-| [Full CLI reference](docs/reference/ux-surfaces.md) | [P2P exchange](docs/exchange/overview.md) |
-| [Token economy](docs/economics/tokenomics.md) | [Node rewards](docs/concepts/node-rewards.md) |
-| [Security model](docs/concepts/security-model.md) | [Spec (`URACE.md`)](URACE.md) |
-| [Ecosystem roadmap](docs/roadmap/ecosystem-roadmap.md) | [Full docs index](docs/index.md) |
+**Getting started:** [Quick start](docs/getting-started/quick-start.md) · [5-min guide](docs/reference/ux-guide.md) · [Full CLI reference](docs/reference/ux-surfaces.md)
+
+**Exchange & economy:** [P2P exchange](docs/exchange/overview.md) · [Token economy](docs/economics/tokenomics.md) · [Node rewards](docs/concepts/node-rewards.md)
+
+**Reference:** [Security model](docs/concepts/security-model.md) · [Spec (`URACE.md`)](URACE.md) · [Ecosystem roadmap](docs/roadmap/ecosystem-roadmap.md) · [Full docs index](docs/index.md)
 
 ---
 
-v0.7.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.8.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

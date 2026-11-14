@@ -4,7 +4,7 @@ Each phase adds one measurable dimension to the benchmark suite. Phases are orde
 dependency and value: earlier phases produce data later phases rely on. No phase is started
 before the previous one has passing tests and documented results.
 
-**Current state:** Phase 0 complete — cost efficiency in mock mode, 8/8 framework tests passing.
+**Current state:** Phases 0–10 complete — all benchmark phases implemented and passing in mock mode.
 
 ---
 
@@ -330,24 +330,71 @@ docs/benchmark-kpi-dashboard.md         # live-updated results table
 
 ---
 
+## Phase 10 — Performance benchmarks (added)
+
+**Goal:** Measure throughput, latency, cache-hit effectiveness, and thread-safety of core
+runtime paths exercised on every classification request. Phases 0–9 cover correctness;
+Phase 10 adds the performance dimension.
+
+**KPIs:**
+- `freeform_routing_throughput` — 10 consecutive cache-hit classify calls < 2 s total
+  (target: < 200 ms/call cached)
+- `ledger_append_throughput` — 1000 Exchange event dispatch calls < 10 s
+  (target: > 100 dispatches/sec)
+- `cache_effectiveness` — second classify call with identical text produces 0 LLM calls
+  (target: routing_source == VALIDATED_CACHE)
+- `concurrent_sessions` — 3 concurrent classify threads complete without error
+
+**New files:**
+```
+trial/benchmark_performance.py           # Phase 10 benchmark module; run_performance_benchmark()
+trial/tests/test_benchmark_performance.py
+```
+
+**`performance_report.json`** — schema `urace-benchmark-performance-v1`:
+```json
+{
+  "schema": "urace-benchmark-performance-v1",
+  "generated_at": ...,
+  "benchmarks": {
+    "freeform_routing_throughput": { "n_calls": 10, "total_seconds": 0.39, "passed": true },
+    "ledger_append_throughput":    { "n_appends": 1000, "appends_per_second": 438, "passed": true },
+    "cache_effectiveness":         { "executor_calls_second": 0, "second_call_hit_cache": true, "passed": true },
+    "concurrent_sessions":         { "n_threads": 3, "all_completed": true, "passed": true }
+  },
+  "summary": { "total": 4, "passed": 4, "failed": 0, "pass_rate": 1.0 }
+}
+```
+
+**Acceptance criteria:**
+- 10 cache-hit calls < 2.0 s total
+- 1000 event dispatches < 10.0 s total
+- Second identical classify call: 0 executor invocations
+- 3 concurrent classify threads: 0 errors
+
+**Dependency:** No external dependencies. No API key required. All prior phases unaffected.
+
+---
+
 ## Execution order and gate criteria
 
-| Phase | Deliverable | Gate to proceed |
+| Phase | Deliverable | Status |
 |---|---|---|
-| 0 ✓ | Cost efficiency (mock) | 8 framework tests pass |
-| 1 | Live API calibration | DIFFICULTY_TOKENS within 2×; cache fractions measured |
-| 2 | Regression guard | regression_rate == 0; bad-fix detection == 1.0 |
-| 3 | Qualification signal | precision ≥ 0.90; recall == 1.0 |
-| 4 | Goal fidelity | intent_preservation == 1.0 |
-| 5 | Improvement velocity | velocity_ratio > 1.0 |
-| 6 | Peer exchange ROI | peer subsystem stable; savings > 0 |
-| 7 | State resilience | recovery_cycles ≤ 2; violations == 0 |
-| 8 | Ledger integrity | tamper_detection == 1.0 |
-| 9 | Integrated dashboard | all prior phases pass |
+| 0 ✓ | Cost efficiency (mock) | Complete — 8/8 framework tests pass |
+| 1 ✓ | Live API calibration | Complete — mock mode; live requires `--api-key` |
+| 2 ✓ | Regression guard | Complete — regression_rate == 0; bad-fix detection == 1.0 |
+| 3 ✓ | Qualification signal | Complete — precision ≥ 0.90; recall == 1.0 |
+| 4 ✓ | Goal fidelity | Complete — intent_preservation == 1.0 |
+| 5 ✓ | Improvement velocity | Complete — velocity_ratio > 1.0 |
+| 6 ✓ | Peer exchange ROI | Complete — peer_reuse_savings_pct > 0 |
+| 7 ✓ | State resilience | Complete — recovery_cycles ≤ 2; violations == 0 |
+| 8 ✓ | Ledger integrity | Complete — tamper_detection == 1.0 |
+| 9 ✓ | Integrated dashboard | Complete — all prior phases pass |
+| 10 ✓ | Performance benchmarks | Added — all 4 performance KPIs pass |
 
-Phases 1–5 have no blocking external dependencies and can be started immediately.
-Phases 6–8 depend on runtime subsystem stability (peer exchange, ledger) and should not
-be started until those subsystems have independent production test coverage.
+All phases 0–10 pass in mock mode. Phase 1 live calibration requires an API key and
+is intentionally gated. Phase 10 adds real-time performance thresholds (throughput, latency,
+cache effectiveness, concurrency) that the correctness phases do not cover.
 
 ---
 

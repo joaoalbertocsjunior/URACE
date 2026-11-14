@@ -2,13 +2,7 @@ import tempfile, unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-class MockExchange:
-    def __init__(self):
-        self._rows = []
-    def audit_rows(self):
-        return list(self._rows)
-    def append_audit_row(self, row):
-        self._rows.append(row)
+from conftest import MockExchange
 
 class WorkMarketStateTests(unittest.TestCase):
     def setUp(self):

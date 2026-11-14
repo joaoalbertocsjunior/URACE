@@ -21,7 +21,7 @@ jobs:
       - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
       - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/core-state --ignore=urace/trial/tests -m "not slow" -x -q
 
   test-312:
     runs-on: ubuntu-latest
@@ -37,7 +37,7 @@ jobs:
       - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
       - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/core-state --ignore=urace/trial/tests -m "not slow" -x -q
 
   test-313:
     runs-on: ubuntu-latest
@@ -53,7 +53,7 @@ jobs:
       - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
       - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/core-state --ignore=urace/trial/tests -m "not slow" -x -q
 
   test-network-extras:
     runs-on: ubuntu-latest
@@ -68,6 +68,20 @@ jobs:
           python-version: '3.12'
       - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/test_kademlia.py -x -q
+
+  test-benchmarks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: urace
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e "urace/runtime/[test]"
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/tests/ -x -q
 
   lint:
     runs-on: ubuntu-latest

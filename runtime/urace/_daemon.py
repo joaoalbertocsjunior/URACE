@@ -181,24 +181,41 @@ def dispatch(args, config: dict) -> int:
     interval_sec = max(60.0, float(interval_minutes) * 60)
 
     _write_pid(config)
-    # Start P2P exchange server in background thread (tunnel auto-detected)
-    _p2p_thread_ref = [None]
+    # Start P2P exchange server as a tracked subprocess so urace stop terminates it.
+    # Use a list-cell ref so the signal handler (main thread) can reach the proc.
+    _p2p_proc_ref = [None]
+    _p2p_ready = _threading.Event()
+
     def _start_p2p_server():
         try:
             import subprocess, sys as _sys
-            subprocess.run([_sys.executable, '-m', 'urace', 'exchange', 'network', 'serve',
-                           '--host', '0.0.0.0', '--port', '7301'],
-                          check=False)
+            proc = subprocess.Popen([_sys.executable, '-m', 'urace', 'exchange', 'network', 'serve',
+                                     '--host', '0.0.0.0', '--port', '7301'])
+            _p2p_proc_ref[0] = proc
+        finally:
+            _p2p_ready.set()
+        try:
+            proc.wait()
         except Exception:
             pass
-    _p2p_thread_ref[0] = _threading.Thread(target=_start_p2p_server, daemon=True)
-    _p2p_thread_ref[0].start()
+
+    _p2p_thread = _threading.Thread(target=_start_p2p_server, daemon=True)
+    _p2p_thread.start()
     stopped = [False]
     _rpc_thread = _threading.Thread(target=_run_rpc_server, args=(config, stopped), daemon=True)
     _rpc_thread.start()
 
     def _handle_signal(signum, frame):
         stopped[0] = True
+        # Terminate the P2P exchange server subprocess so it doesn't orphan.
+        # Wait up to 2s for the thread to assign the proc ref (eliminates start-up race).
+        _p2p_ready.wait(timeout=2.0)
+        proc = _p2p_proc_ref[0]
+        if proc is not None:
+            try:
+                proc.terminate()
+            except OSError:
+                pass
 
     signal.signal(signal.SIGTERM, _handle_signal)
     try:

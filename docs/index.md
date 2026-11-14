@@ -10,8 +10,9 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 
 | | |
 |---|---|
-| [Install](getting-started/install.md) | pip install, requirements, verify |
+| [Install](getting-started/install.md) | requirements, platform support, dev install, optional extras |
 | [Quick Start](getting-started/quick-start.md) | 5-minute guide — init, run, mint to P2P |
+| [Daily Use](reference/ux-guide.md) | Shell workflow, shortcuts, config, troubleshooting |
 | [Concepts](getting-started/concepts.md) | Goals, plans, operations, lifecycle overview |
 
 ---
@@ -23,6 +24,9 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 | [Node Rewards](concepts/node-rewards.md) | All reward roles, protocol fee treasury, delivery fee split |
 | [Asset Integrity](concepts/asset-integrity.md) | ALE (fingerprint/dHash/Winnowing/LLM-peer), APS staking, MIME validators |
 | [Security Model](concepts/security-model.md) | Session DEK, escrow auto-refund, cartel guard, market integrity |
+| [Comparative Analysis](concepts/comparative-analysis.md) | Architectural comparison with adjacent systems |
+| [Adoption Evidence](concepts/adoption-evidence.md) | Honest assessment of current adoption state |
+| [Ethereum Patterns](concepts/ethereum-patterns.md) | Ethereum patterns selectively adopted in the peer ledger design |
 
 ---
 
@@ -35,6 +39,10 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 | [Derive](guides/derive.md) | Extract architectural patterns from your product spec |
 | [Search](guides/search.md) | Search context ledger and P2P audit trail |
 | [Update](guides/update.md) | Runtime versioning: download, explain, apply |
+| [Runtime Improvement](guides/runtime-improvement.md) | Runtime self-improvement workflows |
+| [Auto-Milestones](guides/auto-milestones.md) | Automatic milestone suggestions: local, zero model calls |
+| [Decision Benefits](guides/decision-benefits.md) | Decision benefit feedback in auto mode |
+| [Milestone Phases](guides/milestone-phases.md) | Milestone phase/status view via `milestone --json` |
 
 ---
 
@@ -48,6 +56,8 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 | [Work Market](exchange/work-market.md) | Request work, bids, escrow, verify delivery |
 | [Network](exchange/network.md) | P2P discovery, consensus, disconnect, audit |
 | [Reputation](exchange/reputation.md) | Tokens, ledger, reputation history, leaderboard |
+| [Peer Sharing](exchange/peer-sharing.md) | P2P bundle operations and quarantine |
+| [Sharing Safeguards](exchange/sharing-safeguards.md) | Security mechanisms for peer sharing |
 
 ---
 
@@ -58,6 +68,8 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 | [Tokenomics](economics/tokenomics.md) | Full token model: supply, earn, spend, epoch |
 | [Price Mechanics](economics/price-mechanics.md) | Executor ceiling, momentum guard, wash trading prevention |
 | [Qualification Protocol](economics/qualification-protocol.md) | What qualifies a P2P cost savings claim; cohort and reviewer requirements |
+| [Token Deployment](economics/token-deployment.md) | ERC-20 contract deployment on Polygon PoS; wallet and settlement setup |
+| [Automation & Economics Requirements](economics/automation-and-economics-requirements.md) | Retained design requirements: automation defaults, feature economics, bundle rules, build-vs-buy |
 
 ---
 
@@ -76,6 +88,7 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 | | |
 |---|---|
 | [CLI Reference](reference/cli.md) | All CLI commands in one table |
+| [UX Surfaces](reference/ux-surfaces.md) | Full UX surface reference — all ~334 command paths, every flag, every schema |
 | [Config Reference](reference/config.md) | All config options with defaults; `urace config show-all` |
 | [Spec](reference/spec.md) | URACE system spec: guarantees, invariants, lifecycle |
 
@@ -86,6 +99,7 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 | | |
 |---|---|
 | [Agent Integrations](reference/agent-integrations.md) | MCP and A2A protocol reference — start an A2A endpoint, wire an MCP server, review authority rules |
+| [RPC Contract (urace-rpc-v1)](reference/urace-rpc-v1.md) | Daemon socket API — machine interface for plugins, dashboards, and IDE extensions |
 | [AGENTS.md](../AGENTS.md) | Complete onboarding reference for executors and AI agents: authority model, command reference, file structure, machine interface contract |
 
 ---
@@ -111,11 +125,8 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 
 ---
 
-## Other Docs
+## Deployment
 
-- [Runtime Improvement](guides/runtime-improvement.md) — Runtime self-improvement workflows
-- [Peer Sharing](exchange/peer-sharing.md) — P2P bundle operations and quarantine
-- [Sharing Safeguards](exchange/sharing-safeguards.md) — Security mechanisms for peer sharing
-- [Operational Readiness](deployment/operational-readiness.md) — Features code-complete but requiring external setup: EVM node, live peers, funded wallet, network pilot
-- [Comparative Analysis](concepts/comparative-analysis.md) — Architectural comparison with adjacent systems
-- [Adoption Evidence](concepts/adoption-evidence.md) — Honest assessment of current adoption state
+| | |
+|---|---|
+| [Operational Readiness](deployment/operational-readiness.md) | Features code-complete but requiring external setup: EVM node, live peers, funded wallet, network pilot |

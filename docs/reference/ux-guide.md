@@ -1,4 +1,6 @@
-# URACE — Get Running in 5 Minutes
+# URACE — Daily Use
+
+[← Documentation](../index.md)
 
 ## Install
 

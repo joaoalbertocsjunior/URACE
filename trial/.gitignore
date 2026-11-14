@@ -119,3 +119,10 @@
 !/test_measurement_corpus.py
 !/test_executor_receipt.py
 !/test_measurement_report.py
+
+!/benchmark_performance.py
+!/tests/
+!/tests/.gitkeep
+!/tests/conftest.py
+!/tests/__init__.py
+!/tests/test_benchmark_performance.py

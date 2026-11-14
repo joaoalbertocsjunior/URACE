@@ -64,6 +64,17 @@ urace update apply
 
 URACE will verify the update's cryptographic signature and integrity before applying. If verification fails, the update is rejected.
 
+Before queuing the migration, URACE automatically creates a dated backup of your state at:
+```
+~/.urace/state/backups/state-pre-update-<timestamp>.json
+```
+
+**Local customizations**: If you have modified any runtime files, `update apply` will block and show you what changed. Review with `urace update explain`, then:
+
+```sh
+urace update apply --force   # apply over local customizations
+```
+
 ---
 
 ## Self-Evolution Updates

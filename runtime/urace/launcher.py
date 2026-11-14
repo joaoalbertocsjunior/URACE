@@ -18,6 +18,9 @@ STATE_PATH = SYSTEM_ROOT / "state/state.json"
 STABLE_RUNTIME = SYSTEM_ROOT / "state/stable-runtime"
 _DEFAULT_STATE_PATH = STATE_PATH
 _DEFAULT_STABLE_RUNTIME = STABLE_RUNTIME
+# True only when launcher.py itself lives under ~/.urace/ (production pip-venv install).
+# False in dev source trees — avoids picking up ~/.urace/config.json during development.
+_LAUNCHER_IN_PROD_VENV = str(Path(__file__).resolve()).startswith(str(Path.home() / ".urace"))
 EXPECTED_KERNEL_HASHES = evolution_guard.kernel_hashes(PRODUCT_ROOT)
 
 
@@ -25,7 +28,10 @@ def configured_paths() -> tuple[Path, Path]:
     """Resolve the same active Product state as the controller, without importing it."""
     if STATE_PATH != _DEFAULT_STATE_PATH or STABLE_RUNTIME != _DEFAULT_STABLE_RUNTIME:
         return STATE_PATH, STABLE_RUNTIME
-    path = RUNTIME_ROOT / 'urace/config.json'
+    # User-data config survives pip upgrades; only preferred from a production venv install.
+    _user_cfg = Path.home() / ".urace" / "config.json"
+    path = (_user_cfg if (_LAUNCHER_IN_PROD_VENV and _user_cfg.exists())
+            else RUNTIME_ROOT / 'urace/config.json')
     if not path.exists():
         return STATE_PATH, STABLE_RUNTIME
     config = json.loads(path.read_text())

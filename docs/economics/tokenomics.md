@@ -76,7 +76,7 @@ Supply scales with bandwidth, not peers. The constraint is always "can new peers
 
 ## Initial Ledger
 
-URACE ships with a pre-built initial ledger of **1,405 built-in features** — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. Entries with an exact local runtime-module tag also pin source paths and file digests; these bindings identify local implementations but are not delivered artifacts or quality qualifications. All initial ledger features are:
+URACE ships with a pre-built initial ledger of built-in features — every atomic capability across all runtime and trial modules, CLI surfaces, exchange/P2P commands, and test contracts. Entries with an exact local runtime-module tag also pin source paths and file digests; these bindings identify local implementations but are not delivered artifacts or quality qualifications. All initial ledger features are:
 
 - **Free-use**: borrow cost = 0 tokens
 - **No owner**: minted without a creator, available to all peers
@@ -85,16 +85,12 @@ URACE ships with a pre-built initial ledger of **1,405 built-in features** — e
 
 | Metric | Value |
 |--------|-------|
-| Initial features minted | 1,405 |
 | Format | JSONL (`runtime/initial_ledger.jsonl`) — line 1 is a header, each subsequent line is one feature |
 | Breakdown | mechanism · schema · contract · integration · protocol features |
-| Revenue features | 65% (882 features with active token flow) |
-| Free/decayed features | 35% (474 features — consume infra but generate no token flow) |
+| Revenue features | ~65% (features with active token flow) |
+| Free/decayed features | ~35% (consume infra but generate no token flow) |
 | Max features at 1 Mbps / 1,000 peers | 3,840 |
-| Utilization at baseline infra | 35% |
-| Room for user features at baseline | 2,470 additional features |
 | Max features at 10 Mbps / 10,000 peers | 65,536 |
-| Utilization at 10 Mbps | 2% |
 
 ### Revenue Feature Fraction
 
@@ -261,6 +257,62 @@ An attacker who temporarily isolates part of the network cannot lower the thresh
 
 ---
 
+## Network Accessibility
+
+URACE is designed for internet-wide participation including home users on consumer hardware.
+
+### Low-Bandwidth Peers
+
+Nodes operating below 1 Mbps are supported through a `bandwidth_profile` setting:
+
+| Profile | Description | Auto-role set |
+|---------|-------------|---------------|
+| `low` | ≤512 Kbps — consumer/creator only; skip relay duty | `consumer + creator` |
+| `standard` | 1–10 Mbps — default; eligible for relay duty | `consumer + creator + relay` (if NAT allows) |
+| `high` | >10 Mbps — eligible for bootstrap + relay | `bootstrap + relay + consumer + creator` |
+
+```sh
+# Explicitly configure a low-bandwidth profile
+urace exchange settings set --bandwidth-profile low
+```
+
+Low-bandwidth nodes receive only the **ledger tail** (sliding window) via `/urace/rpc/v1/ledger-tail`, not the full history. They participate fully in borrowing, minting, and earning — they are simply excluded from relay/bootstrap duty.
+
+Tunnel support (`--tunnel localhost.run` or `--tunnel bore`) is available for cone NAT nodes that cannot port-forward, enabling full inbound connectivity without static IP or router access.
+
+### No Explicit Throughput Requirement
+
+Consumer nodes behind strict NAT — including most home routers — are assigned `consumer + creator` roles automatically. They contribute to the network through quality gate passes and feature listings. Bandwidth only affects eligibility for relay/bootstrap roles, not participation in the token economy.
+
+---
+
+## Late-Joiner Fairness
+
+The network uses a **merit-based** fairness model. There is no explicit catch-up mechanism in the current runtime.
+
+### Current Model
+
+| Factor | Early joiners | Late joiners |
+|--------|--------------|--------------|
+| Catalog depth | Larger available catalog at join | May find catalog already populated |
+| Feature novelty | Higher `mint_per_adoption()` on early features | Same formula — novelty reward available on new types |
+| Bootstrap grant | Same (3 tokens, locked until quality pass) | Same |
+| Trial borrow | Same (1 free borrow) | Same |
+| Quality gate earn | Same formula | Same formula |
+
+The adoption rank decay (`1 / (1 + log2(rank))`) applies per-feature, not globally. A late joiner introducing a new feature type earns full novelty reward on that feature; they only face rank-decay on features already widely adopted.
+
+### Planned: Time-Decay Reward Curve and Late-Joiner Bonus
+
+For the **Polygon EVM mainnet era**, a time-decay reward curve and late-joiner bonus are planned:
+
+- **Time-decay curve**: `epoch_decay` will steepen on highly-adopted features after the network reaches a saturation threshold, redirecting token flow toward newer, underexplored feature types.
+- **Late-joiner bonus**: a one-time multiplier on the first 10 quality gate passes for peers joining after the network exceeds `n_sat` (30% of estimated peers). This supplements the bootstrap grant.
+
+These mechanisms are **not yet implemented** — they are planned for the Polygon mainnet launch phase and will require on-chain settlement to enforce fairly. No runtime change should be made without settlement in place.
+
+---
+
 ## Token Settlement
 
 Mainnet settlement is **disabled by default**. Tokens operate as reputation scores within a closed network until you explicitly enable peer-to-peer settlement.
@@ -293,7 +345,7 @@ URACE can broadcast credit deltas as EVM transactions when configured with a JSO
 | `chain_id` | Network | Gas per ERC-20 transfer | Economical for per-borrow? |
 |------------|---------|------------------------|---------------------------|
 | `1` | Ethereum mainnet | ~$4–7 at 20 Gwei | **No** — 600× a typical executor call |
-| `137` | Polygon PoS | ~$0.001 | **Yes** — recommended |
+| `137` | Polygon PoS | ~$0.001 | **Yes** — planned mainnet (EVM, low gas) |
 | `8453` | Base | ~$0.001 | **Yes** |
 | `42161` | Arbitrum One | ~$0.001 | **Yes** |
 

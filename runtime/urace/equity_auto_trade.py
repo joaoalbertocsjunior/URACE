@@ -68,10 +68,10 @@ DEFAULT_CONFIG: dict = {
         'bp_to_sell_per_trigger': 1000,
         'min_hold_bp_to_trigger': 500,
         # Trigger early sell when depletion is detected
-        'sell_on_near_depleted': True,    # auto-list when feature is NEAR_DEPLETED
+        'sell_on_near_depleted': False,   # auto-list when feature is NEAR_DEPLETED
         'sell_on_slowing': False,         # auto-list when feature is SLOWING (earlier exit)
         # Hands-free replication: offer bundle to network when no replica holders exist
-        'auto_replicate': True,           # emit BUNDLE_REPLICATION_OFFER for single-holder features
+        'auto_replicate': False,          # emit BUNDLE_REPLICATION_OFFER for single-holder features
         'replication_offer_cooldown': 86400,  # seconds between replication offers per feature
     },
     'auto_mint': {
@@ -940,7 +940,7 @@ def auto_sell(
     min_return           = float(cfg.get('min_return_multiplier', 2.0))
     bp_to_list           = int(cfg.get('bp_to_sell_per_trigger', 1000))
     min_hold_bp          = int(cfg.get('min_hold_bp_to_trigger', 500))
-    sell_on_near_dep     = bool(cfg.get('sell_on_near_depleted', True))
+    sell_on_near_dep     = bool(cfg.get('sell_on_near_depleted', False))
     sell_on_slowing      = bool(cfg.get('sell_on_slowing', False))
 
     qs = quality_scores or {}
@@ -1017,7 +1017,7 @@ def auto_sell(
     # Prevents single-point-of-failure delivery and warms up availability.
     replication_offers: list[dict] = []
     sell_cfg = (config or {}).get('auto_sell', {})
-    if sell_cfg.get('auto_replicate', True):
+    if sell_cfg.get('auto_replicate', False):
         import hashlib as _rhl, time as _art
         cooldown = int(sell_cfg.get('replication_offer_cooldown', 86400))
         _all_rows_rep = rows  # already fetched above

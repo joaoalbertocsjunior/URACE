@@ -8,21 +8,7 @@ import unittest
 from urace import p2p_cost_qualification as pq
 
 
-class MockExchange:
-    def __init__(self):
-        self._rows = []
-
-    def audit_rows(self):
-        return list(self._rows)
-
-    def append_audit_row(self, row):
-        self._rows.append(row)
-
-    def event(self, kind, **fields):
-        self._rows.append({'kind': kind, **fields})
-
-    def record(self, kind, fields):
-        self._rows.append({'kind': kind, **fields})
+from conftest import MockExchange
 
 
 def _fill_bootstrap(ex, n=30):
