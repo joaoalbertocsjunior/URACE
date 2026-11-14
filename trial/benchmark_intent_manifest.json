@@ -1,0 +1,12 @@
+{
+  "product_id": "budget-tracker-v1",
+  "declared_change_surface": [
+    "export_summary", "top_categories", "days_since_last_transaction",
+    "import_csv", "forecast_spending", "categorize_uncategorized", "merge_accounts",
+    "find_anomalies", "transaction_report", "validate_all",
+    "_validate_transaction", "_anomaly_income", "_anomaly_expense"
+  ],
+  "off_limits": ["add_transaction", "get_balance", "get_transactions",
+                 "monthly_summary", "set_budget_limit", "check_budget_alerts",
+                 "__init__"]
+}

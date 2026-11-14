@@ -132,6 +132,7 @@
 !/benchmark_velocity.py
 !/benchmark_corpus.py
 !/benchmark_control.py
+!/benchmark_intent_manifest.json
 !/benchmark_bad_fixes.py
 !/benchmark_longitudinal.py
 !/benchmark_product.py
