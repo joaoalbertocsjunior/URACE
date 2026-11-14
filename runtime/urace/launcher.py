@@ -18,10 +18,17 @@ STATE_PATH = SYSTEM_ROOT / "state/state.json"
 STABLE_RUNTIME = SYSTEM_ROOT / "state/stable-runtime"
 _DEFAULT_STATE_PATH = STATE_PATH
 _DEFAULT_STABLE_RUNTIME = STABLE_RUNTIME
-# True only when launcher.py itself lives under ~/.urace/ (production pip-venv install).
-# False in dev source trees — avoids picking up ~/.urace/config.json during development.
-_LAUNCHER_IN_PROD_VENV = str(Path(__file__).resolve()).startswith(str(Path.home() / ".urace"))
-EXPECTED_KERNEL_HASHES = evolution_guard.kernel_hashes(PRODUCT_ROOT)
+# True when running from any installed package (pip, pipx, conda, Homebrew).
+# False in dev source trees and editable installs — avoids loading ~/.urace/config.json
+# during development. "site-packages" is present in all non-editable install paths.
+_LAUNCHER_IN_PROD_VENV = "site-packages" in str(Path(__file__).resolve())
+# In pip/pipx/conda installs PRODUCT_ROOT resolves inside the venv (not the source tree),
+# so PROTECTED_FILES don't exist there. Package-manager hash verification already covers
+# integrity; skip the runtime kernel-hash precomputation for installed packages.
+try:
+    EXPECTED_KERNEL_HASHES = evolution_guard.kernel_hashes(PRODUCT_ROOT)
+except (FileNotFoundError, OSError):
+    EXPECTED_KERNEL_HASHES = {}
 
 
 def configured_paths() -> tuple[Path, Path]:
