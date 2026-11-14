@@ -10,6 +10,14 @@ class TestTunnelParsers(unittest.TestCase):
         line = 'https://abc123.lhr.life tunneled with tls termination'
         self.assertEqual(_parse_localhost_run_url(line), 'https://abc123.lhr.life')
 
+    def test_localhost_run_subdomain_url_extracted(self):
+        line = '290d12c1b998a5.app.lhr.life tunneled with tls termination, https://290d12c1b998a5.app.lhr.life'
+        self.assertEqual(_parse_localhost_run_url(line), 'https://290d12c1b998a5.app.lhr.life')
+
+    def test_admin_localhost_run_not_matched(self):
+        line = 'To set up and manage custom domains go to https://admin.localhost.run/'
+        self.assertIsNone(_parse_localhost_run_url(line))
+
     def test_no_match_returns_none(self):
         self.assertIsNone(_parse_cloudflare_url('some random line'))
         self.assertIsNone(_parse_localhost_run_url('some random line'))
