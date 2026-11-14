@@ -173,7 +173,7 @@ def dispatch(args, config: dict) -> int:
         if as_json:
             print(json.dumps(result))
         else:
-            print(f"Daemon already running (pid={existing_pid}). Use 'urace daemon stop' first.")
+            print(f"urace is already running (pid={existing_pid}). Run 'urace stop' to stop it first.")
         return 1
 
     interval_minutes = getattr(args, "interval_minutes", 30.0)
@@ -190,7 +190,7 @@ def dispatch(args, config: dict) -> int:
         try:
             import subprocess, sys as _sys
             proc = subprocess.Popen([_sys.executable, '-m', 'urace', 'exchange', 'network', 'serve',
-                                     '--host', '0.0.0.0', '--port', '7301'])
+                                     '--host', '0.0.0.0', '--port', '7301', '--tunnel', 'auto'])
             _p2p_proc_ref[0] = proc
         finally:
             _p2p_ready.set()

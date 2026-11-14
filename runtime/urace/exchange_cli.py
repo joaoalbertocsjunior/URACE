@@ -894,6 +894,15 @@ def run(args,config):
   elif verb=='reachability':
    from . import nat_check as _nc
    cap=_nc.check_node_capability(timeout=getattr(args,'timeout',5.0))
+   _exch_cfg=exchange.load()
+   _active_tunnel=_exch_cfg.get('active_tunnel_endpoint')
+   if _active_tunnel:
+    cap['can_bootstrap']=True;cap['can_relay']=True
+    if 'bootstrap' not in cap.get('recommended_roles',[]):cap.setdefault('recommended_roles',[]).append('bootstrap')
+    if 'relay' not in cap.get('recommended_roles',[]):cap.setdefault('recommended_roles',[]).append('relay')
+    cap.setdefault('reasons',{})['bootstrap']=f'active tunnel endpoint: {_active_tunnel}'
+    cap['reasons']['relay']=f'active tunnel endpoint: {_active_tunnel}'
+    cap['active_tunnel_endpoint']=_active_tunnel
    role_filter=getattr(args,'role_filter',None)
    if role_filter:
     wanted={r.strip() for r in role_filter.split(',')}
@@ -950,10 +959,13 @@ def run(args,config):
       # Tunnel provides inbound reachability even when NAT blocked it at init time.
       # Upgrade roles to relay (and bootstrap) when a tunnel URL is available,
       # regardless of what nat_check assigned before the tunnel existed.
-      if public_url and 'relay' not in _serve_roles:
+      if public_url:
        from ._common import atomic_write_json as _awj2
-       _serve_roles=list(set(_serve_roles)|{'relay','bootstrap'})
-       _scfg2=exchange.load();_scfg2['node_roles']=_serve_roles
+       _scfg2=exchange.load()
+       if 'relay' not in _serve_roles:
+        _serve_roles=list(set(_serve_roles)|{'relay','bootstrap'})
+        _scfg2['node_roles']=_serve_roles
+       _scfg2['active_tunnel_endpoint']=public_url
        try:_awj2(exchange.root/'policy.json',_scfg2)
        except Exception:pass
       if 'relay' in _serve_roles or 'bootstrap' in _serve_roles or public_url:

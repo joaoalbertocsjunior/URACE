@@ -112,7 +112,7 @@ class Exchange:
  def __init__(self,root):self.root=Path(root)
  def load(self):
   p=self.root/'policy.json'
-  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':True,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':False,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[],'compress_wire':False,'bandwidth_profile':'auto','transfer_chunk_size':0,'relay_credit_per_kb':1,'node_roles':[],'urace_credit_usd_rate':1000,'bootstrap_credit_per_connection':5}
+  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':True,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':False,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[],'compress_wire':False,'bandwidth_profile':'auto','transfer_chunk_size':0,'relay_credit_per_kb':1,'node_roles':['bootstrap','relay'],'urace_credit_usd_rate':1000,'bootstrap_credit_per_connection':5}
  @contextmanager
  def lock(self):
   self.root.mkdir(parents=True,exist_ok=True,mode=0o700)

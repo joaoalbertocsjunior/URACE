@@ -5,9 +5,9 @@ def _parse_cloudflare_url(line: str) -> str | None:
     return m.group(0) if m else None
 
 def _parse_localhost_run_url(line: str) -> str | None:
-    # Tunnel URLs are always *.lhr.life — *.localhost.run subdomains appear in the
-    # welcome banner (admin.localhost.run) before the real URL and must not be matched.
-    m = re.search(r'https://[a-zA-Z0-9\-]+\.lhr\.life', line)
+    # Tunnel URLs are always *.lhr.life (e.g. 290d12c1b998a5.app.lhr.life) —
+    # *.localhost.run subdomains appear in the welcome banner before the real URL.
+    m = re.search(r'https://[a-zA-Z0-9\-\.]+\.lhr\.life', line)
     return m.group(0) if m else None
 
 def _direct_inbound_reachable(port: int, timeout: float = 4.0) -> str | None:
@@ -33,7 +33,7 @@ class TunnelHandle:
     account). cloudflared is used if the binary is present. No third-party service
     is contacted unless a tunnel is actually needed.
     """
-    def __init__(self, provider: str, local_port: int, timeout: float = 20.0):
+    def __init__(self, provider: str, local_port: int, timeout: float = 45.0):
         self.provider = provider
         self.local_port = local_port
         self.timeout = timeout
@@ -78,26 +78,41 @@ class TunnelHandle:
         self._wait_for_url(_parse_cloudflare_url)
 
     def _start_localhost_run(self):
-        # localhost.run via SSH — no install needed
+        # localhost.run via SSH — no install needed.
+        # stdbuf -oL forces SSH stdout to be line-buffered when piped; without it
+        # SSH buffers output until the internal stdio buffer fills (~8 KB), so the
+        # tunnel URL never arrives during _wait_for_url's timeout window.
+        import shutil as _sh
+        _cmd = (['stdbuf', '-oL'] if _sh.which('stdbuf') else []) + [
+            'ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
+            '-R', f'80:localhost:{self.local_port}', 'nokey@localhost.run',
+        ]
         self._proc = subprocess.Popen(
-            ['ssh', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=/dev/null',
-             '-R', f'80:localhost:{self.local_port}', 'nokey@localhost.run'],
+            _cmd,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1
         )
         self._wait_for_url(_parse_localhost_run_url)
 
     def _wait_for_url(self, parser):
-        deadline = time.time() + self.timeout
-        for line in self._proc.stdout:
-            url = parser(line)
-            if url:
-                self.url = url
-                # drain output in background
-                threading.Thread(target=self._proc.stdout.read, daemon=True).start()
-                return
-            if time.time() > deadline:
-                break
+        # Read in a daemon thread so self.timeout is a hard wall-clock deadline
+        # even when the SSH/cloudflared process is slow to produce its first line.
+        result: list[str | None] = [None]
+        def _reader():
+            try:
+                for line in self._proc.stdout:
+                    url = parser(line)
+                    if url:
+                        result[0] = url
+                        threading.Thread(target=self._proc.stdout.read, daemon=True).start()
+                        return
+            except Exception:
+                pass
+        t = threading.Thread(target=_reader, daemon=True)
+        t.start()
+        t.join(timeout=self.timeout)
+        if result[0]:
+            self.url = result[0]
 
     def __exit__(self, *_):
         if self._proc:
