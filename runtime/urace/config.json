@@ -1,0 +1,171 @@
+{
+  "analytics_export": {
+    "include_xlsx": false,
+    "mode": "ON_CHECKPOINT",
+    "output": "generated/reports/latest"
+  },
+  "authority": {
+    "delegated": [
+      "assessment",
+      "objectives",
+      "priority",
+      "plans",
+      "measurement",
+      "validation"
+    ],
+    "provenance": "CI bootstrap",
+    "reserved": [
+      "change retained purpose",
+      "weaken normative invariants",
+      "publish externally",
+      "spend money"
+    ],
+    "source": "repository owner"
+  },
+  "auto_goals": {
+    "enabled": false,
+    "replenish_backlog": true
+  },
+  "change_explanations": {},
+  "constraints": {},
+  "default_metrics": [],
+  "efficiency": {},
+  "evaluation_system": {
+    "minimum_evidence_units": 5,
+    "weights": {
+      "execution_acceptance": 1.5,
+      "goal_completion": 1.0,
+      "productive_call_yield": 1.0,
+      "regression_safety": 2.0
+    }
+  },
+  "execution_workflow": "core",
+  "executor": {
+    "allowed_files_by_scope": {
+      "runtime": []
+    },
+    "availability_probe_interval_seconds": 60,
+    "available_probe_interval_seconds": 30,
+    "capacity_fallback_seconds": 300,
+    "capacity_retry_delay_ms": 500,
+    "capacity_retry_mode": "linear",
+    "command": null,
+    "context_hints": [],
+    "disabled_features": [],
+    "discovery_interval_seconds": 300,
+    "discovery_yield_exhausted_threshold": 3,
+    "enabled": false,
+    "healthcheck_timeout_seconds": 10,
+    "kind": "subprocess",
+    "max_discovery_interval_seconds": 3600,
+    "max_executor_calls_per_24h": null,
+    "max_executor_calls_per_30d": null,
+    "max_executor_result_bytes": 1048576,
+    "max_prompt_external_observations": 20,
+    "max_prompt_reasoning_entries": 50,
+    "max_unavailable_probe_interval_seconds": 600,
+    "model": null,
+    "progress_heartbeat_seconds": 30,
+    "providers": [],
+    "routing_balance_window_seconds": 86400,
+    "routing_efficiency_tolerance_ratio": 0.15,
+    "routing_max_elapsed_seconds": 3600,
+    "routing_suitability_tolerance": 0.1,
+    "sandbox_bwrap_directory": null,
+    "timeout_seconds": 300,
+    "trigger_dedupe_seconds": 60,
+    "triggered_discovery_cooldown_seconds": 60,
+    "validation_timeout_seconds": 60
+  },
+  "external_metrics": {},
+  "github": {
+    "repo": "owner/repo",
+    "token_env": "URACE_GITHUB_TOKEN"
+  },
+  "intent": {
+    "purpose": "CI bootstrap product",
+    "retained": [
+      "purpose",
+      "authority boundaries"
+    ]
+  },
+  "operator_patterns": [],
+  "p2p": {},
+  "product": "ci-test-product",
+  "product_files": [
+    "URACE.md",
+    "README.md"
+  ],
+  "product_registry": [],
+  "product_type": "generic",
+  "product_types": [
+    "generic"
+  ],
+  "project": {},
+  "resource_product_id": "mcp-write-fixture",
+  "resources": {},
+  "runtime_workflow": {"enabled": true},
+  "scope_priority": {
+    "max_weight_step_per_revision": 0.25,
+    "mode": "DYNAMIC_BOUNDED",
+    "scopes": {
+      "authoritative_specification": {
+        "artifacts": [
+          "URACE.md"
+        ],
+        "base_weight": 1.0,
+        "execution_scopes": [
+          "documentation"
+        ],
+        "label": "Authoritative specification",
+        "max_weight": 3.0,
+        "min_weight": 0.5
+      },
+      "measurement_system": {
+        "artifacts": [
+          "urace/runtime/urace/config.json"
+        ],
+        "base_weight": 0.8,
+        "execution_scopes": [
+          "metrics"
+        ],
+        "label": "Metrics and evaluation",
+        "max_weight": 3.0,
+        "min_weight": 0.5
+      },
+      "product_guidance": {
+        "artifacts": [
+          "README.md"
+        ],
+        "base_weight": 1.0,
+        "execution_scopes": [
+          "documentation"
+        ],
+        "label": "Product guidance",
+        "max_weight": 3.0,
+        "min_weight": 0.5
+      },
+      "runtime_implementation": {
+        "artifacts": [
+          "urace/runtime/urace/cli.py"
+        ],
+        "base_weight": 0.9,
+        "execution_scopes": [
+          "runtime",
+          "rebootstrap"
+        ],
+        "label": "Runtime correctness",
+        "max_weight": 3.0,
+        "min_weight": 0.5
+      }
+    },
+    "version": "dynamic-scope-priority-v1"
+  },
+  "self_evolution_policy": {
+    "mode": "NECESSARY_ONLY",
+    "provenance": "CI bootstrap",
+    "source": "CI"
+  },
+  "specification_workflow": {},
+  "state_path": "/tmp/tmpachgu7pp/state/state.json"
+}
