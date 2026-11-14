@@ -5,6 +5,7 @@
 set -e
 
 URACE_VERSION="0.7.0"
+VENV_DIR="${HOME}/.urace"
 MIN_PYTHON_MAJOR=3
 MIN_PYTHON_MINOR=11
 
@@ -14,17 +15,17 @@ if [ -t 1 ]; then
 else
   GREEN=''; YELLOW=''; RED=''; RESET=''
 fi
-info()    { printf "${GREEN}[urace]${RESET} %s\n" "$*"; }
-warn()    { printf "${YELLOW}[urace]${RESET} %s\n" "$*"; }
-die()     { printf "${RED}[urace] error:${RESET} %s\n" "$*" >&2; exit 1; }
+info() { printf "${GREEN}[urace]${RESET} %s\n" "$*"; }
+warn() { printf "${YELLOW}[urace]${RESET} %s\n" "$*"; }
+die()  { printf "${RED}[urace] error:${RESET} %s\n" "$*" >&2; exit 1; }
 
-# ── OS detection ─────────────────────────────────────────────────────────────
+# ── OS detection ──────────────────────────────────────────────────────────────
 detect_os() {
   case "$(uname -s)" in
-    Linux*)  OS=linux ;;
-    Darwin*) OS=macos ;;
+    Linux*)           OS=linux ;;
+    Darwin*)          OS=macos ;;
     MINGW*|MSYS*|CYGWIN*) OS=windows_shell ;;
-    *)       OS=unknown ;;
+    *)                OS=unknown ;;
   esac
 }
 
@@ -45,13 +46,52 @@ find_python() {
   return 1
 }
 
-# ── pip availability ──────────────────────────────────────────────────────────
-find_pip() {
-  if "$PYTHON_CMD" -m pip --version >/dev/null 2>&1; then
-    PIP_CMD="$PYTHON_CMD -m pip"
+# ── install via pipx (cleanest — handles PEP 668 automatically) ───────────────
+try_pipx() {
+  if command -v pipx >/dev/null 2>&1; then
+    info "Installing via pipx..."
+    pipx install "urace==${URACE_VERSION}" || pipx upgrade urace
     return 0
   fi
   return 1
+}
+
+# ── install into a dedicated venv at ~/.urace ─────────────────────────────────
+install_venv() {
+  info "Creating dedicated venv at ${VENV_DIR}..."
+  "$PYTHON_CMD" -m venv "${VENV_DIR}"
+  "${VENV_DIR}/bin/pip" install --quiet "urace==${URACE_VERSION}"
+
+  # Wire up the launcher
+  URACE_BIN="${VENV_DIR}/bin/urace"
+
+  # Add to shell rc if not already present
+  _export_line="export PATH=\"${VENV_DIR}/bin:\$PATH\""
+  for rc in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.profile"; do
+    if [ -f "$rc" ] && ! grep -qF "${VENV_DIR}/bin" "$rc" 2>/dev/null; then
+      printf '\n# URACE\n%s\n' "${_export_line}" >> "$rc"
+      info "Added PATH entry to ${rc}"
+    fi
+  done
+
+  warn "Run this once in your current shell, or open a new terminal:"
+  warn "  ${_export_line}"
+}
+
+# ── install inside an already-active venv ─────────────────────────────────────
+install_active_venv() {
+  info "Active venv detected — installing directly..."
+  "$PYTHON_CMD" -m pip install --quiet "urace==${URACE_VERSION}"
+}
+
+# ── verify ────────────────────────────────────────────────────────────────────
+verify() {
+  _bin="${1:-urace}"
+  if "$_bin" --version >/dev/null 2>&1 || command -v urace >/dev/null 2>&1; then
+    info "urace ${URACE_VERSION} installed."
+  else
+    info "urace ${URACE_VERSION} installed (restart shell or source rc to use)."
+  fi
 }
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -59,7 +99,7 @@ main() {
   detect_os
 
   if [ "$OS" = "windows_shell" ]; then
-    warn "Windows detected (non-WSL shell). For best results use WSL or run directly:"
+    warn "Windows detected (non-WSL shell). Use WSL, or install directly:"
     warn "  pip install urace==${URACE_VERSION}"
     warn "  npm install -g urace-cli@${URACE_VERSION}"
     exit 0
@@ -69,46 +109,28 @@ main() {
 
   if ! find_python; then
     die "Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+ not found.
-  Linux:  sudo apt install python3  (or dnf/pacman/zypper)
+  Linux:  sudo apt install python3-full  (or dnf/pacman/zypper)
   macOS:  brew install python  (or https://python.org)"
   fi
 
   info "Using ${PYTHON_CMD} ($("$PYTHON_CMD" --version 2>&1))"
 
-  if ! find_pip; then
-    die "pip not found. Install it: ${PYTHON_CMD} -m ensurepip --upgrade"
-  fi
-
-  # Prefer --user install to avoid needing sudo; fall back without flag if
-  # inside a virtualenv or if --user is unsupported (e.g. some CI images).
+  # Already inside a venv — install directly, no workarounds needed
   if "$PYTHON_CMD" -c "import sys; sys.exit(0 if hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix else 1)" 2>/dev/null; then
-    PIP_FLAGS=""
-    info "Virtual environment detected — installing without --user"
+    install_active_venv
+    verify
+  # pipx available — use it (handles PEP 668, Debian/Ubuntu, externally-managed)
+  elif try_pipx; then
+    verify
+  # Fall back: create ~/.urace venv
   else
-    PIP_FLAGS="--user"
-  fi
-
-  # shellcheck disable=SC2086
-  $PIP_CMD install $PIP_FLAGS "urace==${URACE_VERSION}" || \
-    $PIP_CMD install "urace==${URACE_VERSION}"
-
-  # Verify
-  if command -v urace >/dev/null 2>&1; then
-    info "urace $(urace --version 2>/dev/null || echo ${URACE_VERSION}) installed successfully."
-  else
-    # --user installs land in ~/.local/bin on Linux, ~/Library/Python/X.Y/bin on macOS
-    warn "urace installed but not found in PATH."
-    if [ "$OS" = "linux" ]; then
-      warn "Add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
-    elif [ "$OS" = "macos" ]; then
-      _pyver=$("$PYTHON_CMD" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-      warn "Add to PATH: export PATH=\"\$HOME/Library/Python/${_pyver}/bin:\$PATH\""
-    fi
+    install_venv
+    verify "${VENV_DIR}/bin/urace"
   fi
 
   info ""
   info "Next steps:"
-  info "  export ANTHROPIC_API_KEY=..."
+  info "  export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY"
   info "  urace start"
   info "  urace"
   info ""
