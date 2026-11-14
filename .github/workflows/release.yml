@@ -90,7 +90,7 @@ jobs:
         id: version
         run: echo "VERSION=$(grep '^version' runtime/pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           generate_release_notes: true
           name: "URACE v${{ steps.version.outputs.VERSION }}"
