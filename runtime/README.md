@@ -154,4 +154,4 @@ python3 -m unittest discover -s tests -v
 
 ---
 
-v0.8.1 · Code: [Apache 2.0](https://github.com/joaoalbertocsjunior/URACE/blob/main/LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](https://github.com/joaoalbertocsjunior/URACE/blob/main/LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.8.2 · Code: [Apache 2.0](https://github.com/joaoalbertocsjunior/URACE/blob/main/LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](https://github.com/joaoalbertocsjunior/URACE/blob/main/LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

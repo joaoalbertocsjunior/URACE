@@ -179,17 +179,17 @@ urace "Improve checkout latency to under 200ms"
 
 ### Bootstrap + Relay Node
 
-If you want your node to serve as a bootstrap and relay for the network:
+All new nodes default to `bootstrap + relay + delivery + block_sealer` roles. No manual role assignment needed unless overriding. When behind NAT, `urace start` automatically establishes an SSH tunnel (localhost.run) so the node can serve as bootstrap and relay without router configuration.
 
 ```sh
-# 1. Set node roles
-urace exchange node roles --set bootstrap,relay
+# 1. (Optional) Override roles — defaults already include bootstrap, relay, delivery, block_sealer
+urace exchange node roles --set bootstrap,relay,delivery,block_sealer
 
-# 2. Start the server (use --tunnel for cone NAT with no port forward)
-urace exchange network serve --host 0.0.0.0 --port 7301 --tunnel localhost.run
+# 2. Start the server — --tunnel auto detects NAT and uses SSH tunnel when needed
+urace exchange network serve --host 0.0.0.0 --port 7301 --tunnel auto
 
-# 3. Verify reachability
-urace exchange network reachability --type bootstrap,relay --json
+# 3. Verify reachability (active_tunnel_endpoint overrides NAT-based can_bootstrap)
+urace exchange network reachability --json
 
 # 4. Monitor connected peers
 urace exchange network peers --detail

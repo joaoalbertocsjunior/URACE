@@ -18090,6 +18090,43 @@ Network work-market escrow floors and configured executor-call estimates MAY be 
 | `LEDGER_BLOCK_SEAL` | Tamper-chain block sealed with balance snapshot |
 | `DELIVERY_FEE` | Bandwidth compensation to replica holder |
 
+## CREDIT_DELTA Earn Directions
+
+`CREDIT_DELTA` rows carry a `direction` field that identifies the earn path. All earn-direction rows MUST include `originating_event_hash` = SHA-256 hex of the JSON-serialised source audit row (keys sorted, default=str) that triggered the earn, except `decay` and `protocol_fee` which have no single originating row.
+
+| `direction` | Triggered by | Key fields |
+|---|---|---|
+| `earn` | `APPLIED_AFTER_LOCAL_QUALIFICATION` | `feature_id`, `score_delta`, `originating_event_hash` |
+| `creator_earn` | `FEATURE_BORROWED` (fill-listing) | `feature_id`, `listing_id`, `borrower_peer_id`, `originating_event_hash` |
+| `seal_reward` | `LEDGER_BLOCK_SEAL` | `block_height`, `block_hash`, `sealed_row_count` |
+| `challenge_bounty` | slash row upheld | `challenge_id`, `challenge_outcome='upheld'`, `verdict_row_hash` |
+| `challenge_stake_returned` | challenge rejected | `challenge_id` |
+| `challenge_stake_locked` | challenge opened | `challenge_id`, negative `amount_units` |
+| `mint_stake_released` | mint stake unlock | `feature_id` |
+| `provenance_compensation` | upheld challenge on derivative | `feature_id`, `reference_feature_id`, `challenge_id` |
+| `composition_referral` | composite feature borrow | `composite_feature_id`, `listing_id`, `borrow_receipt_hash` |
+| `llm_peer_reward` | similarity check pass | `feature_id`, `check_id` |
+| `protocol_fee` | fill-listing | `listing_id`, `feature_id`, `funded_by` |
+| `delivery_relay_earn` | relay peer delivers artifact | `listing_id`, `feature_id` |
+| `escrow_release` | escrow timeout or settlement | `request_id`, `escrow_release_reason` |
+| `send` | manual peer transfer | `sender_peer_id`, `receiver_peer_id` |
+| `spend` | borrow spend | `listing_id` |
+| `decay` | epoch decay above cap | `reason='epoch_decay_above_cap'`, `score_delta` |
+
+## Default Node Roles
+
+The default `node_roles` for all new nodes is `['bootstrap', 'relay', 'delivery', 'block_sealer']`. Roles are stored in `node_roles` in the exchange policy (`policy.json`).
+
+| Role | Description | Default |
+|---|---|---|
+| `bootstrap` | Announces stable address so new peers can join; requires public IP, port-forward, or SSH tunnel | ✓ |
+| `relay` | Forwards traffic between peers that cannot connect directly | ✓ |
+| `delivery` | Serves artifact bundles to buyers; earns `delivery_relay_earn` | ✓ |
+| `block_sealer` | Seals ledger blocks and earns `seal_reward` | ✓ |
+| `consumer` | Borrows features and commissions work | implicit (always available) |
+| `creator` | Publishes features for other peers to adopt | implicit (always available) |
+| `verifier` | Runs LLM similarity checks for `llm_peer_reward` | opt-in (requires executor credits) |
+
 **Implements:** P2PFeatureExchangeProtocol (§62l).
 **Runtime:** `urace/runtime/urace/peer_exchange.py`, `urace/runtime/urace/exchange_cli.py`, `urace/runtime/urace/feature_equity.py`, `urace/runtime/urace/token_ledger.py`.
 
@@ -18401,6 +18438,89 @@ The **DEKDistributionProtocol** governs how the artifact decryption key (DEK) re
 For fully offline creators at million-peer scale: Shamir's Secret Sharing splits DEK into k-of-n shares held by replica nodes; any k reconstruct. Unlocked by `EQUITY_LISTING_FILLED` in the ledger. Requires Kademlia DHT routing for share discovery.
 
 **Runtime:** `urace/runtime/urace/exchange_cli.py` — `list-for-sale` (LISTING_DEK_AVAILABLE), `fill-listing` (ARTIFACT_KEY_GRANT).
+
+---
+
+# 62aj. Shamir DEK Protocol
+
+The **ShamirDEKProtocol** splits the artifact DEK into k-of-n shares held by replica nodes using Shamir's Secret Sharing over GF(256).
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62ai]`
+
+- Shares are computed byte-by-byte: each byte of the DEK is split independently into n shares using Lagrange interpolation evaluated at x=0 over GF(256).
+- k-of-n threshold: any k shares suffice to reconstruct the original DEK.
+- At `list-for-sale`, when replica holders ≥ 2: creator emits `LISTING_DEK_SHARE` rows (one per holder): `feature_id`, `holder_peer_id`, `share_index`, `share_commitment` (SHA-256 of share bytes).
+- Reconstruction path: buyer requests shares from k holders; assembles via Lagrange at x=0.
+
+**Runtime:** `urace/runtime/urace/shamir.py`, `urace/runtime/urace/exchange_cli.py` (list-for-sale Shamir path).
+
+---
+
+# 62ak. Kademlia DHT Protocol
+
+The **KademliaDHTProtocol** provides peer-to-peer routing for artifact chunk discovery using a 256 k-bucket XOR-metric routing table.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62af]`
+
+- Routing key for each chunk: `sha256(artifact:<artifact_id>:chunk:<idx>)`.
+- Routing table: 256 k-buckets keyed by XOR distance from local node ID; populated on every `peer()` call.
+- Persisted to `routing-table.json` in the exchange root on each update.
+- CLI: `urace exchange chunk find-holders <artifact_id>`, `urace exchange network routing-table`.
+
+**Runtime:** `urace/runtime/urace/kademlia.py`, `urace/runtime/urace/peer_exchange.py` (`routing_table()`).
+
+---
+
+# 62al. Ledger Sliding Window Protocol
+
+The **LedgerSlidingWindowProtocol** allows light peers to maintain a correct balance view without replaying the full audit log.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62ad]`
+
+- `balance_from_seal()`: starts from the latest `LEDGER_BLOCK_SEAL` snapshot balance, then sums `CREDIT_DELTA` tail rows since that seal.
+- `prune_to_window()`: drops rows older than the configured window, keeping at minimum the last seal.
+- `verify_tail()`: checks that every tail row's `previous_hash` chain is intact from the seal.
+- CLI: `urace exchange compact sync-state`, `urace exchange compact light-balance`.
+
+**Runtime:** `urace/runtime/urace/ledger_sync.py`.
+
+---
+
+# 62am. NAT-Aware Bootstrap Protocol
+
+The **NATAwareBootstrapProtocol** ensures that every node — regardless of NAT topology — can serve as a bootstrap and relay node without manual router configuration.
+
+**Construct metadata.** `kind: Protocol` · `tier: FOUNDATIONAL` · `standalone: true` · `depends: [§62aa]`
+
+## Reachability Detection Order
+
+When `urace start` runs (or `urace exchange network serve --tunnel auto`), the runtime attempts inbound reachability in this order:
+
+1. **Direct inbound** — STUN probe via `stun.l.google.com`, `stun.cloudflare.com`, `stun.stunprotocol.org`. If `nat_type=direct` and `public_ip` is known, no tunnel needed.
+2. **Cone NAT + UPnP** — `miniupnpc` port-maps TCP external:7301 → local:7301. If mapping succeeds, no tunnel needed.
+3. **localhost.run SSH tunnel** — zero-install reverse SSH: `ssh -R 80:localhost:<port> nokey@localhost.run`. URL format: `https://<id>.lhr.life` or `https://<sub>.app.lhr.life`. Preferred when SSH is available (always present on Linux/macOS).
+4. **cloudflared** — Cloudflare Tunnel binary (auto-installed to `~/.urace/bin/` by `urace init --auto`, or system binary).
+5. **DHT relay** — traffic routed through relay-role peers for symmetric NAT where tunnels are also insufficient.
+
+## Tunnel URL Detection
+
+- localhost.run URLs are always `*.lhr.life`; the SSH welcome banner contains `*.localhost.run` subdomains that MUST NOT be matched.
+- cloudflared URLs match `https://<id>.trycloudflare.com`.
+- Both providers are detected with line-buffered output (`stdbuf -oL` prefix) and a 45-second deadline via a background reader thread.
+
+## Active Tunnel Persistence
+
+When a tunnel URL is obtained, `urace exchange network serve` persists it as `active_tunnel_endpoint` in `policy.json`. The `reachability` command reads this field: if `active_tunnel_endpoint` is set, `can_bootstrap` and `can_relay` are overridden to `true` regardless of NAT type.
+
+## Default Roles
+
+Default `node_roles` are `['bootstrap', 'relay', 'delivery', 'block_sealer']`. Nodes that obtained reachability via tunnel have these roles active automatically without manual `--set` commands.
+
+## Daemon Integration
+
+`urace start` spawns `urace exchange network serve --host 0.0.0.0 --port 7301 --tunnel auto` as a tracked subprocess. On `urace stop` (SIGTERM), the serve subprocess is terminated. If a daemon is already running, `urace start` exits with a user-readable message rather than starting a second instance.
+
+**Runtime:** `urace/runtime/urace/tunnel_server.py` (TunnelHandle, provider detection, URL parsing), `urace/runtime/urace/nat_check.py` (NAT type, UPnP, STUN), `urace/runtime/urace/exchange_cli.py` (`network serve`, `reachability`), `urace/runtime/urace/_daemon.py` (daemon lifecycle).
 
 ---
 
@@ -20495,6 +20615,7 @@ Per-revision scope: `spec` = normative change; `runtime-only` = no spec change; 
 
 | Version | Date | Scope | Summary |
 |---|---|---|---|
+| r135 | 2026-11-14 | spec+runtime | Added §62aj ShamirDEKProtocol, §62ak KademliaDHTProtocol, §62al LedgerSlidingWindowProtocol (sections were referenced in r123 but section headers were absent); added §62am NATAwareBootstrapProtocol (auto-tunnel bootstrap + reachability override via `active_tunnel_endpoint`); extended §62aa CREDIT_DELTA schema with all earn directions and `originating_event_hash` provenance field; added default node_roles table (`bootstrap`, `relay`, `delivery`, `block_sealer`); `verifier` explicitly opt-in; version bump 0.8.1 → 0.8.2. **New external references:** `LISTING_DEK_SHARE`/`share_index`/`share_commitment`/`k_threshold`/`n_total` → §62aj; `routing-table.json`/`chunk_holders()`/`routing_table()` → §62ak; `balance_from_seal`/`prune_to_window`/`verify_tail`/`sync-state`/`light-balance` → §62al; `active_tunnel_endpoint`/`TunnelHandle`/`_parse_localhost_run_url`/`_parse_cloudflare_url` → §62am; `originating_event_hash`/`creator_earn`/`seal_reward`/`challenge_bounty`/`escrow_release`/`delivery_relay_earn`/`composition_referral`/`llm_peer_reward`/`protocol_fee` → §62aa. **Updated:** `peer_exchange.py` default `node_roles`; `ledger_compaction.py` `seal_reward` provenance; `provenance_stake.py` `challenge_bounty` provenance; `escrow_timeout.py` `escrow_release` provenance; `exchange_cli.py` `creator_earn` CREDIT_DELTA + `active_tunnel_endpoint` persistence; `_daemon.py` already-running guard + P2P serve subprocess. |
 | r134 | 2026-11-08 | spec+runtime | Tightened P2P listing ceiling margin: `price_margin_fraction` default raised 0.15 → 0.40; minimum clamped to 0.20 to guarantee $Y + $Z < executor at all times ($Y integration overhead consumes up to 16% of executor cost; margin ≥ 0.20 is the structural floor). At default 0.40 the ceiling = 60% of owner estimate (full completeness), guaranteeing ≥ 24% combined buyer saving in worst-case $Y scenario. All node roles (creator, delivery replica, composition owner, LLM peer, sealer, challenger) remain profitable. Version bump 0.5.0 → 0.5.1. **Updated:** §62aa Exchange Invariant 2 ceiling formula + $Y+$Z floor rationale; `exchange_cli.py` `price_margin_fraction` default + 0.20 clamp. |
 | r133 | 2026-11-08 | spec+runtime | Defined `urace-executor-receipt-v1` schema and auto-capture contract: after every `execute_with_executor` call the runtime extracts token counts and model from `operation["usage"].transport_usage`, prices them at published provider rates (`PROVIDER_RATES`), and writes `state/receipts/receipt_{operation_id}.json`. Added `urace cost summary` and `urace cost list` CLI commands with `--since`, `--limit`, and `--json` options. USD source hierarchy: `provider_published_rate` → `executor_reported` → `unavailable`. Receipt capture is non-blocking (errors suppressed). Version bump 0.4.1 → 0.5.0 (new minor: new CLI commands + auto-capture behavior). **New external references:** receipt schema + storage → `runtime/urace/cost_model.py`; cost CLI → `runtime/urace/cli.py`; cost parser → `runtime/urace/cli_parser.py`; receipt tests → `runtime/tests/test_cost_receipts.py`. |
 | r132 | 2026-11-08 | spec+runtime | Added a frozen cohort-specific economic savings gate, source-custodian attestation bound to source digest and selected task manifest, and two pinned independent reviewers whose signatures bind to the exact LIVE cohort summary; synthetic evidence is explicitly never eligible. Sampled 30 source-bound initial-ledger features for local protocol validation without changing their synthetic task/value/cost status. Split the CLI parser and data handlers into focused modules and split the 13,000-line runtime test monolith into pytest-discoverable thematic suites. **New external references:** paired-cost claim review → `trial/p2p_cost_claim_review.py`; CLI grammar → `runtime/urace/cli_parser.py`; data handlers → `runtime/urace/data_cli.py`; runtime test groups → `runtime/tests/test_urace_*.py`. |

@@ -79,7 +79,8 @@ def balance(exchange, peer_id: str) -> float:
         if settlement and not r.get('receipt_verified', False):
             continue
         if 'credit_units' in r:
-            _new_earned_units += int(r['credit_units'])
+            try: _new_earned_units += int(r['credit_units'])
+            except (TypeError, ValueError): pass
         else:
             _old_borrow_peers.add(borrower)
     earned_propagation = (_new_earned_units / UNIT) + len(_old_borrow_peers) * _BORROW_CREDIT

@@ -1491,7 +1491,11 @@ def run(args,config):
        _fl_credit_units=1  # governance ceiling hit: floor 1 base unit, never hard zero
       else:
        _fl_credit_units=_cl_fb.mint_per_adoption(loc=_fl_loc,dependency_count=_fl_dep,test_count=_fl_tests,adoption_rank=_fl_adoption_rank,network_size=_fl_net_size,estimated_network_size=_fl_net_size,total_network_supply=_fl_total_supply)
-      exchange.append_audit_row({'kind':'FEATURE_BORROWED','feature_id':_feat_id,'creator_peer_id':_original_creator,'borrower_peer_id':local_id,'listing_id':args.listing_id,'outcome_delta':0.0,'receipt_verified':True,'delivered_by':_deliverer,'credit_units':_fl_credit_units,'adoption_rank':_fl_adoption_rank,'estimated_network_size':_fl_net_size,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
+      _borrow_row={'kind':'FEATURE_BORROWED','feature_id':_feat_id,'creator_peer_id':_original_creator,'borrower_peer_id':local_id,'listing_id':args.listing_id,'outcome_delta':0.0,'receipt_verified':True,'delivered_by':_deliverer,'credit_units':_fl_credit_units,'adoption_rank':_fl_adoption_rank,'estimated_network_size':_fl_net_size,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()}
+      _borrow_row_hash=__import__('hashlib').sha256(__import__('json').dumps(_borrow_row,sort_keys=True,default=str).encode()).hexdigest()
+      exchange.append_audit_row(_borrow_row)
+      if _original_creator and _fl_credit_units>0:
+       exchange.append_audit_row({'kind':'CREDIT_DELTA','direction':'creator_earn','peer':_original_creator,'amount_units':_fl_credit_units,'feature_id':_feat_id,'listing_id':args.listing_id,'borrower_peer_id':local_id,'originating_event_hash':_borrow_row_hash,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
      from . import cost_model as _cm
      _pe_cmp=_cm.vs_executor_comparison(config,_fl_price)
      exchange.append_audit_row({'kind':'PRICING_EFFICIENCY','feature_id':_feat_id,'listing_id':args.listing_id,'ask_price_units':_fl_price,'executor_reference_price':None,'net_saving':None,'cheaper_than_executor':None,'comparison_status':'UNQUALIFIED_MISSING_TASK_RECEIPTS','at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
@@ -1508,7 +1512,7 @@ def run(args,config):
        _prov_alloc=_pg.composition_referral_amounts(_feat_id,_fl_all_rows,_pool)
        for _rpeer,_runits in _prov_alloc.items():
         if _rpeer and _runits>0:
-         exchange.append_audit_row({'kind':'CREDIT_DELTA','direction':'composition_referral','peer':_rpeer,'local_peer':local_id,'amount_units':_runits,'composite_feature_id':_feat_id,'listing_id':args.listing_id,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
+         exchange.append_audit_row({'kind':'CREDIT_DELTA','direction':'composition_referral','peer':_rpeer,'local_peer':local_id,'amount_units':_runits,'composite_feature_id':_feat_id,'listing_id':args.listing_id,'borrow_receipt_hash':_borrow_row_hash,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
      # Layer 4: apply any pending LLM-peer SIMILARITY_VERDICT rows
      _verdict_rows=[r for r in _fl_all_rows if r.get('kind')=='SIMILARITY_VERDICT' and r.get('feature_id')==_feat_id and r.get('verdict')=='derived' and r.get('reference_feature_id','')]
      _llm_peer_rewarded=set()
@@ -1835,7 +1839,11 @@ def run(args,config):
    if not _arch_dir.exists():result={'archives':[],'note':'no archives found'}
    elif not args.archive_id:
     import json as _jd
-    archives=[json.loads(f.read_text()) for f in sorted(_arch_dir.glob('*.json'))]
+    _arch_files=sorted(_arch_dir.glob('*.json'))
+    archives=[]
+    for _af2 in _arch_files:
+     try:archives.append(json.loads(_af2.read_text()))
+     except Exception:continue
     result={'archives':[{k:v for k,v in a.items() if k!='payload'} for a in archives],'count':len(archives)}
    else:
     import zlib as _zd,base64 as _bd,json as _jdd

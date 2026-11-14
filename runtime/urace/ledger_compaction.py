@@ -231,10 +231,15 @@ def seal_ledger_block(exchange, root: str) -> dict:
     # Find previous block seal
     prev_seals = [r for r in all_rows if r.get('kind') == 'LEDGER_BLOCK_SEAL']
     if prev_seals:
-        prev = max(prev_seals, key=lambda r: int(r.get('block_height', 0)))
-        prev_height = int(prev.get('block_height', 0))
-        prev_hash = prev.get('block_hash', '0' * 64)
-        row_start = int(prev.get('row_end_index', 0))
+        def _safe_height(r):
+            try: return int(r.get('block_height', 0))
+            except (TypeError, ValueError): return 0
+        prev = max(prev_seals, key=_safe_height)
+        try: prev_height = int(prev.get('block_height', 0))
+        except (TypeError, ValueError): prev_height = 0
+        prev_hash = prev.get('block_hash', '0' * 64) or '0' * 64
+        try: row_start = int(prev.get('row_end_index', 0))
+        except (TypeError, ValueError): row_start = 0
     else:
         prev_height = -1
         prev_hash = '0' * 64
@@ -296,6 +301,8 @@ def seal_ledger_block(exchange, root: str) -> dict:
             'peer': _local_id,
             'amount_units': _seal_reward,
             'block_height': block_height,
+            'block_hash': block_hash,
+            'sealed_row_count': len(block_rows),
             'reason': 'ledger_block_seal',
             'at_unix': time.time(),
             'at': _now_iso(),

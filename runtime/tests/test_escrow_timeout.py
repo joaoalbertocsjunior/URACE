@@ -168,3 +168,40 @@ def test_credit_delta_rows_emitted_on_refund():
     clawback_delta = next(r for r in deltas if r["direction"] == "escrow_clawback")
     assert clawback_delta["peer"] == "seller-B"
     assert clawback_delta["amount_units"] == -120
+
+
+# ── edge case: non-numeric at_unix is tolerated (treated as 0) ────────────────
+
+def test_malformed_at_unix_does_not_crash():
+    """Non-numeric at_unix should not raise — treated as 0 (immediately overdue)."""
+    ex = _MockExchange([
+        _listing_row("lst-m1", "feat-m1"),
+        {
+            "kind": "EQUITY_LISTING_FILLED",
+            "listing_id": "lst-m1",
+            "feature_id": "feat-m1",
+            "buyer_peer_id": "buyer-1",
+            "seller_peer_id": "seller-1",
+            "at_unix": "not-a-number",
+        },
+    ])
+    result = check_escrow_timeouts(ex)
+    assert len(result) == 1
+    assert result[0]["listing_id"] == "lst-m1"
+
+
+def test_missing_at_unix_treated_as_zero():
+    """Missing at_unix (defaults to 0) should not raise and listing is overdue."""
+    ex = _MockExchange([
+        _listing_row("lst-m2", "feat-m2"),
+        {
+            "kind": "EQUITY_LISTING_FILLED",
+            "listing_id": "lst-m2",
+            "feature_id": "feat-m2",
+            "buyer_peer_id": "buyer-1",
+            "seller_peer_id": "seller-1",
+            # no at_unix key
+        },
+    ])
+    result = check_escrow_timeouts(ex)
+    assert len(result) == 1

@@ -234,13 +234,15 @@ def _resolve(exchange, challenge_id, feature_id, verdict, resolver_type, referen
     t = _now()
     exchange.append_audit_row({'kind': 'PROVENANCE_CHALLENGE_RESOLVED', 'schema': SCHEMA, 'challenge_id': challenge_id, 'feature_id': feature_id, 'verdict': verdict, 'resolver_type': resolver_type, 'at_unix': t, 'at': _now_iso()})
     if verdict == 'upheld':
-        stake_units = lock_row['stake_units']
-        staker = lock_row['staker_peer_id']
+        stake_units = lock_row.get('stake_units', 0) if isinstance(lock_row, dict) else 0
+        staker = lock_row.get('staker_peer_id', '') if isinstance(lock_row, dict) else ''
         bounty = max(1, int(stake_units * SLASH_BOUNTY_FRACTION))
         compensation = stake_units - bounty
-        exchange.append_audit_row({'kind': 'MINT_STAKE_SLASHED', 'schema': SCHEMA, 'feature_id': feature_id, 'staker_peer_id': staker, 'stake_units': stake_units, 'challenge_id': challenge_id, 'challenger_bounty': bounty, 'base_owner_compensation': compensation, 'at_unix': t, 'at': _now_iso()})
+        _slash_row = {'kind': 'MINT_STAKE_SLASHED', 'schema': SCHEMA, 'feature_id': feature_id, 'staker_peer_id': staker, 'stake_units': stake_units, 'challenge_id': challenge_id, 'challenger_bounty': bounty, 'base_owner_compensation': compensation, 'at_unix': t, 'at': _now_iso()}
+        _slash_row_hash = hashlib.sha256(__import__('json').dumps(_slash_row, sort_keys=True, default=str).encode()).hexdigest()
+        exchange.append_audit_row(_slash_row)
         # Distribute: challenger bounty
-        exchange.append_audit_row({'kind': 'CREDIT_DELTA', 'direction': 'challenge_bounty', 'peer': challenger_peer_id, 'amount_units': bounty, 'feature_id': feature_id, 'challenge_id': challenge_id, 'at_unix': t, 'at': _now_iso()})
+        exchange.append_audit_row({'kind': 'CREDIT_DELTA', 'direction': 'challenge_bounty', 'peer': challenger_peer_id, 'amount_units': bounty, 'feature_id': feature_id, 'challenge_id': challenge_id, 'challenge_outcome': 'upheld', 'verdict_row_hash': _slash_row_hash, 'at_unix': t, 'at': _now_iso()})
         # Return challenger's locked stake
         exchange.append_audit_row({'kind': 'CREDIT_DELTA', 'direction': 'challenge_stake_returned', 'peer': challenger_peer_id, 'amount_units': challenger_stake_units, 'feature_id': feature_id, 'challenge_id': challenge_id, 'at_unix': t, 'at': _now_iso()})
         # Base owner compensation (if reference known)
@@ -254,8 +256,10 @@ def _resolve(exchange, challenge_id, feature_id, verdict, resolver_type, referen
     else:  # rejected
         # Challenger stake was already deducted — stays slashed (no return)
         # Release creator's locked stake
-        exchange.append_audit_row({'kind': 'MINT_STAKE_RELEASED', 'schema': SCHEMA, 'feature_id': feature_id, 'staker_peer_id': lock_row['staker_peer_id'], 'stake_units': lock_row['stake_units'], 'reason': 'challenge_rejected', 'at_unix': t, 'at': _now_iso()})
-        exchange.append_audit_row({'kind': 'CREDIT_DELTA', 'direction': 'mint_stake_released', 'peer': lock_row['staker_peer_id'], 'amount_units': lock_row['stake_units'], 'feature_id': feature_id, 'challenge_id': challenge_id, 'at_unix': t, 'at': _now_iso()})
+        _lr_staker = lock_row.get('staker_peer_id', '') if isinstance(lock_row, dict) else ''
+        _lr_stake = lock_row.get('stake_units', 0) if isinstance(lock_row, dict) else 0
+        exchange.append_audit_row({'kind': 'MINT_STAKE_RELEASED', 'schema': SCHEMA, 'feature_id': feature_id, 'staker_peer_id': _lr_staker, 'stake_units': _lr_stake, 'reason': 'challenge_rejected', 'at_unix': t, 'at': _now_iso()})
+        exchange.append_audit_row({'kind': 'CREDIT_DELTA', 'direction': 'mint_stake_released', 'peer': _lr_staker, 'amount_units': _lr_stake, 'feature_id': feature_id, 'challenge_id': challenge_id, 'at_unix': t, 'at': _now_iso()})
     resolved_row = next((r for r in exchange.audit_rows() if r.get('kind') == 'PROVENANCE_CHALLENGE_RESOLVED' and r.get('challenge_id') == challenge_id), None)
     return resolved_row or {}
 

@@ -181,22 +181,25 @@ Audit trail is append-only and searchable via `urace compact search`.
 
 Every node auto-detects its capabilities on first run (`urace init --auto`) and is assigned the best role set it can physically support. Roles are stored in `node_roles` in the exchange policy and can be overridden manually.
 
-| Role | Description | Requirement |
-|------|-------------|-------------|
-| `bootstrap` | Announces stable address so new peers can join the network | Public IP, port-forward, or SSH tunnel (auto-configured) |
-| `relay` | Forwards traffic between peers that cannot connect directly | Same as bootstrap — tunnel satisfies this automatically |
-| `consumer` | Borrows features and commissions work | Outbound only — always available |
-| `creator` | Publishes features for other peers to adopt | Outbound only — always available |
+| Role | Description | Requirement | Default |
+|------|-------------|-------------|---------|
+| `bootstrap` | Announces stable address so new peers can join the network | Public IP, port-forward, or SSH tunnel (auto-configured) | ✓ |
+| `relay` | Forwards traffic between peers that cannot connect directly | Same as bootstrap — tunnel satisfies this automatically | ✓ |
+| `delivery` | Serves artifact bundles to buyers; earns delivery relay credit | Outbound only — always available | ✓ |
+| `block_sealer` | Seals ledger blocks and earns seal rewards | Outbound only — always available | ✓ |
+| `consumer` | Borrows features and commissions work | Outbound only — always available | (implicit) |
+| `creator` | Publishes features for other peers to adopt | Outbound only — always available | (implicit) |
+| `verifier` | Runs LLM similarity checks for peer rewards | Executor credits required | opt-in |
 
-Default roles for all new nodes are `bootstrap + relay`. When direct inbound is blocked by NAT, `urace start` automatically establishes a localhost.run SSH tunnel so the node can serve as bootstrap and relay without router configuration.
+Default roles for all new nodes are `bootstrap + relay + delivery + block_sealer`. When direct inbound is blocked by NAT, `urace start` automatically establishes a localhost.run SSH tunnel so the node can serve as bootstrap and relay without router configuration.
 
 Check and set roles:
 
 ```sh
-urace exchange network reachability --json       # probe NAT type + UPnP + feasible roles
-urace exchange node check --json                 # full capability report
-urace exchange node roles --json                 # show current configured roles
-urace exchange node roles --set bootstrap,relay  # override auto-assigned roles
+urace exchange network reachability --json                             # probe NAT type + UPnP + feasible roles
+urace exchange node check --json                                       # full capability report
+urace exchange node roles --json                                       # show current configured roles
+urace exchange node roles --set bootstrap,relay,delivery,block_sealer  # override auto-assigned roles
 ```
 
 Auto-detection logic:

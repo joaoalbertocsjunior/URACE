@@ -344,3 +344,22 @@ class QuorumCrossNodeTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class LockRowMalformedTests(unittest.TestCase):
+    """_resolve handles malformed lock_row (missing stake_units/staker_peer_id)."""
+
+    def setUp(self):
+        self.ex = MockExchange()
+        _fund(self.ex, 'alice', 10)
+        ps.lock_mint_stake(self.ex, 'feat-m', 'alice', 3, 30)
+        _fund(self.ex, 'bob', 5)
+        self.challenge_row = ps.file_challenge(self.ex, 'feat-m', 'bob', 'evidence', None, 2)
+        self.cid = self.challenge_row['challenge_id']
+
+    def test_malformed_lock_row_does_not_crash(self):
+        """resolve_challenge with an empty lock_row dict should not raise KeyError."""
+        from urace.provenance_stake import _resolve
+        # Pass a dict missing stake_units and staker_peer_id
+        result = _resolve(self.ex, self.cid, 'feat-m', 'upheld', 'local', None, {}, 'bob', 2)
+        self.assertIn('challenge_id', result)

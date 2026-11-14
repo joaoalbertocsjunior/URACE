@@ -45,7 +45,8 @@ def check_escrow_timeouts(exchange) -> list[dict]:
             continue
         if listing_id in refunded:
             continue
-        fill_time = float(fill_row.get("at_unix", 0))
+        try: fill_time = float(fill_row.get("at_unix", 0))
+        except (TypeError, ValueError): fill_time = 0.0
         elapsed = now - fill_time
         if elapsed < timeout_secs:
             continue
@@ -57,7 +58,8 @@ def check_escrow_timeouts(exchange) -> list[dict]:
              and r.get("listing_id") == listing_id),
             None,
         )
-        price_units = int((listing_row or {}).get("ask_price_units", 0))
+        try: price_units = int((listing_row or {}).get("ask_price_units", 0))
+        except (TypeError, ValueError): price_units = 0
         buyer_peer_id = fill_row.get("buyer_peer_id", fill_row.get("peer_id", ""))
         seller_peer_id = fill_row.get("seller_peer_id", fill_row.get("seller_id", ""))
 
@@ -110,6 +112,8 @@ def process_escrow_refunds(exchange) -> list[dict]:
             "amount_units": price_units,
             "listing_id": listing_id,
             "feature_id": feature_id,
+            "request_id": listing_id,
+            "escrow_release_reason": "dek_delivery_timeout",
             "at_unix": now,
             "at": now_iso,
         })
@@ -122,6 +126,8 @@ def process_escrow_refunds(exchange) -> list[dict]:
                 "amount_units": -price_units,
                 "listing_id": listing_id,
                 "feature_id": feature_id,
+                "request_id": listing_id,
+                "escrow_release_reason": "dek_delivery_timeout",
                 "at_unix": now,
                 "at": now_iso,
             })
@@ -172,7 +178,8 @@ def process_successful_deliveries(exchange) -> list[dict]:
              and r.get("listing_id") == listing_id),
             None,
         )
-        price_units = int((listing_row or {}).get("ask_price_units", 0))
+        try: price_units = int((listing_row or {}).get("ask_price_units", 0))
+        except (TypeError, ValueError): price_units = 0
         custody_reward = max(1, int(price_units * ESCROW_CUSTODY_REWARD_RATE))
         seller_peer_id = fill_row.get("seller_peer_id", fill_row.get("seller_id", ""))
 
@@ -193,6 +200,8 @@ def process_successful_deliveries(exchange) -> list[dict]:
             "amount_units": custody_reward,
             "listing_id": listing_id,
             "feature_id": fill_row.get("feature_id", ""),
+            "request_id": listing_id,
+            "escrow_release_reason": "timely_dek_delivery",
             "at_unix": now,
             "at": now_iso,
         })

@@ -535,3 +535,39 @@ class EthSettlementAdapterTests(unittest.TestCase):
         config = {'p2p': {'token_settlement': False, 'rpc_provider_url': 'http://localhost:8545'}}
         adapter = get_chain_adapter(config)
         self.assertIsInstance(adapter, NullAdapter)
+
+
+class TestCreditUnitsMalformedGuard(unittest.TestCase):
+    """token_ledger.balance gracefully handles malformed credit_units values."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def test_none_credit_units_does_not_crash(self):
+        from urace import token_ledger as tl
+        e = _make_exchange(self.tmp.name, 'node-tl')
+        with e.lock():
+            e.append_audit_row({
+                'kind': 'FEATURE_BORROWED',
+                'borrower_peer_id': 'peer-tl',
+                'peer': 'peer-tl',
+                'credit_units': None,
+                'at_unix': 1000,
+            })
+        balance = tl.balance(e, 'peer-tl')
+        assert balance == 0, "None credit_units should not add to balance"
+
+    def test_non_int_credit_units_skipped(self):
+        from urace import token_ledger as tl
+        e = _make_exchange(self.tmp.name, 'node-tl2')
+        with e.lock():
+            e.append_audit_row({
+                'kind': 'FEATURE_BORROWED',
+                'borrower_peer_id': 'peer-tl2',
+                'peer': 'peer-tl2',
+                'credit_units': 'invalid',
+                'at_unix': 1000,
+            })
+        balance = tl.balance(e, 'peer-tl2')
+        assert balance == 0, "Non-int credit_units should not add to balance"

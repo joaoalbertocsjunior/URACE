@@ -1,6 +1,6 @@
 # URACE Ecosystem Roadmap
 
-**Last updated:** 2026-11-10  
+**Last updated:** 2026-11-14  
 **Status:** Living document — updated as contracts are added or revised
 
 ---
@@ -161,6 +161,7 @@ These items have been deliberately excluded from the core runtime. The reason in
 | Real-time collaborative editing | CRDT infrastructure, WebSocket server, new failure modes | P2P relay event exchange over existing transport |
 | Web browser/visual tasks | Playwright + browser engine = separate runtime | `urace[browser]` extras hook spec (future) |
 | Cloud-hosted URACE | Infrastructure ops, billing, multi-tenancy | `urace-rpc-v1` over TCP/TLS; deploy URACE yourself |
+| Claude Code / Codex skill wrappers | Separate release cycle, host-specific packaging, skill manifest format | `urace-rpc-v1` dispatch method (all contracts live) |
 
 **The rule:** if maintaining it requires a separate language, a separate registry, a separate OS target, or a separate security review — it is not a URACE feature. It is an ecosystem product.
 
@@ -225,6 +226,33 @@ The work market is an append-only log. All row kinds are documented in `urace/pe
 ### Building against `urace-exchange-v2`
 
 Implement the five endpoints: `exchange.info`, `exchange.offers`, `exchange.assets.catalog`, `exchange.assets.fetch`, `exchange.receive`. See `urace/peer_exchange.py` for the full schema.
+
+---
+
+## Community Opportunities
+
+All items below require no core URACE changes — the contracts already exist.
+
+### Executor Adapters (URACE as consumer)
+
+URACE delegates execution to replaceable executors via `execute_with_executor`. Build against `urace/inspection.py:execute_with_executor` and the executor protocol. No core fork required.
+
+| Adapter | Interface |
+|---------|-----------|
+| **Claude Code skill adapter** | Wraps a Claude Code skill as a URACE executor; configure with `urace executor set --provider anthropic --model claude-sonnet-4-6` |
+| **Codex CLI adapter** | Wraps `codex` CLI as a URACE executor; configure with `urace executor set --provider openai --model o1` |
+| **Local model adapter (Ollama)** | Routes to a local LLM via Ollama HTTP API |
+
+### URACE as a Skill (URACE as provider)
+
+URACE exposes a stable TCP RPC (`urace-rpc-v1` on `127.0.0.1:7474`) and a full CLI grammar. Any skill host (Claude Code, Codex, etc.) can invoke URACE commands through these contracts.
+
+| Skill | What it does | Required contract |
+|-------|-------------|-------------------|
+| **`/urace` Claude Code skill** | Surface `urace status`, `urace auto`, `urace compact search` as slash commands inside Claude Code | `urace-rpc-v1` dispatch method |
+| **P2P exchange skill** | Expose `urace exchange list-features`, `urace exchange borrow`, `urace exchange network discover` as slash commands | `urace-rpc-v1` dispatch method |
+
+Build either skill as: connect to TCP `127.0.0.1:7474`, send `{"method": "dispatch", "argv": ["exchange", "list-features"]}\n`, read JSON response. All required infrastructure is live.
 
 ---
 
