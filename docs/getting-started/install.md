@@ -8,7 +8,7 @@ URACE runs inside your existing project directory. There is no server to manage,
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.11 or higher
 - pip 22+
 - An existing software product directory (URACE attaches to it)
 
@@ -25,11 +25,41 @@ URACE runs inside your existing project directory. There is no server to manage,
 ## Quick Start
 
 ```sh
+# one-liner (Linux / macOS / WSL):
+curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
+
+# pip:
 pip install urace
-urace          # starts everything, opens interactive shell
+
+# npm:
+npm install -g urace-cli
+
+# Homebrew:
+brew install urace
+
+# conda:
+conda install -c conda-forge urace
 ```
 
-That's it. `urace` with no arguments auto-starts the daemon and P2P server, then opens the interactive shell. Run `urace --version` to verify the install.
+```sh
+export ANTHROPIC_API_KEY=...
+urace start    # boot daemon, wire executor, join P2P
+urace          # open interactive shell
+```
+
+Run `urace --version` to verify the install.
+
+---
+
+## Update
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
+pip install --upgrade urace
+npm install -g urace-cli@latest
+brew upgrade urace
+conda update -c conda-forge urace
+```
 
 ---
 

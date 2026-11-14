@@ -13,11 +13,44 @@ Open-source, community-governed.
 ## Install
 
 ```sh
-pip install urace          # Python 3.11+
-npm install -g urace-cli   # Node 16+
+# one-liner (Linux / macOS / WSL):
+curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
 
+# pip:
+pip install urace
+
+# npm:
+npm install -g urace-cli
+
+# Homebrew:
+brew install urace
+
+# conda:
+conda install -c conda-forge urace
+```
+
+```sh
 export ANTHROPIC_API_KEY=...  # or OPENAI_API_KEY
 urace start                   # boot daemon, wire executor, join P2P
+```
+
+## Update
+
+```sh
+# one-liner (re-run installer):
+curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
+
+# pip:
+pip install --upgrade urace
+
+# npm:
+npm install -g urace-cli@latest
+
+# Homebrew:
+brew upgrade urace
+
+# conda:
+conda update -c conda-forge urace
 ```
 
 → [Full setup](docs/getting-started/quick-start.md)

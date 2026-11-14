@@ -3,7 +3,30 @@
 ## Install
 
 ```bash
+# one-liner (Linux / macOS / WSL):
+curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
+
+# pip:
 pip install urace
+
+# npm:
+npm install -g urace-cli
+
+# Homebrew:
+brew install urace
+
+# conda:
+conda install -c conda-forge urace
+```
+
+## Update
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
+pip install --upgrade urace
+npm install -g urace-cli@latest
+brew upgrade urace
+conda update -c conda-forge urace
 ```
 
 ---
