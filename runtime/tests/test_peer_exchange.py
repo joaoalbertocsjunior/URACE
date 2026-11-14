@@ -276,3 +276,43 @@ class BootstrapServerTests(unittest.TestCase):
   self.node.identity()
   with pe.server(self.node) as srv:
    self.assertGreater(srv.server_port,0)
+
+class ExchangePingTests(unittest.TestCase):
+ def setUp(self):
+  self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+  self.node=pe.Exchange(Path(self.tmp.name)/'node');self.node.configure(enabled=True,network=True);self.node.identity()
+
+ def test_ping_unauthenticated_https(self):
+  """GET /exchange/ping returns 200 JSON without a client cert."""
+  import http.client as _hc
+  with pe.server(self.node) as srv:
+   t=threading.Thread(target=srv.serve_forever,daemon=True);t.start()
+   try:
+    ctx=ssl.create_default_context();ctx.check_hostname=False;ctx.verify_mode=ssl.CERT_NONE
+    conn=_hc.HTTPSConnection('127.0.0.1',srv.server_port,context=ctx,timeout=5)
+    conn.request('GET','/exchange/ping')
+    resp=conn.getresponse();body=json.loads(resp.read())
+    self.assertEqual(resp.status,200)
+    self.assertEqual(body['status'],'ok')
+    self.assertEqual(body['schema'],pe.SCHEMA)
+   finally:srv.shutdown();t.join(timeout=5)
+
+ def test_plain_http_from_tls_terminating_tunnel_serves_ping(self):
+  """Plain HTTP bytes (as sent by localhost.run/cloudflared after TLS termination) return ping JSON."""
+  import socket as _sock
+  with pe.server(self.node) as srv:
+   t=threading.Thread(target=srv.serve_forever,daemon=True);t.start()
+   try:
+    s=_sock.create_connection(('127.0.0.1',srv.server_port),timeout=5)
+    s.sendall(b'GET /exchange/ping HTTP/1.0\r\nHost: localhost\r\n\r\n')
+    data=b'';s.settimeout(3)
+    try:
+     while True:
+      chunk=s.recv(4096)
+      if not chunk:break
+      data+=chunk
+    except Exception:pass
+    s.close()
+    self.assertIn(b'"status"',data)
+    self.assertIn(b'"tunnel":"ok"',data)
+   finally:srv.shutdown();t.join(timeout=5)

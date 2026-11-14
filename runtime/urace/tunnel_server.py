@@ -58,12 +58,12 @@ class TunnelHandle:
                 import shutil
                 from . import tunnel_install as _ti
                 _cf = _ti.find_cloudflared()
-                if shutil.which('ssh'):
-                    self.provider = 'localhost.run'
-                    self._start_localhost_run()
-                elif _cf:
+                if _cf:
                     self.provider = 'cloudflare'
                     self._start_cloudflare()
+                elif shutil.which('ssh'):
+                    self.provider = 'localhost.run'
+                    self._start_localhost_run()
                 # else: no tunnel available, url stays None
         return self
 

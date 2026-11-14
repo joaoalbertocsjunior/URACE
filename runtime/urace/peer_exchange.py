@@ -1,7 +1,7 @@
 """Opt-in, product-scoped signed artifact exchange. Incoming artifacts are quarantined, never executed."""
 from pathlib import Path
 from contextlib import contextmanager
-import base64, gzip, hashlib, hmac, http.client, http.server, ipaddress, json, logging, os, re, ssl, subprocess, tempfile, time, urllib.parse, datetime
+import base64, gzip, hashlib, hmac, http.client, http.server, ipaddress, json, logging, os, re, socket, ssl, subprocess, tempfile, time, urllib.parse, datetime
 
 _logger = logging.getLogger(__name__)
 try:
@@ -699,6 +699,9 @@ def server(exchange,host='127.0.0.1',port=0):
   def do_GET(self):
    self.connection.settimeout(5)
    try:
+    if self.path == '/exchange/ping':
+     body=json.dumps({'status':'ok','schema':SCHEMA}).encode()
+     self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body);return
     if self.path != '/urace/rpc/v1/ledger-tail':
      self.send_error(404, 'Not found')
      return
@@ -828,6 +831,14 @@ def server(exchange,host='127.0.0.1',port=0):
  class Server(http.server.HTTPServer):
   def get_request(self):
    sock,address=super().get_request();sock.settimeout(5)
+   try:first=sock.recv(1,socket.MSG_PEEK)
+   except Exception:sock.close();raise
+   if first and first[0]!=0x16:
+    # Plain HTTP from TLS-terminating tunnel (localhost.run/cloudflared) — serve ping inline.
+    _pb=b'{"status":"ok","schema":"urace-exchange-v2","tunnel":"ok"}'
+    try:sock.sendall(b'HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nContent-Length: '+str(len(_pb)).encode()+b'\r\n\r\n'+_pb)
+    except Exception:pass
+    sock.close();raise OSError('plain-http-ping-served')
    try:return context.wrap_socket(sock,server_side=True),address
    except BaseException:sock.close();raise
  return Server((host,port),Handler)

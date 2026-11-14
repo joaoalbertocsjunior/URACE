@@ -94,8 +94,67 @@ def test_setup_node_sets_roles(tmp_path):
 
     # run() returns None for non-special paths (result is printed)
     assert ret in (0, None)
-    assert written['value']['node_roles'] == ['bootstrap', 'relay']
+    # delivery + block_sealer always merged in regardless of NAT-check recommendation
+    assert set(written['value']['node_roles']) == {'bootstrap', 'relay', 'delivery', 'block_sealer'}
     assert written['value']['network_mode'] == 'internet'
+    assert written['value']['network'] is True
+    assert written['value']['enabled'] is True
+
+
+def test_setup_node_always_includes_outbound_roles(tmp_path):
+    """setup-node merges delivery+block_sealer even when NAT only recommends consumer+creator."""
+    cap = {
+        'nat_type': 'symmetric',
+        'public_ip': '1.2.3.4',
+        'upnp_available': False,
+        'can_bootstrap': False,
+        'can_relay': False,
+        'recommended_roles': ['consumer', 'creator'],
+        'recommended_network_mode': 'intranet',
+    }
+    written = {}
+
+    def fake_atomic_write(path, value):
+        written['value'] = dict(value)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exchange, config = _make_exchange_and_config(tmp_dir, {})
+        from urace import exchange_cli
+        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0)
+        with patch('urace.nat_check.check_node_capability', return_value=cap), \
+             patch('urace._common.atomic_write_json', side_effect=fake_atomic_write):
+            exchange_cli.run(args, config)
+
+    assert 'delivery' in written['value']['node_roles']
+    assert 'block_sealer' in written['value']['node_roles']
+    assert written['value']['network'] is True
+
+
+def test_setup_node_enables_network_on_existing_policy_with_network_false(tmp_path):
+    """setup-node sets network=True even when existing policy has network=False."""
+    cap = {
+        'nat_type': 'cone',
+        'public_ip': '1.2.3.4',
+        'upnp_available': False,
+        'can_bootstrap': True,
+        'can_relay': True,
+        'recommended_roles': ['bootstrap', 'relay', 'consumer', 'creator'],
+        'recommended_network_mode': 'hybrid',
+    }
+    written = {}
+
+    def fake_atomic_write(path, value):
+        written['value'] = dict(value)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exchange, config = _make_exchange_and_config(tmp_dir, {'network': False, 'enabled': True})
+        from urace import exchange_cli
+        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0)
+        with patch('urace.nat_check.check_node_capability', return_value=cap), \
+             patch('urace._common.atomic_write_json', side_effect=fake_atomic_write):
+            exchange_cli.run(args, config)
+
+    assert written['value']['network'] is True
 
 
 # ── test 3: bootstrap announce uses STUN fallback ─────────────────────────────

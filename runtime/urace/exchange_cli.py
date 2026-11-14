@@ -176,7 +176,7 @@ def grammar(children):
   if name=='discover':p.add_argument('--seconds',type=int,default=3)
   if name=='refresh':p.add_argument('--limit',type=int,default=3)
   if name=='probe':p.add_argument('peer_id')
-  if name=='serve':p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=0);p.add_argument('--install-service',action='store_true',dest='install_service',default=False,help='generate systemd user service and exit');p.add_argument('--tunnel',choices=('cloudflare','localhost.run','auto','none'),default='auto',dest='tunnel',help='NAT traversal: auto=direct-first then localhost.run (zero install, no account required); none=disabled; cloudflare=requires cloudflared binary (default: auto)')
+  if name=='serve':p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=0);p.add_argument('--install-service',action='store_true',dest='install_service',default=False,help='generate systemd user service and exit');p.add_argument('--tunnel',choices=('cloudflare','localhost.run','auto','none'),default='auto',dest='tunnel',help='NAT traversal: auto=direct-first, then cloudflared (if installed), then localhost.run (SSH, zero install); none=disabled (default: auto)')
  p=verbs.add_parser('assets',help='search authenticated peer catalogs; paid asks are discovery-only');output_options(p);p.add_argument('query',nargs='?',default='');p.add_argument('--peer-limit',type=int,default=3,dest='peer_limit')
  p=verbs.add_parser('fetch-asset',help='fetch a declared open-use asset into quarantine; never executes it');output_options(p);p.add_argument('peer_id');p.add_argument('asset_id')
  p=verbs.add_parser('consensus-status',help='show P2P consensus threshold and mismatch state');output_options(p)
@@ -914,7 +914,13 @@ def run(args,config):
    from ._common import atomic_write_json
    cap=_nc.check_node_capability(timeout=getattr(args,'timeout',5.0))
    _cfg=exchange.load()
-   _cfg['node_roles']=cap['recommended_roles']
+   # delivery + block_sealer are always-on (outbound only) — nat_check never generates them.
+   # Merge so setup-node never strips roles that don't require inbound reachability.
+   _ALWAYS_ON={'delivery','block_sealer'}
+   _roles=list(set(cap['recommended_roles'])|_ALWAYS_ON)
+   _cfg['node_roles']=_roles
+   _cfg['enabled']=True
+   _cfg['network']=True
    _mode_rank={'intranet':0,'hybrid':1,'internet':2}
    if _mode_rank.get(cap['recommended_network_mode'],0)>_mode_rank.get(_cfg.get('network_mode','hybrid'),0):
     _cfg['network_mode']=cap['recommended_network_mode']
@@ -925,7 +931,7 @@ def run(args,config):
     except Exception:pass
    result={
     'nat_type':cap['nat_type'],'public_ip':cap.get('public_ip'),'upnp_available':cap['upnp_available'],
-    'node_roles_set':cap['recommended_roles'],'network_mode_set':_cfg.get('network_mode'),
+    'node_roles_set':_roles,'network_mode_set':_cfg.get('network_mode'),
     'can_bootstrap':cap['can_bootstrap'],'can_relay':cap['can_relay'],
     'status':'ok',
     'note':'Node roles configured. Run: urace exchange network serve --host 0.0.0.0 --port 7301' if (cap['can_bootstrap'] or cap['can_relay']) else 'Running as consumer+creator — no server required'
