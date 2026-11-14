@@ -131,6 +131,15 @@
 !/benchmark_resilience.py
 !/benchmark_velocity.py
 !/benchmark_corpus.py
+!/benchmark_control.py
+!/benchmark_bad_fixes.py
+!/benchmark_longitudinal.py
+!/benchmark_product.py
+!/benchmark_product_canonical.py
+!/benchmark_product_tests.py
+!/benchmark_qualification_corpus.py
+!/benchmark_regression_tests.py
+!/benchmark_runner.py
 !/run_all_benchmarks.py
 !/tests/
 !/tests/.gitkeep

@@ -283,7 +283,7 @@ class P2PPairProtocolTests(unittest.TestCase):
                                  'peer_id': seller_id, 'visibility': 'public',
                                  'description': 'frozen task asset', 'tags': ['task'],
                                  'artifact_ref': artifact_sha, 'artifact_size_bytes': len(artifact),
-                                 'content_type': 'application/octet-stream'})
+                                 'content_type': 'text/plain'})
         catalog = remote_assets.public_catalog(seller, buyer_id)
         asset = catalog['open_assets'][0]
         bundle = remote_assets._make_open_bundle(seller, buyer_id, asset['asset_id'])
@@ -576,7 +576,7 @@ class P2PPairProtocolTests(unittest.TestCase):
                                      'description': source_asset['description'],
                                      'tags': source_asset['tags'],
                                      'artifact_ref': digest, 'artifact_size_bytes': len(artifact),
-                                     'content_type': 'application/zip'})
+                                     'content_type': 'text/x-python'})
             task_specs[index] = (family, feature_id, digest, artifact, task_id, source_asset,
                                  task_text, task_hash, acceptance_hash, rubric_hash)
 
