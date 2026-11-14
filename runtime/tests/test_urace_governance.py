@@ -901,7 +901,7 @@ class SpecAuditTests(unittest.TestCase):
     """Tests for §81 spec structural audit module and cli integration."""
 
     def _spec_path(self):
-        return Path(__file__).parents[3] / "URACE.md"
+        return Path(__file__).parents[2] / "URACE.md"
 
     def test_audit_produces_correct_section_count(self):
         from urace import spec_audit as sa
