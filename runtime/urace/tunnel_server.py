@@ -5,9 +5,9 @@ def _parse_cloudflare_url(line: str) -> str | None:
     return m.group(0) if m else None
 
 def _parse_localhost_run_url(line: str) -> str | None:
+    # Tunnel URLs are always *.lhr.life — *.localhost.run subdomains appear in the
+    # welcome banner (admin.localhost.run) before the real URL and must not be matched.
     m = re.search(r'https://[a-zA-Z0-9\-]+\.lhr\.life', line)
-    if not m:
-        m = re.search(r'https://[a-zA-Z0-9\-]+\.localhost\.run', line)
     return m.group(0) if m else None
 
 def _direct_inbound_reachable(port: int, timeout: float = 4.0) -> str | None:
