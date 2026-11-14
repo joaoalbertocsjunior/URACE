@@ -22,16 +22,25 @@ URACE runs inside your existing project directory. There is no server to manage,
 
 ---
 
-## Install
+## Quick Start
 
 ```sh
 pip install urace
+urace          # starts everything, opens interactive shell
 ```
 
-Verify the install:
+That's it. `urace` with no arguments auto-starts the daemon and P2P server, then opens the interactive shell. Run `urace --version` to verify the install.
+
+---
+
+## Advanced / Headless Setup
+
+For server or systemd use, skip the interactive shell:
 
 ```sh
-urace --version
+pip install urace
+urace --version    # verify
+urace start        # headless daemon + P2P server
 ```
 
 ---
@@ -58,8 +67,7 @@ pytest tests/
 ## Optional Extras
 
 ```sh
-pip install "urace[peer-security]"    # P2P cryptographic signatures (secp256k1)
-pip install "urace[peer-discovery]"   # LAN peer discovery via mDNS/Zeroconf
+pip install "urace[evm]"              # Correct EIP-155 signing with recovery_id for Polygon/EVM settlement (eth_account)
 pip install "urace[telemetry]"        # OpenTelemetry tracing (OTLP export to Jaeger, Grafana Tempo, Datadog, etc.)
 pip install "urace[all]"              # All of the above
 ```
@@ -74,6 +82,8 @@ Telemetry is opt-in and requires `OTEL_EXPORTER_OTLP_ENDPOINT` to be set; withou
 
 - The `urace` CLI entry point
 - The lifecycle control plane (`urace/` Python package)
+- `pysha3` — keccak256 for EVM-compatible wallet address derivation
+- `miniupnpc` — UPnP IGD for automatic inbound port mapping (P2P relay/bootstrap nodes)
 - No server, no daemon — URACE runs in your terminal and writes state to your project directory
 
 State is stored in `urace/state/` (relative to your product root). No data leaves your machine unless you explicitly enable the P2P exchange.

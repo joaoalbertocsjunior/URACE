@@ -177,15 +177,56 @@ Audit trail is append-only and searchable via `urace compact search`.
 
 ---
 
+## Node Roles
+
+Every node auto-detects its capabilities on first run (`urace init --auto`) and is assigned the best role set it can physically support. Roles are stored in `node_roles` in the exchange policy and can be overridden manually.
+
+| Role | Description | Requirement |
+|------|-------------|-------------|
+| `bootstrap` | Announces stable address so new peers can join the network | Public IP or stable port-forward; cone or direct NAT |
+| `relay` | Forwards traffic between peers that cannot connect directly | Cone NAT + UPnP success, or direct public IP |
+| `consumer` | Borrows features and commissions work | Outbound only — always available |
+| `creator` | Publishes features for other peers to adopt | Outbound only — always available |
+
+Roles can be combined. `bootstrap + relay` is the most useful combination for a home server. `consumer + creator` is the default for nodes behind strict NAT.
+
+Check and set roles:
+
+```sh
+urace exchange network reachability --json       # probe NAT type + UPnP + feasible roles
+urace exchange node check --json                 # full capability report
+urace exchange node roles --json                 # show current configured roles
+urace exchange node roles --set bootstrap,relay  # override auto-assigned roles
+```
+
+Auto-detection logic:
+
+| NAT type | UPnP | Auto-assigned roles | `network_mode` |
+|----------|------|---------------------|---------------|
+| Direct (VPS/server) | n/a | bootstrap + relay + consumer + creator | internet |
+| Cone NAT + UPnP success | yes | relay + consumer + creator | hybrid |
+| Cone NAT, no UPnP | no | consumer + creator | hybrid |
+| Symmetric NAT | no | consumer + creator | hybrid |
+| No internet | — | consumer + creator | intranet |
+
+---
+
 ## NAT Traversal
 
 When a node is behind NAT, URACE attempts reachability in this order:
 
-1. **UPnP/NAT-PMP** — automatic port forwarding request on the local gateway (best-effort; silently skipped if the gateway does not support UPnP).
-2. **TCP hole punch** — simultaneous open via STUN-resolved external address.
-3. **DHT relay** — if direct connection fails, URACE auto-discovers relay peers advertising `relay=true` on the DHT and routes through them.
+1. **UPnP** — automatic port-mapping request to the local gateway; runs on startup when `relay` role is assigned. Requires router UPnP enabled and `miniupnpc` (included in base install).
+2. **STUN probe** — determines public IP and NAT type (cone vs symmetric) via `stun.l.google.com`, `stun.cloudflare.com`, `stun.stunprotocol.org`. No single-point-of-failure.
+3. **Manual port-forward** — configure TCP external:7301 → local:7301 on the router for stable inbound without UPnP.
+4. **DHT relay** — if direct inbound is unavailable, URACE routes through relay-role peers automatically.
 
-STUN resolves the external address via multiple fallback servers (`stun.l.google.com`, `stun.cloudflare.com`, `stun.stunprotocol.org`). No STUN server is single-point-of-failure.
+Check your current reachability:
+
+```sh
+urace exchange network reachability --json
+```
+
+Output includes `nat_type` (`direct`/`cone`/`symmetric`/`unknown`), `upnp_available`, `can_bootstrap`, `can_relay`, and `recommended_roles`.
 
 ---
 

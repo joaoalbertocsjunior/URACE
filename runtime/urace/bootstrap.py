@@ -83,6 +83,46 @@ def auto_complete(cli, config):
     identity = _exc.identity()
     steps.append({'step': 'exchange_identity', 'status': 'ok', 'peer_id': identity.get('peer_id', 'unknown')})
 
+    # Step 3.7: NAT detection → auto-assign node_roles + optimise network_mode
+    nat_step = {'step': 'nat_detection'}
+    try:
+        from . import nat_check as _nc
+        from ._common import atomic_write_json
+        cap = _nc.check_node_capability(timeout=4.0, upnp_timeout_ms=2000)
+        nat_step.update({
+            'status': 'ok',
+            'nat_type': cap['nat_type'],
+            'public_ip': cap['public_ip'],
+            'upnp_available': cap['upnp_available'],
+            'recommended_roles': cap['recommended_roles'],
+            'recommended_network_mode': cap['recommended_network_mode'],
+        })
+        # Apply recommended network_mode if better than current
+        try:
+            _policy = _exc.load()
+            current_mode = _policy.get('network_mode', 'hybrid')
+            new_mode = cap['recommended_network_mode']
+            # Only upgrade (intranet < hybrid < internet)
+            _mode_rank = {'intranet': 0, 'hybrid': 1, 'internet': 2}
+            if _mode_rank.get(new_mode, 0) > _mode_rank.get(current_mode, 0):
+                _policy['network_mode'] = new_mode
+            # Write node_roles and urace_credit_usd_rate defaults
+            if not _policy.get('node_roles'):
+                _policy['node_roles'] = cap['recommended_roles']
+            _policy.setdefault('urace_credit_usd_rate', 1000)
+            atomic_write_json(exchange_root / 'policy.json', _policy)
+        except Exception:
+            pass
+        # UPnP auto-open if relay role assigned
+        if cap['can_relay'] and cap['upnp_available']:
+            try:
+                _nc.auto_open_upnp_port()
+            except Exception:
+                pass
+    except Exception as _e:
+        nat_step.update({'status': 'skipped', 'reason': str(_e)})
+    steps.append(nat_step)
+
     # Step 4: apply sensible defaults
     executor['enabled'] = bool(providers)
     configured.setdefault('auto_goals', {}).setdefault('enabled', True)
@@ -120,9 +160,9 @@ def auto_complete(cli, config):
         'product_types': _product_types,
         'steps': steps,
         'next_command': 'urace auto' if providers else 'urace init --ready',
-        'note': 'Install pysha3 for EVM-compatible wallet addresses' if not shutil.which('pip') else None,
     }
-    if not result['note']:
-        del result['note']
+    # Only surface router config hint when explicitly requested (--verbose), not in default output
+    if not result.get('note'):
+        result.pop('note', None)
     print(json.dumps(result, indent=2))
     return 0

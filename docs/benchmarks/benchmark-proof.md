@@ -262,6 +262,6 @@ Both output artifacts are tamper-evident JSON with versioned schemas and Unix ti
 ## Related
 
 - [Benchmark Suite](benchmark-suite.md) — all 9 phases: methodology, results, accuracy assessment
-- [Comparative Analysis](comparative-analysis.md) — architectural comparison with adjacent systems
-- [Adoption Evidence](adoption-evidence.md) — honest assessment of current adoption state
-- [Runtime Improvement](runtime-improvement.md) — how URACE manages improvement cycles
+- [Comparative Analysis](../concepts/comparative-analysis.md) — architectural comparison with adjacent systems
+- [Adoption Evidence](../concepts/adoption-evidence.md) — honest assessment of current adoption state
+- [Runtime Improvement](../guides/runtime-improvement.md) — how URACE manages improvement cycles

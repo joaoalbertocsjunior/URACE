@@ -43,6 +43,7 @@ dev/
 # Exchange: network ledger is runtime data; initial_ledger is committed reference
 exchange/*
 !exchange/initial_ledger/
+!exchange/token_contract.json
 
 # Secrets and env
 secrets/

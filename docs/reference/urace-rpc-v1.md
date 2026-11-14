@@ -21,6 +21,26 @@ Response: `{"schema": "urace-rpc-v1", "status": "running"|"stopped", "pid": <int
 Request: `{"method": "stop"}`  
 Response: `{"schema": "urace-rpc-v1", "status": "stopping"}`
 
+### `dispatch`
+
+Run any `urace` CLI command over the daemon socket and receive its JSON output.
+
+Request: `{"method": "dispatch", "argv": ["exchange", "network", "discover"]}`
+
+Response: `{"schema": "urace-rpc-v1", "output": "<captured JSON string>"}`
+
+All `urace` commands are available. Equivalent to `urace m2m` but over the local TCP socket without process spawn.
+
+### `events`
+
+Fetch recent P2P audit events.
+
+Request: `{"method": "events", "limit": 20}`
+
+Response: `{"schema": "urace-rpc-v1", "output": "<audit rows JSON>"}`
+
+`limit` defaults to 20 if omitted.
+
 ## Notes
 
 - Server only runs when `urace daemon start` is active

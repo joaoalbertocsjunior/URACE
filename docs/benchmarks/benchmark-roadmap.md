@@ -354,5 +354,5 @@ be started until those subsystems have independent production test coverage.
 ## Related
 
 - [Benchmark Proof](benchmark-proof.md) — Phase 0 results and methodology
-- [Comparative Analysis](comparative-analysis.md) — gap analysis vs adjacent systems
-- [Runtime Improvement](runtime-improvement.md) — how URACE manages improvement cycles
+- [Comparative Analysis](../concepts/comparative-analysis.md) — gap analysis vs adjacent systems
+- [Runtime Improvement](../guides/runtime-improvement.md) — how URACE manages improvement cycles

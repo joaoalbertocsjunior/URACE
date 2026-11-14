@@ -56,7 +56,7 @@ Verify recipient/domain binding, replay/idempotency, counter-receipts, pinned id
 
 Routine signatures, compression, peer ranking, ledger checks and accounting use local deterministic code with zero model calls. Measure CPU, bytes, latency and storage growth separately. Avoid copying large public-key descriptors or artifact payloads into every event where a verifiable canonical reference suffices. Efficient compaction preserves signed history and restore capability; it does not erase unfavorable evidence.
 
-Candidate tests and documentation alone do not establish production security, market fairness or whole-pipeline post-quantum coverage. See the post-quantum and network-onboarding roadmaps for remaining gates.
+Candidate tests and documentation alone do not establish production security, market fairness or whole-pipeline post-quantum coverage. See the [post-quantum roadmap](../roadmap/post-quantum-roadmap.md) and [network-onboarding roadmap](../roadmap/network-onboarding.md) for remaining gates.
 
 ## Development-only rewards and bundles
 

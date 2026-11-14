@@ -111,7 +111,8 @@ def _sign_transaction(
 
     Uses crypto_wallet.wallet_sign() for ECDSA signing. The recovery_id is
     approximated as 0 (even y parity) since wallet_sign returns DER encoding
-    without exposing the recovery bit. For production use eth_account instead.
+    without exposing the recovery bit. For production use with correct recovery_id,
+    install urace[evm] and use eth_account.
     """
     to_bytes = bytes.fromhex(to.lstrip('0x').zfill(40))
     data_bytes = bytes.fromhex(data.lstrip('0x')) if data and data != '0x' else b''
@@ -176,7 +177,7 @@ class EthSettlementAdapter(ChainAdapter):
         wallet_dir: 'str | Path | None' = None,
         erc20_contract: 'str | None' = None,
         nft_contract: 'str | None' = None,
-        chain_id: int = 1,
+        chain_id: int = 137,
     ):
         self._rpc_url      = rpc_url.rstrip('/')
         self._wallet_dir   = Path(wallet_dir) if wallet_dir else None
@@ -205,15 +206,28 @@ class EthSettlementAdapter(ChainAdapter):
         except Exception as e:
             return {"error": {"message": str(e)}}
 
-    def _fetch_nonce(self, address: str) -> int:
-        """Fetch pending tx count for address. Returns 0 on any failure (tx will fail on-chain if wrong)."""
+    def _fetch_nonce(self, address: str) -> int | None:
+        """Fetch pending tx count. Returns None on failure (caller must surface error)."""
         resp = self._rpc_call("eth_getTransactionCount", [address, "pending"])
         if "error" in resp:
-            return 0
+            return None
         try:
             return int(resp["result"], 16)
         except (ValueError, TypeError):
-            return 0
+            return None
+
+    def _estimate_gas(self, to: str, value: int, data: str, from_addr: str) -> int:
+        """Estimate gas via eth_estimateGas. Returns estimate * 1.2 buffer, floor 21000."""
+        resp = self._rpc_call("eth_estimateGas", [{
+            "from": from_addr, "to": to, "value": hex(value), "data": data or "0x"
+        }])
+        if "error" in resp:
+            return 100_000  # fallback if estimation fails
+        try:
+            estimated = int(resp["result"], 16)
+            return max(21_000, int(estimated * 1.2))
+        except (ValueError, TypeError):
+            return 100_000
 
     def _fetch_gas_price(self) -> int:
         """Fetch current gas price. Returns 20 Gwei fallback on any failure."""
@@ -240,6 +254,8 @@ class EthSettlementAdapter(ChainAdapter):
             wallet = self._get_wallet()
             address = wallet['address']
             nonce = self._fetch_nonce(address)
+            if nonce is None:
+                return {"status": "rpc_error", "error": "failed to fetch nonce — node may be syncing"}
             gas_price = self._fetch_gas_price()
             if self._erc20_contract:
                 calldata = _encode_erc20_transfer(crypto_address, chain_amount)
@@ -249,8 +265,9 @@ class EthSettlementAdapter(ChainAdapter):
                 calldata = '0x'
                 to_addr  = crypto_address
                 value    = chain_amount
+            gas_limit = self._estimate_gas(to_addr, value, calldata, address)
             signed_tx = _sign_transaction(
-                nonce, gas_price, 100000, to_addr, value, calldata,
+                nonce, gas_price, gas_limit, to_addr, value, calldata,
                 private_key_hex='', wallet_dir=self._wallet_dir,
                 chain_id=self._chain_id,
             )
@@ -268,6 +285,8 @@ class EthSettlementAdapter(ChainAdapter):
             wallet = self._get_wallet()
             address = wallet['address']
             nonce = self._fetch_nonce(address)
+            if nonce is None:
+                return {"status": "rpc_error", "error": "failed to fetch nonce — node may be syncing"}
             gas_price = self._fetch_gas_price()
             if self._erc20_contract:
                 calldata = _encode_erc20_transfer(crypto_address, chain_amount)
@@ -277,8 +296,9 @@ class EthSettlementAdapter(ChainAdapter):
                 calldata = '0x'
                 to_addr  = crypto_address
                 value    = chain_amount
+            gas_limit = self._estimate_gas(to_addr, value, calldata, address)
             signed_tx = _sign_transaction(
-                nonce, gas_price, 100000, to_addr, value, calldata,
+                nonce, gas_price, gas_limit, to_addr, value, calldata,
                 private_key_hex='', wallet_dir=self._wallet_dir,
                 chain_id=self._chain_id,
             )
@@ -294,12 +314,15 @@ class EthSettlementAdapter(ChainAdapter):
             wallet    = self._get_wallet()
             address   = wallet['address']
             nonce     = self._fetch_nonce(address)
+            if nonce is None:
+                return {"status": "rpc_error", "error": "failed to fetch nonce — node may be syncing"}
             gas_price = self._fetch_gas_price()
             token_id  = int(_hashlib.sha256(feature_id.encode()).hexdigest()[:8], 16)
             to_addr   = self._nft_contract if self._nft_contract else '0x' + '00' * 20
             calldata  = _encode_safe_mint(address, token_id) if self._nft_contract else '0x'
+            gas_limit = self._estimate_gas(to_addr, 0, calldata, address)
             signed_tx = _sign_transaction(
-                nonce, gas_price, 100000, to_addr, 0, calldata,
+                nonce, gas_price, gas_limit, to_addr, 0, calldata,
                 private_key_hex='', wallet_dir=self._wallet_dir,
                 chain_id=self._chain_id,
             )

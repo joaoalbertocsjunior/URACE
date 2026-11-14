@@ -312,5 +312,5 @@ python3 -m pytest trial/tests/ -v
 ## Related
 
 - [Benchmark Proof](benchmark-proof.md) — Phase 0 cost efficiency methodology and numbers
-- [Comparative Analysis](comparative-analysis.md) — gap analysis vs adjacent systems
-- [Runtime Improvement](runtime-improvement.md) — how URACE manages improvement cycles
+- [Comparative Analysis](../concepts/comparative-analysis.md) — gap analysis vs adjacent systems
+- [Runtime Improvement](../guides/runtime-improvement.md) — how URACE manages improvement cycles

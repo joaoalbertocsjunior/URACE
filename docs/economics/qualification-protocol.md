@@ -67,7 +67,7 @@ Their public keys must be pinned in the frozen cohort plan before the study begi
 Until the above conditions are met:
 
 - P2P borrows have **$0 provider cost** to the borrower, but this is not evidence of savings versus executor work.
-- Listing prices capped against an owner estimate (see [Price Mechanics](economics/price-mechanics.md)) are a pricing heuristic, not a savings guarantee.
+- Listing prices capped against an owner estimate (see [Price Mechanics](price-mechanics.md)) are a pricing heuristic, not a savings guarantee.
 - No reputation credit, token payout, or cohort with fewer than 30 qualifying pairs constitutes a qualified cost savings claim.
 - Synthetic pairs, unspecified evidence, and partial cohorts cannot qualify any savings claim for any scope.
 

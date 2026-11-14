@@ -16,6 +16,7 @@ LIMIT=524288
 ARTIFACT_INLINE_LIMIT=65536
 ARTIFACT_STORE_LIMIT=104857600
 RELAY_CREDIT_ISSUED = 'RELAY_CREDIT_ISSUED'
+BOOTSTRAP_CREDIT_ISSUED = 'BOOTSTRAP_CREDIT_ISSUED'
 AUDIT_CHAIN_RECORD = 'AUDIT_CHAIN_RECORD'
 ID=re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,95}$')
 
@@ -111,7 +112,7 @@ class Exchange:
  def __init__(self,root):self.root=Path(root)
  def load(self):
   p=self.root/'policy.json'
-  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':False,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':True,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[],'compress_wire':False,'bandwidth_profile':'auto','transfer_chunk_size':0}
+  return json.loads(p.read_text()) if p.exists() else {'schema':SCHEMA,'enabled':True,'network':False,'advertise':False,'auto_select':True,'auto_relay':False,'token_settlement':False,'auto_trust_first_contact':False,'default_feature_rules':{},'relay_only':False,'peers':{},'features':{},'rules':{},'feature_borrow_enabled':True,'max_transfers_per_day':20,'max_transfers_per_peer_per_day':5,'max_bytes_per_day':1048576,'max_rpc_per_day':200,'max_rpc_per_peer_per_day':50,'min_peer_version':PROTOCOL_VERSION,'bootstrap_peers':[],'compress_wire':False,'bandwidth_profile':'auto','transfer_chunk_size':0,'relay_credit_per_kb':1,'node_roles':[],'urace_credit_usd_rate':1000,'bootstrap_credit_per_connection':5}
  @contextmanager
  def lock(self):
   self.root.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -757,7 +758,12 @@ def server(exchange,host='127.0.0.1',port=0):
      if not exchange.load().get('relay_enabled',False):raise ValueError('Relay not enabled on this node')
      target=rpc['params']['target_peer_id'];p2=exchange.load()
      if target not in p2['peers'] or p2['peers'][target]['blocked']:raise ValueError('Target peer unknown or blocked')
+     _relay_params_bytes=encoded(rpc['params']['params'])
      result=request(exchange,target,rpc['params']['method'],rpc['params']['params'])
+     try:
+      cfg=exchange.load();credit_units=max(1,int(len(_relay_params_bytes)/1024*cfg.get('relay_credit_per_kb',1)))
+      issue_relay_credit(exchange,rpc['id'],peer,credit_units)
+     except Exception:pass
     elif rpc['method']=='exchange.shamir_deliver' and isinstance(rpc['params'],dict) and set(rpc['params'])=={'feature_id','share_index','requester_peer_id'}:
      from .shamir_delivery import handle_share_request
      result=handle_share_request(exchange,peer,rpc['params']['feature_id'],rpc['params']['share_index'],rpc['params']['requester_peer_id'])
@@ -829,6 +835,21 @@ def issue_relay_credit(exchange, request_id, relay_peer_id, credit_units):
         'request_id': request_id,
         'relay_peer_id': relay_peer_id,
         'credit_units': credit_units,
+        'at': time.time(),
+    }
+    exchange.append(row)
+    return row
+
+
+def issue_bootstrap_credit(exchange, relay_peer_id, credit_units):
+    """Credit a bootstrap node for facilitating a peer connection."""
+    cfg = exchange.load()
+    credit_per = cfg.get('bootstrap_credit_per_connection', 5)
+    actual = credit_units if credit_units > 0 else credit_per
+    row = {
+        'kind': BOOTSTRAP_CREDIT_ISSUED,
+        'relay_peer_id': relay_peer_id,
+        'credit_units': actual,
         'at': time.time(),
     }
     exchange.append(row)

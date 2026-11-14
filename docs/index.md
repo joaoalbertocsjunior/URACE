@@ -57,7 +57,7 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 |---|---|
 | [Tokenomics](economics/tokenomics.md) | Full token model: supply, earn, spend, epoch |
 | [Price Mechanics](economics/price-mechanics.md) | Executor ceiling, momentum guard, wash trading prevention |
-| [Qualification Protocol](qualification-protocol.md) | What qualifies a P2P cost savings claim; cohort and reviewer requirements |
+| [Qualification Protocol](economics/qualification-protocol.md) | What qualifies a P2P cost savings claim; cohort and reviewer requirements |
 
 ---
 
@@ -85,18 +85,37 @@ URACE manages goals, execution, quality gates, peer collaboration, and token-bas
 
 | | |
 |---|---|
-| [Agent Integrations](agent-integrations.md) | MCP and A2A protocol reference — start an A2A endpoint, wire an MCP server, review authority rules |
+| [Agent Integrations](reference/agent-integrations.md) | MCP and A2A protocol reference — start an A2A endpoint, wire an MCP server, review authority rules |
 | [AGENTS.md](../AGENTS.md) | Complete onboarding reference for executors and AI agents: authority model, command reference, file structure, machine interface contract |
+
+---
+
+## Benchmarks
+
+| | |
+|---|---|
+| [Benchmark Proof](benchmarks/benchmark-proof.md) | Cost efficiency results: URACE vs direct executor, methodology, 50-cycle data |
+| [Benchmark Suite](benchmarks/benchmark-suite.md) | All 9 KPI phases: what each measures, current results (15/15 passing) |
+| [Benchmark Roadmap](benchmarks/benchmark-roadmap.md) | Planned benchmark phases and their dependencies |
+
+---
+
+## Roadmap
+
+| | |
+|---|---|
+| [P2P Bootstrap Infrastructure](roadmap/network-bootstrap.md) | How peers discover each other: LAN now, internet bootstrap next |
+| [Network Onboarding](roadmap/network-onboarding.md) | Mainnet and settlement design record |
+| [Post-Quantum Roadmap](roadmap/post-quantum-roadmap.md) | Post-quantum cryptography upgrade path |
+| [Ecosystem Roadmap](roadmap/ecosystem-roadmap.md) | Extension contracts, integrations, and ecosystem strategy |
 
 ---
 
 ## Other Docs
 
-- [Benchmark Proof](benchmark-proof.md) — URACE vs direct executor: methodology, results, and how tests measure cost/improvement
-- [Benchmark Suite](benchmark-suite.md) — all 9 phases: what each measures, how it works, current results (15/15 KPIs passing), and accuracy assessment
-- [Runtime Improvement](runtime-improvement.md) — Runtime self-improvement workflows
-- [Peer Sharing](peer-sharing.md) — P2P bundle operations and quarantine
-- [Network Onboarding](network-onboarding.md) — Mainnet onboarding and settlement design
-- [Sharing Safeguards](sharing-safeguards.md) — Security mechanisms for peer sharing
-- [Post-Quantum Roadmap](post-quantum-roadmap.md) — Post-quantum cryptography roadmap
+- [Runtime Improvement](guides/runtime-improvement.md) — Runtime self-improvement workflows
+- [Peer Sharing](exchange/peer-sharing.md) — P2P bundle operations and quarantine
+- [Sharing Safeguards](exchange/sharing-safeguards.md) — Security mechanisms for peer sharing
 - [Operational Readiness](deployment/operational-readiness.md) — Features code-complete but requiring external setup: EVM node, live peers, funded wallet, network pilot
+- [Comparative Analysis](concepts/comparative-analysis.md) — Architectural comparison with adjacent systems
+- [Adoption Evidence](concepts/adoption-evidence.md) — Honest assessment of current adoption state

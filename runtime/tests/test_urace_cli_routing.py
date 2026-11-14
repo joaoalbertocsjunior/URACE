@@ -1627,10 +1627,11 @@ class R25IPCTests(unittest.TestCase):
 
     def test_exit_code_130_on_keyboard_interrupt(self):
         config = copy.deepcopy(self.config)
+        from urace import bootstrap as _bootstrap
         with tempfile.TemporaryDirectory() as directory:
             config["state_path"] = str(Path(directory) / "state.json")
             with patch.object(cli, "load_config", return_value=config), \
-                 patch.object(cli, "reconcile_transaction", side_effect=KeyboardInterrupt), \
+                 patch.object(_bootstrap, "auto_complete", side_effect=KeyboardInterrupt), \
                  redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 result = cli.main(["init"])
         self.assertEqual(result, 130)

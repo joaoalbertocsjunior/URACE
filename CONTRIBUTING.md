@@ -19,7 +19,7 @@
 ```sh
 git clone https://github.com/joaoalbertocsjunior/URACE.git
 cd URACE/urace/runtime
-pip install -e ".[peer-security,peer-discovery,test]"
+pip install -e ".[test]"
 pytest tests/ -n auto -m "not slow" -x -q   # fast dev loop (~20 min)
 pytest tests/ -x -q                          # full suite (~58 min)
 ```
@@ -124,7 +124,7 @@ else:
 
 New IDE plugins, dashboard clients, mobile apps, and other UI-layer tools build against
 the [urace-rpc-v1 socket contract](docs/reference/urace-rpc-v1.md) — not against URACE internals.
-See [docs/ecosystem-roadmap.md](docs/ecosystem-roadmap.md) for what contracts exist, what can
+See [docs/roadmap/ecosystem-roadmap.md](docs/roadmap/ecosystem-roadmap.md) for what contracts exist, what can
 be built on top, and why this boundary was chosen.
 
 New contracts (RPC methods, row kinds, export formats) must be implemented in the runtime

@@ -1,11 +1,17 @@
 [project]
 name = "urace"
-version = "0.6.0"
+version = "0.7.0"
 description = "Persistent autonomous Product-evolution control plane"
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
-dependencies = ["cryptography>=50,<51"]
+dependencies = [
+    "cryptography>=50,<51",
+    "zeroconf>=0.148,<1",
+    "kademlia>=2.2,<3",
+    "pysha3>=1.0,<2; python_version < '3.13'",
+    "miniupnpc>=2.2,<3",
+]
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
@@ -19,13 +25,12 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-peer-security = ["cryptography>=50,<51"]
-peer-discovery = ["zeroconf>=0.148,<1"]
-network = ["kademlia>=2.2,<3"]
-test = ["pytest>=8", "pytest-xdist>=3"]
-report = []
+evm       = ["pysha3>=1.0,<2; python_version < '3.13'", "eth-account>=0.10"]
+report    = ["openpyxl"]
+media     = ["Pillow"]
 telemetry = ["opentelemetry-sdk>=1.20", "opentelemetry-exporter-otlp-proto-grpc>=1.20"]
-all = ["urace[peer-security,peer-discovery,network,report,telemetry]"]
+test      = ["pytest>=8", "pytest-xdist>=3", "pytest-testmon>=2"]
+all       = ["urace[evm,report,media,telemetry]"]
 
 [project.scripts]
 urace = "urace.launcher:main"
@@ -39,6 +44,7 @@ packages = ["urace"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+addopts = "-n auto -m 'not slow and not integration'"
 markers = [
     "slow: tests using subprocess, real git, or real file I/O (use -m 'not slow' for fast runs)",
     "integration: tests that require live network/DHT/mDNS (use -m 'not integration' for offline runs)",

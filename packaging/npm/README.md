@@ -327,12 +327,12 @@ Full documentation is at **[docs/index.md](docs/index.md)**.
 
 | Document | Description |
 |----------|-------------|
-| [docs/agent-integrations.md](docs/agent-integrations.md) | MCP and A2A agent integration |
-| [docs/runtime-improvement.md](docs/runtime-improvement.md) | Runtime improvement workflows |
-| [docs/peer-sharing.md](docs/peer-sharing.md) | P2P exchange, bundle operations, quarantine safety |
-| [docs/network-onboarding.md](docs/network-onboarding.md) | Mainnet onboarding, settlement design |
-| [docs/sharing-safeguards.md](docs/sharing-safeguards.md) | Security mechanisms for peer sharing |
-| [docs/post-quantum-roadmap.md](docs/post-quantum-roadmap.md) | Post-quantum cryptography roadmap |
+| [docs/reference/agent-integrations.md](docs/reference/agent-integrations.md) | MCP and A2A agent integration |
+| [docs/guides/runtime-improvement.md](docs/guides/runtime-improvement.md) | Runtime improvement workflows |
+| [docs/exchange/peer-sharing.md](docs/exchange/peer-sharing.md) | P2P exchange, bundle operations, quarantine safety |
+| [docs/roadmap/network-onboarding.md](docs/roadmap/network-onboarding.md) | Mainnet onboarding, settlement design |
+| [docs/exchange/sharing-safeguards.md](docs/exchange/sharing-safeguards.md) | Security mechanisms for peer sharing |
+| [docs/roadmap/post-quantum-roadmap.md](docs/roadmap/post-quantum-roadmap.md) | Post-quantum cryptography roadmap |
 
 ## Directory Structure
 
@@ -371,4 +371,4 @@ USD is priced at the published provider rate for the observed model (`provider_p
 
 ## License
 
-v0.6.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.7.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec (`URACE.md`): [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

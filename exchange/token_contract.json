@@ -1,0 +1,12 @@
+{
+  "schema": "urace-token-contract-v1",
+  "note": "Placeholder — populate after deploying URACE ERC-20 to Polygon PoS. See docs/economics/token-deployment.md",
+  "chain_id": 137,
+  "chain_name": "Polygon PoS",
+  "contract_address": "",
+  "deploy_tx_hash": "",
+  "deployer_address": "",
+  "symbol": "URACE",
+  "decimals": 8,
+  "total_supply": null
+}

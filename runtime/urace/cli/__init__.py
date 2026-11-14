@@ -145,6 +145,12 @@ _KNOWN_TOP_COMMANDS = {
     "compliance",
     # milestone versioning
     "milestone",
+    # lifecycle shortcuts
+    "start", "stop", "run",
+    # interactive control shell
+    "shell",
+    # curses monitoring dashboard (explicit)
+    "dashboard",
     # other
     "help", "schedule-task",
     # onboarding
@@ -350,6 +356,118 @@ def _handle_data_command(args: Any, state: dict, config: dict) -> int:
                                emit_gap=_emit_gap, state_path=state_path)
 
 
+def _handle_source_add_unified(args: Any, config: dict, parser: Any) -> int:
+    """Dispatch `urace source add --kind <kind>` to underlying add handlers."""
+    kind = getattr(args, "kind", None)
+    if not kind:
+        parser.error("source add requires --kind (file|csv|json|sqlite|api|connector|executor|metric|vital|github|product|peer)")
+    _name = getattr(args, "id", None) or getattr(args, "name", None) or ""
+    _fmt = ["--json"] if getattr(args, "format", None) == "json" else []
+
+    if kind in {"file", "csv", "json", "sqlite", "api"}:
+        _argv = ["data", "add", _name,
+                 "--type", getattr(args, "adapter_kind", None) or kind,
+                 "--connect", getattr(args, "dsn", None) or ""]
+        _argv += ["--direction", getattr(args, "direction", "read")]
+        if not getattr(args, "auto", True):
+            _argv += ["--auto", "false"]
+        if getattr(args, "schema_hint", None):
+            _argv += ["--schema", args.schema_hint]
+        return main(_argv + _fmt)
+
+    if kind == "connector":
+        _loc = getattr(args, "location", None) or ""
+        if not _loc:
+            parser.error("source add --kind connector requires --location")
+        print("Note: `urace add source` is also available for connector sources.", file=sys.stderr)
+        _argv = ["add", "source", _name, "--kind", "connector",
+                 "--location", _loc, "--visibility", getattr(args, "visibility", "private")]
+        if getattr(args, "credential_env", None):
+            _argv += ["--credential-env", args.credential_env]
+        return main(_argv + _fmt)
+
+    if kind == "executor":
+        _argv = ["executor", "attach"]
+        if _name:
+            _argv += ["--id", _name]
+        if getattr(args, "executor_binary", None):
+            _argv += ["--command", args.executor_binary]
+        if getattr(args, "adapter", None):
+            _argv += ["--adapter", args.adapter]
+        _argv += ["--priority", str(getattr(args, "priority", 100))]
+        for cap in (getattr(args, "capability", []) or []):
+            _argv += ["--capability", cap]
+        for cp in (getattr(args, "capability_priority", []) or []):
+            _argv += ["--capability-priority", cp]
+        if getattr(args, "max_calls_24h", None) is not None:
+            _argv += ["--max-calls-24h", str(args.max_calls_24h)]
+        if getattr(args, "max_calls_30d", None) is not None:
+            _argv += ["--max-calls-30d", str(args.max_calls_30d)]
+        return main(_argv + _fmt)
+
+    if kind == "metric":
+        _mname = _name
+        _src = getattr(args, "metric_source", None) or ""
+        _path = getattr(args, "metric_path", None) or ""
+        if not _mname:
+            parser.error("source add --kind metric requires a name (positional id or --name)")
+        if not _src:
+            parser.error("source add --kind metric requires --metric-source")
+        if not _path:
+            parser.error("source add --kind metric requires --metric-path")
+        print("Note: `urace add metric` is also available directly.", file=sys.stderr)
+        _dir = getattr(args, "direction", "nondecreasing")
+        if _dir not in {"nondecreasing", "nonincreasing"}:
+            _dir = "nondecreasing"
+        _argv = ["add", "metric", _mname, "--source", _src, "--path", _path, "--direction", _dir]
+        if getattr(args, "metric_target", None) is not None:
+            _argv += ["--target", str(args.metric_target)]
+        return main(_argv + _fmt)
+
+    if kind == "vital":
+        _vname = _name
+        _num = getattr(args, "numerator", None) or ""
+        if not _vname:
+            parser.error("source add --kind vital requires a name (positional id or --name)")
+        if not _num:
+            parser.error("source add --kind vital requires --numerator")
+        print("Note: `urace add vital` is also available directly.", file=sys.stderr)
+        _argv = ["add", "vital", _vname, "--numerator", _num]
+        if getattr(args, "denominator", None):
+            _argv += ["--denominator", args.denominator]
+        if getattr(args, "window", None):
+            _argv += ["--window", args.window]
+        if getattr(args, "description", None):
+            _argv += ["--description", args.description]
+        return main(_argv + _fmt)
+
+    if kind == "github":
+        _repo = getattr(args, "repo", None) or _name or ""
+        if not _repo:
+            parser.error("source add --kind github requires --repo owner/repo")
+        print("Note: `urace github connect` is also available directly.", file=sys.stderr)
+        _argv = ["github", "connect", _repo]
+        if getattr(args, "token_env", None):
+            _argv += ["--token-env", args.token_env]
+        return main(_argv + _fmt)
+
+    if kind == "product":
+        if not _name:
+            parser.error("source add --kind product requires a product id (positional id or --name)")
+        _argv = ["product", "register", _name]
+        return main(_argv + _fmt)
+
+    if kind == "peer":
+        _target = _name or getattr(args, "location", None) or ""
+        if not _target:
+            parser.error("source add --kind peer requires an address (positional id or --location)")
+        _argv = ["exchange", "network", "peer-add", _target]
+        return main(_argv + _fmt)
+
+    parser.error(f"unknown source kind: {kind}")
+    return 1  # unreachable
+
+
 def _build_route_graph(prompt: str, state: dict) -> dict:
     """Decompose a multi-intent prompt into a RouteGraphRecord (r117 §62w)."""
     # Split on semantic connectives
@@ -510,10 +628,25 @@ def main(argv: list[str] | None = None) -> int:
     explicit_classifier=bool(raw_args and raw_args[0].lstrip("/")=="classify")
     raw_args = _preprocess_args(raw_args)
     if not raw_args:
-        from .. import tui as _tui
-        try:_tui_cfg=load_config()
-        except Exception:_tui_cfg={}
-        return _tui.launch(_tui_cfg,SYSTEM_ROOT)
+        import sys as _sys
+        if hasattr(_sys.stdout,'isatty') and _sys.stdout.isatty():
+            try:_shell_cfg=load_config()
+            except Exception:_shell_cfg={}
+            from .. import _daemon as _dm, shell as _sh
+            _pid=_dm._read_pid(_shell_cfg)
+            if not _pid or not _dm._is_running(_pid):
+                import argparse as _ap2, threading as _thr2, time as _t2
+                _da=_ap2.Namespace(command='daemon',daemon_action='start',
+                                   json=False,format=None,interval_minutes=30.0,
+                                   max_cycles=0,cycles=0)
+                _thr2.Thread(target=_dm.dispatch,args=(_da,_shell_cfg),daemon=True).start()
+                _t2.sleep(0.3)  # let daemon write pid before shell checks status
+            return _sh.run_shell(_shell_cfg)
+        else:
+            from .. import tui as _tui
+            try:_tui_cfg=load_config()
+            except Exception:_tui_cfg={}
+            return _tui.launch(_tui_cfg,SYSTEM_ROOT)
     if raw_args in (["help"], ["-h"], ["--help"]):
         print(top_level_help())
         return 0
@@ -1896,12 +2029,19 @@ Key options:
         from ..trial import run_workflow
         explicit_interval = any(a == "--interval" or a.startswith("--interval=") for a in raw_args)
         return run_workflow(args.cycles, dry_run=args.dry_run, interval=args.interval if explicit_interval else 5, json_mode=args.json, quiet=args.quiet)
-    if args.command=="init" and getattr(args,'auto',False):
+    if args.command=="init":
         from .. import bootstrap
-        return bootstrap.auto_complete(sys.modules[__name__],config)
-    if args.command=="init" and args.ready:
-        from .. import bootstrap
-        return bootstrap.complete(sys.modules[__name__],config)
+        if args.ready:
+            return bootstrap.complete(sys.modules[__name__],config)
+        if not getattr(sys.modules[__name__], '_INIT_AUTO_ACTIVE', False):
+            sys.modules[__name__]._INIT_AUTO_ACTIVE = True
+            try:
+                return bootstrap.auto_complete(sys.modules[__name__],config)
+            except KeyboardInterrupt:
+                return 130
+            finally:
+                sys.modules[__name__]._INIT_AUTO_ACTIVE = False
+        # re-entrant call from inside auto_complete — fall through to state init
     if args.command == "commands":
         catalog = command_catalog()
         catalog["by_concern"] = command_surface.catalog(parser)
@@ -2086,6 +2226,45 @@ Key options:
             if _res.stderr:
                 print(_res.stderr, end="", file=__import__("sys").stderr)
         return _res.returncode
+    if args.command == "run":
+        # alias: run one improvement cycle (urace auto --cycles 1)
+        return main(["auto", "--cycles", "1"] + (["--json"] if getattr(args,"json",False) else []))
+
+    if args.command == "start":
+        from .. import bootstrap as _bs, _daemon as _dm
+        import argparse as _ap
+        # init if not yet done
+        _bs.auto_complete(sys.modules[__name__], config)
+        # reload config after init
+        try:
+            import json as _j
+            from .._common import CONFIG_PATH as _cp
+            config = _j.loads(_cp.read_text())
+        except Exception:
+            pass
+        # start daemon (which now also starts P2P serve)
+        _start_args = _ap.Namespace(command='daemon', daemon_action='start',
+                                     json=getattr(args,'json',False),
+                                     format=getattr(args,'format',None),
+                                     interval_minutes=getattr(args,'interval_minutes',30.0),
+                                     max_cycles=0, cycles=0)
+        return _dm.dispatch(_start_args, config)
+
+    if args.command == "stop":
+        from .. import _daemon as _dm
+        import argparse as _ap
+        _stop_args = _ap.Namespace(command='daemon', daemon_action='stop',
+                                    json=getattr(args,'json',False),
+                                    format=getattr(args,'format',None))
+        return _dm.dispatch(_stop_args, config)
+
+    if args.command in ("shell", "dashboard"):
+        if args.command == "dashboard":
+            from .. import tui as _tui
+            return _tui.launch(config, SYSTEM_ROOT)
+        from .. import shell as _shell
+        return _shell.run_shell(config)
+
     if args.command == "daemon":
         from .. import _daemon
         return _daemon.dispatch(args, config)
@@ -4437,6 +4616,38 @@ Commands:
             else:
                 print("current_version:   none achieved yet")
         return 0
+    if args.command == "source" and getattr(args, "action", None) == "add":
+        return _handle_source_add_unified(args, config, parser)
+    if args.command == "source" and getattr(args, "action", None) == "status":
+        _sfmt = ["--json"] if getattr(args, "format", None) == "json" else []
+        return main(["data", "status"] + _sfmt)
+    if args.command == "source" and getattr(args, "action", None) in {"sync", "inspect"} and getattr(args, "id", None):
+        _sfmt = ["--json"] if getattr(args, "format", None) == "json" else []
+        return main(["data", args.action, args.id] + _sfmt)
+    if args.command == "source" and getattr(args, "action", None) == "remove":
+        _kind = getattr(args, "kind", None)
+        _sid = getattr(args, "id", None) or getattr(args, "name", None) or ""
+        _sfmt = ["--json"] if getattr(args, "format", None) == "json" else []
+        if _kind in {"file", "csv", "json", "sqlite", "api"}:
+            return main(["data", "remove", _sid] + _sfmt)
+        if _kind == "executor":
+            _argv = ["executor", "detach"]
+            if _sid:
+                _argv += ["--id", _sid]
+            return main(_argv + _sfmt)
+        if _kind == "metric":
+            return main(["metric", "remove", _sid] + _sfmt)
+        if _kind == "vital":
+            return main(["vital", "remove", _sid] + _sfmt)
+        if _kind == "github":
+            with state_lock(CONFIG_PATH):
+                config = load_config()
+                config.pop("github", None)
+                save_config(config)
+            _res = {"status": "disconnected", "kind": "github"}
+            print(json.dumps(_res, indent=2) if getattr(args, "format", None) == "json" else "GitHub disconnected")
+            return 0
+        # connector or no kind → fall through to existing source_control remove
     if args.command in {"source", "metric", "vital", "goal"}:
         state = load_state_for_read(config)
         if state is None:

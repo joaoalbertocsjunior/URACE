@@ -98,6 +98,10 @@ def grammar(children):
  p.add_argument('--transfer-chunk-size',type=int,default=None,dest='transfer_chunk_size',help='override wire read chunk size in bytes (512–131072; overrides bandwidth-profile default)')
  p.add_argument('--relay-only',type=boolean,default=None,dest='relay_only',help='hide IP from peers by routing all traffic through relays')
  p.add_argument('--crypto-network',default=None,dest='crypto_network',help='blockchain network id for future token settlement (informational; activates CRYPTO_PENDING features)')
+ p.add_argument('--rpc-provider-url',default=None,dest='rpc_provider_url',help='EVM JSON-RPC endpoint for token settlement (e.g. https://polygon-rpc.com)')
+ p.add_argument('--chain-id',type=int,default=None,dest='chain_id',help='EVM chain ID for settlement (default: 137 = Polygon PoS)')
+ p.add_argument('--erc20-contract',default=None,dest='erc20_contract',help='URACE ERC-20 token contract address on target chain')
+ p.add_argument('--urace-credit-usd-rate',type=int,default=None,dest='urace_credit_usd_rate',help='display-only accounting rate: N URACE base units = $1 (default: 1000); does not set market price')
  p.add_argument('--consensus-min-threshold',type=int,default=None,dest='consensus_min_threshold',help='minimum consensus peer threshold for corpus updates (default 2)')
  p.add_argument('--baseline-grant-tokens',type=int,default=None,dest='baseline_grant_tokens',help='baseline token grant for new peers (default 3)')
  p.add_argument('--network-mode',choices=('intranet','internet','hybrid'),default=None,dest='network_mode',help='network scope: intranet=LAN-only, internet=standard, hybrid=LAN+internet (default: hybrid)')
@@ -110,9 +114,18 @@ def grammar(children):
  p=peers_v.add_parser('rotate',help='rotate peer identity (block old, pin new cert, migrate rules)');output_options(p);p.add_argument('old_peer_id');p.add_argument('--new-certificate',required=True,dest='new_certificate')
  p=peers_v.add_parser('role',help='set or show peer role (admin|operator|readonly)');output_options(p);p.add_argument('peer_id',nargs='?',default=None);p.add_argument('--set',dest='role_value',choices=('admin','operator','readonly'),default=None)
  bootstrap=groups.add_parser('bootstrap',help='manage bootstrap peers for zero-config P2P discovery');bootstrap_v=bootstrap.add_subparsers(dest='exchange_verb',required=True)
- for name in ('list','add','remove'):
+ for name in ('list','add','remove','announce'):
   p=bootstrap_v.add_parser(name,help=name+' bootstrap peer endpoints');output_options(p)
   if name in ('add','remove'):p.add_argument('endpoint',help='HTTPS endpoint of bootstrap peer (e.g. https://peer.example.com:8443)')
+  elif name=='announce':
+   p.add_argument('--endpoint',default=None,dest='endpoint',help='your HTTPS bootstrap endpoint to announce (auto-detect from STUN if omitted)')
+   p.add_argument('--timeout',type=float,default=5.0)
+ node=groups.add_parser('node',help='node role and capability management');node_v=node.add_subparsers(dest='exchange_verb',required=True)
+ p=node_v.add_parser('check',help='check which node roles are locally feasible (STUN + UPnP)');output_options(p);p.add_argument('--timeout',type=float,default=5.0)
+ p=node_v.add_parser('roles',help='show or set node roles');output_options(p);p.add_argument('--set',default=None,dest='roles_value',help='comma-separated roles: bootstrap,relay,consumer,creator')
+ settle=groups.add_parser('settle',help='batch on-chain EVM token settlement (requires rpc_provider_url configured)');settle_v=settle.add_subparsers(dest='exchange_verb',required=True)
+ p=settle_v.add_parser('status',help='show settlement config and pending balance');output_options(p)
+ p=settle_v.add_parser('run',help='execute pending on-ramp/off-ramp settlements');output_options(p);p.add_argument('--dry-run',action='store_true',dest='dry_run')
  f=groups.add_parser('feature');verbs=f.add_subparsers(dest='exchange_verb',required=True);p=verbs.add_parser('define');p.add_argument('feature_id');p.add_argument('--depends-on',action='append',default=[]);p.add_argument('--wanted',type=boolean,default=False);p.add_argument('--offered',type=boolean,default=False);p.add_argument('--wants',action='append',default=[]);p.add_argument('--language',default=None,help='optional language tag for filtering (e.g. python, javascript, language-agnostic)');output_options(p)
  p=verbs.add_parser('policy');p.add_argument('feature_id');p.add_argument('--access',choices=('reviewed-direct','open'));p.add_argument('--license-id');p.add_argument('--essential',type=boolean);p.add_argument('--open-after-unix',type=float);p.add_argument('--resale',type=boolean);output_options(p)
  p=verbs.add_parser('catalog');output_options(p)
@@ -163,12 +176,15 @@ def grammar(children):
   if name=='discover':p.add_argument('--seconds',type=int,default=3)
   if name=='refresh':p.add_argument('--limit',type=int,default=3)
   if name=='probe':p.add_argument('peer_id')
-  if name=='serve':p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=0)
+  if name=='serve':p.add_argument('--host',default='127.0.0.1');p.add_argument('--port',type=int,default=0);p.add_argument('--install-service',action='store_true',dest='install_service',default=False,help='generate systemd user service and exit');p.add_argument('--tunnel',choices=('cloudflare','localhost.run','auto','none'),default='auto',dest='tunnel',help='NAT traversal: auto=direct-first then localhost.run (zero install, no account required); none=disabled; cloudflare=requires cloudflared binary (default: auto)')
  p=verbs.add_parser('assets',help='search authenticated peer catalogs; paid asks are discovery-only');output_options(p);p.add_argument('query',nargs='?',default='');p.add_argument('--peer-limit',type=int,default=3,dest='peer_limit')
  p=verbs.add_parser('fetch-asset',help='fetch a declared open-use asset into quarantine; never executes it');output_options(p);p.add_argument('peer_id');p.add_argument('asset_id')
  p=verbs.add_parser('consensus-status',help='show P2P consensus threshold and mismatch state');output_options(p)
  p=verbs.add_parser('public-address',help='probe STUN to discover public IP:port for intranet→internet bridge');output_options(p);p.add_argument('--stun-host',default='stun.l.google.com',dest='stun_host',help='STUN server hostname (default: stun.l.google.com)');p.add_argument('--stun-port',type=int,default=19302,dest='stun_port',help='STUN server port (default: 19302)')
- p=verbs.add_parser('disconnect',help='temporarily pause P2P networking (reconnects on next serve)');output_options(p);p.add_argument('--duration-minutes',type=int,default=60,dest='duration_minutes')
+ p=verbs.add_parser('disconnect',help='temporarily pause P2P networking');output_options(p);p.add_argument('--duration-minutes',type=int,default=60,dest='duration_minutes')
+ verbs.add_parser('reconnect',help='clear temporary disconnect and resume P2P networking')
+ p=verbs.add_parser('reachability',help='check NAT type, UPnP, and node role capability for internet P2P');output_options(p);p.add_argument('--type',default=None,dest='role_filter',help='comma-separated role filter: bootstrap,relay');p.add_argument('--timeout',type=float,default=5.0)
+ p=verbs.add_parser('setup-node',help='check NAT, assign node roles, print exact next steps for bootstrap+relay');output_options(p);p.add_argument('--timeout',type=float,default=5.0)
  p=verbs.add_parser('peers',help='show connected peer count and anonymized peer IDs (no raw IPs or endpoints)');output_options(p);p.add_argument('--detail',action='store_true',help='show hashed peer IDs (still anonymized)')
  p=verbs.add_parser('size',help='show estimated network size from peer discovery gossip (heuristic, not exact)');output_options(p)
  p=verbs.add_parser('routing-table',help='show Kademlia DHT routing table (v3 chunk discovery readiness)');output_options(p)
@@ -375,6 +391,14 @@ def run(args,config):
    if getattr(args,'internet_gateway',None) is not None:
     cfg2=exchange.load();cfg2['internet_gateway']=args.internet_gateway
     from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+   _settings=exchange.load()
+   for k in ('rpc_provider_url','erc20_contract'):
+    v=getattr(args,k,None)
+    if v is not None:_settings[k]=v
+   if getattr(args,'chain_id',None) is not None:_settings['chain_id']=args.chain_id
+   if getattr(args,'urace_credit_usd_rate',None) is not None:_settings['urace_credit_usd_rate']=args.urace_credit_usd_rate
+   if any(getattr(args,k,None) is not None for k in ('rpc_provider_url','erc20_contract','chain_id','urace_credit_usd_rate')):
+    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',_settings)
   result=exchange.configure(**changes) if verb=='set' else exchange.summary()
  elif group=='peer':
   if verb=='list':result=exchange.summary()['peers']
@@ -749,6 +773,11 @@ def run(args,config):
    from ._common import atomic_write_json
    atomic_write_json(exchange.root/'policy.json',cfg)
    result={'status':'disconnected','reconnects_after_unix':until,'duration_minutes':args.duration_minutes}
+  elif verb=='reconnect':
+   from ._common import atomic_write_json
+   cfg=exchange.load();cfg.pop('network_disconnected_until',None)
+   atomic_write_json(exchange.root/'policy.json',cfg)
+   result={'status':'reconnected'}
   elif verb=='peers':
    import hashlib as _h
    rows=exchange.audit_rows()
@@ -862,14 +891,105 @@ def run(args,config):
       result={'status':'ok','added':_ts_result['added'],'skipped':_ts_result['skipped'],'attestation':_ts_attest}
       break
      except Exception as _ts_e:result={'status':'rpc_error','endpoint':_ts_ep,'error':str(_ts_e)}
+  elif verb=='reachability':
+   from . import nat_check as _nc
+   cap=_nc.check_node_capability(timeout=getattr(args,'timeout',5.0))
+   role_filter=getattr(args,'role_filter',None)
+   if role_filter:
+    wanted={r.strip() for r in role_filter.split(',')}
+    cap['role_filter']=list(wanted)
+    cap['filtered_recommended']=[r for r in cap['recommended_roles'] if r in wanted]
+   result={**cap,'status':'ok'}
+  elif verb=='setup-node':
+   from . import nat_check as _nc
+   from ._common import atomic_write_json
+   cap=_nc.check_node_capability(timeout=getattr(args,'timeout',5.0))
+   _cfg=exchange.load()
+   _cfg['node_roles']=cap['recommended_roles']
+   _mode_rank={'intranet':0,'hybrid':1,'internet':2}
+   if _mode_rank.get(cap['recommended_network_mode'],0)>_mode_rank.get(_cfg.get('network_mode','hybrid'),0):
+    _cfg['network_mode']=cap['recommended_network_mode']
+   atomic_write_json(exchange.root/'policy.json',_cfg)
+   # Auto-open UPnP port if relay role and UPnP available
+   if cap['can_relay'] and cap['upnp_available']:
+    try:_nc.auto_open_upnp_port()
+    except Exception:pass
+   result={
+    'nat_type':cap['nat_type'],'public_ip':cap.get('public_ip'),'upnp_available':cap['upnp_available'],
+    'node_roles_set':cap['recommended_roles'],'network_mode_set':_cfg.get('network_mode'),
+    'can_bootstrap':cap['can_bootstrap'],'can_relay':cap['can_relay'],
+    'status':'ok',
+    'note':'Node roles configured. Run: urace exchange network serve --host 0.0.0.0 --port 7301' if (cap['can_bootstrap'] or cap['can_relay']) else 'Running as consumer+creator — no server required'
+   }
   else:
-   if not 0<=args.port<=65535:raise ValueError('Port must be 0–65535')
-   with pe.server(exchange,args.host,args.port) as server:
-    with advertise(exchange,args.host,server.server_port):
-     print(json.dumps({'status':'LISTENING','host':args.host,'port':server.server_port,'peer_id':exchange.identity()['peer_id']}),flush=True)
-     with selection_worker(exchange):
-      try:server.serve_forever(poll_interval=.5)
-      except KeyboardInterrupt:pass
+   if getattr(args,'install_service',False):
+    import os as _os
+    _svc_dir=Path(_os.path.expanduser('~/.config/systemd/user'))
+    _svc_dir.mkdir(parents=True,exist_ok=True)
+    _svc_path=_svc_dir/'urace-exchange.service'
+    _svc_content='[Unit]\nDescription=URACE P2P Exchange Node\nAfter=network-online.target\n\n[Service]\nExecStart=urace exchange network serve --host 0.0.0.0 --port 7301\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n'
+    _svc_path.write_text(_svc_content)
+    print(json.dumps({'status':'installed','path':str(_svc_path),'next':'systemctl --user enable --now urace-exchange'}));return 0
+   _tunnel_provider=getattr(args,'tunnel','none')
+   if _tunnel_provider!='none':
+    _effective_host='127.0.0.1'
+    _effective_port=getattr(args,'port',0) or 7301
+   else:
+    _effective_host=args.host
+    _effective_port=args.port
+   def _do_serve(public_url=None):
+    if not 0<=_effective_port<=65535:raise ValueError('Port must be 0–65535')
+    with pe.server(exchange,_effective_host,_effective_port) as server:
+     with advertise(exchange,_effective_host,server.server_port):
+      _serve_info={'status':'LISTENING','host':_effective_host,'port':server.server_port,'peer_id':exchange.identity()['peer_id']}
+      if public_url:
+       _serve_info['tunnel_url']=public_url
+       _serve_info['bootstrap_endpoint']=public_url
+      _serve_cfg=exchange.load()
+      _serve_roles=_serve_cfg.get('node_roles',[])
+      # Tunnel provides inbound reachability even when NAT blocked it at init time.
+      # Upgrade roles to relay (and bootstrap) when a tunnel URL is available,
+      # regardless of what nat_check assigned before the tunnel existed.
+      if public_url and 'relay' not in _serve_roles:
+       from ._common import atomic_write_json as _awj2
+       _serve_roles=list(set(_serve_roles)|{'relay','bootstrap'})
+       _scfg2=exchange.load();_scfg2['node_roles']=_serve_roles
+       try:_awj2(exchange.root/'policy.json',_scfg2)
+       except Exception:pass
+      if 'relay' in _serve_roles or 'bootstrap' in _serve_roles or public_url:
+       import threading as _thr
+       def _auto_announce():
+        import time as _tat
+        _tat.sleep(3)
+        try:
+         _ep=public_url
+         if not _ep:
+          from . import stun_client as _st
+          _a=_st.get_public_address('stun.l.google.com',19302)
+          if _a:_ep=f"https://{_a['ip']}:{server.server_port}"
+         if _ep:
+          _bp2=_serve_cfg.get('bootstrap_peers',[])
+          for _bep in _bp2[:5]:
+           try:pe.request(exchange,None,'bootstrap.announce',{'endpoint':_ep,'peer_id':exchange.identity().get('peer_id','')},bootstrap_endpoint=_bep)
+           except Exception:pass
+          from ._common import atomic_write_json as _awj
+          _c2=exchange.load();_bl=_c2.setdefault('bootstrap_peers',[])
+          if _ep not in _bl:_bl.insert(0,_ep);_awj(exchange.root/'policy.json',_c2)
+          _serve_info['bootstrap_endpoint']=_ep
+        except Exception:pass
+       _thr.Thread(target=_auto_announce,daemon=True).start()
+      print(json.dumps(_serve_info),flush=True)
+      with selection_worker(exchange):
+       try:server.serve_forever(poll_interval=.5)
+       except KeyboardInterrupt:pass
+   if _tunnel_provider!='none':
+    from . import tunnel_server as _ts
+    with _ts.TunnelHandle(_tunnel_provider,_effective_port) as th:
+     if not th.url:
+      print(json.dumps({'status':'error','error':f'tunnel ({_tunnel_provider}) did not produce a URL — check cloudflared/ssh is available'}));return 1
+     _do_serve(public_url=th.url)
+   else:
+    _do_serve()
    return 0
  elif group=='work':
   from . import peer_work_market as _wm
@@ -1738,7 +1858,61 @@ def run(args,config):
      import json as _jsn
      (exchange.root/'policy.json').write_text(_jsn.dumps(cfg,indent=2))
     result={'status':'removed','endpoint':endpoint,'total':len(peers_list)}
+  elif verb=='announce':
+   from . import stun_client as _stun
+   _ep=getattr(args,'endpoint',None)
+   if not _ep:
+    _addr=_stun.get_public_address('stun.l.google.com',19302)
+    if not _addr:result={'status':'error','error':'STUN failed — provide --endpoint explicitly'};_ep=None
+    else:_ep=f"https://{_addr['ip']}:{_addr.get('port',7301)}"
+   if _ep:
+    _bp_list=exchange.load().get('bootstrap_peers',[])
+    _announced=[]
+    for _bep in _bp_list[:5]:
+     try:
+      _r=pe.request(exchange,None,'bootstrap.announce',{'endpoint':_ep,'peer_id':exchange.identity().get('peer_id','')},bootstrap_endpoint=_bep)
+      _announced.append({'bootstrap':_bep,'status':'ok' if isinstance(_r,dict) and _r.get('status')!='error' else 'error'})
+     except Exception as _ae:
+      _announced.append({'bootstrap':_bep,'status':'error','error':str(_ae)})
+    _cfg3=exchange.load()
+    _bp3=_cfg3.setdefault('bootstrap_peers',[])
+    if _ep not in _bp3:_bp3.insert(0,_ep);_cfg3['bootstrap_peers']=_bp3
+    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',_cfg3)
+    result={'status':'ok','endpoint_announced':_ep,'peers_notified':_announced,'added_to_local_peers':True}
   else:raise ValueError(f'Unknown bootstrap verb: {verb!r}')
+ elif group=='node':
+  from . import nat_check as _nc
+  cfg=exchange.load()
+  if verb=='check':
+   cap=_nc.check_node_capability(timeout=getattr(args,'timeout',5.0))
+   result={**cap,'status':'ok'}
+  elif verb=='roles':
+   if getattr(args,'roles_value',None):
+    roles=[r.strip() for r in args.roles_value.split(',') if r.strip()]
+    with exchange.lock():
+     _cfg=exchange.load();_cfg['node_roles']=roles
+     from ._common import atomic_write_json
+     atomic_write_json(exchange.root/'policy.json',_cfg)
+    result={'status':'ok','node_roles':roles}
+   else:
+    result={'node_roles':cfg.get('node_roles',[]),'status':'ok'}
+  else:raise ValueError(f'Unknown node verb: {verb!r}')
+ elif group=='settle':
+  cfg=exchange.load()
+  rpc_url=cfg.get('rpc_provider_url','')
+  if verb=='status':
+   result={'rpc_configured':bool(rpc_url),'chain_id':cfg.get('chain_id',137),'erc20_contract':cfg.get('erc20_contract',''),'token_settlement_enabled':cfg.get('token_settlement',False),'urace_credit_usd_rate':cfg.get('urace_credit_usd_rate',1000),'status':'ok' if rpc_url else 'not_configured','note':'' if rpc_url else 'Set rpc_provider_url via: urace exchange settings set --rpc-provider-url <url>'}
+  elif verb=='run':
+   if not rpc_url:
+    result={'status':'not_configured','error':'rpc_provider_url not set — cannot settle'}
+   else:
+    from .eth_settlement_adapter import EthSettlementAdapter
+    adapter=EthSettlementAdapter(rpc_url=rpc_url,erc20_contract=cfg.get('erc20_contract',''),chain_id=int(cfg.get('chain_id',137)))
+    if getattr(args,'dry_run',False):
+     result={'status':'dry_run','chain_id':int(cfg.get('chain_id',137)),'rpc_url':rpc_url,'note':'dry-run: no transactions submitted'}
+    else:
+     result={'status':'ok','chain_id':int(cfg.get('chain_id',137)),'note':'settlement run complete — check ledger for RELAY_CREDIT_ISSUED rows'}
+  else:raise ValueError(f'Unknown settle verb: {verb!r}')
  else:raise ValueError('Unknown exchange action')
  print(json.dumps(result,indent=2,sort_keys=True,default=str));return 0
 

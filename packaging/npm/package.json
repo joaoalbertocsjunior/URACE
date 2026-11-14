@@ -1,6 +1,6 @@
 {
   "name": "urace-cli",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "URACE — AI-powered product improvement runtime with P2P feature exchange",
   "bin": {
     "urace": "./bin/urace.js"

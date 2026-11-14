@@ -105,4 +105,4 @@ This migrates all your access control rules to the new identity and notifies pin
 - [Authority Boundary](authority-boundary.md) — quarantine and governance
 - [Security Overview](overview.md) — full security guarantees table
 - [Network](../exchange/network.md) — peer management commands
-- [Post-Quantum Roadmap](../post-quantum-roadmap.md) — future cryptography upgrades
+- [Post-Quantum Roadmap](../roadmap/post-quantum-roadmap.md) — future cryptography upgrades

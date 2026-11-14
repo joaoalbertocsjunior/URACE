@@ -1,9 +1,10 @@
 # URACE
 
-**Your product improves while you sleep.**
+**Autonomous improvement. P2P feature market. Token rewards for every contribution.**
 
-Type what you want. URACE classifies it, discovers reusable peer features, executes improvements,
-enforces quality gates, and checkpoints verified results.
+Type a goal — URACE executes, verifies, and checkpoints. Borrow proven features from peers instead
+of building from scratch. Mint yours and earn when others borrow them. Run a node and earn for
+every delivery, relay, or block you seal.
 
 Open-source, community-governed.
 
@@ -16,23 +17,50 @@ pip install urace          # Python 3.11+
 npm install -g urace-cli   # Node 16+
 
 export ANTHROPIC_API_KEY=...  # or OPENAI_API_KEY
-urace init --auto             # detect product, wire executor
-urace daemon start            # start background cycles
+urace start                   # boot daemon, wire executor, join P2P
 ```
 
 → [Full setup](docs/getting-started/quick-start.md)
 
 ---
 
-## Use it
+## Daily use
 
 ```sh
-urace "What's blocking my latency goal?"  # plain-text request, routed automatically
-urace run && urace status                 # trigger a cycle, check results
-urace cost summary                        # executor costs at published provider rates
+urace start                      # boot
+urace                            # open shell — type goals, rules, context, questions
+urace status                     # see health, goals, decisions, activity
+urace stop                       # shutdown
 ```
 
-→ [CLI reference](docs/reference/cli.md)
+Inside the shell:
+
+```
+> improve test coverage and reduce build time
+→ Goal added
+
+> never modify database migrations without a review
+→ Rule added (prohibition)
+
+> /events --follow               # live activity tail
+> /status                        # daemon + network status
+```
+
+---
+
+## Core commands
+
+| Command | What it does |
+|---------|-------------|
+| `urace start` | Boot daemon + join P2P network |
+| `urace` | Open shell (your main workspace) |
+| `urace status` | Health, goals, decisions, activity |
+| `urace source add --kind <kind>` | Connect data, executors, metrics, github, peers |
+| `urace config` | Change settings |
+| `urace update` | Apply spec updates |
+| `urace stop` | Shutdown |
+
+→ [All commands](docs/reference/ux-guide.md) · [Full reference](docs/reference/ux-surfaces.md)
 
 ---
 
@@ -40,14 +68,10 @@ urace cost summary                        # executor costs at published provider
 
 Peers mint, list, and borrow verified software features.
 
-Listing prices are capped against owner-provided estimates — not a savings guarantee.
 P2P borrows have `$0` provider cost in the current runtime; buyers pay URACE units at the listing ask.
 No URACE↔USD exchange rate exists.
-Use task-matched receipts to compare actual costs.
 
-→ [P2P exchange](docs/exchange/overview.md)
-→ [Cost breakdown and caveats](docs/economics/tokenomics.md#p2p-cost-dimensions)
-→ [Token economy](docs/economics/tokenomics.md)
+→ [P2P exchange](docs/exchange/overview.md) · [Token economy](docs/economics/tokenomics.md)
 
 ---
 
@@ -60,25 +84,9 @@ Use task-matched receipts to compare actual costs.
 | Composition owner | A derivative of your feature is filled |
 | Challenger | Your APS challenge succeeds |
 | Ledger sealer | You seal a block |
-| LLM similarity peer | You submit a SIMILARITY_VERDICT |
 | Hired Node | You win a work-market bid and your delivery is verified |
 
-Funded by a protocol fee on every fill — not inflation.
-
 → [Node rewards](docs/concepts/node-rewards.md)
-→ [Price mechanics](docs/economics/price-mechanics.md)
-
----
-
-## Security
-
-Post-quantum signatures · TLS 1.3 · at-rest encryption · escrow auto-refund · cartel protection ·
-APS provenance staking · sybil resistance · wash-trading block.
-
-Incoming artifacts are never auto-executed.
-
-→ [Security overview](docs/security/overview.md)
-→ [Security model](docs/concepts/security-model.md)
 
 ---
 
@@ -86,13 +94,12 @@ Incoming artifacts are never auto-executed.
 
 | | |
 |---|---|
-| [Quick start](docs/getting-started/quick-start.md) | [CLI reference](docs/reference/cli.md) |
-| [P2P exchange](docs/exchange/overview.md) | [Token economy](docs/economics/tokenomics.md) |
-| [Price mechanics](docs/economics/price-mechanics.md) | [Node rewards](docs/concepts/node-rewards.md) |
+| [Quick start](docs/getting-started/quick-start.md) | [5-min guide](docs/reference/ux-guide.md) |
+| [Full CLI reference](docs/reference/ux-surfaces.md) | [P2P exchange](docs/exchange/overview.md) |
+| [Token economy](docs/economics/tokenomics.md) | [Node rewards](docs/concepts/node-rewards.md) |
 | [Security model](docs/concepts/security-model.md) | [Spec (`URACE.md`)](URACE.md) |
-| [Ecosystem roadmap](docs/ecosystem-roadmap.md) | [RPC contract (`urace-rpc-v1`)](docs/reference/urace-rpc-v1.md) |
-| [Benchmark proof](docs/benchmark-proof.md) | [Full docs index](docs/index.md) |
+| [Ecosystem roadmap](docs/roadmap/ecosystem-roadmap.md) | [Full docs index](docs/index.md) |
 
 ---
 
-v0.6.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.7.0 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

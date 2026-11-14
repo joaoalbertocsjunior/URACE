@@ -22,8 +22,12 @@ Every node role that contributes real work earns tokens. Rewards are funded by a
 | Protocol treasury | `protocol_fee` | 2% of fill price; funds seal + LLM rewards |
 | Hired node (work market) | `escrow_release` | Win a bid on the work market, deliver verified work, receive credits |
 | Hired node (custody bonus) | `escrow_custody_earned` | 3% of contract budget credited on verified delivery; proportional per hired node |
+| Relay node | `RELAY_CREDIT_ISSUED` | Routes a P2P connection hop; rate = `relay_credit_per_kb` (default 1 unit/KB) |
+| Bootstrap node | `BOOTSTRAP_CREDIT_ISSUED` | Facilitates a new peer connection; rate = `bootstrap_credit_per_connection` (default 5 units) |
 
 Routing is built into every node — no dedicated routing tier, no routing reward. Cost is negligible; a routing reward would be trivially gamed by Sybil flooding fake `find_node` queries.
+
+Relay and bootstrap credits are off-chain ledger entries. They become redeemable on-chain only after the URACE ERC-20 contract is deployed and `token_settlement=true` is configured (see [Token Deployment](../economics/token-deployment.md)).
 
 ---
 

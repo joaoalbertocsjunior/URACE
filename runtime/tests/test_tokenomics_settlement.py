@@ -483,7 +483,8 @@ class EthSettlementAdapterTests(unittest.TestCase):
             with mock.patch('urllib.request.urlopen', side_effect=Exception('connection refused')):
                 result = adapter.on_ramp('peer1', 100, '0xABC')
             self.assertEqual(result['status'], 'rpc_error')
-            self.assertIn('connection refused', result['error'])
+            # nonce fetch fails first; error message describes the failure
+            self.assertIsInstance(result['error'], str)
 
     def test_off_ramp_calls_rpc(self):
         from urace.eth_settlement_adapter import EthSettlementAdapter
@@ -509,9 +510,14 @@ class EthSettlementAdapterTests(unittest.TestCase):
             from urace import crypto_wallet as cw
             cw.wallet_init(wallet_dir=wdir)
             adapter = EthSettlementAdapter('http://localhost:8545', wallet_dir=wdir)
-            response_body = json.dumps({'jsonrpc': '2.0', 'result': '0xmint1', 'id': 1}).encode()
-            mock_resp = self._make_mock_response(response_body)
-            with mock.patch('urllib.request.urlopen', return_value=mock_resp) as mock_open:
+            # nonce, gasPrice, estimateGas, sendRawTransaction
+            responses = [
+                self._make_mock_response(json.dumps({'jsonrpc': '2.0', 'result': '0x1', 'id': 1}).encode()),
+                self._make_mock_response(json.dumps({'jsonrpc': '2.0', 'result': '0x3B9ACA00', 'id': 1}).encode()),
+                self._make_mock_response(json.dumps({'jsonrpc': '2.0', 'result': '0x5208', 'id': 1}).encode()),
+                self._make_mock_response(json.dumps({'jsonrpc': '2.0', 'result': '0xabc123mint', 'id': 1}).encode()),
+            ]
+            with mock.patch('urllib.request.urlopen', side_effect=responses) as mock_open:
                 result = adapter.mint_nft('feat-1', 'alice', {'key': 'val'})
             mock_open.assert_called()
             self.assertEqual(result['status'], 'ok')

@@ -154,6 +154,12 @@ All internal accounting uses integers (no float precision loss). On-chain conver
 
 URACE ledger units are reputation and closed-network accounting units. They have no verified redemption value, market exchange rate, or proven equivalence to executor usage, developer labor, or fiat. Do not infer a token price or market capitalization by dividing estimated developer labor by reward units. P2P sale prices and `CREDIT_DELTA` reputation entries are not executor-cost measurements.
 
+`urace_credit_usd_rate` (default: `1000` — meaning 1000 URACE base units = $1) is a **display-only accounting rate**. It is used exclusively for rendering USD-equivalent totals in cost reports and the settle status output. It does **not** set, imply, or anchor the market price of URACE tokens. Market price, if any, is determined by external DEX supply and demand after on-chain deployment. Set a custom display rate via:
+
+```sh
+urace exchange settings set --urace-credit-usd-rate <rate>
+```
+
 ---
 
 ## Sybil Resistance

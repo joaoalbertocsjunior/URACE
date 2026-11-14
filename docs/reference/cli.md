@@ -75,6 +75,10 @@ All URACE commands in one place.
 | `urace exchange compact search "q"` | Search live + compressed archives |
 | `urace exchange compact checkpoint` | Write ledger checkpoint + seal a PoQ block (tamper-evidence + O(tail) balance lookup) |
 | `urace exchange compact balance-fast <peer_id>` | O(tail) credit balance using latest sealed block snapshot |
+| `urace exchange compact contracts [--older-than-days N]` | Compact closed work market contracts. |
+| `urace exchange compact sync-tail` | Show checkpoint + tail for fast ledger sync. |
+| `urace exchange compact sync-state` | Show sliding-window ledger sync state (light peer). |
+| `urace exchange compact light-balance <peer_id>` | Compute peer balance from seal snapshot + tail. |
 | `urace exchange bundle fetch-artifact <bundle_id>` | Show artifact sha256/size for a bundle |
 | `urace exchange bundle fetch-artifact <bundle_id> --out <path>` | Write artifact bytes to file (any type/size) |
 
@@ -126,6 +130,36 @@ All URACE commands in one place.
 
 ---
 
+## Lifecycle
+
+```
+urace
+```
+No args, TTY: auto-starts daemon and P2P server, opens interactive shell.
+No args, non-TTY: shows TUI dashboard.
+
+```
+urace start [--interval-minutes N]
+```
+Headless: start daemon + P2P server in background (for systemd/server use).
+
+```
+urace stop
+```
+Stop daemon and P2P server.
+
+```
+urace shell
+```
+Open interactive control shell explicitly (same as bare `urace` in TTY).
+
+```
+urace dashboard
+```
+Open curses monitoring dashboard.
+
+---
+
 ## Exchange: Settings and Identity
 
 | Command | Description |
@@ -174,7 +208,20 @@ All URACE commands in one place.
 | `urace exchange network port-to-internet --dry-run` | Analysis only — show what would be ported, no changes |
 | `urace exchange network port-to-internet --features F1,F2` | Port specific features by ID |
 | `urace exchange network port-to-internet --min-kpi-score 0.7` | Raise quality threshold for auto-selection |
+| `urace exchange network reachability [--json]` | Check NAT type, UPnP availability, and feasible node roles |
+| `urace exchange network reachability --type bootstrap,relay` | Filter reachability report by role |
+| `urace exchange network setup-node [--timeout SECS]` | Check NAT type, assign node roles, auto-open UPnP. Zero manual steps. |
+| `urace exchange network serve [--host HOST] [--port PORT] [--tunnel auto\|localhost.run\|cloudflare\|none] [--install-service]` | Start P2P listener. `--tunnel auto` (default): uses localhost.run via SSH if NAT blocks direct inbound — zero install, zero account required. |
+| `urace exchange network routing-table` | Show Kademlia DHT routing table. |
+| `urace exchange network find-node <target_peer_id>` | Kademlia find_node RPC. |
+| `urace exchange network shamir-deliver <feature_id> --holder <peer_id> --share-index N` | Deliver encrypted DEK share to replica holder. |
+| `urace exchange network tail-sync --from-peer <peer_id>` | Pull ledger seal+tail from a full peer (light-peer sync). |
 | `urace exchange network-audit list [--kind K] [--peer P]` | View network audit events |
+| `urace exchange node check [--json]` | Full node capability report (STUN + UPnP) |
+| `urace exchange node roles [--json]` | Show configured node roles |
+| `urace exchange node roles --set bootstrap,relay` | Set node roles |
+| `urace exchange settle status [--json]` | Show settlement configuration and pending balance |
+| `urace exchange settle run [--dry-run] [--json]` | Execute pending on-ramp/off-ramp settlements |
 
 ---
 
@@ -262,6 +309,7 @@ All URACE commands in one place.
 | `urace exchange bootstrap add --address ADDR` | Add a bootstrap peer address |
 | `urace exchange bootstrap list` | List configured bootstrap peers |
 | `urace exchange bootstrap remove --address ADDR` | Remove a bootstrap peer |
+| `urace exchange bootstrap announce [--endpoint URL] [--timeout SECS]` | Announce your endpoint to known bootstrap peers. Auto-detects via STUN if `--endpoint` omitted. Runs automatically on serve when bootstrap role is set. |
 
 ---
 

@@ -62,7 +62,7 @@ URACE/urace/
 ├── runtime/
 │   ├── build_initial_ledger.py    ← regenerate exchange/initial_ledger/ after module changes
 │   ├── urace/                     ← runtime Python package
-│   │   ├── cli.py                 ← top-level CLI entrypoint
+│   │   ├── cli/                   ← CLI package (entrypoint: cli/__init__.py)
 │   │   ├── cli_parser.py          ← canonical argparse grammar
 │   │   ├── data_cli.py            ← isolated data-source command handlers
 │   │   ├── exchange_cli.py        ← exchange/P2P CLI verbs

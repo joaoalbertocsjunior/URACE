@@ -1,6 +1,6 @@
 # URACE comparative strengths and gap analysis
 
-Observed 2026-10-29. For measured cost/improvement results see [Benchmark Proof](benchmark-proof.md). This document is an architectural/documentation comparison, not a benchmark proving competitive superiority. Distinguish deployed URACE, the isolated candidate and future designs. External descriptions come from primary project documentation; they are not independent audits. No exact competitor offering URACE's entire proposed combination was established, but a limited search cannot prove uniqueness, novelty, patentability or lack of competition.
+Observed 2026-10-29. For measured cost/improvement results see [Benchmark Proof](../benchmarks/benchmark-proof.md). This document is an architectural/documentation comparison, not a benchmark proving competitive superiority. Distinguish deployed URACE, the isolated candidate and future designs. External descriptions come from primary project documentation; they are not independent audits. No exact competitor offering URACE's entire proposed combination was established, but a limited search cannot prove uniqueness, novelty, patentability or lack of competition.
 
 ## Principal finding
 
@@ -87,7 +87,7 @@ Run independent pilots with actual users/products and compare URACE against a co
 [5] https://docs.drips.network/
 [6] https://ethereum.org/developers/docs/transactions/ ; https://eips.ethereum.org/EIPS/eip-155 ; https://ethereum.org/developers/docs/consensus-mechanisms/pos/
 
-Related design records: post-quantum-roadmap.md, network-onboarding.md and ethereum-patterns.md. Documentation readiness must not be reported as implemented network capability.
+Related design records: roadmap/post-quantum-roadmap.md, roadmap/network-onboarding.md and ethereum-patterns.md. Documentation readiness must not be reported as implemented network capability.
 
 ## Additional direct overlap: autonomous agent procurement
 

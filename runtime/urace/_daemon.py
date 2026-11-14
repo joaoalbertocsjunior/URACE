@@ -75,6 +75,30 @@ def _handle_rpc_client(conn, config, stopped):
             resp = {"schema": _RPC_SCHEMA, "status": "stopping"}
         elif method == "ping":
             resp = {"schema": _RPC_SCHEMA, "pong": True}
+        elif method == "dispatch":
+            # Run any urace argv inline and return captured JSON output
+            argv = msg.get("argv", [])
+            import io, contextlib
+            from . import cli as _cli_mod
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    _cli_mod.main(list(argv) + (["--json"] if "--json" not in argv else []))
+                resp = {"schema": _RPC_SCHEMA, "output": buf.getvalue().strip()}
+            except Exception as _de:
+                resp = {"schema": _RPC_SCHEMA, "error": str(_de), "output": buf.getvalue().strip()}
+        elif method == "events":
+            limit = int(msg.get("limit", 20))
+            import io, contextlib
+            from . import cli as _cli_mod
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    _cli_mod.main(["exchange", "network-audit", "list",
+                                   "--limit", str(limit), "--json"])
+                resp = {"schema": _RPC_SCHEMA, "output": buf.getvalue().strip()}
+            except Exception as _ee:
+                resp = {"schema": _RPC_SCHEMA, "error": str(_ee)}
         else:
             resp = {"schema": _RPC_SCHEMA, "error": f"unknown method: {method}"}
         conn.sendall((_json.dumps(resp) + "\n").encode("utf-8"))
@@ -157,6 +181,18 @@ def dispatch(args, config: dict) -> int:
     interval_sec = max(60.0, float(interval_minutes) * 60)
 
     _write_pid(config)
+    # Start P2P exchange server in background thread (tunnel auto-detected)
+    _p2p_thread_ref = [None]
+    def _start_p2p_server():
+        try:
+            import subprocess, sys as _sys
+            subprocess.run([_sys.executable, '-m', 'urace', 'exchange', 'network', 'serve',
+                           '--host', '0.0.0.0', '--port', '7301'],
+                          check=False)
+        except Exception:
+            pass
+    _p2p_thread_ref[0] = _threading.Thread(target=_start_p2p_server, daemon=True)
+    _p2p_thread_ref[0].start()
     stopped = [False]
     _rpc_thread = _threading.Thread(target=_run_rpc_server, args=(config, stopped), daemon=True)
     _rpc_thread.start()

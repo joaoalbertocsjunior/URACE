@@ -742,37 +742,45 @@ def command_catalog() -> dict[str, list[dict[str, str]]]:
 
 
 def top_level_help() -> str:
-    return """URACE commands
+    return """URACE — autonomous product improvement
 
-  urace "<freeform-text>"             interpret intent using an available Executor
-  status [SUBJECT]                    read-only status; defaults to runtime
-  configuration [SETTING]            persistent settings, models and resource effort
-  change                  list changes or explain one accepted change
+Get started in 5 minutes:
 
-Lifecycle:       init, auto, plan, pause, resume, onboard
-Work and input:  add, goal, context, source, metric, vital, inbox, feedback
-Execution:      executor, product, fleet, portfolio, data
-Governance:     rules, intent, constraint, govern, blocker
-Investigation:  change, decision, explain, why, trace, evidence
-Maintenance:    update, derive, compact, decompact, amend, crc
-Integration:    trial, report, resource, schema, api, commands, help
+  pip install urace
+  urace start               boot daemon + join P2P network (zero-config)
+  urace                     open shell — type goals and questions in plain language
+
+Core commands:
+
+  start                     boot daemon + P2P network
+  stop                      shutdown
+  status [SUBJECT]          observe: health, goals, decisions, activity, vitals
+  config [SETTING]          settings: evolution, budget, executor, controls
+  update                    apply a spec update
+  source add --kind <kind>  connect data files, executors, metrics, github, peers
+  api serve --transport     machine interface: MCP stdio, A2A HTTP
+
+Inside the shell, type naturally:
+
+  > improve test coverage by 20%        → goal added
+  > never modify production config      → rule added
+  > why did you change the README?      → decision explained
+  > what blocked progress today?        → blockers listed
+  > run now                             → cycle triggered
+
+Slash shortcuts: /status  /events  /config  /peers  /stop  /exit
+
+Source kinds:  file  csv  json  sqlite  api  connector  executor  metric  vital  github  product  peer
 
 Status subjects:
-  runtime, vitals, executors, resources, products, fleet, data, quality,
-  compliance, milestones, blockers, integrity, onboarding, configuration,
-  inbox, goals, evaluation
+  runtime  goals  decisions  vitals  plan  health  blockers  compliance
+  quality  milestone  inbox  integrity  features  schema  resources
 
-Configuration settings:
-  auto-goals, effort, executor, self-evolution, change-explanations,
-  external-metrics, analytics-export, executor-budget,
-  evaluation-minimum, evaluation-weight
-
-Use `urace help <command> [subcommand ...]` or `<command> --help`.
-`urace commands` lists installed commands by concern; `urace api commands`
-exports typed machine discovery. Help spends no Executor credit.
-Compatibility names (including check, vitals, autonomous, add-goal,
-add-context, self-evolution, policy and budget) remain accepted.
-Freeform inference is fallible; unresolved sections remain explicit."""
+For power users and integrations — full reference:
+  urace <command> --help    any hidden command still works
+  urace help <command>      contextual help without Executor
+  docs/reference/ux-guide.md              5-minute guide
+  docs/reference/ux-surfaces.md           full surface reference (all ~334 paths)"""
 
 
 

@@ -343,7 +343,7 @@ _FEATURES: list[dict] = [
         'test_coverage': 'partial',
         'tags': ['integration', 'delivery'],
         'blockers': [],
-        'notes': 'Requires urace[network] extra. Local routing table used for intranet mode.',
+        'notes': 'Included in base install. Local routing table used for intranet mode.',
     },
     {
         'id': 'peer-exchange',

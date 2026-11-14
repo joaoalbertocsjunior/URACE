@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -e "urace/runtime/[peer-security,peer-discovery,test]"
+      - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
       - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
       - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
@@ -34,7 +34,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e "urace/runtime/[peer-security,peer-discovery,test]"
+      - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
       - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
       - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - run: pip install -e "urace/runtime/[peer-security,peer-discovery,test]"
+      - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
       - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
       - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/test_p2p_pair_protocol.py urace/trial/test_p2p_cost_claim_review.py urace/trial/test_measurement_corpus.py urace/trial/test_executor_receipt.py urace/trial/test_measurement_report.py -x -q
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e "urace/runtime/[peer-security,peer-discovery,network,test]"
+      - run: pip install -e "urace/runtime/[test]"
       - run: python -m pytest urace/runtime/tests/test_kademlia.py -x -q
 
   lint:
@@ -110,6 +110,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e "urace/runtime/[peer-security,peer-discovery]"
+      - run: pip install -e "urace/runtime/"
       - run: python urace/runtime/tests/conftest.py
       - run: urace security audit --no-network --json
