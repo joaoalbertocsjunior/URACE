@@ -54,12 +54,14 @@ def test_install_service_creates_unit_file(tmp_path):
         )
 
         with patch.object(Path, 'write_text', fake_write_text), \
-             patch.object(Path, 'mkdir', lambda self, **kw: None):
+             patch.object(Path, 'mkdir', lambda self, **kw: None), \
+             patch('sys.platform', 'linux'), \
+             patch('shutil.which', return_value='/usr/bin/urace'):
             ret = exchange_cli.run(args, config)
 
     assert ret == 0
     assert 'urace-exchange.service' in written['path']
-    assert 'ExecStart=urace exchange network serve' in written['content']
+    assert 'ExecStart=' in written['content']
     assert 'WantedBy=default.target' in written['content']
 
 
@@ -192,8 +194,8 @@ def test_bootstrap_announce_stun_fallback():
 
 # ── install-service generates correct systemd unit ────────────────────────────
 
-def test_install_service_includes_tunnel_and_restart_always(tmp_path):
-    """--install-service writes tunnel flag and Restart=always to service file."""
+def test_install_service_linux(tmp_path):
+    """Linux: --install-service writes systemd unit with tunnel, Restart=always, StartLimitIntervalSec=0."""
     svc_dir = tmp_path / 'systemd' / 'user'
     svc_dir.mkdir(parents=True)
     svc_path = svc_dir / 'urace-exchange.service'
@@ -201,12 +203,11 @@ def test_install_service_includes_tunnel_and_restart_always(tmp_path):
     with tempfile.TemporaryDirectory() as tmp_dir:
         exchange, config = _make_exchange_and_config(tmp_dir, {})
         from urace import exchange_cli
-        import os
-        args = _make_args(
-            exchange_group='network', exchange_verb='serve',
-            port=7301, tunnel='auto', install_service=True,
-        )
-        with patch('os.path.expanduser', return_value=str(svc_dir)):
+        args = _make_args(exchange_group='network', exchange_verb='serve',
+                          port=7301, tunnel='auto', install_service=True)
+        with patch('sys.platform', 'linux'), \
+             patch('shutil.which', return_value='/usr/bin/urace'), \
+             patch('os.path.expanduser', return_value=str(svc_dir)):
             exchange_cli.run(args, config)
 
     content = svc_path.read_text()
@@ -214,6 +215,54 @@ def test_install_service_includes_tunnel_and_restart_always(tmp_path):
     assert 'Restart=always' in content
     assert 'RestartSec=10' in content
     assert '--port 7301' in content
+    assert 'StartLimitIntervalSec=0' in content
+
+
+def test_install_service_macos(tmp_path):
+    """macOS: --install-service writes launchd plist with KeepAlive=true."""
+    svc_dir = tmp_path / 'LaunchAgents'
+    svc_dir.mkdir(parents=True)
+    svc_path = svc_dir / 'com.urace.exchange.plist'
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exchange, config = _make_exchange_and_config(tmp_dir, {})
+        from urace import exchange_cli
+        args = _make_args(exchange_group='network', exchange_verb='serve',
+                          port=7301, tunnel='auto', install_service=True)
+        with patch('sys.platform', 'darwin'), \
+             patch('shutil.which', return_value='/usr/local/bin/urace'), \
+             patch('os.path.expanduser', side_effect=lambda p: str(svc_dir) if 'Library' in p else p):
+            ret = exchange_cli.run(args, config)
+
+    assert ret in (0, None)
+    assert svc_path.exists()
+    content = svc_path.read_text()
+    assert 'com.urace.exchange' in content
+    assert '<key>KeepAlive</key><true/>' in content
+    assert '--tunnel' in content
+    assert '--port' in content
+
+
+def test_install_service_windows_prints_instructions():
+    """Windows: --install-service prints schtasks command, writes no file."""
+    import io
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exchange, config = _make_exchange_and_config(tmp_dir, {})
+        from urace import exchange_cli
+        args = _make_args(exchange_group='network', exchange_verb='serve',
+                          port=7301, tunnel='auto', install_service=True)
+        captured = io.StringIO()
+        with patch('sys.platform', 'win32'), \
+             patch('shutil.which', return_value='C:\\Program Files\\urace\\urace.exe'), \
+             patch('sys.stdout', captured):
+            ret = exchange_cli.run(args, config)
+
+    assert ret in (0, None)
+    out = captured.getvalue()
+    result = json.loads(out)
+    assert result['platform'] == 'Windows'
+    assert 'schtasks' in result['command']
+    assert '--tunnel auto' in result['command']
 
 
 # ── urace stop graceful when not initialized ──────────────────────────────────

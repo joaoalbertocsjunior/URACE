@@ -938,15 +938,46 @@ def run(args,config):
    }
   else:
    if getattr(args,'install_service',False):
-    import os as _os
-    _svc_dir=Path(_os.path.expanduser('~/.config/systemd/user'))
-    _svc_dir.mkdir(parents=True,exist_ok=True)
-    _svc_path=_svc_dir/'urace-exchange.service'
+    import os as _os,sys as _sys,shutil as _sh
     _svc_port=getattr(args,'port',0) or 7301
     _svc_tunnel=getattr(args,'tunnel','auto') or 'auto'
-    _svc_content=f'[Unit]\nDescription=URACE P2P Exchange Node\nAfter=network-online.target\n\n[Service]\nExecStart=urace exchange network serve --port {_svc_port} --tunnel {_svc_tunnel}\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n'
-    _svc_path.write_text(_svc_content)
-    print(json.dumps({'status':'installed','path':str(_svc_path),'next':'systemctl --user enable --now urace-exchange'}));return 0
+    _urace_bin=_sh.which('urace') or 'urace'
+    if _sys.platform=='darwin':
+     # macOS — launchd user agent
+     _svc_dir=Path(_os.path.expanduser('~/Library/LaunchAgents'))
+     _svc_dir.mkdir(parents=True,exist_ok=True)
+     _svc_path=_svc_dir/'com.urace.exchange.plist'
+     _svc_content=f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.urace.exchange</string>
+  <key>ProgramArguments</key><array>
+    <string>{_urace_bin}</string>
+    <string>exchange</string><string>network</string><string>serve</string>
+    <string>--port</string><string>{_svc_port}</string>
+    <string>--tunnel</string><string>{_svc_tunnel}</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>{_os.path.expanduser('~/.urace/exchange.log')}</string>
+  <key>StandardErrorPath</key><string>{_os.path.expanduser('~/.urace/exchange.log')}</string>
+</dict></plist>
+'''
+     _svc_path.write_text(_svc_content)
+     print(json.dumps({'status':'installed','path':str(_svc_path),'next':f'launchctl load {_svc_path}','platform':'macOS'}));return 0
+    elif _sys.platform=='win32':
+     # Windows — Task Scheduler via schtasks
+     _task_name='URACEExchange'
+     _cmd=f'schtasks /create /tn "{_task_name}" /tr "\\"{_urace_bin}\\" exchange network serve --port {_svc_port} --tunnel {_svc_tunnel}" /sc onlogon /ru %USERNAME% /f'
+     print(json.dumps({'status':'instructions','platform':'Windows','command':_cmd,'note':'Run the command above in an elevated PowerShell to register the scheduled task. It will start on login and restart automatically.'}));return 0
+    else:
+     # Linux — systemd user service
+     _svc_dir=Path(_os.path.expanduser('~/.config/systemd/user'))
+     _svc_dir.mkdir(parents=True,exist_ok=True)
+     _svc_path=_svc_dir/'urace-exchange.service'
+     _svc_content=f'[Unit]\nDescription=URACE P2P Exchange Node\nAfter=network-online.target\nStartLimitIntervalSec=0\n\n[Service]\nExecStart={_urace_bin} exchange network serve --port {_svc_port} --tunnel {_svc_tunnel}\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n'
+     _svc_path.write_text(_svc_content)
+     print(json.dumps({'status':'installed','path':str(_svc_path),'next':'systemctl --user enable --now urace-exchange','platform':'Linux'}));return 0
    _tunnel_provider=getattr(args,'tunnel','none')
    if _tunnel_provider!='none':
     _effective_host='127.0.0.1'

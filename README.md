@@ -137,4 +137,4 @@ Polygon is planned as mainnet — EVM-compatible, lower gas fees than Ethereum.
 
 ---
 
-v0.8.4 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+v0.8.5 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
