@@ -942,7 +942,9 @@ def run(args,config):
     _svc_dir=Path(_os.path.expanduser('~/.config/systemd/user'))
     _svc_dir.mkdir(parents=True,exist_ok=True)
     _svc_path=_svc_dir/'urace-exchange.service'
-    _svc_content='[Unit]\nDescription=URACE P2P Exchange Node\nAfter=network-online.target\n\n[Service]\nExecStart=urace exchange network serve --host 0.0.0.0 --port 7301\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n'
+    _svc_port=getattr(args,'port',0) or 7301
+    _svc_tunnel=getattr(args,'tunnel','auto') or 'auto'
+    _svc_content=f'[Unit]\nDescription=URACE P2P Exchange Node\nAfter=network-online.target\n\n[Service]\nExecStart=urace exchange network serve --port {_svc_port} --tunnel {_svc_tunnel}\nRestart=always\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n'
     _svc_path.write_text(_svc_content)
     print(json.dumps({'status':'installed','path':str(_svc_path),'next':'systemctl --user enable --now urace-exchange'}));return 0
    _tunnel_provider=getattr(args,'tunnel','none')
@@ -952,7 +954,7 @@ def run(args,config):
    else:
     _effective_host=args.host
     _effective_port=args.port
-   def _do_serve(public_url=None):
+   def _do_serve(public_url=None,tunnel_proc=None):
     if not 0<=_effective_port<=65535:raise ValueError('Port must be 0–65535')
     with pe.server(exchange,_effective_host,_effective_port) as server:
      with advertise(exchange,_effective_host,server.server_port):
@@ -997,6 +999,14 @@ def run(args,config):
         except Exception:pass
        _thr.Thread(target=_auto_announce,daemon=True).start()
       print(json.dumps(_serve_info),flush=True)
+      if tunnel_proc is not None:
+       import threading as _thr2
+       def _tunnel_watchdog():
+        tunnel_proc.wait()
+        # Tunnel subprocess died — shut down so systemd can restart with a fresh tunnel
+        try:server.shutdown()
+        except Exception:pass
+       _thr2.Thread(target=_tunnel_watchdog,daemon=True).start()
       with selection_worker(exchange):
        try:server.serve_forever(poll_interval=.5)
        except KeyboardInterrupt:pass
@@ -1005,7 +1015,7 @@ def run(args,config):
     with _ts.TunnelHandle(_tunnel_provider,_effective_port) as th:
      if not th.url:
       print(json.dumps({'status':'error','error':f'tunnel ({_tunnel_provider}) did not produce a URL — check cloudflared/ssh is available'}));return 1
-     _do_serve(public_url=th.url)
+     _do_serve(public_url=th.url,tunnel_proc=th._proc)
    else:
     _do_serve()
    return 0

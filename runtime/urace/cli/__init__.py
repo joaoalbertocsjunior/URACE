@@ -4868,8 +4868,17 @@ Commands:
         return 0
     if args.command == "pause":
         config = load_config()
-        with state_lock(state_path(config)):
-            state = load_state(config)
+        try:
+            _state_path = state_path(config)
+        except Exception:
+            print(json.dumps({"status": "not_running", "note": "URACE is not initialized; nothing to stop"}) if getattr(args, 'json', False) else "URACE is not initialized; nothing to stop.")
+            return 0
+        with state_lock(_state_path):
+            try:
+                state = load_state(config)
+            except RuntimeError:
+                print(json.dumps({"status": "not_running", "note": "URACE is not initialized; nothing to stop"}) if getattr(args, 'json', False) else "URACE is not initialized; nothing to stop.")
+                return 0
             if state["lifecycle_state"] == "PAUSED":
                 print("Lifecycle is already PAUSED" if not args.json else json.dumps({"status": "already_paused"}))
                 return 0
