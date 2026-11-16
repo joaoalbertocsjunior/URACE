@@ -620,5 +620,91 @@ class ListingCeilingMarginTests(unittest.TestCase):
                                 'old margin=0.15 should violate the invariant (documents the fix)')
 
 
+class BorrowCostContextTests(unittest.TestCase):
+
+    def test_pre_borrow_total_sums_correctly(self):
+        ctx = cm.BorrowCostContext(executor_calls=3, executor_cost_per_call=0.04)
+        self.assertAlmostEqual(ctx.pre_borrow_total(), 0.12, places=10)
+
+    def test_zero_overhead_case(self):
+        ctx = cm.BorrowCostContext(executor_calls=0, executor_cost_per_call=0.0)
+        self.assertAlmostEqual(ctx.pre_borrow_total(), 0.0, places=10)
+
+    def test_mitm_cost_added(self):
+        ctx = cm.BorrowCostContext(executor_calls=1, executor_cost_per_call=0.10, mitm_cost=0.05)
+        # 1 * 0.10 + 0.05 = 0.15
+        self.assertAlmostEqual(ctx.pre_borrow_total(), 0.15, places=10)
+
+    def test_cycles_cost_added(self):
+        ctx = cm.BorrowCostContext(executor_calls=2, executor_cost_per_call=0.05,
+                                   cycles_cost=0.20)
+        # 2 * 0.05 + 0.20 = 0.30
+        self.assertAlmostEqual(ctx.pre_borrow_total(), 0.30, places=10)
+
+    def test_all_zero_fields(self):
+        ctx = cm.BorrowCostContext()
+        self.assertEqual(ctx.pre_borrow_total(), 0.0)
+
+
+class TieredCeilingTests(unittest.TestCase):
+
+    def test_ceiling_micro_25loc(self):
+        # 25 LOC ≤ 50 → micro tier → 5%
+        self.assertAlmostEqual(cm._ceiling_for_loc(25), 0.05)
+
+    def test_ceiling_micro_exactly_50loc(self):
+        self.assertAlmostEqual(cm._ceiling_for_loc(50), 0.05)
+
+    def test_ceiling_standard_100loc(self):
+        # 100 LOC in (50, 500] → standard → 8%
+        self.assertAlmostEqual(cm._ceiling_for_loc(100), 0.08)
+
+    def test_ceiling_standard_exactly_500loc(self):
+        self.assertAlmostEqual(cm._ceiling_for_loc(500), 0.08)
+
+    def test_ceiling_large_600loc(self):
+        # 600 LOC > 500 → large → 12%
+        self.assertAlmostEqual(cm._ceiling_for_loc(600), 0.12)
+
+    def test_ceiling_large_1000loc(self):
+        self.assertAlmostEqual(cm._ceiling_for_loc(1000), 0.12)
+
+    def test_scale_tier_names(self):
+        # borrow_feature_cost returns scale_tier in {'micro','standard','large','bundle','unknown'}
+        for loc, expected_tier in [(25, 'micro'), (100, 'standard'), (600, 'large')]:
+            result = cm.borrow_feature_cost({}, ask_price_units=10, loc=loc)
+            self.assertEqual(result['scale_tier'], expected_tier,
+                             f'loc={loc} should map to {expected_tier}')
+
+    def test_borrow_feature_cost_returns_new_fields(self):
+        result = cm.borrow_feature_cost(
+            {'p2p': {'executor_reference_price_per_unit': 1000}},
+            ask_price_units=50,
+            loc=100,
+        )
+        self.assertIn('borrow_tax_units', result)
+        self.assertIn('scale_tier', result)
+        self.assertIn('savings_vs_executor_pct', result)
+        self.assertIn('ceiling_compliant', result)
+
+    def test_ceiling_compliant_true_when_ask_below_ceiling(self):
+        # executor_ref=100, loc=25 → ceiling=5%, ceiling_limit=5
+        # ask=4 → compliant
+        result = cm.borrow_feature_cost(
+            {'p2p': {'executor_reference_price_per_unit': 100}},
+            ask_price_units=4, loc=25,
+        )
+        self.assertTrue(result['ceiling_compliant'])
+
+    def test_ceiling_compliant_false_when_ask_exceeds_ceiling(self):
+        # executor_ref=100, loc=25 → ceiling=5%, ceiling_limit=5
+        # ask=10 → not compliant
+        result = cm.borrow_feature_cost(
+            {'p2p': {'executor_reference_price_per_unit': 100}},
+            ask_price_units=10, loc=25,
+        )
+        self.assertFalse(result['ceiling_compliant'])
+
+
 if __name__ == '__main__':
     unittest.main()

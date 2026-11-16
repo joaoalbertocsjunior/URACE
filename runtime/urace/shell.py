@@ -3,7 +3,7 @@
 urace shell — persistent REPL over the entire URACE control plane.
 
 Slash commands  → control shortcuts (/stop /pause /status /events /config /help)
-Known commands  → run inline via main() (exchange network discover, status, etc.)
+Known commands  → run inline via main() (network discover, status, etc.)
 Freeform text   → routed through NL classifier → executor
 """
 from __future__ import annotations
@@ -112,7 +112,7 @@ def _handle_slash(cmd: str, rest: str, config: dict) -> bool:
         print('Slash commands:')
         for k, v in _SLASH_COMMANDS.items():
             print(f'  {k:<12} {v}')
-        print('\nOr type any urace command (e.g. "status", "exchange network discover").')
+        print('\nOr type any urace command (e.g. "status", "network discover").')
         print('Freeform text is routed to the NL classifier.')
         return True
 
@@ -122,7 +122,7 @@ def _handle_slash(cmd: str, rest: str, config: dict) -> bool:
             print(json.dumps(r, indent=2))
         else:
             print('daemon: not running')
-        _run_cmd(['exchange', 'node', 'roles', '--json'], config)
+        _run_cmd(['network', 'node', 'roles', '--json'], config)
         return True
 
     if cmd == '/stop':
@@ -160,17 +160,17 @@ def _handle_slash(cmd: str, rest: str, config: dict) -> bool:
             except KeyboardInterrupt:
                 print()
         else:
-            _run_cmd(['exchange', 'network-audit', 'list', '--limit', str(limit), '--json'], config)
+            _run_cmd(['network', 'network-audit', 'list', '--limit', str(limit), '--json'], config)
         return True
 
     if cmd == '/config':
         parts = rest.strip().split(None, 1)
         if not parts:
-            _run_cmd(['exchange', 'settings', 'show', '--json'], config)
+            _run_cmd(['network', 'settings', 'show', '--json'], config)
         elif len(parts) == 1:
             key = parts[0]
             # dotted path → show filtered from full settings JSON
-            r = _rpc('dispatch', argv=['exchange', 'settings', 'show', '--json'])
+            r = _rpc('dispatch', argv=['network', 'settings', 'show', '--json'])
             if r and 'output' in r:
                 try:
                     data = json.loads(r['output'])
@@ -180,21 +180,21 @@ def _handle_slash(cmd: str, rest: str, config: dict) -> bool:
                 except (KeyError, TypeError):
                     print(f'key not found: {key}')
             else:
-                _run_cmd(['exchange', 'settings', 'show', '--json'], config)
+                _run_cmd(['network', 'settings', 'show', '--json'], config)
         else:
             key, value = parts
             # Support dotted keys like p2p.network_mode → --network-mode
             leaf = key.split('.')[-1]
             flag = f'--{leaf.replace("_", "-")}'
-            _run_cmd(['exchange', 'settings', 'set', flag, value], config)
+            _run_cmd(['network', 'settings', 'set', flag, value], config)
         return True
 
     if cmd == '/peers':
-        _run_cmd(['exchange', 'network', 'peers', '--json'], config)
+        _run_cmd(['network', 'peers', '--json'], config)
         return True
 
     if cmd == '/roles':
-        _run_cmd(['exchange', 'node', 'roles', '--json'], config)
+        _run_cmd(['network', 'node', 'roles', '--json'], config)
         return True
 
     print(f'unknown slash command: {cmd}  (try /help)')
@@ -205,10 +205,11 @@ def _handle_slash(cmd: str, rest: str, config: dict) -> bool:
 
 _KNOWN_FIRST_WORDS = {
     'status', 'check', 'vitals', 'rules', 'auto', 'pause', 'resume', 'init',
-    'exchange', 'compact', 'search', 'doctor', 'controls', 'trial', 'daemon',
-    'start', 'stop', 'crypto', 'cost', 'export', 'report', 'schema', 'data',
+    'network', 'exchange', 'compact', 'search', 'doctor', 'controls', 'trial', 'daemon',
+    'start', 'stop', 'reload', 'crypto', 'cost', 'export', 'report', 'schema', 'data',
     'product', 'features', 'rollback', 'security', 'config', 'resource',
     'trace', 'explain', 'watch', 'feedback', 'freeform-text',
+    'why', 'plan', 'update', 'inbox',
 }
 
 

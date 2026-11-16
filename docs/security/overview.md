@@ -98,5 +98,8 @@ Each finding includes a severity (`info`, `warning`, or `critical`) and a remedi
 
 - [Authority Boundary](authority-boundary.md) — self-evolve governance, protected files
 - [Peer Security](peer-security.md) — TLS 1.3, post-quantum, quarantine, flood protection
-- [Price Mechanics](../economics/price-mechanics.md) — market integrity
-- [Tokenomics](../economics/tokenomics.md) — supply security and cartel detection
+- [Price Mechanics](../economy/price-mechanics.md) — market integrity
+- [Tokenomics](../economy/tokenomics.md) — supply security and cartel detection
+
+---
+→ [Next: Authority Boundary](authority-boundary.md) — self-evolve governance and protected file contracts

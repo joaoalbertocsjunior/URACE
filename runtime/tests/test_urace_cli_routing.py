@@ -253,8 +253,8 @@ class UniversalInputRoutingTests(unittest.TestCase):
     def test_sd_true_alias_status_routes_to_check(self):
         self.assertEqual(self._route(["status"]), ["status"])  # Workflow-aware inspection; core mode still delegates to check.
 
-    def test_sd_true_alias_stop_routes_to_pause(self):
-        self.assertEqual(self._route(["stop"]), ["pause"])
+    def test_sd_true_alias_stop_routes_to_stop(self):
+        self.assertEqual(self._route(["stop"]), ["stop"])
 
     def test_sd_true_two_word_rules_list(self):
         self.assertEqual(self._route(["rules", "list"]), ["rules", "list"])
@@ -321,7 +321,7 @@ class ComprehensiveRoutingTests(unittest.TestCase):
         self.assertEqual(self._route(["status"]), ["status"])  # Workflow-aware inspection; core mode still delegates to check.
 
     def test_sd_true_stop(self):
-        self.assertEqual(self._route(["stop"]), ["pause"])
+        self.assertEqual(self._route(["stop"]), ["stop"])
 
     def test_sd_true_start(self):
         self.assertEqual(self._route(["resume"]), ["resume"])
@@ -444,7 +444,7 @@ class CommandHandlerFunctionalTests(unittest.TestCase):
              redirect_stdout(out):
             result = cli.main(["check"])
         self.assertEqual(result, 0)
-        self.assertIn("lifecycle_state:", out.getvalue())
+        self.assertIn("lifecycle:", out.getvalue())
 
     def test_check_json_flag_emits_valid_json(self):
         out = io.StringIO()

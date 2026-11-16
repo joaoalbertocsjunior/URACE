@@ -189,5 +189,85 @@ class TestRegisterReplicaGuard(unittest.TestCase):
         )
 
 
+def _qv_row(issuer, subject):
+    return {'kind': 'QUALITY_VERIFICATION', 'peer': issuer, 'subject_peer_id': subject}
+
+
+class MutualApprovalCartelTests(unittest.TestCase):
+    def setUp(self):
+        from urace import cartel_guard as cg
+        self.cg = cg
+
+    def _fully_connected_rows(self, peers):
+        """Return QUALITY_VERIFICATION rows for every directed pair among peers."""
+        rows = []
+        for a in peers:
+            for b in peers:
+                if a != b:
+                    rows.append(_qv_row(a, b))
+        return rows
+
+    def test_fully_connected_3node_ring_flagged(self):
+        peers = ['alice', 'bob', 'carol']
+        rows = self._fully_connected_rows(peers)
+        result = self.cg.detect_mutual_approval_cartel(rows, min_scc_size=3,
+                                                        min_mutual_density=0.70)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(set(result[0]['members']), set(peers))
+        self.assertGreaterEqual(result[0]['density'], 0.70)
+
+    def test_partial_density_below_threshold_not_flagged(self):
+        # 3 nodes, only 3 out of 6 possible directed edges → density 0.5 < 0.7
+        rows = [
+            _qv_row('alice', 'bob'),
+            _qv_row('bob', 'carol'),
+            _qv_row('carol', 'alice'),
+            # No reverse edges → density = 3/6 = 0.5
+        ]
+        result = self.cg.detect_mutual_approval_cartel(rows, min_scc_size=3,
+                                                        min_mutual_density=0.70)
+        # density 0.5 < 0.70 → not flagged
+        self.assertEqual(len(result), 0)
+
+    def test_scc_too_small_not_flagged(self):
+        # Only 2 peers → SCC size 2 < min_scc_size=3
+        rows = [_qv_row('alice', 'bob'), _qv_row('bob', 'alice')]
+        result = self.cg.detect_mutual_approval_cartel(rows, min_scc_size=3)
+        self.assertEqual(len(result), 0)
+
+    def test_confidence_scales_with_density(self):
+        peers = ['a', 'b', 'c']
+        rows = self._fully_connected_rows(peers)
+        result = self.cg.detect_mutual_approval_cartel(rows, min_scc_size=3,
+                                                        min_mutual_density=0.70)
+        self.assertEqual(len(result), 1)
+        # fully connected → density=1.0 → confidence = (1.0-0.70)/(1.0-0.70) = 1.0
+        self.assertAlmostEqual(result[0]['confidence'], 1.0, places=2)
+
+    def test_ignores_non_quality_verification_rows(self):
+        peers = ['x', 'y', 'z']
+        noise_rows = [
+            {'kind': 'CREDIT_DELTA', 'peer': 'x', 'subject_peer_id': 'y'},
+            {'kind': 'EQUITY_GRANT', 'peer': 'y', 'subject_peer_id': 'z'},
+        ]
+        qv_rows = self._fully_connected_rows(peers)
+        result_with_noise = self.cg.detect_mutual_approval_cartel(
+            qv_rows + noise_rows, min_scc_size=3, min_mutual_density=0.70)
+        result_without_noise = self.cg.detect_mutual_approval_cartel(
+            qv_rows, min_scc_size=3, min_mutual_density=0.70)
+        self.assertEqual(len(result_with_noise), len(result_without_noise))
+
+    def test_no_self_edges(self):
+        # Rows where issuer==subject should be excluded (self-ratings)
+        rows = [
+            _qv_row('alice', 'alice'),
+            _qv_row('bob', 'bob'),
+            _qv_row('carol', 'carol'),
+        ]
+        # With only self-edges, no real SCC can form
+        result = self.cg.detect_mutual_approval_cartel(rows, min_scc_size=3)
+        self.assertEqual(len(result), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

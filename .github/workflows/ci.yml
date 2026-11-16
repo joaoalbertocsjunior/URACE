@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
+      - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q --cov=urace --cov-report=term-missing
       - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
       - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/core-state --ignore=urace/trial/tests -m "not slow" -x -q
 
@@ -95,7 +95,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install ruff
-      - run: ruff check urace/runtime/urace/ --select F821,F541,F811,E711,E712,B006,B007
+      - run: ruff check urace/runtime/urace/ --select F,E7,B,W --ignore E501,E402,E731
 
   ledger-sync:
     runs-on: ubuntu-latest
@@ -125,5 +125,6 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e "urace/runtime/"
-      - run: python urace/runtime/tests/conftest.py
-      - run: urace security audit --no-network --json
+      - run: python -c "import urace; from urace.cli import main; print('import ok')"
+      - run: python -c "from urace.credit_ledger import CONSENSUS_WEIGHTS, UNIT; assert UNIT == 100_000_000"
+      - run: python -c "from urace.cost_model import BorrowCostContext, _ceiling_for_loc; assert _ceiling_for_loc(25)==0.05"

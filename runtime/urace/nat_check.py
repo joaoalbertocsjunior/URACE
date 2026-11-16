@@ -63,17 +63,19 @@ def detect_nat_type(timeout: float = 5.0) -> dict:
     'unknown'  — STUN failed
     """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("0.0.0.0", 0))
-    results = []
-    stun_used = None
-    for host, port in STUN_SERVERS[:3]:
-        r = _stun_probe(host, port, sock, timeout)
-        if r:
-            results.append(r)
-            if stun_used is None:
-                stun_used = f"{host}:{port}"
-        time.sleep(0.1)
-    sock.close()
+    try:
+        sock.bind(("0.0.0.0", 0))
+        results = []
+        stun_used = None
+        for host, port in STUN_SERVERS[:3]:
+            r = _stun_probe(host, port, sock, timeout)
+            if r:
+                results.append(r)
+                if stun_used is None:
+                    stun_used = f"{host}:{port}"
+            time.sleep(0.1)
+    finally:
+        sock.close()
 
     if not results:
         return {"nat_type": "unknown", "public_ip": None, "public_port": None, "stun_server": None}

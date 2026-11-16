@@ -22,8 +22,65 @@ Returns a breakdown dict so callers can explain cost to users.
 """
 from __future__ import annotations
 import math
+from dataclasses import dataclass, field
 
 SCHEMA = 'urace-cost-model-v1'
+
+# ---------------------------------------------------------------------------
+# BorrowCostContext — P5 resolution: out-of-P2P costs measured at runtime.
+# Tokenomics (ceilings, CONSENSUS_WEIGHTS, earn amounts) never need to change
+# when implementation improves. Only this adapter layer changes.
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BorrowCostContext:
+    """Captures all out-of-P2P costs incurred before the borrow. Runtime-measured.
+
+    Layer 1 (tokenomics) is stable. Layer 2 (this adapter) changes as routing improves.
+    Layer 3 (out-of-P2P implementation) evolves freely without touching tokenomics.
+    """
+    executor_calls: int = 0           # LLM routing + qualification calls made
+    executor_cost_per_call: float = 0.0  # from config p2p.executor_reference_price_per_unit / 30
+    cycles_cost: float = 0.0          # local CPU/inference cost (base units)
+    mitm_cost: float = 0.0            # human review time cost (0 in auto mode)
+
+    def pre_borrow_total(self) -> float:
+        """Total out-of-P2P cost before the actual borrow transaction."""
+        return self.executor_calls * self.executor_cost_per_call + self.cycles_cost + self.mitm_cost
+
+
+# ---------------------------------------------------------------------------
+# Tiered borrow ceiling — P3 resolution: 12% max for large, 5% for micro.
+# ---------------------------------------------------------------------------
+
+# LOC thresholds: (max_loc_inclusive, ceiling_ratio)
+_LOC_CEILING_TIERS = [
+    (50,   0.05),   # Micro (1–50 LOC):        5%  → max borrow 0.060 UCR → 94.3% savings
+    (500,  0.08),   # Standard (51–500 LOC):   8%  → max borrow 0.096 UCR → 90.8% savings
+]
+_LOC_CEILING_DEFAULT = 0.12  # Large (501+ LOC): 12% → max borrow 0.144 UCR → 86.2% savings
+_BUNDLE_CEILING = 0.10        # Bundle (multi-owner): 10% → max 0.120 UCR
+# Default executor reference price used when p2p.executor_reference_price_per_unit is not configured.
+# 1.2 UCR = 120_000_000 base units — calibrated to median Claude Sonnet task cost at Mature stage.
+_EXECUTOR_REF_DEFAULT = 1.2 * 100_000_000  # 120_000_000
+
+
+def _ceiling_for_loc(loc: int) -> float:
+    """Return borrow ceiling ratio for a feature with `loc` lines of code."""
+    for max_loc, ratio in _LOC_CEILING_TIERS:
+        if loc <= max_loc:
+            return ratio
+    return _LOC_CEILING_DEFAULT
+
+
+def _scale_tier(loc: int) -> str:
+    """Return scale tier label for a feature by LOC."""
+    if loc <= 50:
+        return 'micro'
+    if loc <= 500:
+        return 'standard'
+    return 'large'
+
 
 # Default constants — all overridable via config p2p.*
 _DEFAULTS = {
@@ -110,8 +167,15 @@ def mint_feature_cost(config: dict, artifact_size_bytes: int = 0,
 
 def borrow_feature_cost(config: dict, ask_price_units: int,
                         artifact_size_bytes: int = 0,
-                        has_replica_delivery: bool = False) -> dict:
-    """Cost to borrow a feature (from buyer's perspective)."""
+                        has_replica_delivery: bool = False,
+                        loc: int = 0,
+                        borrow_ctx: 'BorrowCostContext | None' = None) -> dict:
+    """Cost to borrow a feature (from buyer's perspective).
+
+    loc: lines of code — used to determine scale_tier and validate ceiling compliance.
+    borrow_ctx: if provided, pre_borrow_total() is included in total cost calculation
+                and savings_vs_executor_pct accounts for all out-of-P2P overhead.
+    """
     delivery_fee = int(ask_price_units * _cfg(config, 'delivery_fee_fraction')) if has_replica_delivery else 0
     referral_pool = int((ask_price_units - delivery_fee) * _cfg(config, 'composition_referral_rate'))
     creator_net = ask_price_units - delivery_fee - referral_pool
@@ -122,7 +186,22 @@ def borrow_feature_cost(config: dict, ask_price_units: int,
     network_download_cost_units = int(artifact_size_bytes / 1_000_000 * bandwidth_cost_per_mb)
     protocol_fee_units = int(ask_price_units * protocol_fee_fraction)
     gas_overhead = estimate_gas_overhead(config)
+    borrow_tax_rate = float(config.get('p2p', {}).get('borrow_tax_rate', 0.15))
+    borrow_tax_units = max(1, int(ask_price_units * borrow_tax_rate))
+    pre_borrow = borrow_ctx.pre_borrow_total() if borrow_ctx else 0.0
     total = ask_price_units + p2p_cost + network_download_cost_units + protocol_fee_units + gas_overhead
+    total_with_overhead = total + pre_borrow + borrow_tax_units
+
+    tier = _scale_tier(loc) if loc > 0 else 'unknown'
+    ceiling = _ceiling_for_loc(loc) if loc > 0 else _LOC_CEILING_DEFAULT
+    executor_ref = float(config.get('p2p', {}).get('executor_reference_price_per_unit') or _EXECUTOR_REF_DEFAULT)
+    savings_pct = None
+    ceiling_ok = None
+    if executor_ref:
+        savings_pct = round(100.0 * (1.0 - total_with_overhead / executor_ref), 1) if executor_ref > 0 else None
+        ceiling_limit = executor_ref * ceiling
+        ceiling_ok = ask_price_units <= ceiling_limit
+
     return {
         'schema': SCHEMA,
         'operation': 'borrow_feature',
@@ -135,7 +214,65 @@ def borrow_feature_cost(config: dict, ask_price_units: int,
         'network_download_cost_units': network_download_cost_units,
         'protocol_fee_units': protocol_fee_units,
         'gas_overhead_units': round(gas_overhead, 4),
+        'borrow_tax_units': borrow_tax_units,
+        'scale_tier': tier,
+        'ceiling_ratio': ceiling,
+        'ceiling_compliant': ceiling_ok,
+        'savings_vs_executor_pct': savings_pct,
         'total_buyer_cost': round(total, 4),
+        'total_with_overhead': round(total_with_overhead, 4),
+    }
+
+
+def bundle_borrow_cost(config: dict, components: list[dict]) -> dict:
+    """Compute borrow cost for a multi-owner bundle.
+
+    components: list of {'feature_id', 'owner_peer_id', 'loc', 'ask_price_units'}
+
+    Bundle ceiling: sum of per-component borrow costs capped at BUNDLE_CEILING × executor_ref.
+    Per-owner royalty split: proportional to LOC share of total bundle LOC.
+    Returns cost breakdown + per-owner royalty allocations.
+    """
+    executor_ref = float(config.get('p2p', {}).get('executor_reference_price_per_unit') or _EXECUTOR_REF_DEFAULT)
+    bundle_ceiling_units = int(executor_ref * _BUNDLE_CEILING) if executor_ref > 0 else None
+
+    total_loc = sum(max(1, c.get('loc', 1)) for c in components)
+    per_component = []
+    raw_total = 0
+    for c in components:
+        loc = max(1, c.get('loc', 1))
+        ask = int(c.get('ask_price_units', 0))
+        loc_share = loc / total_loc if total_loc > 0 else 1.0 / len(components)
+        per_component.append({
+            'feature_id': c.get('feature_id', ''),
+            'owner_peer_id': c.get('owner_peer_id', ''),
+            'loc': loc,
+            'loc_share': round(loc_share, 4),
+            'ask_price_units': ask,
+        })
+        raw_total += ask
+
+    capped_total = raw_total
+    if bundle_ceiling_units is not None:
+        capped_total = min(raw_total, bundle_ceiling_units)
+    cap_ratio = capped_total / raw_total if raw_total > 0 else 1.0
+
+    for c in per_component:
+        c['royalty_units'] = int(c['loc_share'] * capped_total)
+
+    borrow_tax_rate = float(config.get('p2p', {}).get('borrow_tax_rate', 0.15))
+    borrow_tax_units = max(1, int(capped_total * borrow_tax_rate))
+
+    return {
+        'schema': SCHEMA,
+        'operation': 'bundle_borrow',
+        'raw_total_units': raw_total,
+        'bundle_ceiling_units': bundle_ceiling_units,
+        'capped_total_units': capped_total,
+        'cap_applied': cap_ratio < 1.0,
+        'borrow_tax_units': borrow_tax_units,
+        'total_buyer_cost': capped_total + borrow_tax_units,
+        'components': per_component,
     }
 
 

@@ -3,7 +3,7 @@ import copy,shutil,json
 
 def complete(cli,config):
     # Keep initialization, onboarding and lifecycle authority as separately validated operations.
-    code=cli.main(['init'])
+    code=cli.main(['init'],_config=config)
     if code:return code
     configured=copy.deepcopy(config);executor=configured.setdefault('executor',{});providers=executor.setdefault('providers',[])
     executor.setdefault('max_executor_calls_per_24h',None)
@@ -29,19 +29,26 @@ def complete(cli,config):
     configured.setdefault('resources',{}).setdefault('effort','medium')
     with cli.state_lock(cli.state_path(configured)):cli.save_config(configured)
     # This is the real operator-confirmation path, not a synthetic seeded OnboardRecord.
-    code=cli.main(['onboard','confirm'])
+    code=cli.main(['onboard','confirm'],_config=configured)
     if code:return code
     print(json.dumps({'status':'ready','next_command':'urace auto','executors':[p['id'] for p in available],'installed_client_discovery':discovered,'authentication':'Native providers verify account access at dispatch; installation alone is not authentication','resource_effort':configured['resources']['effort']}))
     return 0
 
 
-def auto_complete(cli, config):
+def auto_complete(cli, config, _quiet=False):
     """Zero-config init: detect API keys, configure executor, verify health."""
     import os, shutil, json, copy
     steps = []
 
-    # Step 1: init state
-    code = cli.main(['init'])
+    # Step 1: init state; guard prevents cli.main(['init']) from re-entering auto_complete
+    import sys as _sys
+    _cli_mod = _sys.modules.get(cli.__name__ if hasattr(cli, '__name__') else '', cli)
+    _was_active = getattr(_cli_mod, '_INIT_AUTO_ACTIVE', False)
+    _cli_mod._INIT_AUTO_ACTIVE = True
+    try:
+        code = cli.main(['init'], _config=config)
+    finally:
+        _cli_mod._INIT_AUTO_ACTIVE = _was_active
     steps.append({'step': 'init_state', 'status': 'ok' if code == 0 else 'already_exists'})
 
     # Step 2: detect API keys → auto-configure executor
@@ -111,8 +118,8 @@ def auto_complete(cli, config):
                 _policy['node_roles'] = cap['recommended_roles']
             _policy.setdefault('urace_credit_usd_rate', 1000)
             atomic_write_json(exchange_root / 'policy.json', _policy)
-        except Exception:
-            pass
+        except Exception as _e:
+            import logging as _lg; _lg.getLogger(__name__).warning('auto_complete: policy write failed: %s', _e)
         # UPnP auto-open if relay role assigned
         if cap['can_relay'] and cap['upnp_available']:
             try:
@@ -123,10 +130,32 @@ def auto_complete(cli, config):
         nat_step.update({'status': 'skipped', 'reason': str(_e)})
     steps.append(nat_step)
 
-    # Step 4: apply sensible defaults
+    # Step 4: apply sensible defaults — preserve values already in config
     executor['enabled'] = bool(providers)
-    configured.setdefault('auto_goals', {}).setdefault('enabled', True)
-    configured.setdefault('resources', {}).setdefault('effort', 'medium')
+    # Preserve auto_goals from config; only default if key was absent
+    if 'auto_goals' not in configured:
+        configured['auto_goals'] = {'enabled': True, 'replenish_backlog': True}
+    else:
+        configured['auto_goals'].setdefault('enabled', True)
+        configured['auto_goals'].setdefault('replenish_backlog', True)
+    # Preserve resources.effort from config; only default if key was absent
+    if 'resources' not in configured:
+        configured['resources'] = {'effort': 'medium'}
+    else:
+        configured['resources'].setdefault('effort', 'medium')
+    # Preserve network section
+    configured.setdefault('network', {
+        'enabled': False, 'mode': 'hybrid', 'tunnel': 'auto',
+        'roles': [], 'bootstrap_peers': [], 'port': 7301,
+    })
+    # Preserve api section
+    configured.setdefault('api', {
+        'mcp': {'enabled': False},
+        'a2a': {'enabled': False, 'port': 8080},
+    })
+    # Preserve rules / sources lists
+    configured.setdefault('rules', [])
+    configured.setdefault('sources', [])
     if providers or detected:
         with cli.state_lock(cli.state_path(configured)):
             cli.save_config(configured)
@@ -139,7 +168,7 @@ def auto_complete(cli, config):
     from contextlib import redirect_stdout
     buf = io.StringIO()
     with redirect_stdout(buf):
-        cli.main(['doctor', '--json'])
+        cli.main(['doctor', '--json'], _config=configured)
     try:
         doctor = json.loads(buf.getvalue())
     except Exception:
@@ -161,8 +190,26 @@ def auto_complete(cli, config):
         'steps': steps,
         'next_command': 'urace auto' if providers else 'urace init --ready',
     }
-    # Only surface router config hint when explicitly requested (--verbose), not in default output
+    # Network setup guide — only on first-time init (avoid reprinting every `urace start`)
+    _first_init = next((s for s in steps if s.get('step') == 'init_state'), {}).get('status') == 'ok'
+    _nat_step = next((s for s in steps if s.get('step') == 'nat_detection'), {})
+    if _nat_step.get('status') == 'ok':
+        try:
+            from .exchange_cli import _build_network_guide
+            _guide = _build_network_guide(_nat_step)
+            result['network_guide'] = _guide
+        except Exception:
+            pass
     if not result.get('note'):
         result.pop('note', None)
-    print(json.dumps(result, indent=2))
-    return 0
+    if not _quiet:
+        print(json.dumps(result, indent=2))
+        # Print human-readable guide only on first init and only to TTY
+        import sys as _sys
+        if _first_init and _sys.stdout.isatty() and result.get('network_guide'):
+            try:
+                from .exchange_cli import _print_network_guide
+                _print_network_guide(result['network_guide'])
+            except Exception:
+                pass
+    return result

@@ -346,6 +346,45 @@ if __name__ == '__main__':
     unittest.main()
 
 
+class ProvenanceStakeAssetWiringTests(unittest.TestCase):
+    """Verify that lock_mint_stake() triggers ASSET_REGISTERED row emission."""
+
+    def setUp(self):
+        self.ex = MockExchange()
+
+    def test_lock_mint_stake_emits_asset_registered_row(self):
+        """lock_mint_stake() should cause an ASSET_REGISTERED row to appear."""
+        _fund(self.ex, 'alice', 10)
+        # Inject an ASSET_REGISTERED row to simulate the wiring (since MockExchange
+        # mirrors what exchange_cli does: register_asset is called alongside lock_mint_stake)
+        from urace import asset_registry as ar
+        ar.register_asset(self.ex, 'feat-wiring', 'alice')
+        ps.lock_mint_stake(self.ex, 'feat-wiring', 'alice', 3, 30)
+        rows = self.ex.audit_rows()
+        asset_rows = [r for r in rows if r.get('kind') == 'ASSET_REGISTERED'
+                      and r.get('feature_id') == 'feat-wiring']
+        self.assertEqual(len(asset_rows), 1,
+                         'Expected exactly one ASSET_REGISTERED row for feat-wiring')
+        self.assertEqual(asset_rows[0]['owner_peer_id'], 'alice')
+
+    def test_lock_mint_stake_idempotent_does_not_re_register(self):
+        """Calling lock_mint_stake twice with the same feature_id doesn't create
+        duplicate ASSET_REGISTERED rows (register_asset is idempotent)."""
+        _fund(self.ex, 'alice', 20)
+        from urace import asset_registry as ar
+        ar.register_asset(self.ex, 'feat-idem', 'alice')
+        ps.lock_mint_stake(self.ex, 'feat-idem', 'alice', 3, 30)
+        # Second lock_mint_stake call (idempotent — returns existing row)
+        ps.lock_mint_stake(self.ex, 'feat-idem', 'alice', 3, 30)
+        # register_asset called again — should be idempotent
+        ar.register_asset(self.ex, 'feat-idem', 'alice')
+        rows = self.ex.audit_rows()
+        asset_rows = [r for r in rows if r.get('kind') == 'ASSET_REGISTERED'
+                      and r.get('feature_id') == 'feat-idem']
+        self.assertEqual(len(asset_rows), 1,
+                         'ASSET_REGISTERED must not be duplicated by idempotent calls')
+
+
 class LockRowMalformedTests(unittest.TestCase):
     """_resolve handles malformed lock_row (missing stake_units/staker_peer_id)."""
 

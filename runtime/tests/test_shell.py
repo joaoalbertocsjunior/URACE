@@ -1,7 +1,9 @@
 import unittest
 from unittest.mock import patch, MagicMock
+import pytest
 
 
+@pytest.mark.slow
 class TestShellDispatch(unittest.TestCase):
     def _dispatch(self, line, config=None):
         from urace.shell import _dispatch_line
@@ -46,10 +48,10 @@ class TestShellDispatch(unittest.TestCase):
         self.assertTrue(result)
         mock_rpc.assert_called_once_with('stop')
 
-    def test_exchange_command_dispatches_directly(self):
-        result, mock_run = self._dispatch('exchange network discover')
+    def test_network_command_dispatches_directly(self):
+        result, mock_run = self._dispatch('network discover')
         self.assertTrue(result)
-        mock_run.assert_called_once_with(['exchange', 'network', 'discover'], {})
+        mock_run.assert_called_once_with(['network', 'discover'], {})
 
     def test_whitespace_only_continues(self):
         result, mock_run = self._dispatch('   ')
@@ -57,6 +59,7 @@ class TestShellDispatch(unittest.TestCase):
         mock_run.assert_not_called()
 
 
+@pytest.mark.slow
 class TestShellPrompt(unittest.TestCase):
     def test_prompt_contains_stopped_when_daemon_down(self):
         from urace.shell import _prompt
@@ -95,6 +98,7 @@ class TestShellPrompt(unittest.TestCase):
         self.assertFalse(result)
 
 
+@pytest.mark.slow
 class TestShellRunCmd(unittest.TestCase):
     def test_run_cmd_returns_exit_code(self):
         from urace.shell import _run_cmd

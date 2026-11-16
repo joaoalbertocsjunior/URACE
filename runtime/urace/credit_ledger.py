@@ -396,6 +396,112 @@ def _peer_held_features(root, peer_id: str) -> set:
 REP_SOURCE_WORK  = 'work'    # earned via delivery, quality, adoption — counts for earned_rep
 REP_SOURCE_TRADE = 'trade'   # purchased / traded — market_rep only, never earned_rep
 
+# ── Consensus weights — event-count based, fully decoupled from UCR amounts ───
+# Every CREDIT_DELTA earn row contributes (1 × weight) to weighted_rep_score().
+# Weights encode the trust signal depth of each earn path.
+# DECOUPLING INVARIANT: changing these weights has ZERO effect on earned_balance().
+# Changing earn amounts (seal_reward_units etc.) has ZERO effect on consensus weight.
+# Trade-source directions always weight 0.0 — they never feed consensus.
+# Adding a new earn path: add it here. Missing key defaults to 0.0 (safe).
+CONSENSUS_WEIGHTS: dict[str, float] = {
+    # High trust — PoQ-verified quality, direct output signal
+    'earn':                    1.00,
+    'delivery_fee':            0.90,
+    'challenge_bounty':        0.90,  # won a challenge → validation accuracy signal
+    # Network service — requires real uptime, hardest to Sybil-fake at scale
+    'seal_reward':             0.80,
+    'relay_reward':            0.80,  # relay node open = highest cold-start value
+    'bootstrap_reward':        0.75,
+    'llm_peer_reward':         0.70,
+    # Referral / composition — indirect signal (follower, not originator)
+    'composition_referral':    0.60,
+    'provenance_compensation': 0.60,
+    # Borrow / adoption — user of others' work, not creator
+    'borrow_earn':             0.40,
+    'escrow_custody_earned':   0.30,
+    # Stake returns — not earn signals, excluded
+    'mint_stake_released':     0.00,
+    'challenge_stake_returned': 0.00,
+    # Trade-source only — never earned consensus
+    'asset_royalty':           0.00,
+    'purchase_receive':        0.00,
+    'cartel_penalty':          0.00,  # negative event, handled via balance debit
+    'decay':                   0.00,
+    # Locked grant — usable as stake only, not transferable until earned via delivery
+    'baseline_grant_locked':   0.00,
+}
+
+# Backward-compat alias — remove after all callers updated
+EARN_WEIGHTS = CONSENSUS_WEIGHTS
+
+# Direction constant for provisional/locked baseline grant
+BASELINE_GRANT_LOCKED_DIRECTION = 'baseline_grant_locked'
+
+
+def weighted_rep_score(root, peer_id: str,
+                       longevity_multiplier: float = 1.0) -> float:
+    """Consensus weight score — event-count weighted, fully decoupled from UCR amounts.
+
+    Each CREDIT_DELTA row contributes: 1 × CONSENSUS_WEIGHTS[direction].
+    Counts events, NOT amounts. Changing earn amounts has zero effect on this score.
+    Trade-source rows are excluded (always weight 0.0).
+
+    longevity_multiplier: pass reputation_categories.score_longevity() to age-weight
+    the score. Default 1.0 gives the raw event-weighted score.
+
+    This is the canonical trust/consensus metric. Use for bid ranking, governance votes,
+    sybil gates, and challenge weight. Use earned_balance() only for credit accounting.
+    """
+    rows = _credit_rows(root, peer_id)
+    total = 0.0
+    for r in rows:
+        if r.get('rep_source', REP_SOURCE_WORK) != REP_SOURCE_WORK:
+            continue
+        direction = r.get('direction', '')
+        weight = CONSENSUS_WEIGHTS.get(direction, 0.0)
+        if weight <= 0.0:
+            continue
+        total += weight  # count the event, not the amount
+    return total * max(0.0, longevity_multiplier)
+
+
+def transfer_earned_rep(root, from_peer_id: str, to_peer_id: str, units: int) -> dict:
+    """Transfer earned reputation on-chain (creates trade rep for receiver).
+
+    Earned rep can be sold/transferred. Once transferred it becomes trade rep —
+    the receiver holds it as trade reputation, never earned. The sender's
+    earned rep decrements. Trust-critical operations always filter to earned-only.
+
+    Records two CREDIT_DELTA rows:
+      - from_peer: spend (direction='rep_transfer_out', rep_source='work')
+      - to_peer:   earn  (direction='rep_transfer_in',  rep_source='trade')
+    """
+    import time as _time
+    if units <= 0:
+        raise ValueError('units must be positive')
+    current = earned_balance(root, from_peer_id)
+    if current < units:
+        raise ValueError(
+            f'Insufficient earned rep: {from_peer_id!r} has {current}, needs {units}')
+    t = _time.time()
+    _ledger(root).append('CREDIT_DELTA', {
+        'peer': from_peer_id, 'delta_units': -units,
+        'direction': 'rep_transfer_out', 'rep_source': REP_SOURCE_WORK,
+        'to_peer_id': to_peer_id, 'at_unix': t,
+    })
+    _ledger(root).append('CREDIT_DELTA', {
+        'peer': to_peer_id, 'delta_units': units,
+        'direction': 'rep_transfer_in', 'rep_source': REP_SOURCE_TRADE,
+        'from_peer_id': from_peer_id, 'at_unix': t,
+    })
+    return {
+        'status': 'transferred',
+        'from_peer_id': from_peer_id,
+        'to_peer_id': to_peer_id,
+        'units': units,
+        'note': 'receiver holds this as trade_rep — never converts back to earned_rep',
+    }
+
 
 def earned_balance(root, peer_id: str) -> int:
     """Credits earned via REP_SOURCE_WORK only — the basis for earned reputation.
@@ -408,6 +514,44 @@ def earned_balance(root, peer_id: str) -> int:
         src = r.get('rep_source', REP_SOURCE_WORK)  # backward-compat: unlabelled = work
         total += _row_units(r) if src == REP_SOURCE_WORK else 0
     return max(0, total)
+
+
+def locked_grant_balance(root, peer_id: str) -> int:
+    """Return the still-locked portion of the baseline grant for peer_id.
+
+    The grant is 3 UCR (BASELINE_GRANT_UNITS), unlocked 1 UCR per accepted delivery.
+    Locked balance = BASELINE_GRANT_UNITS - sum of unlock events.
+    """
+    rows = _credit_rows(root, peer_id)
+    unlocked = sum(
+        abs(_row_units(r)) for r in rows
+        if r.get('direction') == 'baseline_grant_unlock'
+    )
+    return max(0, BASELINE_GRANT_UNITS - unlocked)
+
+
+def unlock_grant(root, peer_id: str, delivery_earn_units: int) -> dict:
+    """Unlock 1 UCR of the baseline grant after a successful delivery acceptance.
+
+    Called by exchange_cli after first delivery_fee rows are recorded.
+    Idempotent: once fully unlocked (3 deliveries), subsequent calls are no-ops.
+    Returns {'unlocked': int, 'remaining_locked': int}.
+    """
+    import time as _t
+    still_locked = locked_grant_balance(root, peer_id)
+    if still_locked <= 0:
+        return {'unlocked': 0, 'remaining_locked': 0}
+    unlock_amount = min(UNIT, still_locked)  # 1 UCR per delivery, capped at remaining
+    _ledger(root).append('CREDIT_DELTA', {
+        'peer': peer_id,
+        'delta_units': 0,  # no net credit change — just status change
+        'direction': 'baseline_grant_unlock',
+        'rep_source': REP_SOURCE_WORK,
+        'unlock_units': unlock_amount,
+        'triggered_by_delivery_earn': delivery_earn_units,
+        'at_unix': _t.time(),
+    })
+    return {'unlocked': unlock_amount, 'remaining_locked': max(0, still_locked - unlock_amount)}
 
 
 def earn_units(root, peer_id, units: int, reason, bundle_id=None, metadata: dict | None = None,
@@ -1276,9 +1420,31 @@ def apply_cartel_penalty(exchange, peer_id: str) -> dict:
     if peer_earn <= cartel_threshold:
         return {'applied': False, 'reason': f'earn_rate_ok ({peer_earn} <= {cartel_threshold:.1f})'}
 
-    # Penalty = 50% of excess above median
+    # Confidence score: how far above 3× is this peer?
+    # 0.0 at exactly 3× median, 1.0 at 6× median
+    confidence = min(1.0, (peer_earn / network_median - 3.0) / 3.0)
+
     excess = peer_earn - network_median
-    penalty = max(1, int(excess * 0.5))
+    if confidence < 0.5:
+        # Low confidence — warning only, no slash
+        import datetime as _dt
+        exchange.append_audit_row({
+            'kind': 'CARTEL_WARNING',
+            'peer': peer_id,
+            'peer_earn_30d': peer_earn,
+            'network_median_30d': round(network_median, 2),
+            'confidence': round(confidence, 3),
+            'at_unix': now,
+            'at': _dt.datetime.now(_dt.timezone.utc).isoformat(),
+            'note': f'Cartel warning (conf={confidence:.2f}): earn {peer_earn} > 3× median — no penalty yet',
+        })
+        return {'applied': False, 'reason': f'cartel_warning_only (confidence={confidence:.2f})', 'confidence': confidence}
+    elif confidence < 0.8:
+        # Medium confidence — 30% slash of excess
+        penalty = max(1, int(excess * 0.30))
+    else:
+        # High confidence — full 50% slash of excess
+        penalty = max(1, int(excess * 0.50))
 
     import datetime as _dt
     exchange.append_audit_row({

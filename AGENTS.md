@@ -1,6 +1,6 @@
 # AGENTS.md — URACE Executor and Agent Onboarding
 
-**Runtime version: 0.8.2**
+**Runtime version: 0.9.3**
 
 This document is the authoritative onboarding reference for any automated agent, AI executor, or programmatic client operating on a URACE runtime. Read this before issuing any `urace` command.
 
@@ -171,41 +171,41 @@ urace operations complete --id <id> --json
 
 ## 7. Exchange / P2P Commands
 
-All exchange commands are under `urace exchange` or the `exchange` prefix.
+All network/exchange commands are under `urace network` (alias: `urace exchange`).
 
 ### Feature Browsing (no cost)
 
 ```sh
 urace search --kind p2p --json                    # search P2P ledger
-urace exchange compact search <query> --json      # search with compressed archives
+urace network compact search <query> --json      # search with compressed archives
 ```
 
 ### Publishing Features (earns tokens)
 
 ```sh
-urace exchange equity grant --feature-id <id> --description "..." \
+urace network equity grant --feature-id <id> --description "..." \
   --borrow-price-units 100 --json
 ```
 
 ### Borrowing Features (spends tokens)
 
 ```sh
-urace exchange equity fill-listing --feature-id <id> --json
+urace network equity fill-listing --feature-id <id> --json
 ```
 
 ### Balance and History
 
 ```sh
-urace exchange ledger balance --json
-urace exchange ledger history --json
+urace network ledger balance --json
+urace network ledger history --json
 ```
 
 ### Bootstrap Peers (first-peer discovery)
 
 ```sh
-urace exchange bootstrap list --json             # list configured bootstrap endpoints
-urace exchange bootstrap add <https://endpoint> --json   # add a bootstrap peer (https:// required)
-urace exchange bootstrap remove <https://endpoint> --json
+urace network bootstrap list --json             # list configured bootstrap endpoints
+urace network bootstrap add <https://endpoint> --json   # add a bootstrap peer (https:// required)
+urace network bootstrap remove <https://endpoint> --json
 ```
 
 Bootstrap peers are contacted during exchange init when no DHT neighbors are known yet. Stored in `exchange/policy.json`.
@@ -213,10 +213,10 @@ Bootstrap peers are contacted during exchange init when no DHT neighbors are kno
 ### Network Stats (anonymized)
 
 ```sh
-urace exchange network peers --json   # anonymized SHA-256 peer hashes
-urace exchange network size --json    # heuristic DHT estimate
-urace exchange network assets [QUERY] --json  # discover authenticated pinned-peer assets; paid asks are discovery-only
-urace exchange network fetch-asset <peer_id> <asset_id> --json  # fetch an explicitly selected open-use asset into quarantine
+urace network network peers --json   # anonymized SHA-256 peer hashes
+urace network network size --json    # heuristic DHT estimate
+urace network network assets [QUERY] --json  # discover authenticated pinned-peer assets; paid asks are discovery-only
+urace network network fetch-asset <peer_id> <asset_id> --json  # fetch an explicitly selected open-use asset into quarantine
 ```
 
 Remote open-use fetch requires a pinned authenticated peer, a public listing, an explicit zero-price open-use license, an allowed local receive rule, a verified seller signature and digest, and an artifact no larger than 300,000 bytes. The artifact is quarantined; fetch never applies or executes it. The seller verifies the buyer-signed quarantine receipt, records and signs an acknowledgement bound to the bundle, asset, artifact, receipt and seller audit event, and handles exact receipt replays idempotently while rejecting conflicting receipts. The buyer verifies and stores that attestation, so pair evidence does not require reading the remote seller's local files. This is cryptographic integrity and seller attestation under pinned-key assumptions, not global consensus or a guarantee against compromised keys/endpoints. Paid remote asks are informational only because cross-peer purchase settlement is not implemented. Do not claim that a P2P ask or reputation credit is cheaper than executor work without qualified paired evidence. A claim is cohort-specific and requires a source-custodian signature binding the source-corpus digest and exact frozen task manifest, plus a complete 30-pair LIVE study with six pairs per family, both arms accepted in every pair, P2P value no lower in every pair, complete comparable USD costs, zero URACE units paid, an allowed provider billing basis, and a paired 95% bootstrap upper bound below zero. It remains unqualified until two distinct reviewers pinned in the frozen plan sign the exact cohort and summary using `trial/p2p_cost_claim_review.py` and attest to full evidence review, workload-provenance review, and independence. These signatures provide accountable attestations, not automatic proof that signers are honest. Synthetic and unspecified evidence can never qualify a savings claim; no cohort proves a universal executor price ceiling.
@@ -224,11 +224,11 @@ Remote open-use fetch requires a pinned authenticated peer, a public listing, an
 ### Market Stats (token velocity + supply health)
 
 ```sh
-urace exchange market stats --json                   # 24h window (default)
-urace exchange market stats --window-hours 48 --json # 48h window
+urace network market stats --json                   # 24h window (default)
+urace network market stats --window-hours 48 --json # 48h window
 ```
 
-`urace exchange ...` is the top-level shorthand — `urace product exchange ...` also resolves but is the internal path.
+`urace network ...` is the top-level shorthand — `urace product exchange ...` also resolves but is the internal path.
 
 Returns:
 - `velocity`: mint/burn/equity/work events in window
@@ -245,10 +245,10 @@ Returns:
 
 ```sh
 # Baseline (1 Mbps consumer) — expect verdict=OK
-urace exchange ledger supply-calc --peers 1000 --ledger-mb 50
+urace network ledger supply-calc --peers 1000 --ledger-mb 50
 
 # Large network (10 Mbps enterprise) — expect UNDERSUPPLIED → raise BASE_CAP_UNITS
-urace exchange ledger supply-calc --peers 10000 --bandwidth-kbps 10000 --ledger-mb 500 --sync-secs 60
+urace network ledger supply-calc --peers 10000 --bandwidth-kbps 10000 --ledger-mb 500 --sync-secs 60
 ```
 
 **Constants (credit_ledger.py):**
@@ -268,19 +268,19 @@ Rate a feature after using it to improve recommendation quality across the netwo
 
 ```sh
 # Rate a feature by outcome
-urace exchange feature rate --feature-id <id> --outcome positive --json
-urace exchange feature rate --feature-id <id> --outcome negative --json
-urace exchange feature rate --feature-id <id> --outcome neutral --json
+urace network feature rate --feature-id <id> --outcome positive --json
+urace network feature rate --feature-id <id> --outcome negative --json
+urace network feature rate --feature-id <id> --outcome neutral --json
 
 # Rate with an explicit quality score (0.0–1.0)
-urace exchange feature rate --feature-id <id> --outcome positive --score 0.85 --json
+urace network feature rate --feature-id <id> --outcome positive --score 0.85 --json
 ```
 
 Get personalized recommendations based on your ratings and improvement history:
 
 ```sh
-urace exchange feature recommend --json          # top recommendations (default limit)
-urace exchange feature recommend --limit 5 --json
+urace network feature recommend --json          # top recommendations (default limit)
+urace network feature recommend --limit 5 --json
 ```
 
 ### Network Mode and Public Address
@@ -288,19 +288,19 @@ urace exchange feature recommend --limit 5 --json
 Three modes control how the exchange reaches other peers:
 
 ```sh
-urace exchange settings set --network-mode intranet  # LAN-only, no internet
-urace exchange settings set --network-mode internet  # DHT + bootstrap peers
-urace exchange settings set --network-mode hybrid    # LAN + optional internet gateway (default)
+urace network settings set --network-mode intranet  # LAN-only, no internet
+urace network settings set --network-mode internet  # DHT + bootstrap peers
+urace network settings set --network-mode hybrid    # LAN + optional internet gateway (default)
 
 # In hybrid mode, designate an internet-facing gateway peer
-urace exchange settings set --internet-gateway <peer-id> --json
+urace network settings set --internet-gateway <peer-id> --json
 ```
 
 Resolve your public IP/port via STUN (needed when transitioning from intranet to internet):
 
 ```sh
-urace exchange network public-address --json
-urace exchange network public-address --stun-host stun.example.com --stun-port 3478 --json
+urace network network public-address --json
+urace network network public-address --stun-host stun.example.com --stun-port 3478 --json
 ```
 
 ### Peer Roles
@@ -308,30 +308,30 @@ urace exchange network public-address --stun-host stun.example.com --stun-port 3
 Roles control what a peer may do on your node (admin > operator > readonly):
 
 ```sh
-urace exchange peer role <peer_id> --json                    # show current role
-urace exchange peer role <peer_id> --set admin --json        # grant admin
-urace exchange peer role <peer_id> --set operator --json     # grant operator
-urace exchange peer role <peer_id> --set readonly --json     # restrict to read-only
+urace network peer role <peer_id> --json                    # show current role
+urace network peer role <peer_id> --set admin --json        # grant admin
+urace network peer role <peer_id> --set operator --json     # grant operator
+urace network peer role <peer_id> --set readonly --json     # restrict to read-only
 ```
 
 ### Exchange Settings (governance parameters)
 
 ```sh
 # Minimum peers required for consensus decisions
-urace exchange settings set --consensus-min-threshold 3 --json
+urace network settings set --consensus-min-threshold 3 --json
 
 # Override baseline token grant per new peer (affects supply calibration)
-urace exchange settings set --baseline-grant-tokens 500 --json
+urace network settings set --baseline-grant-tokens 500 --json
 ```
 
 ### Work Market
 
 ```sh
-urace exchange work create --description "..." --budget-units 1000 --mode agora --json
-urace exchange work create --description "..." --budget-units 1000 \
+urace network work create --description "..." --budget-units 1000 --mode agora --json
+urace network work create --description "..." --budget-units 1000 \
   --mode cohort --cohort-reputation-floor 50 --json
-urace exchange work bid --request-id <id> --price-units 800 --json
-urace exchange work accept --request-id <id> --bid-id <bid> --json
+urace network work bid --request-id <id> --price-units 800 --json
+urace network work accept --request-id <id> --bid-id <bid> --json
 ```
 
 ### GitHub-Attached Products
@@ -448,9 +448,9 @@ The `command` field is split on spaces and dispatched through the normal CLI. `-
 ### Bandwidth and Compression Settings
 
 ```sh
-urace exchange settings set --bandwidth-profile low --compress-wire true  # low-bandwidth peer
-urace exchange settings set --bandwidth-profile high                       # high-bandwidth peer
-urace exchange settings set --transfer-chunk-size 16384                   # explicit override
+urace network settings set --bandwidth-profile low --compress-wire true  # low-bandwidth peer
+urace network settings set --bandwidth-profile high                       # high-bandwidth peer
+urace network settings set --transfer-chunk-size 16384                   # explicit override
 ```
 
 Profiles: `auto` (4 KB chunks), `low` (1 KB + optional gzip), `high` (64 KB chunks).
@@ -557,11 +557,11 @@ Checks: config integrity, state schema, executor availability, exchange identity
 ## 11. Auto Buy/Sell Presets
 
 ```sh
-urace exchange trade-config show-presets --json       # list available presets
-urace exchange trade-config set --preset conservative --json
-urace exchange trade-config set --preset balanced --json
-urace exchange trade-config set --preset aggressive --json
-urace exchange trade-config set --auto-tune --json    # derive from network conditions
+urace network trade-config show-presets --json       # list available presets
+urace network trade-config set --preset conservative --json
+urace network trade-config set --preset balanced --json
+urace network trade-config set --preset aggressive --json
+urace network trade-config set --auto-tune --json    # derive from network conditions
 ```
 
 Presets: `conservative` (low risk, low ROI), `balanced` (default), `aggressive` (high volume, higher risk).
@@ -573,9 +573,9 @@ Presets: `conservative` (low risk, low ROI), `balanced` (default), `aggressive` 
 ```sh
 urace compact --json                 # compress context to free space
 urace decompact --json               # restore from compressed snapshot
-urace exchange compact compress --json
-urace exchange compact decompress --json
-urace exchange compact search <query> --json  # searches live + archives
+urace network compact compress --json
+urace network compact decompress --json
+urace network compact search <query> --json  # searches live + archives
 ```
 
 ---
@@ -661,8 +661,8 @@ urace crypto wallet rotate --backup-dir /secure/backup --json
 Tokens are reputation scores in a closed network by default. Mainnet settlement is disabled until explicitly enabled:
 
 ```sh
-urace exchange settings set --token-settlement true   # explicit opt-in
-urace exchange ledger transfer <peer_id> <amount_units> --yes
+urace network settings set --token-settlement true   # explicit opt-in
+urace network ledger transfer <peer_id> <amount_units> --yes
 ```
 
 **CRYPTO_PENDING_FEATURES**: `token_settlement`, `cross_chain_transfer` — await blockchain connector integration.
@@ -901,7 +901,7 @@ Goose should treat `urace api commands --json` as its schema source and respect 
 OpenSandbox agents can call URACE via its MCP server:
 
 ```sh
-urace exchange network serve --host 127.0.0.1 --port 8443
+urace network network serve --host 127.0.0.1 --port 8443
 ```
 
 The MCP endpoint exposes the same JSON-schema-validated API. OpenSandbox agents must set `--json` on all calls and parse the `status` field before proceeding. Authority boundary rules (§2) apply equally to OpenSandbox-originated commands.
@@ -914,13 +914,13 @@ When a user is ready to expose intranet features to the public P2P network, agen
 
 ```sh
 # Zero-conf: analyze + apply smart defaults (min-kpi-score 0.5, min-ratings 2, mode hybrid)
-urace exchange network port-to-internet --auto --json
+urace network network port-to-internet --auto --json
 
 # Dry-run: analysis only, no changes made
-urace exchange network port-to-internet --dry-run --json
+urace network network port-to-internet --dry-run --json
 
 # Power-user: explicit feature selection and raised quality threshold
-urace exchange network port-to-internet --features feat-abc,feat-def --min-kpi-score 0.7 --json
+urace network network port-to-internet --features feat-abc,feat-def --min-kpi-score 0.7 --json
 ```
 
 Response fields: `public_address`, `features_to_port` (with `kpi_score`, `positive`, `negative`), `features_skipped`, `recommended_mode`, `steps`, `status`.
@@ -977,8 +977,8 @@ The `commands` list is an allowlist — anything not listed is blocked. `ADMIN` 
 ## 27. Related References
 
 - `docs/index.md` — documentation index
-- `docs/getting-started/quick-start.md` — five-minute walkthrough
+- `docs/users/quick-start.md` — five-minute walkthrough
 - `docs/security/authority-boundary.md` — authority model details
-- `docs/exchange/overview.md` — P2P exchange overview
-- `docs/economics/tokenomics.md` — token supply and economics
+- `docs/power-users/exchange-overview.md` — P2P exchange overview
+- `docs/economy/tokenomics.md` — token supply and economics
 - `CLAUDE.md` — Claude Code operator instructions (not for executors)

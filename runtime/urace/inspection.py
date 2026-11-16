@@ -744,21 +744,11 @@ def command_catalog() -> dict[str, list[dict[str, str]]]:
 def top_level_help() -> str:
     return """URACE — autonomous product improvement
 
-Get started in 5 minutes:
-
-  pip install urace
-  urace start               boot daemon + join P2P network (zero-config)
-  urace                     open shell — type goals and questions in plain language
-
-Core commands:
-
-  start                     boot daemon + P2P network
-  stop                      shutdown
-  status [SUBJECT]          observe: health, goals, decisions, activity, vitals
-  config [SETTING]          settings: evolution, budget, executor, controls
-  update                    apply a spec update
-  source add --kind <kind>  connect data files, executors, metrics, github, peers
-  api serve --transport     machine interface: MCP stdio, A2A HTTP
+  urace start               boot daemon, join P2P network, detect executors
+  urace stop                graceful shutdown
+  urace status              observe: lifecycle, network, executor, goals, health
+  urace reload              hot-reload config.json without restart
+  urace                     shell — type goals and questions in plain language
 
 Inside the shell, type naturally:
 
@@ -767,20 +757,19 @@ Inside the shell, type naturally:
   > why did you change the README?      → decision explained
   > what blocked progress today?        → blockers listed
   > run now                             → cycle triggered
+  > status goals                        → goals summary
+  > status network                      → network detail
+  > update                              → apply pending spec update
 
-Slash shortcuts: /status  /events  /config  /peers  /stop  /exit
+Slash shortcuts: /status  /stop  /reload  /peers  /exit
 
-Source kinds:  file  csv  json  sqlite  api  connector  executor  metric  vital  github  product  peer
+Configure everything in config.json — see: urace status --json | python3 -m json.tool
+Network, executor, rules, sources, auto_goals — all editable; apply with: urace reload
 
-Status subjects:
-  runtime  goals  decisions  vitals  plan  health  blockers  compliance
-  quality  milestone  inbox  integrity  features  schema  resources
-
-For power users and integrations — full reference:
-  urace <command> --help    any hidden command still works
+For integrations (all hidden commands still work):
+  urace <command> --help    full reference for any command
   urace help <command>      contextual help without Executor
-  docs/reference/ux-guide.md              5-minute guide
-  docs/reference/ux-surfaces.md           full surface reference (all ~334 paths)"""
+  urace m2m '{"command":"status"}'   machine-to-machine JSON interface"""
 
 
 

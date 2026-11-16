@@ -83,6 +83,26 @@ def lock_mint_stake(exchange, feature_id: str, staker_peer_id: str, stake_units:
         'at_unix': t,
         'at': _now_iso(),
     })
+    _nft_token_id = None
+    try:
+        from .eth_settlement_adapter import EthSettlementAdapter as _EthAdapter
+        _chain_cfg = exchange.load().get('chain', {}) if hasattr(exchange, 'load') else {}
+        if _chain_cfg.get('rpc_url') and _chain_cfg.get('nft_contract'):
+            _nft_result = _EthAdapter(_chain_cfg).mint_nft(
+                feature_id=feature_id,
+                creator_peer_id=staker_peer_id,
+                metadata={},
+            )
+            if _nft_result.get('status') == 'ok':
+                _nft_token_id = str(_nft_result.get('token_id', ''))
+    except Exception:
+        pass
+    try:
+        from . import asset_registry as _ar
+        _ar.register_asset(exchange, feature_id=feature_id, creator_peer_id=staker_peer_id,
+                           nft_token_id=_nft_token_id)
+    except Exception:
+        pass
     return lock_row
 
 

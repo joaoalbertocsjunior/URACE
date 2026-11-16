@@ -269,3 +269,123 @@ def register_replica_guard(
             f'({result.get("slot_count",0)} slots, reason={reason!r}, threshold={threshold:.2f}) '
             f'— registration blocked to prevent availability hijack'
         )
+
+
+# ---------------------------------------------------------------------------
+# Mutual-approval quality cartel detection (III.2)
+# ---------------------------------------------------------------------------
+
+def detect_mutual_approval_cartel(
+    rows: list[dict],
+    min_scc_size: int = 3,
+    min_mutual_density: float = 0.70,
+) -> list[dict]:
+    """Detect mutual-approval cartel rings via strongly-connected components (SCCs).
+
+    Builds a directed graph from QUALITY_VERIFICATION rows (issuer → subject).
+    SCCs with ≥ min_scc_size nodes and bidirectional density ≥ min_mutual_density
+    are flagged as suspected cartels. Confidence = (density - 0.70) / 0.30 → [0, 1].
+
+    Returns list of flagged cartel groups:
+      [{'members': [...], 'density': float, 'confidence': float, 'scc_size': int}, ...]
+    """
+    from collections import defaultdict
+
+    # Build adjacency: who verified whom
+    out_edges: dict[str, set[str]] = defaultdict(set)
+    for r in rows:
+        if r.get('kind') == 'QUALITY_VERIFICATION':
+            issuer = r.get('peer') or r.get('issuer')
+            subject = r.get('subject_peer_id') or r.get('subject_peer')
+            if issuer and subject and issuer != subject:
+                out_edges[issuer].add(subject)
+
+    all_peers = set(out_edges.keys()) | {v for vs in out_edges.values() for v in vs}
+    if len(all_peers) < min_scc_size:
+        return []
+
+    # Kosaraju's SCC algorithm
+    peer_list = list(all_peers)
+    idx = {p: i for i, p in enumerate(peer_list)}
+    n = len(peer_list)
+    adj = [[] for _ in range(n)]
+    radj = [[] for _ in range(n)]
+    for src, dsts in out_edges.items():
+        s = idx.get(src)
+        if s is None:
+            continue
+        for dst in dsts:
+            d = idx.get(dst)
+            if d is None:
+                continue
+            adj[s].append(d)
+            radj[d].append(s)
+
+    visited = [False] * n
+    order: list[int] = []
+
+    def _dfs1(v: int) -> None:
+        stack = [(v, 0)]
+        while stack:
+            u, state = stack.pop()
+            if state == 0:
+                if visited[u]:
+                    continue
+                visited[u] = True
+                stack.append((u, 1))
+                for w in adj[u]:
+                    if not visited[w]:
+                        stack.append((w, 0))
+            else:
+                order.append(u)
+
+    for i in range(n):
+        if not visited[i]:
+            _dfs1(i)
+
+    comp = [-1] * n
+    c = 0
+
+    def _dfs2(v: int, label: int) -> None:
+        stack = [v]
+        while stack:
+            u = stack.pop()
+            if comp[u] != -1:
+                continue
+            comp[u] = label
+            for w in radj[u]:
+                if comp[w] == -1:
+                    stack.append(w)
+
+    for v in reversed(order):
+        if comp[v] == -1:
+            _dfs2(v, c)
+            c += 1
+
+    # Group by SCC
+    scc_groups: dict[int, list[str]] = defaultdict(list)
+    for i, label in enumerate(comp):
+        scc_groups[label].append(peer_list[i])
+
+    flagged = []
+    for label, members in scc_groups.items():
+        if len(members) < min_scc_size:
+            continue
+        member_set = set(members)
+        # Count actual bidirectional edges within the SCC
+        possible_edges = len(members) * (len(members) - 1)
+        actual_edges = sum(
+            1 for src in members for dst in out_edges.get(src, set())
+            if dst in member_set and dst != src
+        )
+        density = actual_edges / possible_edges if possible_edges > 0 else 0.0
+        if density >= min_mutual_density:
+            confidence = min(1.0, (density - min_mutual_density) / (1.0 - min_mutual_density))
+            flagged.append({
+                'members': sorted(members),
+                'scc_size': len(members),
+                'density': round(density, 3),
+                'confidence': round(confidence, 3),
+            })
+
+    return flagged

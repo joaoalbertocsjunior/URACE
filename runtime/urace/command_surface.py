@@ -20,7 +20,7 @@ def output_options(parser):
 
 
 def product(sub):
-    root=sub.add_parser('product',help='manage products, isolated work, value evidence and improvement controls')
+    root=sub.add_parser('product',help=argparse.SUPPRESS)
     root.set_defaults(command='product',name=None,improvement_product_id=None,all_products=False,product_state_path=None,product_files=[],intent_purpose=None,reason=None,force=False,value_id=None,value_data=None,project=None,template='navigation',work_executor='auto',execution_mode='auto',max_seconds=480,run_id=None,adaptive='true',product_github=None,product_clone_to=None,git_args=[])
     output_options(root);children=root.add_subparsers(dest='action',required=True)
     for action in ('list','status','help','switch','register','remove','deactivate','activate','enable','disable'):
@@ -55,7 +55,7 @@ def product(sub):
     return root
 
 def config_showall(sub):
-    root=sub.add_parser('config',help='show or manage all configuration')
+    root=sub.add_parser('config',help=argparse.SUPPRESS)
     root.set_defaults(command='config')
     verbs=root.add_subparsers(dest='config_verb',required=True)
     p=verbs.add_parser('show-all',help='show complete configuration: controls, executor, exchange, fleet')
@@ -63,7 +63,7 @@ def config_showall(sub):
     return root
 
 def security_audit(sub):
-    root=sub.add_parser('security',help='security posture audit and key management')
+    root=sub.add_parser('security',help=argparse.SUPPRESS)
     root.set_defaults(command='security')
     verbs=root.add_subparsers(dest='security_verb',required=True)
     p=verbs.add_parser('audit',help='check security posture: wallet, consensus, compliance, circuit breaker, GitHub release integrity')
@@ -72,7 +72,7 @@ def security_audit(sub):
     return root
 
 def watch(sub):
-    root=sub.add_parser('watch',help='observe runtime improvement cycles and deployment evidence')
+    root=sub.add_parser('watch',help=argparse.SUPPRESS)
     root.set_defaults(command='watch',watch_action='events',follow=False,limit=20,report=False,guard=False,dashboard=False)
     root.add_argument('--follow','-f',action='store_true');root.add_argument('--limit',type=int,default=20);output_options(root)
     old=root.add_mutually_exclusive_group()
@@ -86,7 +86,7 @@ def watch(sub):
 
 
 def configuration(sub):
-    root = sub.add_parser('configuration', help='inspect or change persistent settings', formatter_class=argparse.RawDescriptionHelpFormatter, description='Persistent settings. Examples: configuration effort high; configuration executor codex --model MODEL; configuration auto-goals replenish disable. Existing tasks and Authority remain separate.')
+    root = sub.add_parser('configuration', help=argparse.SUPPRESS, formatter_class=argparse.RawDescriptionHelpFormatter, description='Persistent settings. Examples: configuration effort high; configuration executor codex --model MODEL; configuration auto-goals replenish disable. Existing tasks and Authority remain separate.')
     root.set_defaults(setting='show',value=None,daily=None,monthly=None,component=None)
     output_options(root)
     children = root.add_subparsers(dest='configuration_setting', metavar='SETTING')
@@ -127,7 +127,7 @@ def configuration(sub):
     return root
 
 def crypto(sub):
-    root=sub.add_parser('crypto',help='local wallet and signing primitives (gas-free; no on-chain broadcast)')
+    root=sub.add_parser('crypto',help=argparse.SUPPRESS)
     root.set_defaults(command='crypto',crypto_action=None,wallet_dir=None,payload=None,overwrite=False)
     output_options(root);children=root.add_subparsers(dest='crypto_action',required=True)
     wallet=children.add_parser('wallet',help='secp256k1 keypair management');wallet.set_defaults(crypto_action='wallet',wallet_verb=None)
@@ -139,7 +139,7 @@ def crypto(sub):
     return root
 
 def qualification(sub):
-    root=sub.add_parser('qualification',help='qualification audit: replay and verify past evidence/decision pairs')
+    root=sub.add_parser('qualification',help=argparse.SUPPRESS)
     root.set_defaults(command='qualification',qualification_action=None,evidence_id=None)
     output_options(root);children=root.add_subparsers(dest='qualification_action',required=True)
     p=children.add_parser('replay',help='replay a qualification: verify evidence integrity and reproduce decision logic from stored inputs')

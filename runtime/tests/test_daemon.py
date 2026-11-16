@@ -8,6 +8,7 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+import pytest
 
 
 def _make_config(directory):
@@ -75,6 +76,7 @@ class IsRunningTests(unittest.TestCase):
             self.assertFalse(d._is_running(99999))
 
 
+@pytest.mark.slow
 class DispatchStatusTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="urace-daemon-test-")
@@ -189,7 +191,7 @@ class DispatchStartTests(unittest.TestCase):
         from urace import _daemon as d
         import io
         cycle_calls = []
-        def fake_cli_main(argv):
+        def fake_cli_main(argv, **kwargs):
             cycle_calls.append(argv)
         with patch("urace.cli.main", side_effect=fake_cli_main):
             with patch("os.getpid", return_value=33333):

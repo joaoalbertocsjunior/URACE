@@ -287,9 +287,9 @@ def seal_ledger_block(exchange, root: str) -> dict:
     # Maintainer reward: sealer earns for chain-integrity work
     try:
         _policy = exchange.load()
-        _seal_reward = int(_policy.get('p2p', {}).get('seal_reward_units', 1))
+        _seal_reward = int(_policy.get('p2p', {}).get('seal_reward_units', 1_000_000))
     except Exception:
-        _seal_reward = 1
+        _seal_reward = 1_000_000
     try:
         _local_id = exchange.identity().get('peer_id', '')
     except Exception:
@@ -307,6 +307,19 @@ def seal_ledger_block(exchange, root: str) -> dict:
             'at_unix': time.time(),
             'at': _now_iso(),
         })
+
+    # Chain anchor hook — no-op until ledger.chain_anchor.enabled = true
+    try:
+        from . import chain_anchor as _ca
+        _config = exchange.load() if hasattr(exchange, 'load') else {}
+        _ca.publish_seal({
+            'block_hash': block_hash,
+            'block_height': block_height,
+            'rows_hash': rows_hash,
+            'at_unix': time.time(),
+        }, _config)
+    except Exception:
+        pass
 
     return {
         'status': 'sealed',

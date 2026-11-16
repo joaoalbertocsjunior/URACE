@@ -332,8 +332,14 @@ def submit_bid(
     bidder_id: str,
     combined_rep: float,
     sub_task_id: str | None = None,
+    consensus_weight: float | None = None,
 ) -> None:
-    """Submit a WORK_BID. combined_rep must meet min_combined_rep to be valid."""
+    """Submit a WORK_BID. combined_rep must meet min_combined_rep to be valid.
+
+    consensus_weight: event-count based score from credit_ledger.weighted_rep_score().
+    Used as a tiebreaker — peers with equal combined_rep are ranked by consensus_weight.
+    Does not replace combined_rep; supplements it.
+    """
     st = escrow_state(request_id, exchange)
     if st['state'] != 'OPEN':
         raise ValueError(f'Request {request_id} is not open for bids (state={st["state"]})')
@@ -349,7 +355,7 @@ def submit_bid(
                 f'Cohort mode: bidder combined_rep {combined_rep:.3f} < cohort_rep_floor {floor:.3f}. '
                 'Only trusted peers (pinned + reputation >= floor) may bid on cohort requests.'
             )
-    exchange.append_audit_row({
+    row: dict = {
         'kind': 'WORK_BID',
         'request_id': request_id,
         'bidder_id': bidder_id,
@@ -357,7 +363,10 @@ def submit_bid(
         'sub_task_id': sub_task_id,
         'at_unix': time.time(),
         'at': _now_iso(),
-    })
+    }
+    if consensus_weight is not None:
+        row['consensus_weight'] = consensus_weight
+    exchange.append_audit_row(row)
 
 
 def accept_bid(

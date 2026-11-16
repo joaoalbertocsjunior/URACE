@@ -77,6 +77,9 @@ What it cannot do without your action:
 
 ## Related
 
-- [Update Guide](../guides/update.md) — the full update workflow
+- [Update Guide](../power-users/update.md) — the full update workflow
 - [Peer Security](peer-security.md) — quarantine model for borrowed features
 - [Security Overview](overview.md) — all security guarantees
+
+---
+→ [Next: Peer Security](peer-security.md) — TLS 1.3, post-quantum hybrid, quarantine model

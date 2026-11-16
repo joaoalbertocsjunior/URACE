@@ -70,7 +70,7 @@ class UraceLifecycleTests(unittest.TestCase):
         with redirect_stdout(output):
             self.assertEqual(cli.main(["help"]), 0)
         text = output.getvalue()
-        self.assertIn("source add --kind", text)
+        self.assertIn("urace start", text)
         self.assertIn("boot daemon", text)
         self.assertNotIn("positional arguments", text)
         self.assertNotIn("repair-controller", text)

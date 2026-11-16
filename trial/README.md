@@ -1,5 +1,16 @@
 # URACE specification improvement trial
 
+## Phase I–V Tokenomics Changes (v0.9.x)
+
+The following tokenomics changes affect trial benchmarks:
+
+- **Calibrated reward amounts**: seal = 0.01 UCR, relay = 0.01 UCR, llm_peer = 0.02 UCR at Mature (1×) stage. Bootstrap (5×): seal/relay = 0.05 UCR, llm_peer = 0.10 UCR.
+- **Tiered borrow ceiling**: micro (1–50 LOC) 5%, standard (51–500) 8%, large (501+) 12%, bundle 10%.
+- **BorrowCostContext**: out-of-P2P costs (executor calls, cycles, mitm) are now measured at runtime — not configured. Pass a `BorrowCostContext` to `borrow_feature_cost()`.
+- **`record_usage_earn()` requires explicit `earn_units`**: the parameter has no default — always pass it explicitly.
+
+→ [Token Economics](../docs/economics/tokenomics.md) for full tables.
+
 Product: `URACE.md`. Runtime engine: this `urace/trial/` directory. Baseline: user-selected committed `URACE.md`, Git 5688fda7911f8b14fed4284e54938602456fb318. The original working specification is untouched.
 
 The active version-0 baseline is inside the snapshot series identified by `version-series.json`. Previous baseline series remain intact. Every accepted improvement gets a monotonically numbered `vNNNNNN` snapshot with source/parent/baseline hashes, acceptance evidence, native time/token receipts, and `parent.diff` plus `baseline.diff`. `version-comparisons.json` indexes the complete version chain. Timestamps supplement version comparisons. Rejected candidates remain in `runs/`, outside the accepted chain. Previous runtime-code trials remain historical and are not pooled as specification improvements.

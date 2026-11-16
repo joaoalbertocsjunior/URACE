@@ -18,6 +18,7 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
+import pytest
 
 
 def _make_config(directory):
@@ -50,6 +51,7 @@ def _make_start_args(max_cycles=1, interval_minutes=0.001):
     )
 
 
+@pytest.mark.slow
 class DaemonCycleCountTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="urace-lifecycle-")
@@ -59,7 +61,7 @@ class DaemonCycleCountTests(unittest.TestCase):
     def test_one_cycle_calls_main_once(self):
         from urace import _daemon as d
         calls = []
-        with patch("urace.cli.main", side_effect=lambda a: calls.append(a)):
+        with patch("urace.cli.main", side_effect=lambda a, **kw: calls.append(a)):
             with patch("sys.stdout"):
                 d.dispatch(_make_start_args(max_cycles=1), self.config)
         self.assertEqual(len(calls), 1)
@@ -68,7 +70,7 @@ class DaemonCycleCountTests(unittest.TestCase):
         from urace import _daemon as d
         calls = []
         with _fast_clock():
-            with patch("urace.cli.main", side_effect=lambda a: calls.append(a)):
+            with patch("urace.cli.main", side_effect=lambda a, **kw: calls.append(a)):
                 with patch("sys.stdout"):
                     d.dispatch(_make_start_args(max_cycles=2), self.config)
         self.assertEqual(len(calls), 2)
@@ -76,7 +78,7 @@ class DaemonCycleCountTests(unittest.TestCase):
     def test_cycle_first_arg_is_auto(self):
         from urace import _daemon as d
         calls = []
-        with patch("urace.cli.main", side_effect=lambda a: calls.append(a[:])):
+        with patch("urace.cli.main", side_effect=lambda a, **kw: calls.append(a[:])):
             with patch("sys.stdout"):
                 d.dispatch(_make_start_args(max_cycles=1), self.config)
         self.assertEqual(calls[0][0], "auto")
@@ -84,7 +86,7 @@ class DaemonCycleCountTests(unittest.TestCase):
     def test_cycle_includes_cycles_1_flag(self):
         from urace import _daemon as d
         calls = []
-        with patch("urace.cli.main", side_effect=lambda a: calls.append(a[:])):
+        with patch("urace.cli.main", side_effect=lambda a, **kw: calls.append(a[:])):
             with patch("sys.stdout"):
                 d.dispatch(_make_start_args(max_cycles=1), self.config)
         self.assertIn("--cycles", calls[0])
@@ -99,6 +101,7 @@ class DaemonCycleCountTests(unittest.TestCase):
         self.assertIsNone(d._read_pid(self.config))
 
 
+@pytest.mark.slow
 class DaemonStateUpdateTests(unittest.TestCase):
     """Simulated improvement: each cycle writes an updated state file.
 
@@ -117,7 +120,7 @@ class DaemonStateUpdateTests(unittest.TestCase):
         from urace import _daemon as d
         state_path = Path(self.config["state_path"])
 
-        def simulated_cycle(argv):
+        def simulated_cycle(argv, **kw):
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text(json.dumps({"improved": True, "cycle": 1}))
 
@@ -133,7 +136,7 @@ class DaemonStateUpdateTests(unittest.TestCase):
         state_path = Path(self.config["state_path"])
         counter = [0]
 
-        def simulated_cycle(argv):
+        def simulated_cycle(argv, **kw):
             counter[0] += 1
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text(json.dumps({"cycles_completed": counter[0]}))
@@ -152,7 +155,7 @@ class DaemonStateUpdateTests(unittest.TestCase):
         versions = []
         counter = [0]
 
-        def simulated_cycle(argv):
+        def simulated_cycle(argv, **kw):
             counter[0] += 1
             state_path.parent.mkdir(parents=True, exist_ok=True)
             state_path.write_text(json.dumps({"version": counter[0]}))
@@ -169,6 +172,7 @@ class DaemonStateUpdateTests(unittest.TestCase):
                                "State version must not regress between cycles")
 
 
+@pytest.mark.slow
 class DaemonFaultResilienceTests(unittest.TestCase):
     """Critical for hands-free operation: a crashing cycle must not kill the daemon."""
 
@@ -181,7 +185,7 @@ class DaemonFaultResilienceTests(unittest.TestCase):
         from urace import _daemon as d
         call_count = [0]
 
-        def sometimes_failing(argv):
+        def sometimes_failing(argv, **kw):
             call_count[0] += 1
             if call_count[0] == 1:
                 raise RuntimeError("simulated transient failure")
@@ -197,7 +201,7 @@ class DaemonFaultResilienceTests(unittest.TestCase):
     def test_persistent_failures_exit_cleanly(self):
         from urace import _daemon as d
 
-        def always_failing(argv):
+        def always_failing(argv, **kw):
             raise RuntimeError("persistent failure")
 
         with _fast_clock():
@@ -210,7 +214,7 @@ class DaemonFaultResilienceTests(unittest.TestCase):
     def test_pid_cleared_after_all_failures(self):
         from urace import _daemon as d
 
-        def always_failing(argv):
+        def always_failing(argv, **kw):
             raise RuntimeError("failure")
 
         with _fast_clock():
@@ -225,7 +229,7 @@ class DaemonFaultResilienceTests(unittest.TestCase):
         from urace import _daemon as d
         call_count = [0]
 
-        def raising_systemexit(argv):
+        def raising_systemexit(argv, **kw):
             call_count[0] += 1
             raise SystemExit(0)
 
@@ -238,6 +242,7 @@ class DaemonFaultResilienceTests(unittest.TestCase):
         self.assertEqual(call_count[0], 2)
 
 
+@pytest.mark.slow
 class DaemonRpcReadinessTests(unittest.TestCase):
     """Verify daemon exposes urace-rpc-v1 TCP contract — required for ecosystem clients."""
 

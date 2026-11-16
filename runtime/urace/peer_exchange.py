@@ -77,8 +77,10 @@ def _store_artifact(exchange_root, sha256_hex, raw_bytes):
  try:
   from .chunk_store import ChunkStore
   ChunkStore(exchange_root).store(sha256_hex, raw_bytes)
- except Exception:
-  pass
+ except (OSError, ValueError) as _ce:
+  import logging as _lg; _lg.getLogger(__name__).debug('ChunkStore.store failed for %s: %s', sha256_hex, _ce)
+ except Exception as _ce:
+  import logging as _lg; _lg.getLogger(__name__).debug('ChunkStore.store unexpected error for %s: %s', sha256_hex, _ce)
 
 def _load_artifact_bytes(exchange_root, sha256_hex):
  # v2 path: erasure-coded ChunkStore (may reconstruct even when flat file is missing)
@@ -87,8 +89,10 @@ def _load_artifact_bytes(exchange_root, sha256_hex):
   _cs_data = ChunkStore(exchange_root).load(sha256_hex)
   if _cs_data is not None:
    return _cs_data
- except Exception:
-  pass
+ except (OSError, ValueError) as _ce:
+  import logging as _lg; _lg.getLogger(__name__).debug('ChunkStore.load failed for %s: %s', sha256_hex, _ce)
+ except Exception as _ce:
+  import logging as _lg; _lg.getLogger(__name__).debug('ChunkStore.load unexpected error for %s: %s', sha256_hex, _ce)
  # v1 path: flat AES-GCM encrypted file
  p = _artifact_store_path(exchange_root, sha256_hex)
  if not p.exists():
@@ -238,7 +242,8 @@ class Exchange:
    _rt=_RT.load(self.root/'routing-table.json',self.identity()['peer_id'])
    _rt.add(fingerprint,endpoint or '')
    _rt.save(self.root/'routing-table.json')
-  except Exception:pass
+  except Exception as _e:
+   import logging as _lg;_lg.getLogger(__name__).debug('DHT routing table update failed: %s',_e)
   return {'peer_id':fingerprint,'trusted_for_content':False}
  def routing_table(self):
   """Return Kademlia routing table for DHT chunk/peer discovery (v3)."""
@@ -511,7 +516,7 @@ def auto_pin(exchange, certificate: str, endpoint: str, *, default_rules: dict |
                 try:
                     exchange.rule(peer_id, feature_name, direction, allowed)
                 except Exception as _exc:
-                    _logger.debug("rule not applied for feature %r: %s", feature_name, _exc)
+                    _logger.warning("rule application failed for feature %r: %s", feature_name, _exc)
 
     return {'status': status, 'peer_id': peer_id, 'endpoint': endpoint}
 
@@ -597,11 +602,35 @@ def _wire_chunk_size(p):
  if explicit:return explicit
  return {'low':1024,'high':65536}.get(p.get('bandwidth_profile','auto'),4096)
 
-def request(exchange,peer,method,params,*,telemetry=None):
+def _bootstrap_request(endpoint: str, method: str, params: dict) -> dict:
+ """Plain (unauthenticated) JSON-RPC POST to a bootstrap endpoint. Used for bootstrap.* methods."""
+ u=validate_endpoint(endpoint)
+ import http.client as _hc
+ body=json.dumps({'jsonrpc':'2.0','id':'bootstrap','method':method,'params':params},separators=(',',':')).encode()
+ ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT);ctx.check_hostname=False;ctx.verify_mode=ssl.CERT_NONE
+ c=_hc.HTTPSConnection(u.hostname,u.port or 443,context=ctx,timeout=10)
+ try:
+  c.request('POST','/bootstrap-rpc',body,{'Content-Type':'application/json','Content-Length':str(len(body))})
+  r=c.getresponse();data=r.read(LIMIT)
+  if r.status!=200:raise ValueError(f'Bootstrap RPC failed: HTTP {r.status}')
+  resp=json.loads(data)
+  if isinstance(resp,dict) and 'result' in resp:return resp['result']
+  if isinstance(resp,dict) and 'error' in resp:raise ValueError(f'Bootstrap RPC error: {resp["error"]}')
+  return resp
+ finally:
+  c.close()
+
+def request(exchange,peer,method,params,*,telemetry=None,bootstrap_endpoint=None):
+ # bootstrap_endpoint: unauthenticated plain-JSON path for bootstrap.* methods (peer=None)
+ if bootstrap_endpoint is not None and peer is None:
+  return _bootstrap_request(bootstrap_endpoint,method,params)
  started=time.monotonic();response_bytes=0;request_bytes=0
  p=exchange.load()
  if peer not in p['peers'] or p['peers'][peer]['blocked']:raise ValueError('Unknown or blocked peer')
- u=validate_endpoint(p['peers'][peer]['endpoint'] or '');ctx=tls_context(exchange)
+ from . import peer_address_book as _pab
+ _book=_pab.get_address_book()
+ _primary_ep=p['peers'][peer].get('endpoint') or ''
+ u=validate_endpoint(_primary_ep);ctx=tls_context(exchange)
  from .ledger_crypto import encrypt
  nonce=os.urandom(24).hex();local=exchange.identity()['peer_id'];context={'schema':SCHEMA,'sender':local,'recipient':peer,'request_nonce':nonce}
  rpc={'jsonrpc':'2.0','id':nonce,'method':method,'params':params};signed={'rpc':rpc,'signature':exchange.crypto_identity().sign(rpc,'peer-rpc-request')}
@@ -613,51 +642,84 @@ def request(exchange,peer,method,params,*,telemetry=None):
  if _compress:
   body=gzip.compress(body,compresslevel=6);headers['Content-Encoding']='gzip'
  request_bytes=len(body)
- c=http.client.HTTPSConnection(u.hostname,u.port or 443,context=ctx,timeout=10)
+ def _do_request(endpoint_url):
+  nonlocal response_bytes,request_bytes
+  _u=validate_endpoint(endpoint_url)
+  _c=http.client.HTTPSConnection(_u.hostname,_u.port or 443,context=ctx,timeout=10)
+  try:
+   _c.connect()
+   if hashlib.sha256(_c.sock.getpeercert(binary_form=True)).hexdigest()!=peer:raise ValueError('Peer certificate fingerprint differs')
+   _c.request('POST','/rpc',body,headers);_r=_c.getresponse()
+   _data=b''
+   while True:
+    _part=_r.read(_chunk)
+    if not _part:break
+    response_bytes+=len(_part)
+    _data+=_part
+    if len(_data)>LIMIT*2:raise ValueError('Peer response exceeds limit — possible DoS')
+   if _r.getheader('Content-Encoding')=='gzip':
+    _data=gzip.decompress(_data)
+    if len(_data)>LIMIT:raise ValueError(f'Peer response exceeds {LIMIT} bytes after decompression — possible DoS')
+   if _r.status!=200:raise ValueError('Peer response failed/oversized')
+   return _data
+  finally:
+   _c.close()
  try:
-  c.connect()
-  if hashlib.sha256(c.sock.getpeercert(binary_form=True)).hexdigest()!=peer:raise ValueError('Peer certificate fingerprint differs')
-  c.request('POST','/rpc',body,headers);r=c.getresponse()
-  data=b''
-  while True:
-   _part=r.read(_chunk)
-   if not _part:break
-   response_bytes+=len(_part)
-   data+=_part
-   if len(data)>LIMIT*2:raise ValueError('Peer response exceeds limit — possible DoS')
-  if r.getheader('Content-Encoding')=='gzip':
-   data=gzip.decompress(data)
-   if len(data)>LIMIT:raise ValueError(f'Peer response exceeds {LIMIT} bytes after decompression — possible DoS')
-  if r.status!=200:raise ValueError('Peer response failed/oversized')
-  envelope=json.loads(data);response_context={**context,'direction':'response'}
-  if set(envelope)!={'encrypted'}:raise ValueError('Encrypted response required')
-  signed=json.loads(exchange.crypto_identity().decrypt(envelope['encrypted'],response_context));result=signed['rpc']
-  from .ledger_crypto import verify
-  verify(exchange.trusted_crypto(p,peer),result,signed['signature'],'peer-rpc-response')
-  if result.get('jsonrpc')!='2.0' or result.get('id')!=nonce or 'error' in result or 'result' not in result:raise ValueError('Peer RPC failed')
-  payload=result['result']
-  if method=='exchange.info' and 'p2p_corpus_fingerprint' in payload:
-   remote_fp=payload['p2p_corpus_fingerprint'];local_fp=_local_corpus_fingerprint()
-   if remote_fp!=local_fp:
-    with exchange.lock():exchange.event('P2P_CORPUS_MISMATCH',peer=peer,local_fingerprint=local_fp,remote_fingerprint=remote_fp)
-    # Peer-consensus trigger: if ≥N distinct peers now report the same newer fingerprint,
-    # check the central update hub immediately without waiting for the 60-min cycle.
-    # N is dynamic: max(2, ceil(10% × estimated_network_size)), capped at 10.
+  _raw=_do_request(_primary_ep)
+ except (OSError,ConnectionError,TimeoutError) as _conn_err:
+  # Connection failed — try alternate endpoints from address book before giving up
+  _retried=False
+  if _book is not None:
+   for _alt_ep in _book.endpoints_for(peer):
+    if _alt_ep==_primary_ep:continue
     try:
-     _rows=[r for r in exchange.audit_rows() if r.get('kind')=='P2P_CORPUS_MISMATCH' and r.get('remote_fingerprint')==remote_fp]
-     if len({r.get('peer') for r in _rows if r.get('peer')})>=_consensus_min(exchange):
-      import threading as _t
-      from . import peer_discovery as _pd
-      _t.Thread(target=_pd._run_update_check,args=(exchange,),daemon=True,name='urace-p2p-consensus-check').start()
-    except Exception:pass
-  return payload
- finally:
-  c.close()
-  if telemetry is not None:
-   telemetry.update({'method':method,'request_payload_bytes':request_bytes,
-                     'response_payload_bytes':response_bytes,
-                     'application_payload_bytes':request_bytes+response_bytes,
-                     'elapsed_seconds':time.monotonic()-started})
+     _raw=_do_request(_alt_ep)
+     _retried=True
+     break
+    except (OSError,ConnectionError,TimeoutError) as _alt_err:
+     continue
+  if not _retried:raise
+ try:
+  envelope=json.loads(_raw)
+ except (ValueError,TypeError) as _je:
+  raise ValueError(f'Peer RPC: malformed JSON response ({_je})') from _je
+ response_context={**context,'direction':'response'}
+ if set(envelope)!={'encrypted'}:raise ValueError('Encrypted response required')
+ try:
+  signed=json.loads(exchange.crypto_identity().decrypt(envelope['encrypted'],response_context))
+ except (ValueError,TypeError) as _de:
+  raise ValueError(f'Peer RPC: response decryption/parse failed ({_de})') from _de
+ result=signed.get('rpc')
+ if result is None:raise ValueError('Peer RPC: missing rpc field in signed response')
+ from .ledger_crypto import verify
+ verify(exchange.trusted_crypto(p,peer),result,signed['signature'],'peer-rpc-response')
+ if result.get('jsonrpc')!='2.0' or result.get('id')!=nonce or 'error' in result or 'result' not in result:raise ValueError('Peer RPC failed')
+ # Record successful endpoint in address book
+ if _book is not None:
+  try:_book.record(peer,_primary_ep)
+  except Exception as _be:
+   import logging as _lg;_lg.getLogger(__name__).debug('address book record failed: %s',_be)
+ payload=result['result']
+ if method=='exchange.info' and 'p2p_corpus_fingerprint' in payload:
+  remote_fp=payload['p2p_corpus_fingerprint'];local_fp=_local_corpus_fingerprint()
+  if remote_fp!=local_fp:
+   with exchange.lock():exchange.event('P2P_CORPUS_MISMATCH',peer=peer,local_fingerprint=local_fp,remote_fingerprint=remote_fp)
+   # Peer-consensus trigger: if ≥N distinct peers now report the same newer fingerprint,
+   # check the central update hub immediately without waiting for the 60-min cycle.
+   # N is dynamic: max(2, ceil(10% × estimated_network_size)), capped at 10.
+   try:
+    _rows=[r for r in exchange.audit_rows() if r.get('kind')=='P2P_CORPUS_MISMATCH' and r.get('remote_fingerprint')==remote_fp]
+    if len({r.get('peer') for r in _rows if r.get('peer')})>=_consensus_min(exchange):
+     import threading as _t
+     from . import peer_discovery as _pd
+     _t.Thread(target=_pd._run_update_check,args=(exchange,),daemon=True,name='urace-p2p-consensus-check').start()
+   except Exception:pass
+ if telemetry is not None:
+  telemetry.update({'method':method,'request_payload_bytes':request_bytes,
+                    'response_payload_bytes':response_bytes,
+                    'application_payload_bytes':request_bytes+response_bytes,
+                    'elapsed_seconds':time.monotonic()-started})
+ return payload
 
 def send(exchange,bid):
  # Reserve locally, then release all local locks before waiting on another peer.
@@ -679,7 +741,12 @@ def send(exchange,bid):
   verify(exchange.trusted_crypto(p,b['recipient']),expected,receipt.get('signature'),'delivery-receipt')
   with exchange.lock():exchange.event('SENT_QUARANTINED',peer=b['recipient'],feature=b['feature'],bundle=bid,bytes=size,counter_receipt=receipt)
   return result
- except Exception:
+ except (OSError, ConnectionError, TimeoutError) as _net_err:
+  import logging as _lg;_lg.getLogger(__name__).debug('send transient failure to %s: %s',b['recipient'],_net_err)
+  with exchange.lock():exchange.event('SEND_FAILED_OR_UNCONFIRMED',peer=b['recipient'],bundle=bid,bytes=size)
+  raise
+ except Exception as _err:
+  import logging as _lg;_lg.getLogger(__name__).warning('send unexpected error to %s: %s',b['recipient'],_err)
   with exchange.lock():exchange.event('SEND_FAILED_OR_UNCONFIRMED',peer=b['recipient'],bundle=bid,bytes=size)
   raise
 
@@ -730,6 +797,32 @@ def server(exchange,host='127.0.0.1',port=0):
     self.send_error(400, 'Exchange GET request rejected')
   def do_POST(self):
    self.connection.settimeout(5)
+   # Unauthenticated bootstrap path: /bootstrap-rpc accepts bootstrap.announce
+   if self.path=='/bootstrap-rpc':
+    try:
+     _bs_size=int(self.headers.get('Content-Length','0'))
+     if not 0<_bs_size<=65536:self.send_error(400,'Bootstrap request size invalid');return
+     _bs_data=self.rfile.read(_bs_size)
+     _bs_rpc=json.loads(_bs_data)
+     if not isinstance(_bs_rpc,dict) or _bs_rpc.get('method') not in ('bootstrap.announce',):self.send_error(400,'Unsupported bootstrap method');return
+     _bs_method=_bs_rpc['method'];_bs_params=_bs_rpc.get('params',{})
+     _bs_result={'status':'error','error':'unknown'}
+     if _bs_method=='bootstrap.announce':
+      _bs_ep=_bs_params.get('endpoint','');_bs_pid=_bs_params.get('peer_id','')
+      try:validate_endpoint(_bs_ep)
+      except Exception:self.send_error(400,'Invalid announce endpoint');return
+      # Record in address book if available
+      from . import peer_address_book as _pab_bs
+      _bk=_pab_bs.get_address_book()
+      if _bk is not None and _bs_pid and _bs_ep:
+       try:_bk.record(_bs_pid,_bs_ep);_bk.save()
+       except Exception:pass
+      _bs_result={'status':'ok','announced':_bs_ep}
+     _bs_body=json.dumps({'jsonrpc':'2.0','id':_bs_rpc.get('id','bootstrap'),'result':_bs_result},separators=(',',':')).encode()
+     self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(_bs_body)));self.end_headers();self.wfile.write(_bs_body)
+    except Exception as _bs_err:
+     self.send_error(400,f'Bootstrap RPC error: {str(_bs_err)[:80]}')
+    return
    try:
     _req_enc=self.headers.get('Content-Encoding','')
     if self.path!='/rpc' or self.headers.get('Transfer-Encoding') or self.headers.get_content_type()!='application/json' or (_req_enc and _req_enc!='gzip'):raise ValueError('Invalid RPC envelope')
@@ -787,7 +880,8 @@ def server(exchange,host='127.0.0.1',port=0):
      try:
       cfg=exchange.load();credit_units=max(1,int(len(_relay_params_bytes)/1024*cfg.get('relay_credit_per_kb',1)))
       issue_relay_credit(exchange,rpc['id'],peer,credit_units)
-     except Exception:pass
+     except Exception as _e:
+      import logging as _lg;_lg.getLogger(__name__).warning('relay credit issuance failed: %s',_e)
     elif rpc['method']=='exchange.shamir_deliver' and isinstance(rpc['params'],dict) and set(rpc['params'])=={'feature_id','share_index','requester_peer_id'}:
      from .shamir_delivery import handle_share_request
      result=handle_share_request(exchange,peer,rpc['params']['feature_id'],rpc['params']['share_index'],rpc['params']['requester_peer_id'])
@@ -810,6 +904,36 @@ def server(exchange,host='127.0.0.1',port=0):
      from .ledger_sync import request_tail_payload
      payload=request_tail_payload(exchange)
      result={'schema':'urace-ledger-sync-v1','head_sha':payload['tail'][-1]['sha256'] if payload['tail'] else (payload['seal']['sha256'] if payload['seal'] else '0'*64),'row_count':len(payload['tail'])}
+    elif rpc['method']=='bootstrap.update_endpoint' and isinstance(rpc['params'],dict) and {'endpoint','peer_id'}.issubset(set(rpc['params'])):
+     _new_ep=rpc['params']['endpoint'];_claimed_pid=rpc['params'].get('peer_id','')
+     validate_endpoint(_new_ep)
+     # peer is already authenticated via TLS cert — peer_id must match the cert fingerprint
+     if _claimed_pid and _claimed_pid!=peer:raise ValueError('bootstrap.update_endpoint: peer_id does not match authenticated certificate')
+     from ._common import atomic_write_json as _awj_ep
+     with exchange.lock():
+      _ep_cfg=exchange.load()
+      if peer in _ep_cfg.get('peers',{}):
+       _ep_cfg['peers'][peer]['endpoint']=_new_ep
+       # Sync bootstrap_peers list: replace any old endpoint for this peer
+       _old_ep=_ep_cfg['peers'][peer].get('endpoint')
+       _bl=_ep_cfg.get('bootstrap_peers',[])
+       if _old_ep and _old_ep in _bl:
+        _bl=[_new_ep if u==_old_ep else u for u in _bl]
+       elif _new_ep not in _bl:
+        _bl.insert(0,_new_ep)
+       _ep_cfg['bootstrap_peers']=_bl
+       try:_awj_ep(exchange.root/'policy.json',_ep_cfg)
+       except Exception as _e:
+        import logging as _lg;_lg.getLogger(__name__).warning('endpoint update: policy write failed: %s',_e)
+       exchange.event('PEER_ENDPOINT_UPDATED',peer=peer,endpoint=_new_ep)
+     result={'status':'ok'}
+    elif rpc['method']=='bootstrap.address_book' and rpc['params']=={}:
+     from . import peer_address_book as _pab_srv
+     _book_srv=_pab_srv.get_address_book()
+     if _book_srv is not None:
+      result={'entries':{pid:list(urls) for pid,urls in list(_book_srv.all_entries().items())[:50]}}
+     else:
+      result={'entries':{}}
     else:raise ValueError('Unsupported RPC method')
     rpc_result={'jsonrpc':'2.0','id':rpc['id'],'result':result};signed={'rpc':rpc_result,'signature':exchange.crypto_identity().sign(rpc_result,'peer-rpc-response')}
     body=encoded({'encrypted':encrypt(exchange.trusted_crypto(p,peer),encoded(signed),{**context,'direction':'response'})})
@@ -823,11 +947,17 @@ def server(exchange,host='127.0.0.1',port=0):
     for _h,_v in _resp_headers.items():self.send_header(_h,_v)
     self.end_headers();self.wfile.write(body)
    except (ValueError,TypeError,KeyError,OSError) as _rpc_err:
+    import logging as _lg
+    _lg.getLogger(__name__).debug('RPC handler error: %s', _rpc_err)
     try:
      _rpc_peer=hashlib.sha256(self.connection.getpeercert(binary_form=True)).hexdigest() if self.connection else None
      if _rpc_peer:exchange.event('RPC_REJECTED',peer=_rpc_peer,reason=str(_rpc_err)[:120])
-    except Exception:pass
-    self.send_error(400,'Exchange request rejected')
+    except Exception as _audit_err:
+     _lg.getLogger(__name__).debug('RPC audit log failed: %s', _audit_err)
+    try:
+     self.send_error(400,'Exchange request rejected')
+    except Exception:
+     pass
  class Server(http.server.HTTPServer):
   def get_request(self):
    sock,address=super().get_request();sock.settimeout(5)
@@ -837,7 +967,10 @@ def server(exchange,host='127.0.0.1',port=0):
     # Plain HTTP from TLS-terminating tunnel (localhost.run/cloudflared) — serve ping inline.
     _pb=b'{"status":"ok","schema":"urace-exchange-v2","tunnel":"ok"}'
     try:sock.sendall(b'HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nContent-Length: '+str(len(_pb)).encode()+b'\r\n\r\n'+_pb)
-    except Exception:pass
+    except (OSError, BrokenPipeError) as _e:
+     import logging as _lg;_lg.getLogger(__name__).debug('plain HTTP ping sendall failed: %s',_e)
+    except Exception as _e:
+     import logging as _lg;_lg.getLogger(__name__).debug('plain HTTP ping unexpected error: %s',_e)
     sock.close();raise OSError('plain-http-ping-served')
    try:return context.wrap_socket(sock,server_side=True),address
    except BaseException:sock.close();raise

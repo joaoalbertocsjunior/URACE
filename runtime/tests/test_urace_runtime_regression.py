@@ -1069,6 +1069,7 @@ class R34AdditionsTests(unittest.TestCase):
     def test_evaluate_sweet_spot_forming_when_no_caps_capable(self):
         """All capabilities ABSENT -> maturity FORMING."""
         config = copy.deepcopy(self.config)
+        config.pop("product_files", None)
         config["capability_envelope"] = {
             "capabilities": [
                 {"id": "cap-aabbccdd20", "name": "auth", "description": "d",
@@ -1087,6 +1088,7 @@ class R34AdditionsTests(unittest.TestCase):
     def test_evaluate_sweet_spot_capable_when_all_caps_capable(self):
         """All capabilities CAPABLE -> maturity is CAPABLE or OPTIMIZED (both are sweet spot)."""
         config = copy.deepcopy(self.config)
+        config.pop("product_files", None)
         config["capability_envelope"] = {
             "capabilities": [
                 {"id": "cap-aabbccdd21", "name": "auth", "description": "d",
@@ -1137,6 +1139,7 @@ class R34AdditionsTests(unittest.TestCase):
     def test_evaluate_sweet_spot_writes_value_density_record(self):
         """Each evaluation writes a ValueDensityRecord."""
         config = copy.deepcopy(self.config)
+        config.pop("product_files", None)
         config["capability_envelope"] = {
             "capabilities": [
                 {"id": "cap-aabbccdd23", "name": "c", "description": "d",

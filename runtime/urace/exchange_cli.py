@@ -79,9 +79,71 @@ def _validate_freeform_query(q, max_bytes=4096):
         raise ValueError(f"Query exceeds maximum length of {max_bytes} bytes")
     return q
 
+def _build_network_guide(cap: dict) -> dict:
+ """Given nat_check capability dict, determine scenario and return actionable guidance."""
+ import shutil
+ from pathlib import Path
+ nat_type=cap.get('nat_type','unknown')
+ upnp=cap.get('upnp_available',False)
+ from . import tunnel_install as _ti
+ has_cf=bool(_ti.find_cloudflared())
+ has_cert=(Path.home()/'.cloudflared'/'cert.pem').exists()
+ has_ssh=bool(shutil.which('ssh'))
+ if nat_type=='direct':
+  scenario='vps_direct';label='VPS / server with public IP'
+  recommendation='Direct inbound — no tunnel needed. Most reliable bootstrap+relay.'
+  commands=['urace network serve --host 0.0.0.0 --port 7301']
+  pf_alt=None
+ elif nat_type in ('cone','symmetric') and nat_type=='cone' and upnp:
+  scenario='cone_upnp';label='Home router (cone NAT + UPnP)'
+  recommendation='UPnP opened the port automatically. Direct inbound works.'
+  commands=['urace network serve --host 0.0.0.0 --port 7301']
+  pf_alt='Alternative for more stability: urace network setup-port-forward'
+ elif has_cf and has_cert:
+  scenario='cloudflare_named';label='cloudflared authenticated (permanent URL)'
+  recommendation='Named tunnel gives a permanent URL that survives reboots. Best option for home nodes.'
+  commands=['urace network serve --tunnel auto --port 7301']
+  pf_alt=None
+ elif has_cf and not has_cert:
+  scenario='cloudflare_needs_login';label='cloudflared installed — needs login'
+  recommendation='One browser login → permanent URL forever. Strongly recommended before serving.'
+  commands=['cloudflared tunnel login','urace network serve --tunnel auto --port 7301']
+  pf_alt='Alternative without Cloudflare account: urace network setup-port-forward'
+ elif has_ssh:
+  scenario='localhost_run';label='SSH tunnel via localhost.run (no install needed)'
+  recommendation='Zero install, zero account. URL changes on reconnect; peers notified automatically. Good for testing; cloudflared login gives a permanent URL.'
+  commands=['urace network serve --tunnel auto --port 7301']
+  pf_alt='For permanent URL without Cloudflare: urace network setup-port-forward'
+ else:
+  scenario='intranet_only';label='No internet tunnel available'
+  recommendation='Install cloudflared or ensure SSH is available for internet-facing node. For LAN use, intranet mode is fine.'
+  commands=['urace network settings set --network-mode intranet','urace network serve --host 0.0.0.0 --port 7301']
+  pf_alt=None
+ guide={'scenario':scenario,'label':label,'recommendation':recommendation,'commands':commands,'doc':'docs/exchange/network.md#nat-traversal'}
+ if scenario=='intranet_only':guide['warning']='This node cannot act as bootstrap or relay for the internet network. Only LAN peers will be reachable.'
+ if pf_alt:guide['port_forward_alternative']=pf_alt
+ return guide
+
+
+def _print_network_guide(guide: dict) -> None:
+ """Print human-readable network setup guidance to stdout."""
+ print('\n── Network Setup Guide ──────────────────────────────')
+ print(f"  Situation : {guide['label']}")
+ print(f"  Advice    : {guide['recommendation']}")
+ print( '  Run       :')
+ for cmd in guide.get('commands',[]):
+  print(f'    {cmd}')
+ if guide.get('port_forward_alternative'):
+  print(f"  Alternative: {guide['port_forward_alternative']}")
+ if guide.get('warning'):
+  print(f"  WARNING   : {guide['warning']}")
+ print(f"  Docs      : {guide['doc']}")
+ print('─────────────────────────────────────────────────────\n')
+
+
 def grammar(children):
  from .command_surface import output_options,boolean
- root=children.add_parser('exchange',help='opt-in signed peer artifacts; default off, incoming content quarantined');root.set_defaults(action='exchange');output_options(root);groups=root.add_subparsers(dest='exchange_group',required=True)
+ root=children.add_parser('network',aliases=['exchange'],help='==SUPPRESS==');root.set_defaults(action='exchange');output_options(root);groups=root.add_subparsers(dest='exchange_group',required=True)
  for name in ('status','audit'):
   p=groups.add_parser(name);output_options(p)
   if name=='audit':
@@ -104,6 +166,7 @@ def grammar(children):
  p.add_argument('--urace-credit-usd-rate',type=int,default=None,dest='urace_credit_usd_rate',help='display-only accounting rate: N URACE base units = $1 (default: 1000); does not set market price')
  p.add_argument('--consensus-min-threshold',type=int,default=None,dest='consensus_min_threshold',help='minimum consensus peer threshold for corpus updates (default 2)')
  p.add_argument('--baseline-grant-tokens',type=int,default=None,dest='baseline_grant_tokens',help='baseline token grant for new peers (default 3)')
+ p.add_argument('--relay-bandwidth-kbps',type=int,default=None,dest='relay_bandwidth_kbps',help='Bandwidth cap for relay role in KB/s (0=unlimited, default)')
  p.add_argument('--network-mode',choices=('intranet','internet','hybrid'),default=None,dest='network_mode',help='network scope: intranet=LAN-only, internet=standard, hybrid=LAN+internet (default: hybrid)')
  p.add_argument('--internet-gateway',default=None,dest='internet_gateway',help='peer-id of the internet bridge peer for intranet→internet upgrade')
  peers=groups.add_parser('peer');peers_v=peers.add_subparsers(dest='exchange_verb',required=True)
@@ -184,7 +247,8 @@ def grammar(children):
  p=verbs.add_parser('disconnect',help='temporarily pause P2P networking');output_options(p);p.add_argument('--duration-minutes',type=int,default=60,dest='duration_minutes')
  verbs.add_parser('reconnect',help='clear temporary disconnect and resume P2P networking')
  p=verbs.add_parser('reachability',help='check NAT type, UPnP, and node role capability for internet P2P');output_options(p);p.add_argument('--type',default=None,dest='role_filter',help='comma-separated role filter: bootstrap,relay');p.add_argument('--timeout',type=float,default=5.0)
- p=verbs.add_parser('setup-node',help='check NAT, assign node roles, print exact next steps for bootstrap+relay');output_options(p);p.add_argument('--timeout',type=float,default=5.0)
+ p=verbs.add_parser('setup-node',help='check NAT, assign node roles, print exact next steps for bootstrap+relay');output_options(p);p.add_argument('--timeout',type=float,default=5.0);p.add_argument('--guide',action='store_true',help='print scenario-specific setup guidance without changing config (safe to run anytime)')
+ p=verbs.add_parser('setup-port-forward',help='detect public IP + gateway, print router port-forward instructions; optionally configure DuckDNS DDNS');output_options(p);p.add_argument('--port',type=int,default=7301,help='exchange server port (default 7301)');p.add_argument('--ddns-token',default=None,dest='ddns_token',help='DuckDNS token (optional)');p.add_argument('--ddns-domain',default=None,dest='ddns_domain',help='DuckDNS subdomain, without .duckdns.org (optional)')
  p=verbs.add_parser('peers',help='show connected peer count and anonymized peer IDs (no raw IPs or endpoints)');output_options(p);p.add_argument('--detail',action='store_true',help='show hashed peer IDs (still anonymized)')
  p=verbs.add_parser('size',help='show estimated network size from peer discovery gossip (heuristic, not exact)');output_options(p)
  p=verbs.add_parser('routing-table',help='show Kademlia DHT routing table (v3 chunk discovery readiness)');output_options(p)
@@ -270,6 +334,12 @@ def grammar(children):
  p=na_v.add_parser('list',help='list P2P network audit events');output_options(p);p.add_argument('--kind',help='filter by event kind',default=None);p.add_argument('--peer',help='filter by peer id',default=None);p.add_argument('--limit',type=int,default=100)
  rst=groups.add_parser('reset',help='clear all exchange data for a clean release build');rst_v=rst.add_subparsers(dest='exchange_verb',required=True)
  p=rst_v.add_parser('all',help='delete all exchange audit rows (balances, listings, work history)');output_options(p);p.add_argument('--yes',action='store_true')
+ # ── Asset registry CLI ────────────────────────────────────────────────────────
+ ast=groups.add_parser('asset',help='asset registry — portfolio, earn rate, transfer');ast_v=ast.add_subparsers(dest='exchange_verb',required=True)
+ p=ast_v.add_parser('portfolio',help='show owned assets with earn rates');output_options(p);p.add_argument('--peer',default=None,dest='peer_id',help='peer id (default: local)')
+ p=ast_v.add_parser('show',help='show asset details and earn log');output_options(p);p.add_argument('feature_id');p.add_argument('--history',action='store_true',help='full per-borrow earn log')
+ p=ast_v.add_parser('opportunities',help='browse assets ranked by earn rate');output_options(p);p.add_argument('--min-earn-rate',type=float,default=0.0,dest='min_earn_rate',help='min UCR/day');p.add_argument('--budget',type=float,default=None,dest='budget',help='max ask price in UCR');p.add_argument('--max-roi-days',type=int,default=None,dest='max_roi_days',help='max payback days');p.add_argument('--top',type=int,default=20,dest='top_n',help='top N results (default 20)')
+ p=ast_v.add_parser('transfer',help='initiate/accept/cancel asset ownership transfer');output_options(p);p.add_argument('action',choices=['initiate','accept','cancel']);p.add_argument('--feature',required=True,dest='feature_id',help='feature id');p.add_argument('--to',default=None,dest='to_peer_id',help='recipient peer id (initiate only)')
  return root
 
 def bounded_file(name,limit,artifact=False):
@@ -397,7 +467,8 @@ def run(args,config):
     if v is not None:_settings[k]=v
    if getattr(args,'chain_id',None) is not None:_settings['chain_id']=args.chain_id
    if getattr(args,'urace_credit_usd_rate',None) is not None:_settings['urace_credit_usd_rate']=args.urace_credit_usd_rate
-   if any(getattr(args,k,None) is not None for k in ('rpc_provider_url','erc20_contract','chain_id','urace_credit_usd_rate')):
+   if getattr(args,'relay_bandwidth_kbps',None) is not None:_settings['relay_bandwidth_kbps']=args.relay_bandwidth_kbps
+   if any(getattr(args,k,None) is not None for k in ('rpc_provider_url','erc20_contract','chain_id','urace_credit_usd_rate','relay_bandwidth_kbps')):
     from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',_settings)
   result=exchange.configure(**changes) if verb=='set' else exchange.summary()
  elif group=='peer':
@@ -764,7 +835,7 @@ def run(args,config):
   elif verb=='public-address':
    from . import stun_client as _stun
    _addr=_stun.get_public_address(getattr(args,'stun_host','stun.l.google.com'),getattr(args,'stun_port',19302))
-   if _addr:result={**_addr,'status':'ok','note':'Register this address as a bootstrap peer endpoint to expose your node to the internet: urace exchange bootstrap add --address https://<ip>:<port>'}
+   if _addr:result={**_addr,'status':'ok','note':'Register this address as a bootstrap peer endpoint to expose your node to the internet: urace network bootstrap add --address https://<ip>:<port>'}
    else:result={'status':'error','error':'STUN probe failed — check network connectivity or try a different STUN server'}
   elif verb=='disconnect':
    import time as _t
@@ -913,29 +984,117 @@ def run(args,config):
    from . import nat_check as _nc
    from ._common import atomic_write_json
    cap=_nc.check_node_capability(timeout=getattr(args,'timeout',5.0))
-   _cfg=exchange.load()
-   # delivery + block_sealer are always-on (outbound only) — nat_check never generates them.
-   # Merge so setup-node never strips roles that don't require inbound reachability.
-   _ALWAYS_ON={'delivery','block_sealer'}
-   _roles=list(set(cap['recommended_roles'])|_ALWAYS_ON)
-   _cfg['node_roles']=_roles
-   _cfg['enabled']=True
-   _cfg['network']=True
-   _mode_rank={'intranet':0,'hybrid':1,'internet':2}
-   if _mode_rank.get(cap['recommended_network_mode'],0)>_mode_rank.get(_cfg.get('network_mode','hybrid'),0):
-    _cfg['network_mode']=cap['recommended_network_mode']
-   atomic_write_json(exchange.root/'policy.json',_cfg)
-   # Auto-open UPnP port if relay role and UPnP available
-   if cap['can_relay'] and cap['upnp_available']:
-    try:_nc.auto_open_upnp_port()
+   _guide=_build_network_guide(cap)
+   if getattr(args,'guide',False):
+    # Guide-only mode: no config changes — purely advisory
+    result={'status':'ok','guide':_guide,'nat_type':cap['nat_type'],'public_ip':cap.get('public_ip'),'upnp_available':cap['upnp_available'],'can_bootstrap':cap['can_bootstrap'],'can_relay':cap['can_relay']}
+    if not getattr(args,'json',False):
+     _print_network_guide(_guide)
+     return 0
+   else:
+    _cfg=exchange.load()
+    # delivery + block_sealer are always-on (outbound only) — nat_check never generates them.
+    # Merge so setup-node never strips roles that don't require inbound reachability.
+    _ALWAYS_ON={'delivery','block_sealer'}
+    _roles=list(set(cap['recommended_roles'])|_ALWAYS_ON)
+    _cfg['node_roles']=_roles
+    _cfg['enabled']=True
+    _cfg['network']=True
+    _mode_rank={'intranet':0,'hybrid':1,'internet':2}
+    if _mode_rank.get(cap['recommended_network_mode'],0)>_mode_rank.get(_cfg.get('network_mode','hybrid'),0):
+     _cfg['network_mode']=cap['recommended_network_mode']
+    atomic_write_json(exchange.root/'policy.json',_cfg)
+    # Auto-open UPnP port if relay role and UPnP available
+    if cap['can_relay'] and cap['upnp_available']:
+     try:_nc.auto_open_upnp_port()
+     except Exception:pass
+    result={
+     'nat_type':cap['nat_type'],'public_ip':cap.get('public_ip'),'upnp_available':cap['upnp_available'],
+     'node_roles_set':_roles,'network_mode_set':_cfg.get('network_mode'),
+     'can_bootstrap':cap['can_bootstrap'],'can_relay':cap['can_relay'],
+     'status':'ok','guide':_guide,
+     'note':'Node roles configured. Run: urace network serve --host 0.0.0.0 --port 7301' if (cap['can_bootstrap'] or cap['can_relay']) else 'Running as consumer+creator — no server required'
+    }
+  elif verb=='setup-port-forward':
+   import subprocess as _spf,socket as _spf_sock
+   from . import ddns as _ddns
+   _spf_port=getattr(args,'port',7301) or 7301
+   # 1. Public IP via STUN or HTTP fallback
+   _pub_ip=None
+   try:
+    from . import stun_client as _st2
+    _sa=_st2.get_public_address('stun.l.google.com',19302,timeout=5.0)
+    if _sa:_pub_ip=_sa.get('ip')
+   except Exception:pass
+   if not _pub_ip:
+    _pub_ip=_ddns.get_current_public_ip(timeout=5.0)
+   # 2. Local IP via socket
+   _local_ip=None
+   try:
+    with _spf_sock.socket(_spf_sock.AF_INET,_spf_sock.SOCK_DGRAM) as _s2:
+     _s2.connect(('8.8.8.8',80));_local_ip=_s2.getsockname()[0]
+   except Exception:_local_ip='unknown'
+   # 3. Gateway — OS-agnostic (Linux/macOS/Windows)
+   _gateway=None
+   import sys as _sys_spf
+   try:
+    if _sys_spf.platform=='win32':
+     _rout=_spf.run(['route','print','0.0.0.0'],capture_output=True,text=True,timeout=5)
+     for _ln in _rout.stdout.splitlines():
+      _parts=_ln.split()
+      if len(_parts)>=3 and _parts[0]=='0.0.0.0':_gateway=_parts[2];break
+    elif _sys_spf.platform=='darwin':
+     _rout=_spf.run(['netstat','-nr'],capture_output=True,text=True,timeout=5)
+     for _ln in _rout.stdout.splitlines():
+      _parts=_ln.split()
+      if _parts and _parts[0] in('default','0/1'):_gateway=_parts[1] if len(_parts)>1 else None;break
+    else:
+     _rout=_spf.run(['ip','route'],capture_output=True,text=True,timeout=5)
+     for _ln in _rout.stdout.splitlines():
+      if _ln.startswith('default'):
+       _parts=_ln.split()
+       if len(_parts)>=3:_gateway=_parts[2];break
+   except Exception:pass
+   if not _gateway:
+    # Fallback: assume .1 of local subnet
+    if _local_ip and _local_ip!='unknown':
+     _gateway='.'.join(_local_ip.split('.')[:3])+'.1'
+     if not _gateway:_gateway='unknown'
+    else:_gateway='unknown'
+   # 4. Optional DuckDNS configuration
+   _ddns_token=getattr(args,'ddns_token',None)
+   _ddns_domain=getattr(args,'ddns_domain',None)
+   _ddns_url=None
+   _ddns_note=None
+   if _ddns_token and _ddns_domain:
+    _ddns_url=f'https://{_ddns_domain}.duckdns.org:{_spf_port}'
+    _test_ip=_pub_ip or ''
+    _ddns_ok=False
+    if _test_ip:
+     _ddns_ok=_ddns.update_duckdns(_ddns_token,_ddns_domain,_test_ip)
+    _ddns_note='DuckDNS updated OK' if _ddns_ok else 'DuckDNS update failed — check token/domain'
+    # Store in policy
+    from ._common import atomic_write_json as _awj3
+    _pcfg=exchange.load()
+    _pcfg['ddns_token']=_ddns_token
+    _pcfg['ddns_domain']=_ddns_domain
+    _pcfg['ddns_url']=_ddns_url
+    try:_awj3(exchange.root/'policy.json',_pcfg)
     except Exception:pass
-   result={
-    'nat_type':cap['nat_type'],'public_ip':cap.get('public_ip'),'upnp_available':cap['upnp_available'],
-    'node_roles_set':_roles,'network_mode_set':_cfg.get('network_mode'),
-    'can_bootstrap':cap['can_bootstrap'],'can_relay':cap['can_relay'],
-    'status':'ok',
-    'note':'Node roles configured. Run: urace exchange network serve --host 0.0.0.0 --port 7301' if (cap['can_bootstrap'] or cap['can_relay']) else 'Running as consumer+creator — no server required'
+   # 5. Build result
+   _direct_url=f'https://{_pub_ip}:{_spf_port}' if _pub_ip else None
+   _instruct={
+    'summary':f'Forward port {_spf_port} (TCP) on your router to {_local_ip}:{_spf_port}',
+    'step1':f'Open your router admin page (usually http://{_gateway})',
+    'step2':"Find 'Port Forwarding' or 'Virtual Server' section",
+    'step3':f'Add rule: External port {_spf_port} → Internal IP {_local_ip} port {_spf_port}, protocol TCP',
+    'step4':f'Save and test: curl {_direct_url}/exchange/ping' if _direct_url else f'Save and test from another device on the internet',
    }
+   if _ddns_url:_instruct['ddns_note']='If your ISP changes your IP, use ddns_url instead of direct_url'
+   result={'status':'ok','public_ip':_pub_ip,'local_ip':_local_ip,'gateway':_gateway,'port':_spf_port,'instructions':_instruct}
+   if _direct_url:result['direct_url']=_direct_url
+   if _ddns_url:result['ddns_url']=_ddns_url
+   if _ddns_note:result['ddns_status']=_ddns_note
   else:
    if getattr(args,'install_service',False):
     import os as _os,sys as _sys,shutil as _sh
@@ -985,69 +1144,225 @@ def run(args,config):
    else:
     _effective_host=args.host
     _effective_port=args.port
-   def _do_serve(public_url=None,tunnel_proc=None):
+   _user_stop=[False]
+   def _url_priority_key(url):
+    # cloudflare named (permanent) > quicktunnel > lhr.life > others
+    if 'cfargotunnel.com' in url:return 0
+    if 'trycloudflare.com' in url:return 1
+    if 'lhr.life' in url:return 2
+    return 3
+   def _merge_peer_urls(existing,new_urls):
+    # Keep cloudflare URLs first, then lhr, then others; cap at 3 per node.
+    combined=[]
+    seen=set()
+    for u in sorted(new_urls,key=_url_priority_key)+existing:
+     if u not in seen:
+      combined.append(u)
+      seen.add(u)
+    return combined[:3]
+   def _do_serve(public_url=None,tunnel_proc=None,public_urls=None,immediate=False):
+    # public_urls supersedes public_url when dual-tunnel is active.
+    if public_urls is None:
+     public_urls=[public_url] if public_url else []
+    primary_url=public_urls[0] if public_urls else public_url
     if not 0<=_effective_port<=65535:raise ValueError('Port must be 0–65535')
+    # F7-lite: load address book on serve startup
+    from . import peer_address_book as _pab
+    _book_path=exchange.root/'peer_address_book.json'
+    _pab.init_address_book(_book_path)
     with pe.server(exchange,_effective_host,_effective_port) as server:
      with advertise(exchange,_effective_host,server.server_port):
       _serve_info={'status':'LISTENING','host':_effective_host,'port':server.server_port,'peer_id':exchange.identity()['peer_id']}
-      if public_url:
-       _serve_info['tunnel_url']=public_url
-       _serve_info['bootstrap_endpoint']=public_url
+      if primary_url:
+       _serve_info['tunnel_url']=primary_url
+       _serve_info['bootstrap_endpoint']=primary_url
+      if len(public_urls)>1:
+       _serve_info['tunnel_urls']=public_urls
       _serve_cfg=exchange.load()
       _serve_roles=_serve_cfg.get('node_roles',[])
       # Tunnel provides inbound reachability even when NAT blocked it at init time.
       # Upgrade roles to relay (and bootstrap) when a tunnel URL is available,
       # regardless of what nat_check assigned before the tunnel existed.
-      if public_url:
+      if public_urls:
        from ._common import atomic_write_json as _awj2
        _scfg2=exchange.load()
        if 'relay' not in _serve_roles:
         _serve_roles=list(set(_serve_roles)|{'relay','bootstrap'})
         _scfg2['node_roles']=_serve_roles
-       _scfg2['active_tunnel_endpoint']=public_url
+       _scfg2['active_tunnel_endpoint']=primary_url
+       _scfg2['active_tunnel_endpoints']=list(public_urls)
+       # Register all tunnel URLs in bootstrap_peers, deduped and ordered by priority.
+       _bl2=_scfg2.setdefault('bootstrap_peers',[])
+       _merged=_merge_peer_urls(_bl2,public_urls)
+       for _u in _merged:
+        if _u not in _bl2:_bl2.insert(0,_u)
+       _scfg2['bootstrap_peers']=_merge_peer_urls(_bl2,public_urls)
        try:_awj2(exchange.root/'policy.json',_scfg2)
        except Exception:pass
-      if 'relay' in _serve_roles or 'bootstrap' in _serve_roles or public_url:
+      _relay_bw=exchange.load().get('relay_bandwidth_kbps',0)
+      if _relay_bw>0:
+       print(json.dumps({'status':'info','detail':f'relay bandwidth cap: {_relay_bw} KB/s'}))
+      if 'relay' in _serve_roles or 'bootstrap' in _serve_roles or public_urls:
        import threading as _thr
-       def _auto_announce():
+       def _auto_announce(_imm=immediate,_urls=list(public_urls)):
         import time as _tat
-        _tat.sleep(3)
+        if not _imm:
+         _tat.sleep(3)
         try:
-         _ep=public_url
-         if not _ep:
+         _eps=_urls
+         if not _eps:
           from . import stun_client as _st
           _a=_st.get_public_address('stun.l.google.com',19302)
-          if _a:_ep=f"https://{_a['ip']}:{server.server_port}"
-         if _ep:
-          _bp2=_serve_cfg.get('bootstrap_peers',[])
-          for _bep in _bp2[:5]:
-           try:pe.request(exchange,None,'bootstrap.announce',{'endpoint':_ep,'peer_id':exchange.identity().get('peer_id','')},bootstrap_endpoint=_bep)
+          if _a:_eps=[f"https://{_a['ip']}:{server.server_port}"]
+         if _eps:
+          _primary_ep=_eps[0]
+          _c3=exchange.load()
+          # Announce to bootstrap_peers (unauthenticated path, best-effort).
+          _bp2=list(_c3.get('bootstrap_peers',[]))
+          for _bep in _bp2:
+           for _ep_i in _eps:
+            try:
+             pe.request(exchange,None,'bootstrap.announce',{'endpoint':_ep_i,'peer_id':exchange.identity().get('peer_id','')},bootstrap_endpoint=_bep)
+            except Exception:pass
+          # F7-lite: exchange address books with authenticated peers
+          from . import peer_address_book as _pab_srv2
+          _bk_srv=_pab_srv2.get_address_book()
+          if _bk_srv is not None:
+           _my_pid2=exchange.identity().get('peer_id','')
+           for _pid2,_pdata2 in _c3.get('peers',{}).items():
+            if _pdata2.get('blocked'):continue
+            if not _pdata2.get('endpoint'):continue
+            try:
+             _ab_resp=pe.request(exchange,_pid2,'bootstrap.address_book',{})
+             if isinstance(_ab_resp,dict) and _ab_resp.get('entries'):
+              _bk_srv.merge(_ab_resp['entries'])
+              _bk_srv.save()
+            except Exception:pass
+          # Gossip new URL to all authenticated peers that have a stored endpoint.
+          _my_pid=exchange.identity().get('peer_id','')
+          for _pid,_pdata in _c3.get('peers',{}).items():
+           if _pdata.get('blocked'):continue
+           _pep=_pdata.get('endpoint')
+           if not _pep:continue
+           try:pe.request(exchange,_pid,'bootstrap.update_endpoint',{'endpoint':_eps[0],'peer_id':_my_pid})
            except Exception:pass
           from ._common import atomic_write_json as _awj
           _c2=exchange.load();_bl=_c2.setdefault('bootstrap_peers',[])
-          if _ep not in _bl:_bl.insert(0,_ep);_awj(exchange.root/'policy.json',_c2)
-          _serve_info['bootstrap_endpoint']=_ep
+          _c2['bootstrap_peers']=_merge_peer_urls(_bl,_eps)
+          _c2['active_tunnel_endpoints']=_eps
+          try:_awj(exchange.root/'policy.json',_c2)
+          except Exception:pass
+          _serve_info['bootstrap_endpoint']=_primary_ep
         except Exception:pass
        _thr.Thread(target=_auto_announce,daemon=True).start()
       print(json.dumps(_serve_info),flush=True)
-      if tunnel_proc is not None:
-       import threading as _thr2
+      # Determine procs to watch (dual-tunnel aware).
+      _all_procs=[]
+      if hasattr(tunnel_proc,'_all_procs'):
+       _all_procs=tunnel_proc._all_procs
+      elif tunnel_proc is not None:
+       _all_procs=[tunnel_proc]
+      if _all_procs:
+       import threading as _thr2,subprocess as _sp2,urllib.request as _ur
        def _tunnel_watchdog():
-        tunnel_proc.wait()
-        # Tunnel subprocess died — shut down so systemd can restart with a fresh tunnel
-        try:server.shutdown()
-        except Exception:pass
+        # Reconnect only when ALL tunnel procs have died.
+        import time as _twt
+        while not _user_stop[0]:
+         _twt.sleep(5)
+         if all(p.poll() is not None for p in _all_procs):
+          break
+        if not _user_stop[0]:
+         try:server.shutdown()
+         except Exception:pass
        _thr2.Thread(target=_tunnel_watchdog,daemon=True).start()
+       if primary_url:
+        def _tunnel_healthcheck(_chk_urls=list(public_urls) or [primary_url]):
+         import time as _tht
+         _fail=0
+         while not _user_stop[0]:
+          _tht.sleep(60)
+          if _user_stop[0]:break
+          _any_ok=False
+          for _cu in _chk_urls:
+           try:
+            r=_ur.urlopen(_cu+'/exchange/ping',timeout=10)
+            if b'"status"' in r.read(256):
+             _any_ok=True;break
+           except Exception:pass
+          if _any_ok:
+           _fail=0
+          else:
+           _fail+=1
+           if _fail>=2 and not _user_stop[0]:
+            # ALL tunnel URLs unreachable 2× — force reconnect
+            for _p in _all_procs:
+             try:_p.terminate()
+             except Exception:pass
+            break
+        _thr2.Thread(target=_tunnel_healthcheck,daemon=True).start()
       with selection_worker(exchange):
        try:server.serve_forever(poll_interval=.5)
-       except KeyboardInterrupt:pass
+       except KeyboardInterrupt:_user_stop[0]=True
    if _tunnel_provider!='none':
     from . import tunnel_server as _ts
-    with _ts.TunnelHandle(_tunnel_provider,_effective_port) as th:
-     if not th.url:
-      print(json.dumps({'status':'error','error':f'tunnel ({_tunnel_provider}) did not produce a URL — check cloudflared/ssh is available'}));return 1
-     _do_serve(public_url=th.url,tunnel_proc=th._proc)
+    import time as _rt2
+    _retry_n=0
+    _is_reconnect=False
+    _prev_provider=None
+    while not _user_stop[0]:
+     _retry_n+=1
+     try:
+      from pathlib import Path as _Path
+      from . import tunnel_install as _ti_rc
+      _cert_now=(_Path.home()/'.cloudflared'/'cert.pem').exists()
+      _cf_now=bool(_ti_rc.find_cloudflared())
+      if _cert_now and _cf_now and _prev_provider in ('localhost.run',None) and _tunnel_provider=='auto':
+       print(json.dumps({'status':'info','detail':'cloudflared cert detected — upgrading to named tunnel'}))
+      if _tunnel_provider=='auto':
+       _th_ctx=_ts.DualTunnelHandle(_effective_port)
+       _th_ctx._peer_id=exchange.identity().get('peer_id','')
+      else:
+       _th_ctx=_ts.TunnelHandle(_tunnel_provider,_effective_port)
+      with _th_ctx as th:
+       if not th.url:
+        _rd=min(60,10*_retry_n)
+        print(json.dumps({'status':'warn','detail':f'tunnel ({_tunnel_provider}) did not produce a URL, retry {_retry_n} in {_rd}s'}),flush=True)
+        try:_rt2.sleep(_rd)
+        except KeyboardInterrupt:_user_stop[0]=True
+        continue
+       _retry_n=0
+       _pub_urls=th.urls if hasattr(th,'urls') else ([th.url] if th.url else [])
+       _do_serve(public_url=th.url,tunnel_proc=th,public_urls=_pub_urls,immediate=_is_reconnect)
+       _prev_provider=getattr(th,'provider',None)
+       _is_reconnect=True
+     except KeyboardInterrupt:_user_stop[0]=True
+     except OSError as _oe:
+      # Port still in use from previous session — wait and retry
+      print(json.dumps({'status':'warn','detail':f'bind failed ({_oe}), retry {_retry_n} in 15s'}),flush=True)
+      try:_rt2.sleep(15)
+      except KeyboardInterrupt:_user_stop[0]=True
+      continue
+     except Exception as _ex:
+      print(json.dumps({'status':'warn','detail':f'serve error ({_ex}), retry {_retry_n} in 10s'}),flush=True)
+      try:_rt2.sleep(10)
+      except KeyboardInterrupt:_user_stop[0]=True
+      continue
+     if _user_stop[0]:break
+     print(json.dumps({'status':'info','detail':'tunnel dropped; reconnecting in 10s'}),flush=True)
+     try:_rt2.sleep(10)
+     except KeyboardInterrupt:_user_stop[0]=True
    else:
+    # no-tunnel direct inbound: auto-start DDNS watcher if ddns_token stored in policy
+    _notun_cfg=exchange.load()
+    _notun_token=_notun_cfg.get('ddns_token')
+    _notun_domain=_notun_cfg.get('ddns_domain')
+    if _notun_token and _notun_domain:
+     try:
+      from . import ddns as _ddns_srv
+      _ddns_srv.start_ddns_watcher(_notun_token,_notun_domain,interval=300)
+      print(json.dumps({'status':'info','detail':f'DDNS watcher started for {_notun_domain}.duckdns.org (5-min interval)'}),flush=True)
+     except Exception as _dex:
+      print(json.dumps({'status':'warn','detail':f'DDNS watcher failed to start: {_dex}'}),flush=True)
     _do_serve()
    return 0
  elif group=='work':
@@ -1067,7 +1382,16 @@ def run(args,config):
    result={'request_id':_wm.create_work_request(exchange,local_id,args.spec,args.budget,args.min_rep,args.nodes,complexity=args.complexity,work_mode=getattr(args,'work_mode','agora'),cohort_rep_floor=getattr(args,'cohort_rep_floor',0.5))}
   elif verb=='bid':
    # Bids are reputation scores, not prices; request budget is set at creation.
-   _wm.submit_bid(exchange,args.request_id,local_id,args.combined_rep);result={'status':'bid_submitted'}
+   # Include consensus_weight (event-count tiebreaker) alongside combined_rep.
+   try:
+    from . import credit_ledger as _cl_bid
+    from . import reputation_categories as _rc_bid
+    _bid_rows=exchange.audit_rows() if hasattr(exchange,'audit_rows') else []
+    _lon_mult=_rc_bid.score_longevity(_bid_rows,local_id)
+    _cw=_cl_bid.weighted_rep_score(exchange.root,local_id,longevity_multiplier=_lon_mult)
+   except Exception:
+    _cw=None
+   _wm.submit_bid(exchange,args.request_id,local_id,args.combined_rep,consensus_weight=_cw);result={'status':'bid_submitted','consensus_weight':_cw}
   elif verb=='accept':_wm.accept_bid(exchange,exchange.root,args.request_id,args.bidder_id);result={'status':'bid_accepted'}
   elif verb=='deliver':_wm.submit_delivery(exchange,args.request_id,local_id,args.delivery_hash);result={'status':'delivery_submitted'}
   elif verb=='verify':_wm.verify_delivery(exchange,exchange.root,args.request_id,local_id,args.approve,args.reason,args.dispute_kind);result={'status':'verified' if args.approve else 'disputed'}
@@ -1519,6 +1843,13 @@ def run(args,config):
       for _del_peer,_del_units in _fee_alloc.items():
        exchange.append_audit_row({'kind':'DELIVERY_FEE','listing_id':args.listing_id,'feature_id':_feat_id,'deliverer_peer_id':_del_peer,'buyer_peer_id':local_id,'fee_units':_del_units,'chunk_fraction':round(_fee_alloc[_del_peer]/_total_delivery_fee,4) if _total_delivery_fee>0 else 1.0,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
      _delivery_fee=_total_delivery_fee  # used below in composition referral pool
+     # Unlock baseline grant after first successful delivery (P4 fix)
+     if _total_delivery_fee>0 and _fee_alloc:
+      try:
+       from . import credit_ledger as _cl_ug
+       for _del_peer2 in _fee_alloc:
+        _cl_ug.unlock_grant(exchange.root,_del_peer2,_total_delivery_fee)
+      except Exception:pass
      # FEATURE_BORROWED always credits the original creator regardless of who delivered
      if _original_creator:
       # Compute network-size-aware credit amount at mint time (stored in row for audit integrity)
@@ -1538,9 +1869,22 @@ def run(args,config):
        _fl_credit_units=1  # governance ceiling hit: floor 1 base unit, never hard zero
       else:
        _fl_credit_units=_cl_fb.mint_per_adoption(loc=_fl_loc,dependency_count=_fl_dep,test_count=_fl_tests,adoption_rank=_fl_adoption_rank,network_size=_fl_net_size,estimated_network_size=_fl_net_size,total_network_supply=_fl_total_supply)
+      try:
+       from .cost_model import BorrowCostContext as _BCC,borrow_feature_cost as _bfc
+       _bcc_v3=_BCC(executor_calls=0,executor_cost_per_call=0.0)
+       _bi=_bfc(config,_fl_credit_units,loc=_fl_loc,borrow_ctx=_bcc_v3)
+       if not _bi.get('ceiling_compliant',True):
+        import logging as _log_v3;_log_v3.getLogger(__name__).warning('COST_INVARIANT_VIOLATION feature=%s scale=%s savings=%.1f%%',_feat_id,_bi.get('scale_tier',''),_bi.get('savings_vs_executor_pct',0))
+      except Exception:
+       pass
       _borrow_row={'kind':'FEATURE_BORROWED','feature_id':_feat_id,'creator_peer_id':_original_creator,'borrower_peer_id':local_id,'listing_id':args.listing_id,'outcome_delta':0.0,'receipt_verified':True,'delivered_by':_deliverer,'credit_units':_fl_credit_units,'adoption_rank':_fl_adoption_rank,'estimated_network_size':_fl_net_size,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()}
       _borrow_row_hash=__import__('hashlib').sha256(__import__('json').dumps(_borrow_row,sort_keys=True,default=str).encode()).hexdigest()
       exchange.append_audit_row(_borrow_row)
+      try:
+       from . import asset_registry as _ar_v2
+       _ar_v2.record_usage_earn(exchange,feature_id=_feat_id,earn_units=_fl_credit_units,usage_peer_id=local_id)
+      except Exception:
+       pass
       if _original_creator and _fl_credit_units>0:
        exchange.append_audit_row({'kind':'CREDIT_DELTA','direction':'creator_earn','peer':_original_creator,'amount_units':_fl_credit_units,'feature_id':_feat_id,'listing_id':args.listing_id,'borrower_peer_id':local_id,'originating_event_hash':_borrow_row_hash,'at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
      from . import cost_model as _cm
@@ -1570,7 +1914,7 @@ def run(args,config):
        exchange.append_audit_row({'kind':'FEATURE_COMPOSITION','composite_feature_id':_feat_id,'component_feature_ids':[_vr_ref],'creator_peer_id':_original_creator,'auto_detected':True,'detection_method':'llm_peer_semantic','at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
       # Maintainer reward: LLM peer earns for running similarity check work
       _llm_checker=_vr.get('checker_peer_id','') or _vr.get('peer_id','')
-      _llm_reward=int(config.get('p2p',{}).get('llm_peer_reward_units',2))
+      _llm_reward=int(config.get('p2p',{}).get('llm_peer_reward_units',2_000_000))
       if _llm_checker and _llm_reward>0 and _llm_checker not in _llm_peer_rewarded:
        exchange.append_audit_row({'kind':'CREDIT_DELTA','direction':'llm_peer_reward','peer':_llm_checker,'amount_units':_llm_reward,'feature_id':_feat_id,'check_id':_vr.get('check_id',''),'reason':'similarity_verdict','at_unix':_tfl.time(),'at':datetime.now(timezone.utc).isoformat()})
        _llm_peer_rewarded.add(_llm_checker)
@@ -1933,12 +2277,19 @@ def run(args,config):
     if not _addr:result={'status':'error','error':'STUN failed — provide --endpoint explicitly'};_ep=None
     else:_ep=f"https://{_addr['ip']}:{_addr.get('port',7301)}"
    if _ep:
+    # F7-lite: ensure address book is loaded for gossip
+    from . import peer_address_book as _pab_ann
+    _book_ann=_pab_ann.get_address_book()
+    if _book_ann is None:
+     _pab_ann.init_address_book(exchange.root/'peer_address_book.json')
+     _book_ann=_pab_ann.get_address_book()
     _bp_list=exchange.load().get('bootstrap_peers',[])
     _announced=[]
     for _bep in _bp_list[:5]:
      try:
       _r=pe.request(exchange,None,'bootstrap.announce',{'endpoint':_ep,'peer_id':exchange.identity().get('peer_id','')},bootstrap_endpoint=_bep)
       _announced.append({'bootstrap':_bep,'status':'ok' if isinstance(_r,dict) and _r.get('status')!='error' else 'error'})
+      # F7-lite: request address book from bootstrap peer (authenticated path not available; skip)
      except Exception as _ae:
       _announced.append({'bootstrap':_bep,'status':'error','error':str(_ae)})
     _cfg3=exchange.load()
@@ -1968,7 +2319,7 @@ def run(args,config):
   cfg=exchange.load()
   rpc_url=cfg.get('rpc_provider_url','')
   if verb=='status':
-   result={'rpc_configured':bool(rpc_url),'chain_id':cfg.get('chain_id',137),'erc20_contract':cfg.get('erc20_contract',''),'token_settlement_enabled':cfg.get('token_settlement',False),'urace_credit_usd_rate':cfg.get('urace_credit_usd_rate',1000),'status':'ok' if rpc_url else 'not_configured','note':'' if rpc_url else 'Set rpc_provider_url via: urace exchange settings set --rpc-provider-url <url>'}
+   result={'rpc_configured':bool(rpc_url),'chain_id':cfg.get('chain_id',137),'erc20_contract':cfg.get('erc20_contract',''),'token_settlement_enabled':cfg.get('token_settlement',False),'urace_credit_usd_rate':cfg.get('urace_credit_usd_rate',1000),'status':'ok' if rpc_url else 'not_configured','note':'' if rpc_url else 'Set rpc_provider_url via: urace network settings set --rpc-provider-url <url>'}
   elif verb=='run':
    if not rpc_url:
     result={'status':'not_configured','error':'rpc_provider_url not set — cannot settle'}
@@ -1980,6 +2331,55 @@ def run(args,config):
     else:
      result={'status':'ok','chain_id':int(cfg.get('chain_id',137)),'note':'settlement run complete — check ledger for RELAY_CREDIT_ISSUED rows'}
   else:raise ValueError(f'Unknown settle verb: {verb!r}')
+ elif group=='asset':
+  from . import asset_registry as _ar_cli
+  UNIT=100_000_000
+  local_id=config.get('peer_id',exchange.identity().get('peer_id','local'))
+  all_rows=exchange.audit_rows()
+  if verb=='portfolio':
+   peer=getattr(args,'peer_id',None) or local_id
+   items=_ar_cli.peer_asset_portfolio(all_rows,peer)
+   for item in items:
+    item['earn_rate_24h_ucr']=round(_ar_cli.earn_rate(all_rows,item['feature_id'])/UNIT,8)
+    item['cumulative_earn_ucr']=round(item.get('cumulative_earn_units',0)/UNIT,8)
+   result={'peer':peer,'assets':items,'count':len(items)}
+  elif verb=='show':
+   summary=_ar_cli.asset_summary(all_rows,args.feature_id)
+   if summary is None:result={'error':f'Asset {args.feature_id!r} not registered'}
+   else:
+    summary['earn_rate_24h_ucr']=round(_ar_cli.earn_rate(all_rows,args.feature_id)/UNIT,8)
+    summary['cumulative_earn_ucr']=round(summary.get('cumulative_earn_units',0)/UNIT,8)
+    if getattr(args,'history',False):
+     summary['earn_log']=[r for r in all_rows if r.get('kind')=='ASSET_EARN' and r.get('feature_id')==args.feature_id]
+    result=summary
+  elif verb=='opportunities':
+   registered=[r for r in all_rows if r.get('kind')=='ASSET_REGISTERED']
+   opps=[]
+   for reg in registered:
+    fid=reg.get('feature_id','')
+    owner=reg.get('owner_peer_id','')
+    er=_ar_cli.earn_rate(all_rows,fid)
+    er_ucr=er/UNIT
+    ask_rows=[r for r in all_rows if r.get('kind')=='EQUITY_LISTING' and r.get('feature_id')==fid and r.get('status','open')=='open']
+    ask_price_ucr=min((r.get('ask_price_units',0)/UNIT for r in ask_rows),default=None)
+    roi_days=round(ask_price_ucr/er_ucr,1) if er_ucr>0 and ask_price_ucr else None
+    if er_ucr<getattr(args,'min_earn_rate',0.0):continue
+    if getattr(args,'budget',None) and ask_price_ucr and ask_price_ucr>args.budget:continue
+    if getattr(args,'max_roi_days',None) and roi_days and roi_days>args.max_roi_days:continue
+    opps.append({'feature_id':fid,'owner':owner,'earn_rate_24h_ucr':round(er_ucr,8),'ask_price_ucr':ask_price_ucr,'est_roi_days':roi_days})
+   opps.sort(key=lambda x:x['earn_rate_24h_ucr'],reverse=True)
+   result={'opportunities':opps[:getattr(args,'top_n',20)],'total_found':len(opps)}
+  elif verb=='transfer':
+   action=args.action
+   if action=='initiate':
+    if not getattr(args,'to_peer_id',None):result={'error':'--to is required for initiate'}
+    else:result=_ar_cli.initiate_transfer(exchange,args.feature_id,local_id,args.to_peer_id)
+   elif action=='accept':
+    result=_ar_cli.accept_transfer(exchange,args.feature_id,local_id)
+   elif action=='cancel':
+    result=_ar_cli.cancel_transfer(exchange,args.feature_id,local_id)
+   else:result={'error':f'Unknown transfer action: {action!r}'}
+  else:raise ValueError(f'Unknown asset verb: {verb!r}')
  else:raise ValueError('Unknown exchange action')
  print(json.dumps(result,indent=2,sort_keys=True,default=str));return 0
 

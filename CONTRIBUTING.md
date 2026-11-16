@@ -160,15 +160,15 @@ else:
 
 1. Implement handler in `runtime/urace/cli/` (add to the appropriate submodule and register in `cli/__init__.py`).
 2. Register in `_KNOWN_TOP_COMMANDS` to prevent freeform routing.
-3. Add entry to `docs/reference/cli.md`.
+3. Add entry to `docs/users/cli.md`.
 4. Add at least one test in `tests/`.
-5. Update `AGENTS.md` if executor behavior changes.
+5. Update `docs/users/cli.md` if executor behavior changes.
 
 ---
 
 ## Ecosystem Contributions
 
-UI-layer tools (IDE plugins, dashboards, mobile apps) build against the [urace-rpc-v1 socket contract](docs/reference/urace-rpc-v1.md) — not against URACE internals. See [ecosystem roadmap](docs/roadmap/ecosystem-roadmap.md) for buildable surfaces.
+UI-layer tools (IDE plugins, dashboards, mobile apps) build against the [urace-rpc-v1 socket contract](docs/power-users/urace-rpc-v1.md) — not against URACE internals. See [Polygon Roadmap](docs/roadmap/polygon-roadmap.md) for mainnet deployment context.
 
 New RPC methods, row kinds, or export formats: implement in runtime first (§62z), then document.
 

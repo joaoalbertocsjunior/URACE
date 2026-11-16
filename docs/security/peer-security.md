@@ -19,7 +19,7 @@ Connections from peers that do not present a valid certificate are rejected at t
 URACE does not rely on certificate authorities. Peers are trusted only if their certificate is explicitly pinned:
 
 ```sh
-urace exchange peer add --certificate peer-cert.pem
+urace network peer add --certificate peer-cert.pem
 ```
 
 This means a compromised CA cannot be used to impersonate a peer. You choose exactly which peers to trust.
@@ -81,7 +81,7 @@ DHT bootstrap attempts are rate-limited to a minimum of **5 minutes** between at
 Block a misbehaving peer immediately:
 
 ```sh
-urace exchange peer block <peer_id>
+urace network peer block <peer_id>
 ```
 
 Blocked peers cannot connect, send RPC calls, or deliver bundles until unblocked.
@@ -93,7 +93,7 @@ Blocked peers cannot connect, send RPC calls, or deliver bundles until unblocked
 If a keypair is compromised, rotate your identity:
 
 ```sh
-urace exchange peer rotate <old_id> --new-certificate new-cert.pem
+urace network peer rotate <old_id> --new-certificate new-cert.pem
 ```
 
 This migrates all your access control rules to the new identity and notifies pinned peers.
@@ -104,5 +104,8 @@ This migrates all your access control rules to the new identity and notifies pin
 
 - [Authority Boundary](authority-boundary.md) — quarantine and governance
 - [Security Overview](overview.md) — full security guarantees table
-- [Network](../exchange/network.md) — peer management commands
-- [Post-Quantum Roadmap](../roadmap/post-quantum-roadmap.md) — future cryptography upgrades
+- [Network](../power-users/exchange-network.md) — peer management commands
+- [Polygon Roadmap](../roadmap/polygon-roadmap.md) — mainnet deployment and settlement
+
+---
+→ [Next: Security Model](security-model.md) — defense in depth: transport, storage, delivery, market integrity

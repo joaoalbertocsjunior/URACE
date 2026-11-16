@@ -189,8 +189,11 @@ def dispatch(args, config: dict) -> int:
     def _start_p2p_server():
         try:
             import subprocess, sys as _sys
+            _net = config.get('network', {})
+            _port = str(_net.get('port', 7301))
+            _tunnel = _net.get('tunnel', 'auto')
             proc = subprocess.Popen([_sys.executable, '-m', 'urace', 'exchange', 'network', 'serve',
-                                     '--host', '0.0.0.0', '--port', '7301', '--tunnel', 'auto'])
+                                     '--host', '0.0.0.0', '--port', _port, '--tunnel', _tunnel])
             _p2p_proc_ref[0] = proc
         finally:
             _p2p_ready.set()
@@ -218,10 +221,16 @@ def dispatch(args, config: dict) -> int:
                 pass
 
     signal.signal(signal.SIGTERM, _handle_signal)
+
+    _reload_flag = [False]
+
+    def _handle_sighup(signum, frame):
+        _reload_flag[0] = True
+
     try:
-        signal.signal(signal.SIGHUP, _handle_signal)
+        signal.signal(signal.SIGHUP, _handle_sighup)
     except AttributeError:
-        pass  # Windows has no SIGHUP
+        pass  # Windows
 
     if as_json:
         print(json.dumps({"status": "started", "pid": os.getpid(), "interval_minutes": interval_minutes, "max_cycles": max_cycles or "infinity"}))
@@ -234,6 +243,28 @@ def dispatch(args, config: dict) -> int:
     count = 0
     try:
         while not stopped[0]:
+            if _reload_flag[0]:
+                _reload_flag[0] = False
+                try:
+                    from ._common import CONFIG_PATH as _cp
+                    import json as _j
+                    _new_config = _j.loads(_cp.read_text())
+                    _old_net = config.get('network', {})
+                    _new_net = _new_config.get('network', {})
+                    _changed = [k for k in set(list(_old_net.keys()) + list(_new_net.keys()))
+                                if _old_net.get(k) != _new_net.get(k)]
+                    config.update(_new_config)
+                    if as_json:
+                        print(json.dumps({"event": "reloaded", "changed_sections": list(set(
+                            k.split('.')[0] for k in _changed)) or ["none"]}))
+                        sys.stdout.flush()
+                    else:
+                        print("[daemon] config reloaded")
+                except Exception as _e:
+                    if as_json:
+                        print(json.dumps({"event": "reload_error", "error": str(_e)}))
+                    else:
+                        print(f"[daemon] reload error: {_e}")
             if max_cycles and count >= max_cycles:
                 break
             if as_json:
@@ -242,7 +273,7 @@ def dispatch(args, config: dict) -> int:
             else:
                 print(f"[daemon] cycle {count + 1}" + (f"/{max_cycles}" if max_cycles else ""))
             try:
-                _cli.main(["auto", "--cycles", "1", "--quiet"] + (["--json"] if as_json else []))
+                _cli.main(["auto", "--cycles", "1", "--quiet"] + (["--json"] if as_json else []), _config=config)
             except SystemExit:
                 pass
             except Exception as exc:

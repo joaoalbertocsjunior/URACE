@@ -146,7 +146,7 @@ _KNOWN_TOP_COMMANDS = {
     # milestone versioning
     "milestone",
     # lifecycle shortcuts
-    "start", "stop", "run",
+    "start", "stop", "run", "reload",
     # interactive control shell
     "shell",
     # curses monitoring dashboard (explicit)
@@ -197,8 +197,8 @@ _KNOWN_TOP_COMMANDS = {
     "config",
     # security audit
     "security",
-    # top-level exchange shorthand
-    "exchange",
+    # P2P network (primary) and legacy alias
+    "network", "exchange",
     # github / git / gh integration
     "github", "git", "gh",
     # binary content references
@@ -209,137 +209,227 @@ _KNOWN_TOP_COMMANDS = {
 
 _KNOWN_TOP_COMMANDS -= command_surface.PHANTOMS
 
-# SD=True: canonical exact-match aliases — heuristically classifiable at command time
-# MUST be conservative: only exact matches to known commands/aliases, no fuzzy matching
-_SD_TRUE_EXACT: dict[str, list[str]] = {
-    # single-word direct mappings
-    "check": ["check"],
-    "vitals": ["vitals"],
-    "pause": ["pause"],
-    "resume": ["resume"],
-    "help": ["help"],
-    "rules": ["rules", "list"],
-    "status": ["status"],
-    "stop": ["pause"],
-    "start": ["resume"],
-    # two-word exact patterns
-    "rules list": ["rules", "list"],
-    "rules graph": ["rules", "graph"],
-    "rules conflicts": ["rules", "conflicts"],
-    "change list": ["change", "list"],
-    "goal list": ["goal", "list"],
-    "vitals check": ["vitals"],
-    "check status": ["check"],
-    # onboard / product / fleet exact patterns
-    "onboard status": ["onboard", "status"],
-    "onboard confirm": ["onboard", "confirm"],
-    "product list": ["product", "list"],
-    "product status": ["product", "status"],
-    "fleet status": ["fleet", "status"],
-    "fleet run": ["fleet", "run"],
-    "fleet stop": ["fleet", "stop"],
-    "fleet broadcast": ["fleet", "broadcast"],
-    # r73 new commands
-    "evidence list": ["evidence", "list"],
-    "blocker list": ["blocker", "list"],
-    "blocker resolve": ["blocker", "resolve"],
-    "decision list": ["decision", "list"],
-    "decision inspect": ["decision", "inspect"],
-    "integrity-signal list": ["integrity-signal", "list"],
-    "govern list-gates": ["govern", "list-gates"],
-    "govern clear": ["govern", "clear"],
-    # r75 trace
-    "trace list": ["trace", "list"],
-    "trace inspect": ["trace", "inspect"],
-    # r77 schema + feedback
-    "schema list": ["schema", "list"],
-    "schema inspect": ["schema", "inspect"],
-    "schema export": ["schema", "export"],
-    "feedback list": ["feedback", "list"],
-    # r85 resource budget
-    "resource status": ["resource", "status"],
-    "resource report": ["resource", "report"],
-    "resource help": ["resource", "help"],
-    # r86 help subcommand routing (all SD=True)
-    "inbox help": ["inbox", "help"],
-    "onboard help": ["onboard", "help"],
-    "product help": ["product", "help"],
-    "fleet help": ["fleet", "help"],
-    "trace help": ["trace", "help"],
-    "feedback help": ["feedback", "help"],
-    "update help": ["update", "help"],
-    "schema help": ["schema", "help"],
-    # r93 api command routing
-    "api help": ["api", "help"],
-    "api call": ["api", "call"],
-    "api batch": ["api", "batch"],
-    # r98 api extensions
-    "api watch": ["api", "watch"],
-    "api version": ["api", "version"],
-    # r101: add subcommands (canonical)
-    "add context": ["add", "context"],
-    "add goal": ["add", "goal"],
-    "add source": ["add", "source"],
-    "add metric": ["add", "metric"],
-    "add vital": ["add", "vital"],
-    "add evidence": ["add", "evidence"],
-    # backwards compat: declare aliases → add (r100 deprecated forms)
+_SEVERITY_ORDER: dict[str, int] = {"INFO": 0, "WARNING": 1, "BLOCKING": 2}
+
+def _lev1(a: str, b: str) -> bool:
+    """True if Damerau-Levenshtein distance between a and b is exactly 1."""
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        diffs = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+        if len(diffs) == 1:
+            return True
+        # adjacent transposition: "relaod" ↔ "reload"
+        if (len(diffs) == 2 and diffs[1] == diffs[0] + 1
+                and a[diffs[0]] == b[diffs[1]] and a[diffs[1]] == b[diffs[0]]):
+            return True
+        return False
+    shorter, longer = (a, b) if len(a) < len(b) else (b, a)
+    i = j = diff = 0
+    while i < len(shorter) and j < len(longer):
+        if shorter[i] != longer[j]:
+            diff += 1
+            if diff > 1:
+                return False
+            j += 1
+        else:
+            i += 1; j += 1
+    return True
+
+# Genuine synonym/redirect table — trivial tokenizations removed (handled by
+# space-split normalization + Tier 1b).  Only real redirects live here.
+_SD_SYNONYMS: dict[str, list[str]] = {
+    # bare commands → default subcommand
+    "feedback": ["feedback", "list"],
+    "rules":    ["rules",    "list"],
+    # extra-word disambiguation
+    "vitals check":  ["vitals"],
+    "check status":  ["check"],
+    # synonym: declare → add (deprecated alias)
     "declare context": ["add", "context"],
-    "declare goal": ["add", "goal"],
-    "declare source": ["add", "source"],
-    "declare metric": ["add", "metric"],
-    "declare vital": ["add", "vital"],
+    "declare goal":    ["add", "goal"],
+    "declare source":  ["add", "source"],
+    "declare metric":  ["add", "metric"],
+    "declare vital":   ["add", "vital"],
 }
 
-def _preprocess_args(raw_args: list[str]) -> list[str]:
-    """Three-tier routing.
+_INTENT_KEYWORDS: dict[str, frozenset[str]] = {
+    "status decisions": frozenset({"decision", "decisions", "decide", "chose", "choice", "choices", "why", "changed"}),
+    "status goals":     frozenset({"goal", "goals", "objective", "objectives", "aim", "aims", "target", "targets"}),
+    "status vitals":    frozenset({"vital", "vitals", "metric", "metrics", "health", "credit", "score", "scores"}),
+    "status blockers":  frozenset({"blocked", "blocker", "blockers", "blocking", "stuck", "obstacle", "obstacles"}),
+    "status plan":      frozenset({"plan", "plans", "planning", "next", "strategy", "roadmap", "scheduled"}),
+    "status watch":     frozenset({"watch", "watching", "activity", "happening", "working", "live", "current"}),
+}
 
-    Tier 0: /command  → direct, zero cost, always works
-    Tier 1: SD=True exact match → direct, zero cost
-    Tier 1b: known command pass-through → argparse (recovery in main)
-    Tier 2: everything else → executor via classify handler (internal, freeform)
+def _match_intent(tokens: list[str]) -> list[str] | None:
+    """Token-overlap intent scoring — no LLM, no library.
+
+    Returns the best-matching argparse route if ≥50% of meaningful query
+    tokens match a known intent's keyword set. Returns None to fall through
+    to Tier 2 (LLM classify) if ambiguous.
     """
-    if len(raw_args)>=2 and raw_args[0] in ('status','/status') and raw_args[1]=='scores':
-        return ['trial','status','scores',*raw_args[2:]]
-    if not raw_args or (raw_args[0].startswith("-") and raw_args[0] not in {"--json","--format"} and not raw_args[0].startswith("--format=")):
+    # Only fire for multi-token inputs that look like NL (not bare commands)
+    if len(tokens) < 2:
+        return None
+    lower_tokens = [t.lower() for t in tokens]
+    # Exclude question/filler words from scoring denominator
+    _FILLERS = {"what", "show", "me", "my", "are", "is", "the", "a", "an", "i", "list", "get",
+                "recent", "latest", "current", "today", "now", "all", "see", "tell"}
+    meaningful = [t for t in lower_tokens if t not in _FILLERS and t.isalpha()]
+    if not meaningful:
+        return None
+    best_route, best_score = None, 0.0
+    for route, kws in _INTENT_KEYWORDS.items():
+        hits = sum(1 for t in meaningful if t in kws)
+        score = hits / len(meaningful)
+        if score > best_score:
+            best_score, best_route = score, route
+    if best_score >= 0.5 and best_route:
+        return best_route.split()
+    return None
+
+_RE_SEPARATORS = __import__('re').compile(r'[/_]+')
+_RE_LEADING_SPECIAL = __import__('re').compile(r'^[@#!]+')
+
+def _preprocess_args(raw_args: list[str]) -> list[str]:
+    """NLP routing — deterministic fast path, LLM fallback.
+
+    Tier 0:   /command               → direct, zero cost
+    Tier 1b:  exact known command    → argparse pass-through (bare → default expansion)
+    Tier 1:   SD synonym match       → direct route
+    Tier 1c:  normalization          → case, punct, separators, leading chars, concat split
+    Tier 1.5: intent scoring         → NL status queries, no LLM
+    Tier 1d:  fuzzy match            → Lev-1 + Damerau transposition + prefix on first token
+    Tier 2:   everything else        → executor classify (LLM)
+    """
+    if len(raw_args) >= 2 and raw_args[0] in ('status', '/status') and raw_args[1] == 'scores':
+        return ['trial', 'status', 'scores', *raw_args[2:]]
+    if not raw_args or (raw_args[0].startswith("-") and raw_args[0] not in {"--json", "--format"}
+                        and not raw_args[0].startswith("--format=")):
         return raw_args
     first = raw_args[0]
-    if first in {"--json","--format"} or first.startswith("--format="):
-        prefix=[];rest=list(raw_args)
-        while rest:
-            if rest[0]=="--json" or rest[0].startswith("--format="):prefix.append(rest.pop(0))
-            elif rest[0]=="--format" and len(rest)>1:prefix.extend([rest.pop(0),rest.pop(0)])
-            else:break
-        return prefix+_preprocess_args(rest) if rest else raw_args
+    rest = list(raw_args[1:])
 
-    # Routing flags outside quoted prose are controls, not part of the operator text.
+    # Peel leading --json/--format flags and re-enter
+    if first in {"--json", "--format"} or first.startswith("--format="):
+        prefix = []
+        remaining = list(raw_args)
+        while remaining:
+            if remaining[0] == "--json" or remaining[0].startswith("--format="):
+                prefix.append(remaining.pop(0))
+            elif remaining[0] == "--format" and len(remaining) > 1:
+                prefix.extend([remaining.pop(0), remaining.pop(0)])
+            else:
+                break
+        return prefix + _preprocess_args(remaining) if remaining else raw_args
+
+    # Space-split: single arg containing spaces → split and re-enter.
+    # Guard: only when first token is a known command and string has ≤3 tokens total,
+    # preventing NL prose like "pause the task if the deploy fails" being split.
+    if not rest and ' ' in first and not first.startswith('/'):
+        _parts = first.split()
+        if (len(_parts) <= 3
+                and _parts[0].lower() in _KNOWN_TOP_COMMANDS
+                and all(re.match(r'^[a-zA-Z][a-zA-Z0-9\-]{0,29}$', p) for p in _parts)):
+            return _preprocess_args(_parts)
+
+    # Routing flags in prose → classify with trailing flags preserved
     if first not in _KNOWN_TOP_COMMANDS and first.lstrip("/") not in _KNOWN_TOP_COMMANDS:
-        for index,token in enumerate(raw_args[1:],1):
-            if token in {"--json","--format","--confirm","--selection","--p2p-asset"} or token.startswith(("--format=","--selection=","--p2p-asset=")):
-                text=" ".join(raw_args[:index])
-                return ["classify",text[1:] if text.startswith("/") else text,*raw_args[index:]]
+        for index, token in enumerate(raw_args[1:], 1):
+            if token in {"--json", "--format", "--confirm", "--selection", "--p2p-asset"} \
+                    or token.startswith(("--format=", "--selection=", "--p2p-asset=")):
+                text = " ".join(raw_args[:index])
+                return ["classify", text[1:] if text.startswith("/") else text, *raw_args[index:]]
 
-    # Tier 0: slash-prefixed direct command
+    # ── Tier 0: slash-prefixed ───────────────────────────────────────────────
     if first.startswith("/"):
         stripped = first[1:]
         if stripped in _KNOWN_TOP_COMMANDS:
-            return [stripped] + raw_args[1:]
-        # Unknown slash → free-form (strip the /)
-        free_text = (stripped + (" " + " ".join(raw_args[1:])) if raw_args[1:] else stripped).strip()
-        sd = _SD_TRUE_EXACT.get(free_text.lower())
+            return [stripped] + rest
+        free_text = (stripped + " " + " ".join(rest) if rest else stripped).strip()
+        sd = _SD_SYNONYMS.get(free_text.lower())
         return list(sd) if sd is not None else ["classify", free_text]
 
-    # Tier 1: full-input SD=True exact match (aliases + natural phrases)
+    # ── Tier 1b: exact known command ─────────────────────────────────────────
+    if first in _KNOWN_TOP_COMMANDS:
+        if not rest:
+            # bare command: check for default subcommand expansion
+            _bare = _SD_SYNONYMS.get(first)
+            return list(_bare) if _bare is not None else raw_args
+        # check two-token synonym (e.g. "vitals check" → ["vitals"], "declare goal" → ["add", "goal"])
+        _two = _SD_SYNONYMS.get(first + " " + rest[0].lower())
+        if _two is not None:
+            return list(_two) + list(rest[1:])
+        # normalize first subcommand token (handles "Blocker List" → ["blocker", "list"])
+        norm_rest = [rest[0].lower() if rest[0].isalpha() else rest[0]] + rest[1:]
+        return [first] + norm_rest
+
+    first_lower = first.lower()
+
+    # ── Tier 1c: surface normalisation (applied to first token) ─────────────
+    # 1. Strip leading special characters (@status → status, #reload → reload)
+    _clean = _RE_LEADING_SPECIAL.sub('', first_lower)
+    if _clean != first_lower and _clean:
+        return _preprocess_args([_clean] + rest)
+
+    # 2. Strip trailing punctuation (status! → status)
+    _trail = first_lower.rstrip("!.,;:?")
+    if _trail != first_lower and _trail:
+        return _preprocess_args([_trail] + rest)
+
+    # 3. Mixed case (Status → status)
+    if first_lower in _KNOWN_TOP_COMMANDS:
+        return _preprocess_args([first_lower] + rest)
+
+    # ── Tier 1: SD synonym match on full phrase ──────────────────────────────
     full = " ".join(raw_args).strip()
-    sd = _SD_TRUE_EXACT.get(full.lower())
+    sd = _SD_SYNONYMS.get(full.lower())
     if sd is not None:
         return list(sd)
 
-    # Tier 1b: known command — pass to argparse; main() handles recovery
-    if first in _KNOWN_TOP_COMMANDS:
-        return raw_args
+    # 4. Separator normalization: status/goals, status_goals → status goals
+    #    Only on single-token with no spaces to avoid splitting multi-word NL input
+    if not rest and not first_lower.startswith("-") and ' ' not in first_lower:
+        _sep_norm = _RE_SEPARATORS.sub(' ', first_lower).strip()
+        if ' ' in _sep_norm:
+            _parts = _sep_norm.split()
+            if _parts[0] in _KNOWN_TOP_COMMANDS:
+                return [_parts[0]] + _parts[1:]
+            sd2 = _SD_SYNONYMS.get(_sep_norm)
+            if sd2 is not None:
+                return list(sd2)
 
-    # Tier 2: executor classification via internal classify handler
+    # 5. Concat split: statusnetwork → status network (only for no-space tokens)
+    if not rest and len(first_lower) >= 6 and ' ' not in first_lower:
+        for split in range(2, len(first_lower) - 1):
+            head, tail = first_lower[:split], first_lower[split:]
+            if head in _KNOWN_TOP_COMMANDS:
+                return [head, tail]
+            sd3 = _SD_SYNONYMS.get(head + " " + tail)
+            if sd3 is not None:
+                return list(sd3)
+
+    # ── Tier 1.5: intent scoring (NL status queries, no LLM) ─────────────────
+    _intent = _match_intent(raw_args)
+    if _intent is not None:
+        return _intent
+
+    # ── Tier 1d: fuzzy first-token match (all arg counts) ────────────────────
+    # Fires on first token whether the input is 1 or many tokens.
+    # Guard: same first char + length ≥ 3 → avoids false positives on short prose words.
+    if len(first_lower) >= 3 and first_lower[0].isalpha():
+        # Lev-1 + Damerau transposition
+        for cmd in _KNOWN_TOP_COMMANDS:
+            if first_lower[0] == cmd[0] and _lev1(first_lower, cmd):
+                return [cmd] + rest
+        # Unambiguous prefix expansion (e.g. "sto" → "stop", "rel" → "reload")
+        _prefix_matches = [cmd for cmd in _KNOWN_TOP_COMMANDS if cmd.startswith(first_lower)
+                           and len(first_lower) >= 3]
+        if len(_prefix_matches) == 1:
+            return [_prefix_matches[0]] + rest
+
+    # ── Tier 2: LLM executor classification ──────────────────────────────────
     return ["classify", full]
 
 
@@ -615,7 +705,7 @@ def run(state: dict, cfg: dict) -> int:
 
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
     from ..runtime_product import mutation_blocker
     _blocked=mutation_blocker(SYSTEM_ROOT,raw_args)
@@ -984,8 +1074,8 @@ def main(argv: list[str] | None = None) -> int:
         from ..exchange_cli import run as run_exchange
         try:return run_exchange(args,load_config())
         except (ValueError,OSError) as error:parser.error(str(error))
-    if args.command=='exchange':
-        if _unknown:parser.error('Unrecognized exchange arguments: '+' '.join(_unknown))
+    if args.command in ('network', 'exchange'):
+        if _unknown:parser.error('Unrecognized network arguments: '+' '.join(_unknown))
         from ..exchange_cli import run as run_exchange
         try:return run_exchange(args,load_config())
         except (ValueError,OSError) as error:parser.error(str(error))
@@ -2053,7 +2143,7 @@ Key options:
                 for _r in _aud_records[-20:]:
                     print(f"  {_r.get('kind','?')} | {_r.get('operation','?')} | {_r.get('at','?')}")
         return 0
-    config = load_config()
+    config = _config if _config is not None else load_config()
     path = state_path(config)
     if getattr(args, 'resume', False):
         _session_turns = _load_session_context(config)
@@ -2072,7 +2162,8 @@ Key options:
         if not getattr(sys.modules[__name__], '_INIT_AUTO_ACTIVE', False):
             sys.modules[__name__]._INIT_AUTO_ACTIVE = True
             try:
-                return bootstrap.auto_complete(sys.modules[__name__],config)
+                _ac_result = bootstrap.auto_complete(sys.modules[__name__],config)
+                return 0 if isinstance(_ac_result, dict) else _ac_result
             except KeyboardInterrupt:
                 return 130
             finally:
@@ -2269,8 +2360,16 @@ Key options:
     if args.command == "start":
         from .. import bootstrap as _bs, _daemon as _dm
         import argparse as _ap
-        # init if not yet done
-        _bs.auto_complete(sys.modules[__name__], config)
+        as_json = getattr(args, 'json', False) or getattr(args, 'format', None) == 'json'
+        # init + detect, suppress verbose JSON — we print our own compact banner
+        # Set re-entrancy guard so cli.main(['init']) inside auto_complete doesn't recurse
+        sys.modules[__name__]._INIT_AUTO_ACTIVE = True
+        try:
+            _init_result = _bs.auto_complete(sys.modules[__name__], config, _quiet=True)
+        finally:
+            sys.modules[__name__]._INIT_AUTO_ACTIVE = False
+        if not isinstance(_init_result, dict):
+            _init_result = {}
         # reload config after init
         try:
             import json as _j
@@ -2278,9 +2377,37 @@ Key options:
             config = _j.loads(_cp.read_text())
         except Exception:
             pass
-        # start daemon (which now also starts P2P serve)
+        # print compact startup banner
+        _nat = next((s for s in _init_result.get('steps', []) if s.get('step') == 'nat_detection'), {})
+        _guide = _init_result.get('network_guide', {})
+        try:
+            _lifecycle = load_state(config).get('lifecycle_state', 'UNKNOWN')
+        except Exception:
+            _lifecycle = 'UNKNOWN'
+        _banner = {
+            'status': 'starting',
+            'lifecycle': _lifecycle,
+            'network': {
+                'nat': _nat.get('nat_type', 'unknown'),
+                'public_ip': _nat.get('public_ip'),
+                'roles': _nat.get('recommended_roles', []),
+                'mode': _nat.get('recommended_network_mode', 'hybrid'),
+                'tunnel': _guide.get('scenario', 'none'),
+            },
+            'executor': {'providers': _init_result.get('executor_providers', 0)},
+            'doctor': next((s.get('status') for s in _init_result.get('steps', []) if s.get('step') == 'doctor'), 'unknown'),
+        }
+        if _guide.get('scenario') == 'cloudflare_named':
+            _banner['network']['note'] = 'permanent URL via cloudflared'
+        print(json.dumps(_banner) if as_json else
+              f"urace starting — lifecycle:{_banner['lifecycle']} nat:{_banner['network']['nat']} "
+              f"roles:{','.join(_banner['network']['roles']) or 'none'} "
+              f"tunnel:{_banner['network']['tunnel']} "
+              f"executor:{_banner['executor']['providers']} providers")
+        sys.stdout.flush()
+        # start daemon (which also starts P2P serve)
         _start_args = _ap.Namespace(command='daemon', daemon_action='start',
-                                     json=getattr(args,'json',False),
+                                     json=as_json,
                                      format=getattr(args,'format',None),
                                      interval_minutes=getattr(args,'interval_minutes',30.0),
                                      max_cycles=0, cycles=0)
@@ -2293,6 +2420,25 @@ Key options:
                                     json=getattr(args,'json',False),
                                     format=getattr(args,'format',None))
         return _dm.dispatch(_stop_args, config)
+
+    if args.command == "reload":
+        from .. import _daemon as _dm
+        as_json = getattr(args, 'json', False) or getattr(args, 'format', None) == 'json'
+        pid = _dm._read_pid(config)
+        if pid is None or not _dm._is_running(pid):
+            msg = {"status": "no_daemon", "detail": "no running daemon to reload; config will be applied on next urace start"}
+            print(json.dumps(msg) if as_json else "No daemon running. Config will be applied on next 'urace start'.")
+            return 0
+        import os as _os
+        try:
+            _os.kill(pid, signal.SIGHUP)
+            msg = {"status": "reloading", "pid": pid, "detail": "SIGHUP sent; daemon is reloading config"}
+            print(json.dumps(msg) if as_json else f"Reloading config (pid={pid})...")
+            return 0
+        except OSError as _e:
+            msg = {"status": "error", "detail": str(_e)}
+            print(json.dumps(msg) if as_json else f"Reload failed: {_e}")
+            return 1
 
     if args.command in ("shell", "dashboard"):
         if args.command == "dashboard":
@@ -4436,42 +4582,184 @@ Commands:
                 def _matches(v: object) -> bool:
                     return _q in str(v).lower()
                 surface = {k: v for k, v in surface.items() if _matches(k) or _matches(v)}
+            # ── network section ───────────────────────────────────────────────
+            _net_section: dict = {'status': 'not_initialized'}
+            try:
+                from .. import peer_exchange as _pex_s
+                _exch_root = SYSTEM_ROOT / 'exchange'
+                _policy_path = _exch_root / 'policy.json'
+                if _policy_path.exists():
+                    _exc_s = _pex_s.Exchange(_exch_root)
+                    _policy = _exc_s.load()
+                    _peers = _policy.get('peers', {})
+                    _active_tunnel = _policy.get('active_tunnel_endpoint')
+                    _net_section = {
+                        'status': 'initialized',
+                        'mode': _policy.get('network_mode', _policy.get('mode', 'hybrid')),
+                        'roles': _policy.get('node_roles', []),
+                        'peers': len(_peers),
+                        'tunnel': 'up' if _active_tunnel else 'down',
+                    }
+                    if _active_tunnel:
+                        _net_section['tunnel_url'] = _active_tunnel
+                    _id_cert = _exch_root / 'identity-cert.pem'
+                    if _id_cert.exists():
+                        import hashlib as _hl, ssl as _ssl
+                        _der = _ssl.PEM_cert_to_DER_cert(_id_cert.read_text())
+                        _net_section['peer_id'] = _hl.sha256(_der).hexdigest()[:16] + '…'
+            except Exception:
+                _net_section = {'status': 'error'}
+            # ── executor section ──────────────────────────────────────────────
+            _exc_section: dict = {}
+            try:
+                _exc_cfg = config.get('executor', {})
+                _exc_providers = _exc_cfg.get('providers', [])
+                _exc_avail = [p for p in _exc_providers if p.get('enabled', True)]
+                _now_ts = __import__('datetime').datetime.now(__import__('datetime').timezone.utc).timestamp()
+                _calls_24h = [c for c in state.get('executor_state', {}).get('executor_calls', [])
+                              if _now_ts - __import__('datetime').datetime.fromisoformat(c['at']).timestamp() < 86400]
+                _exc_section = {
+                    'enabled': bool(_exc_cfg.get('enabled')),
+                    'providers': len(_exc_providers),
+                    'available': len(_exc_avail),
+                    'calls_24h': len(_calls_24h),
+                    'ids': [p.get('id') for p in _exc_avail],
+                }
+            except Exception:
+                pass
+            # ── goals section ─────────────────────────────────────────────────
+            _goals_section: dict = {}
+            try:
+                _objs = state.get('objectives', [])
+                _goals_section = {
+                    'active': len([o for o in _objs if o.get('status') == 'active']),
+                    'pending': len([o for o in _objs if o.get('status') == 'PENDING']),
+                    'blocked': len([o for o in _objs if o.get('status') == 'blocked']),
+                    'total': len(_objs),
+                    'auto_goals': config.get('auto_goals', {}).get('enabled', False),
+                }
+            except Exception:
+                pass
+            # ── config section ────────────────────────────────────────────────
+            _cfg_section: dict = {}
+            try:
+                from .._common import CONFIG_PATH as _cfgp
+                _cfg_section = {
+                    'path': str(_cfgp),
+                    'effort': config.get('resources', {}).get('effort', 'medium'),
+                    'self_evolution': config.get('self_evolution_policy', {}).get('mode', 'auto'),
+                    'auto_goals': config.get('auto_goals', {}).get('enabled', False),
+                    'capability_envelope_waived': bool(config.get('capability_envelope_waived')),
+                }
+                if _cfgp.exists():
+                    import os as _os
+                    _cfg_section['modified'] = __import__('datetime').datetime.fromtimestamp(
+                        _os.path.getmtime(_cfgp), tz=__import__('datetime').timezone.utc
+                    ).strftime('%Y-%m-%dT%H:%M:%SZ')
+            except Exception:
+                pass
+            surface['network'] = _net_section
+            surface['executor'] = _exc_section
+            surface['goals'] = _goals_section
+            surface['config'] = _cfg_section
+            # ── dedup gaps by (kind, detail) for display ──────────────────────
+            def _dedup_gaps(gaps: list) -> list:
+                seen: dict = {}
+                for g in gaps:
+                    key = (g.get('kind', ''), g.get('detail', ''))
+                    if key not in seen:
+                        seen[key] = {**g, '_count': 1}
+                    else:
+                        seen[key]['_count'] += 1
+                return list(seen.values())
+            # ── group gaps by kind for display ────────────────────────────────
+            def _group_gaps(gaps: list) -> dict:
+                groups: dict = {}
+                for g in gaps:
+                    k = g.get('kind', 'unknown')
+                    groups.setdefault(k, []).append(g)
+                return groups
             if args.json:
+                # JSON: deduplicate, add _count, keep structured
+                surface['blocking_gaps'] = _dedup_gaps(surface.get('blocking_gaps', []))
+                surface['warning_gaps'] = _dedup_gaps(surface.get('warning_gaps', []))
                 print(json.dumps(surface, indent=2, sort_keys=True))
             else:
-                print(f"lifecycle_state: {surface['lifecycle_state']}")
-                print(f"summary:         {surface['summary']}")
-                blocking = surface.get("blocking_gaps", [])
-                if blocking:
-                    print(f"blocking_gaps:   {len(blocking)}")
-                    for g in blocking:
-                        print(f"  [{g.get('kind')}] {g.get('detail', '')}")
-                warning = surface.get("warning_gaps", [])
-                if warning:
-                    print(f"warning_gaps:    {len(warning)}")
-                    for g in warning:
-                        print(f"  [{g.get('kind')}] {g.get('detail', '')}")
+                _verbose = getattr(args, 'verbose', False)
+                _lc = surface['lifecycle_state']
+                _blk_raw = surface.get("blocking_gaps", [])
+                _wrn_raw = surface.get("warning_gaps", [])
+                _blk = _dedup_gaps(_blk_raw)
+                _wrn = _dedup_gaps(_wrn_raw)
+                _health = "OK" if not _blk else "BLOCKED"
+                from urace.version import RUNTIME_VERSION as _rv
+                print(f"urace {_rv} — {_lc}")
+                print(f"lifecycle:  {_lc:<14}  health: {_health}  blocking: {len(_blk_raw)}  warnings: {len(_wrn_raw)}")
+                # network
+                _ns = _net_section.get('status', 'unknown')
+                if _ns == 'not_initialized':
+                    print(f"network:    not_initialized")
+                elif _ns == 'error':
+                    print(f"network:    error reading policy")
+                else:
+                    _roles_str = ','.join(_net_section.get('roles', [])) or 'none'
+                    _tunnel_str = _net_section.get('tunnel_url', _net_section.get('tunnel', 'down'))
+                    print(f"network:    mode={_net_section.get('mode','?')}  roles={_roles_str}  peers={_net_section.get('peers',0)}  tunnel={_tunnel_str}")
+                # executor
+                if _exc_section:
+                    _ids_str = ','.join(_exc_section.get('ids', [])) or 'none'
+                    print(f"executor:   enabled={_exc_section.get('enabled',False)}  providers={_ids_str}  calls_24h={_exc_section.get('calls_24h',0)}")
+                # goals
+                if _goals_section:
+                    print(f"goals:      active={_goals_section.get('active',0)}  pending={_goals_section.get('pending',0)}  blocked={_goals_section.get('blocked',0)}  auto={_goals_section.get('auto_goals',False)}")
+                # config
+                if _cfg_section:
+                    _ce = '(waived)' if _cfg_section.get('capability_envelope_waived') else 'not set'
+                    print(f"config:     effort={_cfg_section.get('effort','?')}  self_evolution={_cfg_section.get('self_evolution','?')}  capability_envelope={_ce}")
+                # blocking gaps — always show, deduplicated
+                if _blk:
+                    _blk_total = len(_blk_raw)
+                    _blk_unique = len(_blk)
+                    _extra = f"  ({_blk_total} total, {_blk_unique} unique)" if _blk_total != _blk_unique else ''
+                    print(f"\nBLOCKING{_extra}:")
+                    for g in _blk:
+                        _cnt = g.get('_count', 1)
+                        _sfx = f"  ×{_cnt}" if _cnt > 1 else ''
+                        print(f"  [{g.get('kind')}] {g.get('detail', '')}{_sfx}")
+                        # actionable hint
+                        if g.get('kind') == 'onboard-config-incomplete':
+                            print(f"    → add missing fields to config.json, then: urace reload")
+                        elif g.get('kind') == 'onboard-no-readable-product-files':
+                            print(f"    → check product_files paths in config.json")
+                # warnings — grouped by kind, capped unless --verbose
+                if _wrn:
+                    _wrn_groups = _group_gaps(_wrn_raw)
+                    _wrn_kinds = len(_wrn_groups)
+                    _wrn_total = len(_wrn_raw)
+                    print(f"\nWARNINGS ({_wrn_total} total, {_wrn_kinds} kind{'s' if _wrn_kinds != 1 else ''}):")
+                    for kind, items in _wrn_groups.items():
+                        if len(items) == 1:
+                            print(f"  [{kind}] {items[0].get('detail', '')}")
+                        else:
+                            sample = items[0].get('detail', '')[:60]
+                            print(f"  [{kind}] ×{len(items)}  e.g. {sample}")
+                            if _verbose:
+                                for item in items[1:]:
+                                    print(f"    {item.get('detail', '')}")
+                    if not _verbose and any(len(v) > 1 for v in _wrn_groups.values()):
+                        print(f"  → urace status --verbose  for full list")
+                # preflight hints
                 if _preflight_hints:
-                    print(f"preflight_hints: {len(_preflight_hints)}")
+                    print(f"\nHINTS:")
                     for _h in _preflight_hints:
                         print(f"  [{_h['level']}] {_h['message']} — {_h['action']}")
-            if args.fail_on:
-                severity_order = {"INFO": 0, "WARNING": 1, "BLOCKING": 2}
-                threshold = severity_order.get(args.fail_on, 999)
-                active_gaps = [g for g in state.get("integrity_gaps", []) if g.get("active", True)]
-                has_threshold = any(severity_order.get(g.get("severity", "INFO"), 0) >= threshold for g in active_gaps)
-                if has_threshold:
-                    return 1
+            if args.fail_on and any(_SEVERITY_ORDER.get(g.get("severity", "INFO"), 0) >= _SEVERITY_ORDER.get(args.fail_on, 999) for g in state.get("integrity_gaps", []) if g.get("active", True)):
+                return 1
         else:
             snapshot = vitals_snapshot(config, state)
             print(json.dumps(snapshot, indent=2, sort_keys=True) if args.json else render_vitals(snapshot))
-            if args.fail_on:
-                severity_order = {"INFO": 0, "WARNING": 1, "BLOCKING": 2}
-                threshold = severity_order.get(args.fail_on, 999)
-                active_gaps = [g for g in state.get("integrity_gaps", []) if g.get("active", True)]
-                has_threshold = any(severity_order.get(g.get("severity", "INFO"), 0) >= threshold for g in active_gaps)
-                if has_threshold:
-                    return 1
+            if args.fail_on and any(_SEVERITY_ORDER.get(g.get("severity", "INFO"), 0) >= _SEVERITY_ORDER.get(args.fail_on, 999) for g in state.get("integrity_gaps", []) if g.get("active", True)):
+                return 1
         return 0
     if args.command == "quality":
         state = load_state_for_read(config)
@@ -6035,45 +6323,6 @@ Commands:
                 state["restart_requested"] = False
                 save_state(config, state)
                 write_runtime_snapshot(config)
-            if args.command == "check":
-                surface = _build_inspection_surface(state, config)
-                surface['preflight_hints'] = _preflight_hints
-                if args.json:
-                    print(json.dumps(surface, indent=2, sort_keys=True))
-                else:
-                    print(f"lifecycle_state: {surface['lifecycle_state']}")
-                    print(f"summary:         {surface['summary']}")
-                    blocking = surface.get("blocking_gaps", [])
-                    if blocking:
-                        print(f"blocking_gaps:   {len(blocking)}")
-                        for g in blocking:
-                            print(f"  [{g.get('kind')}] {g.get('detail', '')}")
-                    warning = surface.get("warning_gaps", [])
-                    if warning:
-                        print(f"warning_gaps:    {len(warning)}")
-                        for g in warning:
-                            print(f"  [{g.get('kind')}] {g.get('detail', '')}")
-                    if _preflight_hints:
-                        print(f"preflight_hints: {len(_preflight_hints)}")
-                        for _h in _preflight_hints:
-                            print(f"  [{_h['level']}] {_h['message']} — {_h['action']}")
-                if args.fail_on:
-                    _severity_order = {"INFO": 0, "WARNING": 1, "BLOCKING": 2}
-                    _threshold = _severity_order.get(args.fail_on, 999)
-                    _active_gaps = [g for g in state.get("integrity_gaps", []) if g.get("active", True)]
-                    if any(_severity_order.get(g.get("severity", "INFO"), 0) >= _threshold for g in _active_gaps):
-                        return 1
-                return 0
-            if args.command == "vitals":
-                snapshot = vitals_snapshot(config, state)
-                print(json.dumps(snapshot, indent=2, sort_keys=True) if args.json else render_vitals(snapshot))
-                if args.fail_on:
-                    _severity_order = {"INFO": 0, "WARNING": 1, "BLOCKING": 2}
-                    _threshold = _severity_order.get(args.fail_on, 999)
-                    _active_gaps = [g for g in state.get("integrity_gaps", []) if g.get("active", True)]
-                    if any(_severity_order.get(g.get("severity", "INFO"), 0) >= _threshold for g in _active_gaps):
-                        return 1
-                return 0
             count = 1 if args.command == "plan" else args.cycles
             portfolio_owner = None
             portfolio_restart_after = 0.0
@@ -6129,6 +6378,119 @@ Commands:
                 consumed_inputs = consume_inputs(config, state)
                 # AP18 — check scheduled tasks
                 _check_scheduled_tasks(state, config)
+                # Periodic sybil gate pass (every 24h) — emit SYBIL_CANDIDATE for peers failing gate
+                if args.command == "auto":
+                    _sg_now = time.time()
+                    if _sg_now - state.get('_sybil_gate_last_run', 0) >= 86400:
+                        state['_sybil_gate_last_run'] = _sg_now
+                        try:
+                            from .. import reputation_categories as _rc_sg
+                            _sg_exchange = getattr(args, '_exchange', None)
+                            if _sg_exchange is None:
+                                try:
+                                    from ..peer_exchange import open_exchange
+                                    _sg_exchange = open_exchange(config)
+                                except Exception:
+                                    _sg_exchange = None
+                            if _sg_exchange is not None and hasattr(_sg_exchange, 'audit_rows') and hasattr(_sg_exchange, 'append_audit_row'):
+                                _sg_rows = _sg_exchange.audit_rows()
+                                _sg_peers = {r.get('peer') for r in _sg_rows if r.get('peer')} | \
+                                            {r.get('replica_peer_id') for r in _sg_rows if r.get('replica_peer_id')}
+                                _7d_ago = _sg_now - 604800
+                                for _sg_peer in _sg_peers:
+                                    if not _sg_peer or _sg_peer.startswith('__'):
+                                        continue
+                                    _sg_passes, _sg_failing = _rc_sg.sybil_gate(_sg_rows, _sg_peer)
+                                    if not _sg_passes:
+                                        _already = any(
+                                            r.get('kind') == 'SYBIL_CANDIDATE'
+                                            and r.get('peer') == _sg_peer
+                                            and float(r.get('at_unix', 0)) > _7d_ago
+                                            for r in _sg_rows
+                                        )
+                                        if not _already:
+                                            _sg_exchange.append_audit_row({
+                                                'kind': 'SYBIL_CANDIDATE',
+                                                'peer': _sg_peer,
+                                                'score': len(_sg_failing),
+                                                'flags': _sg_failing,
+                                                'at_unix': _sg_now,
+                                                'at': datetime.now(timezone.utc).isoformat(),
+                                            })
+                                # Periodic mutual-approval cartel scan (piggybacks sybil cycle)
+                                try:
+                                    from .. import cartel_guard as _cg_sg
+                                    _cg_results = _cg_sg.detect_mutual_approval_cartel(_sg_rows)
+                                    for _cg_hit in _cg_results:
+                                        _cg_members = _cg_hit.get('members', [])
+                                        _already_cg = any(
+                                            r.get('kind') == 'CARTEL_CANDIDATE'
+                                            and set(r.get('members', [])) == set(_cg_members)
+                                            and float(r.get('at_unix', 0)) > _7d_ago
+                                            for r in _sg_rows
+                                        )
+                                        if not _already_cg:
+                                            _sg_exchange.append_audit_row({
+                                                'kind': 'CARTEL_CANDIDATE',
+                                                'members': _cg_members,
+                                                'density': _cg_hit.get('density', 0),
+                                                'confidence': _cg_hit.get('confidence', 0),
+                                                'at_unix': _sg_now,
+                                                'at': datetime.now(timezone.utc).isoformat(),
+                                            })
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                # Reward emission pass (every 300s) — emit CREDIT_DELTA for infra events
+                if args.command == "auto":
+                    _rw_now = time.time()
+                    if _rw_now - state.get('_reward_last_run', 0) >= 300:
+                        state['_reward_last_run'] = _rw_now
+                        try:
+                            _rw_ex = getattr(args, '_exchange', None)
+                            if _rw_ex is None:
+                                try:
+                                    from ..peer_exchange import open_exchange
+                                    _rw_ex = open_exchange(config)
+                                except Exception:
+                                    _rw_ex = None
+                            if _rw_ex is not None and hasattr(_rw_ex, 'audit_rows') and hasattr(_rw_ex, 'append_audit_row'):
+                                _rw_rows = _rw_ex.audit_rows()
+                                _rw_peer = (_rw_ex.identity() or {}).get('peer_id')
+                                if _rw_peer and not _rw_peer.startswith('__'):
+                                    _rw_last = state.get('_reward_last_check_unix', _rw_now - 300)
+                                    state['_reward_last_check_unix'] = _rw_now
+                                    _rw_recent = [r for r in _rw_rows if float(r.get('at_unix', 0)) > _rw_last]
+                                    _p2p_cfg = config.get('p2p', {})
+                                    _rw_map = [
+                                        ('SEAL_FINALIZED',    'seal_reward',      int(_p2p_cfg.get('seal_reward_units',      1_000_000))),
+                                        ('RPC_ADMITTED',      'bootstrap_reward', int(_p2p_cfg.get('bootstrap_reward_units', 1_500_000))),
+                                        ('RELAY_CREDIT_ISSUED','relay_reward',    int(_p2p_cfg.get('relay_reward_units',     1_000_000))),
+                                    ]
+                                    for _rw_kind, _rw_dir, _rw_amt in _rw_map:
+                                        for _ in range(sum(1 for r in _rw_recent if r.get('kind') == _rw_kind)):
+                                            _rw_ex.append_audit_row({
+                                                'kind': 'CREDIT_DELTA',
+                                                'direction': _rw_dir,
+                                                'amount_units': _rw_amt,
+                                                'peer': _rw_peer,
+                                                'at_unix': _rw_now,
+                                                'at': datetime.now(timezone.utc).isoformat(),
+                                            })
+                                    # llm_peer_reward: SIMILARITY_VERDICT with verdict='derived'
+                                    _llm_count = sum(1 for r in _rw_recent if r.get('kind') == 'SIMILARITY_VERDICT' and r.get('verdict') == 'derived')
+                                    for _ in range(_llm_count):
+                                        _rw_ex.append_audit_row({
+                                            'kind': 'CREDIT_DELTA',
+                                            'direction': 'llm_peer_reward',
+                                            'amount_units': int(_p2p_cfg.get('llm_peer_reward_units', 2_000_000)),
+                                            'peer': _rw_peer,
+                                            'at_unix': _rw_now,
+                                            'at': datetime.now(timezone.utc).isoformat(),
+                                        })
+                        except Exception:
+                            pass
                 # Check P2P free-use features as potential implementations before executing
                 if args.command == "auto" and config.get('capability_flags', {}).get('p2p_borrow_enabled', True):
                     try:

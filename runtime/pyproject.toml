@@ -1,6 +1,6 @@
 [project]
 name = "urace"
-version = "0.8.5"
+version = "0.9.3"
 description = "Persistent autonomous Product-evolution control plane"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -51,3 +51,11 @@ markers = [
     "slow: tests using subprocess, real git, or real file I/O (use -m 'not slow' for fast runs)",
     "integration: tests that require live network/DHT/mDNS (use -m 'not integration' for offline runs)",
 ]
+
+[tool.coverage.run]
+source = ["urace"]
+omit = ["*/tests/*", "*/trial/*"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true

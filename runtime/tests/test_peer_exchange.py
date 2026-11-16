@@ -2,8 +2,10 @@
 from pathlib import Path
 from unittest.mock import patch
 import copy,json,ssl,tempfile,threading,unittest
+import pytest
 from urace import peer_exchange as pe,exchange_cli,cli,api_interface,command_surface,integration_bridge
 
+@pytest.mark.slow
 class ExchangeTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);root=Path(self.tmp.name);self.a=pe.Exchange(root/'a');self.b=pe.Exchange(root/'b')
@@ -171,6 +173,7 @@ class ExchangeTests(unittest.TestCase):
     for server in (sa,sb):server.shutdown()
     for t in threads:t.join(timeout=5)
 
+@pytest.mark.slow
 class HybridProtocolBoundaryTests(unittest.TestCase):
  setUp=ExchangeTests.setUp
  pair=ExchangeTests.pair
@@ -194,6 +197,7 @@ class HybridProtocolBoundaryTests(unittest.TestCase):
   self.pair();bundle=self.bundle();bundle['payload']['distribution_terms']['payment_enabled']=True;bundle['signature']=self.a.sign(bundle['payload'])
   with self.assertRaises(ValueError):self.b.receive(bundle)
 
+@pytest.mark.slow
 class BandwidthProfileTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);root=Path(self.tmp.name);self.a=pe.Exchange(root/'a');self.b=pe.Exchange(root/'b')
@@ -257,6 +261,7 @@ class BandwidthProfileTests(unittest.TestCase):
    finally:server.shutdown();thread.join(timeout=5)
 
 
+@pytest.mark.slow
 class BootstrapServerTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
@@ -277,6 +282,7 @@ class BootstrapServerTests(unittest.TestCase):
   with pe.server(self.node) as srv:
    self.assertGreater(srv.server_port,0)
 
+@pytest.mark.slow
 class ExchangePingTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
@@ -315,4 +321,41 @@ class ExchangePingTests(unittest.TestCase):
     s.close()
     self.assertIn(b'"status"',data)
     self.assertIn(b'"tunnel":"ok"',data)
+   finally:srv.shutdown();t.join(timeout=5)
+
+
+@pytest.mark.slow
+class GossipUpdateEndpointTests(unittest.TestCase):
+ def setUp(self):
+  self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);root=Path(self.tmp.name);self.a=pe.Exchange(root/'a');self.b=pe.Exchange(root/'b')
+ def pair(self):
+  for e in (self.a,self.b):e.configure(enabled=True,network=True);e.feature('featureA',[])
+  self.aid=self.a.identity()['peer_id'];self.bid=self.b.identity()['peer_id']
+  self.a.peer(self.b.identity()['certificate'],post_quantum=self.b.identity()['post_quantum'])
+  self.b.peer(self.a.identity()['certificate'],post_quantum=self.a.identity()['post_quantum'])
+
+ def test_bootstrap_update_endpoint_stores_new_url(self):
+  """bootstrap.update_endpoint RPC updates the caller's stored endpoint in our peers dict."""
+  self.pair()
+  with pe.server(self.b) as srv:
+   t=threading.Thread(target=srv.serve_forever,daemon=True);t.start()
+   try:
+    self.a.peer(self.b.identity()['certificate'],'https://127.0.0.1:'+str(srv.server_port))
+    new_ep='https://127.0.0.1:'+str(srv.server_port)
+    result=pe.request(self.a,self.bid,'bootstrap.update_endpoint',{'endpoint':new_ep,'peer_id':self.aid})
+    self.assertEqual(result.get('status'),'ok')
+    b_cfg=self.b.load()
+    self.assertEqual(b_cfg['peers'][self.aid].get('endpoint'),new_ep)
+   finally:srv.shutdown();t.join(timeout=5)
+
+ def test_bootstrap_update_endpoint_rejects_mismatched_peer_id(self):
+  """bootstrap.update_endpoint rejects when peer_id doesn't match the authenticated cert."""
+  self.pair()
+  with pe.server(self.b) as srv:
+   t=threading.Thread(target=srv.serve_forever,daemon=True);t.start()
+   try:
+    self.a.peer(self.b.identity()['certificate'],'https://127.0.0.1:'+str(srv.server_port))
+    new_ep='https://127.0.0.1:'+str(srv.server_port)
+    with self.assertRaises(Exception):
+     pe.request(self.a,self.bid,'bootstrap.update_endpoint',{'endpoint':new_ep,'peer_id':'not-the-real-peer-id'})
    finally:srv.shutdown();t.join(timeout=5)

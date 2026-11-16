@@ -89,8 +89,34 @@
       "authority boundaries"
     ]
   },
+  "api": {
+    "mcp": {"enabled": false},
+    "a2a": {"enabled": false, "port": 8080}
+  },
+  "network": {
+    "enabled": false,
+    "mode": "hybrid",
+    "tunnel": "auto",
+    "roles": [],
+    "bootstrap_peers": [],
+    "port": 7301
+  },
   "operator_patterns": [],
-  "p2p": {},
+  "p2p": {
+    "seal_reward_units": 1000000,
+    "relay_reward_units": 1000000,
+    "bootstrap_reward_units": 1500000,
+    "llm_peer_reward_units": 2000000,
+    "executor_reference_price_per_unit": 120000000,
+    "borrow_ceiling_micro": 0.05,
+    "borrow_ceiling_standard": 0.08,
+    "borrow_ceiling_large": 0.12,
+    "borrow_ceiling_bundle": 0.10,
+    "borrow_tax_rate": 0.15,
+    "borrow_earn_rebate_rate": 0.05
+  },
+  "rules": [],
+  "sources": [],
   "product": "ci-test-product",
   "product_files": [
     "URACE.md",

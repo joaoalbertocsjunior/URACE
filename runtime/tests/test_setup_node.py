@@ -88,9 +88,10 @@ def test_setup_node_sets_roles(tmp_path):
         exchange, config = _make_exchange_and_config(tmp_dir, {'network_mode': 'hybrid'})
         from urace import exchange_cli
 
-        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0)
+        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0, guide=False)
 
         with patch('urace.nat_check.check_node_capability', return_value=cap), \
+             patch('urace.tunnel_install.find_cloudflared', return_value=None), \
              patch('urace._common.atomic_write_json', side_effect=fake_atomic_write):
             ret = exchange_cli.run(args, config)
 
@@ -122,8 +123,9 @@ def test_setup_node_always_includes_outbound_roles(tmp_path):
     with tempfile.TemporaryDirectory() as tmp_dir:
         exchange, config = _make_exchange_and_config(tmp_dir, {})
         from urace import exchange_cli
-        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0)
+        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0, guide=False)
         with patch('urace.nat_check.check_node_capability', return_value=cap), \
+             patch('urace.tunnel_install.find_cloudflared', return_value=None), \
              patch('urace._common.atomic_write_json', side_effect=fake_atomic_write):
             exchange_cli.run(args, config)
 
@@ -151,8 +153,9 @@ def test_setup_node_enables_network_on_existing_policy_with_network_false(tmp_pa
     with tempfile.TemporaryDirectory() as tmp_dir:
         exchange, config = _make_exchange_and_config(tmp_dir, {'network': False, 'enabled': True})
         from urace import exchange_cli
-        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0)
+        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0, guide=False)
         with patch('urace.nat_check.check_node_capability', return_value=cap), \
+             patch('urace.tunnel_install.find_cloudflared', return_value=None), \
              patch('urace._common.atomic_write_json', side_effect=fake_atomic_write):
             exchange_cli.run(args, config)
 
@@ -268,7 +271,7 @@ def test_install_service_windows_prints_instructions():
 # ── urace stop graceful when not initialized ──────────────────────────────────
 
 def test_stop_graceful_when_not_initialized():
-    """urace stop (aliased to pause) returns 0 with friendly message when URACE not initialized."""
+    """urace stop returns 0 with friendly message when URACE not initialized."""
     import argparse
     from urace.cli import main as cli_main
     from unittest.mock import patch
@@ -299,3 +302,247 @@ def test_stop_graceful_load_state_raises():
             except (SystemExit, Exception):
                 ret = None
     assert 'nothing to stop' in captured.getvalue() or ret in (0, None)
+
+
+# ── DDNS helpers ──────────────────────────────────────────────────────────────
+
+def test_update_duckdns_returns_true_on_ok(monkeypatch):
+    """update_duckdns returns True when DuckDNS API responds with 'OK'."""
+    import io
+    from unittest.mock import patch, MagicMock
+    from urace import ddns
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"OK"
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        result = ddns.update_duckdns("mytoken", "myhost", "1.2.3.4")
+
+    assert result is True
+
+
+def test_update_duckdns_returns_false_on_ko(monkeypatch):
+    """update_duckdns returns False when DuckDNS API responds with 'KO'."""
+    from unittest.mock import patch, MagicMock
+    from urace import ddns
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"KO"
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        result = ddns.update_duckdns("badtoken", "myhost", "1.2.3.4")
+
+    assert result is False
+
+
+def test_get_current_public_ip_returns_ip(monkeypatch):
+    """get_current_public_ip returns a valid IP when HTTP source responds."""
+    from unittest.mock import patch, MagicMock
+    from urace import ddns
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b"5.6.7.8\n"
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        ip = ddns.get_current_public_ip(timeout=2.0)
+
+    assert ip == "5.6.7.8"
+
+
+def test_get_current_public_ip_falls_back_on_error(monkeypatch):
+    """get_current_public_ip returns None when all sources fail."""
+    from unittest.mock import patch
+    from urace import ddns
+
+    with patch("urllib.request.urlopen", side_effect=OSError("network down")):
+        ip = ddns.get_current_public_ip(timeout=1.0)
+
+    assert ip is None
+
+
+def test_setup_port_forward_basic(tmp_path):
+    """setup-port-forward returns ok JSON with public_ip, local_ip, gateway, port, instructions."""
+    import tempfile
+    from unittest.mock import patch, MagicMock
+    from urace import exchange_cli
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exchange, config = _make_exchange_and_config(tmp_dir)
+        args = _make_args(
+            exchange_group='network', exchange_verb='setup-port-forward',
+            port=7301, ddns_token=None, ddns_domain=None,
+        )
+
+        mock_sock = MagicMock()
+        mock_sock.__enter__ = lambda s: s
+        mock_sock.__exit__ = MagicMock(return_value=False)
+        mock_sock.getsockname.return_value = ('192.168.1.5', 0)
+
+        import io, sys
+        captured = io.StringIO()
+        with patch('urace.stun_client.get_public_address', return_value={'ip': '203.0.113.1', 'port': 7301}), \
+             patch('socket.socket', return_value=mock_sock), \
+             patch('subprocess.run', return_value=MagicMock(stdout='default via 192.168.1.1 dev eth0\n', returncode=0)), \
+             patch('sys.stdout', captured):
+            ret = exchange_cli.run(args, config)
+
+    out = captured.getvalue().strip()
+    result = json.loads(out)
+    assert result['status'] == 'ok'
+    assert result['port'] == 7301
+    assert 'instructions' in result
+    assert 'summary' in result['instructions']
+
+
+def test_setup_port_forward_configures_ddns(tmp_path):
+    """setup-port-forward with --ddns-token and --ddns-domain stores ddns_url in policy."""
+    import tempfile, io
+    from unittest.mock import patch, MagicMock
+    from urace import exchange_cli
+
+    written = {}
+
+    def fake_awj(path, val):
+        written['val'] = dict(val)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exchange, config = _make_exchange_and_config(tmp_dir)
+        args = _make_args(
+            exchange_group='network', exchange_verb='setup-port-forward',
+            port=7301, ddns_token='tok123', ddns_domain='mynode',
+        )
+
+        mock_sock = MagicMock()
+        mock_sock.__enter__ = lambda s: s
+        mock_sock.__exit__ = MagicMock(return_value=False)
+        mock_sock.getsockname.return_value = ('192.168.1.5', 0)
+
+        mock_ddns_resp = MagicMock()
+        mock_ddns_resp.read.return_value = b'OK'
+        mock_ddns_resp.__enter__ = lambda s: s
+        mock_ddns_resp.__exit__ = MagicMock(return_value=False)
+
+        captured = io.StringIO()
+        with patch('urace.stun_client.get_public_address', return_value={'ip': '203.0.113.1', 'port': 7301}), \
+             patch('socket.socket', return_value=mock_sock), \
+             patch('subprocess.run', return_value=MagicMock(stdout='default via 192.168.1.1 dev eth0\n', returncode=0)), \
+             patch('urllib.request.urlopen', return_value=mock_ddns_resp), \
+             patch('urace._common.atomic_write_json', side_effect=fake_awj), \
+             patch('sys.stdout', captured):
+            ret = exchange_cli.run(args, config)
+
+    out = captured.getvalue().strip()
+    result = json.loads(out)
+    assert result['status'] == 'ok'
+    assert result.get('ddns_url') == 'https://mynode.duckdns.org:7301'
+    assert written['val']['ddns_token'] == 'tok123'
+    assert written['val']['ddns_domain'] == 'mynode'
+    assert written['val']['ddns_url'] == 'https://mynode.duckdns.org:7301'
+
+
+# ── network guide helper ──────────────────────────────────────────────────────
+
+def _guide_cap(nat_type, upnp=False, can_bootstrap=True, can_relay=True):
+    return {
+        'nat_type': nat_type, 'public_ip': '1.2.3.4', 'upnp_available': upnp,
+        'can_bootstrap': can_bootstrap, 'can_relay': can_relay,
+        'recommended_roles': ['consumer', 'creator'],
+        'recommended_network_mode': 'hybrid',
+    }
+
+
+def test_guide_vps_direct():
+    from unittest.mock import patch
+    from urace.exchange_cli import _build_network_guide
+    cap = _guide_cap('direct', upnp=False)
+    with patch('urace.tunnel_install.find_cloudflared', return_value=None):
+        guide = _build_network_guide(cap)
+    assert guide['scenario'] == 'vps_direct'
+    assert 'urace network serve' in guide['commands'][0]
+    assert len(guide['commands']) == 1
+
+
+def test_guide_cloudflare_authenticated():
+    from unittest.mock import patch
+    from pathlib import Path
+    from urace.exchange_cli import _build_network_guide
+    cap = _guide_cap('cone', upnp=False)
+    with patch('urace.tunnel_install.find_cloudflared', return_value='/usr/bin/cloudflared'), \
+         patch.object(Path, 'exists', return_value=True):
+        guide = _build_network_guide(cap)
+    assert guide['scenario'] == 'cloudflare_named'
+    assert '--tunnel auto' in guide['commands'][0]
+
+
+def test_guide_cloudflare_needs_login():
+    from unittest.mock import patch
+    from pathlib import Path
+    from urace.exchange_cli import _build_network_guide
+    cap = _guide_cap('cone', upnp=False)
+    with patch('urace.tunnel_install.find_cloudflared', return_value='/usr/bin/cloudflared'), \
+         patch.object(Path, 'exists', return_value=False):
+        guide = _build_network_guide(cap)
+    assert guide['scenario'] == 'cloudflare_needs_login'
+    assert any('cloudflared tunnel login' in c for c in guide['commands'])
+    assert any('serve' in c for c in guide['commands'])
+
+
+def test_guide_localhost_run_fallback():
+    from unittest.mock import patch
+    from pathlib import Path
+    import shutil
+    from urace.exchange_cli import _build_network_guide
+    cap = _guide_cap('symmetric', upnp=False)
+    with patch('urace.tunnel_install.find_cloudflared', return_value=None), \
+         patch('shutil.which', return_value='/usr/bin/ssh'):
+        guide = _build_network_guide(cap)
+    assert guide['scenario'] == 'localhost_run'
+    assert '--tunnel auto' in guide['commands'][0]
+
+
+def test_guide_intranet_only():
+    from unittest.mock import patch
+    from pathlib import Path
+    from urace.exchange_cli import _build_network_guide
+    cap = _guide_cap('unknown', upnp=False, can_bootstrap=False, can_relay=False)
+    with patch('urace.tunnel_install.find_cloudflared', return_value=None), \
+         patch('shutil.which', return_value=None):
+        guide = _build_network_guide(cap)
+    assert guide['scenario'] == 'intranet_only'
+    assert any('intranet' in c for c in guide['commands'])
+
+
+def test_setup_node_guide_flag_no_config_write():
+    """setup-node --guide returns guide without writing policy.json."""
+    import io, tempfile
+    from unittest.mock import patch, MagicMock
+    from urace import exchange_cli
+
+    cap = _guide_cap('cone', upnp=False)
+    written = {}
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        exchange, config = _make_exchange_and_config(tmp_dir)
+        args = _make_args(exchange_group='network', exchange_verb='setup-node', timeout=5.0, guide=True)
+
+        captured = io.StringIO()
+        with patch('urace.nat_check.check_node_capability', return_value=cap), \
+             patch('urace.tunnel_install.find_cloudflared', return_value=None), \
+             patch('shutil.which', return_value='/usr/bin/ssh'), \
+             patch('urace._common.atomic_write_json', side_effect=lambda p, v: written.update({'called': True})), \
+             patch('sys.stdout', captured):
+            ret = exchange_cli.run(args, config)
+
+    assert ret in (0, None)
+    assert not written.get('called'), 'atomic_write_json must NOT be called in --guide mode'
+    out = captured.getvalue()
+    result = json.loads(out)
+    assert result['status'] == 'ok'
+    assert 'guide' in result
+    assert result['guide']['scenario'] in ('localhost_run', 'cloudflare_needs_login', 'cloudflare_named', 'vps_direct', 'intranet_only')
