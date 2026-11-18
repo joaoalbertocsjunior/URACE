@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Goals{% endblock %}
+
+{% block content %}
+<h1>Goals</h1>
+
+<div class="goals-add-card">
+  <h2 class="section-title">Add Goal</h2>
+  <form id="add-goal-form" onsubmit="addGoal(event)">
+    <div class="form-row">
+      <label class="form-label" for="goal-title">Title</label>
+      <input id="goal-title" class="field-input" type="text" placeholder="Goal title" required>
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="goal-desc">Description</label>
+      <textarea id="goal-desc" class="field-input" rows="2" placeholder="Optional description"></textarea>
+    </div>
+    <div class="form-row">
+      <label class="form-label" for="goal-priority">Priority (0–100)</label>
+      <input id="goal-priority" class="field-input" type="number" min="0" max="100" value="50">
+    </div>
+    <div class="form-row">
+      <span class="form-label"></span>
+      <div>
+        <button type="submit" class="btn-primary">Add Goal</button>
+        <span id="add-goal-msg" class="inline-msg"></span>
+      </div>
+    </div>
+  </form>
+</div>
+
+<div class="goals-section">
+  <div class="goals-list-header">
+    <h2 class="section-title">Goals</h2>
+    <button class="btn-secondary" onclick="loadGoals()">Refresh</button>
+  </div>
+  <div id="goals-list">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<div class="goals-forecast-section">
+  <button class="btn-secondary" onclick="toggleForecast(this)">Show Forecast</button>
+  <div id="forecast-content" style="display:none; margin-top:0.8rem;"></div>
+</div>
+
+<script>
+const TOKEN = {{ token | tojson }};
+
+function statusClass(status) {
+  const m = {active:'badge-active', planned:'badge-planned', deferred:'badge-deferred',
+              DONE:'badge-done', awaiting_operator_decision:'badge-waiting'};
+  return m[status] || 'badge-default';
+}
+
+function goalRow(g) {
+  const id = g.id || '';
+  const title = g.title || '(untitled)';
+  const status = g.status || '—';
+  const priority = g.priority != null ? g.priority : '—';
+  const deadline = g.deadline ? g.deadline.slice(0,10) : '—';
+  return `<div class="goal-row">
+    <div class="goal-main">
+      <span class="goal-title">${escHtml(title)}</span>
+      <span class="status-badge ${statusClass(status)}">${escHtml(status)}</span>
+      <span class="goal-meta">P:${priority}</span>
+      <span class="goal-meta">Due: ${escHtml(deadline)}</span>
+    </div>
+    <div class="goal-actions">
+      <button class="btn-xs btn-blue" onclick="goalAction('${escHtml(id)}','pin')">Pin</button>
+      <button class="btn-xs" onclick="goalAction('${escHtml(id)}','unpin')">Unpin</button>
+      <button class="btn-xs btn-warn" onclick="goalAction('${escHtml(id)}','defer')">Defer</button>
+      <button class="btn-xs btn-danger" onclick="goalAction('${escHtml(id)}','cancel')">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadGoals() {
+  const el = document.getElementById('goals-list');
+  el.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/goals/', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const goals = data.goals || [];
+    if (!goals.length) {
+      el.innerHTML = '<div class="cycle-empty">No goals yet.</div>';
+      return;
+    }
+    el.innerHTML = goals.map(goalRow).join('');
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Failed to load goals: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function goalAction(id, action) {
+  try {
+    const r = await fetch(`/api/goals/${encodeURIComponent(id)}/${action}`, {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+TOKEN},
+    });
+    await r.json();
+    loadGoals();
+  } catch(err) {
+    alert('Action failed: ' + err.message);
+  }
+}
+
+async function addGoal(e) {
+  e.preventDefault();
+  const title = document.getElementById('goal-title').value.trim();
+  const description = document.getElementById('goal-desc').value.trim();
+  const priority = parseInt(document.getElementById('goal-priority').value, 10) || 50;
+  const msg = document.getElementById('add-goal-msg');
+  if (!title) return;
+  msg.textContent = 'Adding...';
+  msg.className = 'inline-msg';
+  try {
+    const r = await fetch('/api/goals/add', {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'},
+      body: JSON.stringify({title, description, priority}),
+    });
+    await r.json();
+    document.getElementById('add-goal-form').reset();
+    document.getElementById('goal-priority').value = '50';
+    msg.textContent = 'Added.';
+    msg.className = 'inline-msg msg-ok';
+    setTimeout(() => { msg.textContent = ''; }, 2500);
+    loadGoals();
+  } catch(err) {
+    msg.textContent = 'Error: ' + err.message;
+    msg.className = 'inline-msg msg-err';
+  }
+}
+
+async function toggleForecast(btn) {
+  const el = document.getElementById('forecast-content');
+  if (el.style.display !== 'none') {
+    el.style.display = 'none';
+    btn.textContent = 'Show Forecast';
+    return;
+  }
+  btn.textContent = 'Hide Forecast';
+  el.style.display = 'block';
+  el.innerHTML = '<div class="vitals-loading">Loading forecast...</div>';
+  try {
+    const r = await fetch('/api/goals/forecast', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const output = data.output || JSON.stringify(data, null, 2);
+    el.innerHTML = `<pre class="forecast-pre">${escHtml(output)}</pre>`;
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Forecast unavailable: ${escHtml(err.message)}</div>`;
+  }
+}
+
+loadGoals();
+</script>
+{% endblock %}

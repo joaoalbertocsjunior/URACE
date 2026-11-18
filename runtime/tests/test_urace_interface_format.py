@@ -1530,35 +1530,42 @@ class R105CompactionGap8AtomicFieldsTests(unittest.TestCase):
 class R105FormatXmlTests(unittest.TestCase):
     """--format json|xml support."""
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_json_to_xml_dict(self):
         result = cli._json_to_xml({"status": "ok", "count": 3})
         self.assertIn("<urace>", result)
         self.assertIn("<status>", result)
         self.assertIn("</urace>", result)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_json_to_xml_list(self):
         result = cli._json_to_xml([{"id": "a"}, {"id": "b"}])
         self.assertIn("<item>", result)
         self.assertIn("<id>", result)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_json_to_xml_none(self):
         self.assertIn("<null/>", cli._json_to_xml(None))
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_json_to_xml_bool(self):
         self.assertIn("<bool>true</bool>", cli._json_to_xml(True))
         self.assertIn("<bool>false</bool>", cli._json_to_xml(False))
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_json_to_xml_escapes_special_chars(self):
         result = cli._json_to_xml({"msg": "a<b>&c"})
         self.assertIn("&lt;", result)
         self.assertIn("&amp;", result)
         self.assertNotIn("<b>", result)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_json_to_xml_custom_root(self):
         result = cli._json_to_xml({"x": 1}, root="myroot")
         self.assertIn("<myroot>", result)
         self.assertIn("</myroot>", result)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_format_xml_compact_status(self):
         config = isolated_test_config(self)
         config["executor"]["enabled"] = False
@@ -1586,6 +1593,7 @@ class R105FormatXmlTests(unittest.TestCase):
         data = json.loads(buf.getvalue())
         self.assertIn("has_manifest", data)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_format_flag_forces_json_mode(self):
         """--format xml should force args.json=True for handlers."""
         config = isolated_test_config(self)
@@ -1625,6 +1633,7 @@ class R106FormatPerSubparserTests(unittest.TestCase):
         data = json.loads(buf.getvalue())
         self.assertIn("has_manifest", data)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_subcommand_format_xml_accepted(self):
         """compact --format xml produces XML output."""
         with patch.object(cli, "load_config", return_value=self.config):
@@ -1635,6 +1644,7 @@ class R106FormatPerSubparserTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("<urace>", buf.getvalue())
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_top_level_format_xml_accepted(self):
         """--format xml before subcommand produces XML."""
         with patch.object(cli, "load_config", return_value=self.config):
@@ -1863,6 +1873,7 @@ class R106OutputFormatContractTests(unittest.TestCase):
         self.assertIn(rc, (0, 1))
         self.assertNotIn("unrecognized", _)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_check_format_xml(self):
         rc, out, _ = self._run(["check", "--format", "xml"])
         self.assertEqual(rc, 0)
@@ -1874,12 +1885,14 @@ class R106OutputFormatContractTests(unittest.TestCase):
             cli._print_fmt({"key": "val"}, "json")
         self.assertEqual(json.loads(buf.getvalue())["key"], "val")
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_print_fmt_xml(self):
         buf = io.StringIO()
         with redirect_stdout(buf):
             cli._print_fmt({"key": "val"}, "xml")
         self.assertIn("<key>", buf.getvalue())
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_xml_convert_stream_converts_json(self):
         underlying = io.StringIO()
         stream = cli._XmlConvertStream(underlying)
@@ -1888,6 +1901,7 @@ class R106OutputFormatContractTests(unittest.TestCase):
         out = underlying.getvalue()
         self.assertIn("<a>", out)
 
+    @unittest.skip("XML output removed in r9f14549")
     def test_xml_convert_stream_passes_text(self):
         underlying = io.StringIO()
         stream = cli._XmlConvertStream(underlying)

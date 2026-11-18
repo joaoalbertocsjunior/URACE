@@ -246,7 +246,86 @@ _SD_SYNONYMS: dict[str, list[str]] = {
     # extra-word disambiguation
     "vitals check":  ["vitals"],
     "check status":  ["check"],
-    # synonym: declare → add (deprecated alias)
+    # Note: declare aliases are intentionally NOT in _SD_SYNONYMS so that
+    # `declare context/goal/etc.` passes through argparse to _cmd_declare,
+    # which prints the deprecation warning before re-dispatching to add.
+}
+
+# _SD_TRUE_EXACT: superset mapping used by tests for introspection.
+# Contains all canonical two-word exact routes (SD=True) and deprecated aliases.
+_SD_TRUE_EXACT: dict[str, list[str]] = {
+    # single-word direct mappings
+    "check":   ["check"],
+    "vitals":  ["vitals"],
+    "pause":   ["pause"],
+    "resume":  ["resume"],
+    "help":    ["help"],
+    "rules":   ["rules", "list"],
+    "status":  ["status"],
+    "stop":    ["pause"],
+    "start":   ["resume"],
+    # two-word exact patterns
+    "rules list":       ["rules", "list"],
+    "rules graph":      ["rules", "graph"],
+    "rules conflicts":  ["rules", "conflicts"],
+    "change list":      ["change", "list"],
+    "goal list":        ["goal", "list"],
+    "vitals check":     ["vitals"],
+    "check status":     ["check"],
+    # onboard / product / fleet exact patterns
+    "onboard status":   ["onboard", "status"],
+    "onboard confirm":  ["onboard", "confirm"],
+    "product list":     ["product", "list"],
+    "product status":   ["product", "status"],
+    "fleet status":     ["fleet", "status"],
+    "fleet run":        ["fleet", "run"],
+    "fleet stop":       ["fleet", "stop"],
+    "fleet broadcast":  ["fleet", "broadcast"],
+    # r73 new commands
+    "evidence list":          ["evidence", "list"],
+    "blocker list":           ["blocker", "list"],
+    "blocker resolve":        ["blocker", "resolve"],
+    "decision list":          ["decision", "list"],
+    "decision inspect":       ["decision", "inspect"],
+    "integrity-signal list":  ["integrity-signal", "list"],
+    "govern list-gates":      ["govern", "list-gates"],
+    "govern clear":           ["govern", "clear"],
+    # r75 trace
+    "trace list":    ["trace", "list"],
+    "trace inspect": ["trace", "inspect"],
+    # r77 schema + feedback
+    "schema list":    ["schema", "list"],
+    "schema inspect": ["schema", "inspect"],
+    "schema export":  ["schema", "export"],
+    "feedback list":  ["feedback", "list"],
+    # r85 resource budget
+    "resource status": ["resource", "status"],
+    "resource report": ["resource", "report"],
+    "resource help":   ["resource", "help"],
+    # r86 help subcommand routing
+    "inbox help":    ["inbox", "help"],
+    "onboard help":  ["onboard", "help"],
+    "product help":  ["product", "help"],
+    "fleet help":    ["fleet", "help"],
+    "trace help":    ["trace", "help"],
+    "feedback help": ["feedback", "help"],
+    "update help":   ["update", "help"],
+    "schema help":   ["schema", "help"],
+    # r93 api command routing
+    "api help":  ["api", "help"],
+    "api call":  ["api", "call"],
+    "api batch": ["api", "batch"],
+    # r98 api extensions
+    "api watch":   ["api", "watch"],
+    "api version": ["api", "version"],
+    # r101: add subcommands (canonical)
+    "add context":  ["add", "context"],
+    "add goal":     ["add", "goal"],
+    "add source":   ["add", "source"],
+    "add metric":   ["add", "metric"],
+    "add vital":    ["add", "vital"],
+    "add evidence": ["add", "evidence"],
+    # backwards compat: declare aliases → add (r100 deprecated forms)
     "declare context": ["add", "context"],
     "declare goal":    ["add", "goal"],
     "declare source":  ["add", "source"],
@@ -3801,6 +3880,20 @@ def _cmd_api(args, parser, config, state, fmt, _unknown, raw_args):
             print(json.dumps({"schema_version":"1.0","status":"ok" if not final_rc else "error","results":results,"exit_code":final_rc}));return final_rc
 
 
+def _cmd_web(args, parser, config, state, fmt, _unknown, raw_args):
+    if args.command == "web":
+        from ..web.server import serve, capabilities
+        caps = capabilities()
+        if caps["status"] != "READY":
+            missing = caps.get("missing", [])
+            msg = f"web deps missing: {', '.join(missing)}. Install with: pip install 'urace[web]'"
+            print(json.dumps({"status": "error", "error": msg}) if getattr(args, 'json', False) else msg, file=sys.stderr)
+            return 1
+        host = getattr(args, "host", "127.0.0.1") or "127.0.0.1"
+        port = getattr(args, "port", 7475) or 7475
+        token = getattr(args, "token", None)
+        return serve(config, host=host, port=port, token=token)
+
 
 def _cmd_resource(args, parser, config, state, fmt, _unknown, raw_args):
     if args.command == "resource":
@@ -4757,7 +4850,7 @@ def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args, pref
                         print(f"  → urace status --verbose  for full list")
                 # preflight hints
                 if preflight_hints:
-                    print(f"\nHINTS:")
+                    print(f"\npreflight_hints:")
                     for _h in preflight_hints:
                         print(f"  [{_h['level']}] {_h['message']} — {_h['action']}")
             if args.fail_on and any(_SEVERITY_ORDER.get(g.get("severity", "INFO"), 0) >= _SEVERITY_ORDER.get(args.fail_on, 999) for g in state.get("integrity_gaps", []) if g.get("active", True)):
@@ -5590,6 +5683,7 @@ def _cmd_rules(args, parser, config, state, fmt, _unknown, raw_args):
 
 
 def _cmd_compact_decompact_amend_why_crc(args, parser, config, state, fmt, _unknown, raw_args):
+    _fmt = getattr(args, "format", None) or fmt
     if args.command in {"compact", "decompact", "amend", "why", "crc"}:
         from .. import compaction as _compaction_module
         from .. import cognitive_resume as _crc_module
@@ -6072,7 +6166,10 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     if 'config' not in vars():
         config = _pf_cfg or load_config()
     if 'state' not in vars():
-        state = load_state_for_read(config) or {}
+        try:
+            state = load_state_for_read(config) or {}
+        except Exception:
+            state = {}
     _r = _cmd_features(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r
     _r = _cmd_rollback(args, parser, config, state, _fmt, _unknown, raw_args)
@@ -6450,6 +6547,8 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     _r = _cmd_feedback(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r
     _r = _cmd_api(args, parser, config, state, _fmt, _unknown, raw_args)
+    if _r is not None: return _r
+    _r = _cmd_web(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r
     _r = _cmd_resource(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r

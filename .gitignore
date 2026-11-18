@@ -33,6 +33,7 @@
 !/runtime/urace/*.py
 !/runtime/urace/config.json
 !/runtime/urace/cli/
+!/runtime/urace/web/
 /runtime/tests/*
 !/runtime/tests/*.py
 

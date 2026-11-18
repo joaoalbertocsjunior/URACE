@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title_suffix %} — GitHub{% endblock %}
+
+{% block content %}
+<div class="audit-header">
+  <h1>GitHub</h1>
+  <button class="btn-secondary" onclick="loadStatus()">Refresh</button>
+</div>
+
+<div id="github-status-wrap">
+  <div class="vitals-loading">Loading...</div>
+</div>
+
+<div style="margin-top:1.5rem;display:grid;grid-template-columns:1fr 1fr;gap:1.2rem;" id="github-actions">
+  <div class="config-section">
+    <h2 class="section-title">Push Goals</h2>
+    <div class="form-row" style="grid-template-columns:auto 1fr;align-items:center;">
+      <label class="form-label" for="dry-run-check" style="cursor:pointer;">Dry run</label>
+      <input type="checkbox" id="dry-run-check" class="field-input" checked style="width:1.1rem;height:1.1rem;accent-color:#818cf8;">
+    </div>
+    <div style="margin-top:0.8rem;">
+      <button class="btn-primary" onclick="pushGoals()">Push Goals</button>
+    </div>
+    <div id="push-result" style="margin-top:0.8rem;"></div>
+  </div>
+
+  <div class="config-section">
+    <h2 class="section-title">Trigger Workflow</h2>
+    <div class="form-row" style="grid-template-columns:120px 1fr;">
+      <label class="form-label">Workflow ID</label>
+      <input type="text" id="workflow-id" class="field-input" placeholder="e.g. ci.yml">
+    </div>
+    <div class="form-row" style="grid-template-columns:120px 1fr;">
+      <label class="form-label">Ref</label>
+      <input type="text" id="workflow-ref" class="field-input" value="main">
+    </div>
+    <div style="margin-top:0.8rem;">
+      <button class="btn-primary" onclick="triggerWorkflow()">Trigger</button>
+    </div>
+    <div id="trigger-result" style="margin-top:0.8rem;"></div>
+  </div>
+</div>
+
+<script>
+const TOKEN = {{ token | tojson }};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function loadStatus() {
+  const wrap = document.getElementById('github-status-wrap');
+  wrap.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/github/status', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    if (!data.connected && !data.github_token_set) {
+      wrap.innerHTML = `
+        <div class="github-status-card github-status-disconnected">
+          <div class="github-status-title">Not Connected</div>
+          <div style="color:#94a3b8;margin-top:0.4rem;font-size:0.875rem;">
+            Set the <code style="color:#818cf8">URACE_GITHUB_TOKEN</code> environment variable to connect a GitHub repository.
+          </div>
+          ${data.error ? `<div class="shell-error" style="margin-top:0.6rem;">${escHtml(data.error)}</div>` : ''}
+        </div>`;
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="github-status-card">
+        <div class="github-status-title">
+          ${data.connected
+            ? '<span class="status-badge badge-active">Connected</span>'
+            : '<span class="status-badge badge-danger">Disconnected</span>'}
+          ${data.repo ? `<a href="${escHtml(data.url||'#')}" target="_blank" rel="noopener" style="color:#818cf8;margin-left:0.6rem;">${escHtml(data.repo)}</a>` : ''}
+        </div>
+        <div class="github-status-meta">
+          <span>Branch: <code style="color:#c7d2fe">${escHtml(data.default_branch||'—')}</code></span>
+          <span>Open issues: <code style="color:#c7d2fe">${data.open_issues != null ? data.open_issues : '—'}</code></span>
+          ${data.error ? `<span class="msg-err">${escHtml(data.error)}</span>` : ''}
+        </div>
+      </div>`;
+  } catch(err) {
+    wrap.innerHTML = `<div class="shell-error">Failed to load status: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function pushGoals() {
+  const dryRun = document.getElementById('dry-run-check').checked;
+  const result = document.getElementById('push-result');
+  result.innerHTML = '<span style="color:#64748b">Pushing...</span>';
+  try {
+    const r = await fetch('/api/github/push-goals', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json'},
+      body: JSON.stringify({dry_run: dryRun}),
+    });
+    const data = await r.json();
+    if (data.error || data.status === 'error') {
+      result.innerHTML = `<div class="save-error">${escHtml(data.error || 'Unknown error')}</div>`;
+      return;
+    }
+    const issueList = (data.issues || []).map(i => `<li>${escHtml(typeof i === 'string' ? i : JSON.stringify(i))}</li>`).join('');
+    result.innerHTML = `
+      <div class="save-ok">
+        ${dryRun ? '<strong>Dry run</strong> — ' : ''}${data.objectives_pushed != null ? data.objectives_pushed : 0} objective(s) pushed.
+        ${issueList ? `<ul style="margin-top:0.4rem;padding-left:1.2rem;">${issueList}</ul>` : ''}
+      </div>`;
+  } catch(err) {
+    result.innerHTML = `<div class="save-error">${escHtml(err.message)}</div>`;
+  }
+}
+
+async function triggerWorkflow() {
+  const workflow = document.getElementById('workflow-id').value.trim();
+  const ref = document.getElementById('workflow-ref').value.trim() || 'main';
+  const result = document.getElementById('trigger-result');
+  if (!workflow) {
+    result.innerHTML = '<span class="msg-err">Workflow ID required.</span>';
+    return;
+  }
+  result.innerHTML = '<span style="color:#64748b">Triggering...</span>';
+  try {
+    const r = await fetch('/api/github/trigger-workflow', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json'},
+      body: JSON.stringify({workflow, ref}),
+    });
+    const data = await r.json();
+    if (data.status === 'error') {
+      result.innerHTML = `<div class="save-error">${escHtml(data.error || 'Unknown error')}</div>`;
+      return;
+    }
+    result.innerHTML = `
+      <div class="save-ok">
+        Triggered <code style="color:#c7d2fe">${escHtml(data.workflow||workflow)}</code>
+        on <code style="color:#c7d2fe">${escHtml(data.ref||ref)}</code>
+        in <code style="color:#c7d2fe">${escHtml(data.repo||'—')}</code>.
+      </div>`;
+  } catch(err) {
+    result.innerHTML = `<div class="save-error">${escHtml(err.message)}</div>`;
+  }
+}
+
+loadStatus();
+</script>
+{% endblock %}

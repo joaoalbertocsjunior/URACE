@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Config{% endblock %}
+
+{% block content %}
+<div class="config-page">
+  <h1>Configuration</h1>
+  <div id="save-msg" class="save-msg" style="display:none"></div>
+
+  {% set sections = {} %}
+  {% for field in fields %}
+    {% set parts = field.path.split('.') %}
+    {% set section = parts[0] if parts|length > 1 else 'general' %}
+    {% if section not in sections %}
+      {% set _ = sections.update({section: []}) %}
+    {% endif %}
+    {% set _ = sections[section].append(field) %}
+  {% endfor %}
+
+  {% for section, section_fields in sections.items() %}
+  <div class="config-section">
+    <h2 class="section-title">{{ section }}</h2>
+    {% for field in section_fields %}
+    <div class="field-row" id="field-{{ field.path | replace('.', '-') }}">
+      <label class="field-label">{{ field.path }}</label>
+      {% set current = values.get(field.path, field.default) %}
+      {% if field.type == 'bool' %}
+        <input type="checkbox" class="field-input" data-key="{{ field.path }}"
+               {% if current %}checked{% endif %}>
+      {% elif field.type == 'int' %}
+        <input type="number" class="field-input" data-key="{{ field.path }}"
+               value="{{ current }}">
+      {% elif field.type == 'enum' and field.options %}
+        <select class="field-input" data-key="{{ field.path }}">
+          {% for opt in field.options %}
+          <option value="{{ opt }}" {% if current == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      {% else %}
+        <input type="text" class="field-input" data-key="{{ field.path }}"
+               value="{{ current if current is not none else '' }}">
+      {% endif %}
+      <small class="field-desc">{{ field.description }}</small>
+      <button class="save-field-btn" onclick="saveField('{{ field.path }}', '{{ field.type }}')">Save</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+window.__URACE_TOKEN__ = {{ token | tojson }};
+
+async function saveField(key, type) {
+  const row = document.getElementById('field-' + key.replace(/\./g, '-'));
+  const input = row.querySelector('.field-input');
+  let value;
+  if (type === 'bool') {
+    value = input.checked ? 'true' : 'false';
+  } else {
+    value = input.value;
+  }
+
+  const msg = document.getElementById('save-msg');
+  try {
+    const resp = await fetch('/api/config/set', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + window.__URACE_TOKEN__,
+      },
+      body: JSON.stringify({key, value}),
+    });
+    const data = await resp.json();
+    msg.style.display = 'block';
+    if (resp.ok) {
+      msg.className = 'save-msg save-ok';
+      msg.textContent = key + ' saved.';
+    } else {
+      msg.className = 'save-msg save-error';
+      msg.textContent = data.detail || 'Save failed.';
+    }
+  } catch (err) {
+    msg.style.display = 'block';
+    msg.className = 'save-msg save-error';
+    msg.textContent = 'Error: ' + err.message;
+  }
+  setTimeout(() => { msg.style.display = 'none'; }, 3000);
+}
+</script>
+{% endblock %}

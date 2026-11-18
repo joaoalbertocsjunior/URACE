@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Inbox{% endblock %}
+
+{% block content %}
+<div class="inbox-header">
+  <h1>Inbox <span id="inbox-count-badge" class="inbox-count-badge"></span></h1>
+  <button class="btn-secondary" onclick="loadInbox()">Refresh</button>
+</div>
+
+<div id="inbox-action-msg"></div>
+
+<div id="inbox-list"
+     hx-get="/api/inbox/"
+     hx-trigger="load, every 30s"
+     hx-swap="innerHTML">
+  <div class="vitals-loading">Loading...</div>
+</div>
+
+<script>
+const TOKEN = {{ token | tojson }};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function statusClass(status) {
+  const m = {PENDING:'badge-waiting', QUEUED:'badge-planned', APPROVED:'badge-active',
+              REJECTED:'badge-danger', MALFORMED:'badge-danger'};
+  return m[status] || 'badge-default';
+}
+
+function renderInboxItems(items) {
+  if (!items.length) {
+    return '<div class="cycle-empty">No pending items.</div>';
+  }
+  const countBadge = document.getElementById('inbox-count-badge');
+  const pending = items.filter(i => i.status === 'PENDING').length;
+  if (countBadge) countBadge.textContent = pending > 0 ? pending : '';
+
+  return items.map(item => {
+    const id = item.id || '';
+    const kind = item.kind || '—';
+    const status = item.status || '—';
+    const created = item.created_at ? item.created_at.slice(0,16).replace('T',' ') : '—';
+    return `<div class="inbox-item">
+      <div class="inbox-item-info">
+        <span class="inbox-item-id" title="${escHtml(id)}">${escHtml(id.slice(0,16))}</span>
+        <span class="inbox-item-kind">${escHtml(kind)}</span>
+        <span class="status-badge ${statusClass(status)}">${escHtml(status)}</span>
+        <span class="inbox-item-ts">${escHtml(created)}</span>
+      </div>
+      <div class="inbox-item-actions">
+        <button class="btn-xs btn-blue" onclick="inboxAction('${escHtml(id)}','apply')">Apply</button>
+        <button class="btn-xs btn-danger" onclick="inboxAction('${escHtml(id)}','reject')">Reject</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadInbox() {
+  const el = document.getElementById('inbox-list');
+  el.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/inbox/', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    if (data.error) {
+      el.innerHTML = `<div class="shell-error">Error: ${escHtml(data.error)}</div>`;
+      return;
+    }
+    el.innerHTML = renderInboxItems(data.items || []);
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Failed to load inbox: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function inboxAction(id, action) {
+  const label = action === 'apply' ? 'Apply this change?' : 'Reject this item?';
+  if (!confirm(label)) return;
+  const msgEl = document.getElementById('inbox-action-msg');
+  msgEl.className = 'inline-msg';
+  msgEl.textContent = '';
+  try {
+    const r = await fetch(`/api/inbox/${encodeURIComponent(id)}/${action}`, {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+TOKEN},
+    });
+    const data = await r.json();
+    const output = data.output || data.error || JSON.stringify(data);
+    msgEl.textContent = output;
+    msgEl.className = data.error ? 'inline-msg msg-err' : 'inline-msg msg-ok';
+    setTimeout(() => { msgEl.textContent = ''; msgEl.className = ''; }, 4000);
+    loadInbox();
+  } catch(err) {
+    msgEl.textContent = 'Error: ' + err.message;
+    msgEl.className = 'inline-msg msg-err';
+  }
+}
+
+document.addEventListener('htmx:afterSwap', function(e) {
+  if (e.detail.target.id === 'inbox-list') {
+    try {
+      const data = JSON.parse(e.detail.xhr.responseText);
+      const items = data.items || [];
+      document.getElementById('inbox-list').innerHTML = renderInboxItems(items);
+    } catch(_) {}
+  }
+});
+</script>
+{% endblock %}

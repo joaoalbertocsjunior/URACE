@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URACE{% block title_suffix %}{% endblock %}</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>window.__URACE_TOKEN__ = {{ token | tojson }};</script>
+</head>
+<body>
+<script>
+  document.addEventListener('htmx:configRequest', function(e) {
+    e.detail.headers['Authorization'] = 'Bearer ' + window.__URACE_TOKEN__;
+  });
+</script>
+  <script>
+  document.addEventListener('htmx:afterRequest', function(e) {
+    if (e.detail.elt && e.detail.elt.id === 'inbox-badge') {
+      try {
+        const data = JSON.parse(e.detail.xhr.responseText);
+        const badge = document.getElementById('inbox-badge');
+        if (badge) {
+          if (data.count > 0) {
+            badge.textContent = data.count;
+            badge.style.display = 'inline';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+      } catch (_) {}
+    }
+  });
+  </script>
+  <nav class="topnav">
+    <span class="brand">URACE</span>
+    <div class="nav-links">
+      <a href="/shell" {% if active == 'shell' %}class="active"{% endif %}>Shell</a>
+      <a href="/config" {% if active == 'config' %}class="active"{% endif %}>Config</a>
+      <a href="/vitals" {% if active == 'vitals' %}class="active"{% endif %}>Vitals</a>
+      <a href="/wallet" {% if active == 'wallet' %}class="active"{% endif %}>Wallet</a>
+      <a href="/cycle" {% if active == 'cycle' %}class="active"{% endif %}>Cycle</a>
+      <a href="/goals" {% if active == 'goals' %}class="active"{% endif %}>Goals</a>
+      <a href="/inbox" {% if active == 'inbox' %}class="active"{% endif %}>Inbox<span id="inbox-badge"
+           hx-get="/api/inbox/count"
+           hx-trigger="load, every 30s"
+           hx-swap="none"
+           style="display:none"></span></a>
+      <a href="/audit" {% if active == 'audit' %}class="active"{% endif %}>Audit</a>
+      <a href="/compliance" {% if active == 'compliance' %}class="active"{% endif %}>Compliance</a>
+      <a href="/rules" {% if active == 'rules' %}class="active"{% endif %}>Rules</a>
+      <a href="/github" {% if active == 'github' %}class="active"{% endif %}>GitHub</a>
+      <a href="/exchange" {% if active == 'exchange' %}class="active"{% endif %}>Exchange</a>
+      <a href="/products" {% if active == 'products' %}class="active"{% endif %}>Products</a>
+      <a href="/fleet" {% if active == 'fleet' %}class="active"{% endif %}>Fleet</a>
+      <a href="/portfolio" {% if active == 'portfolio' %}class="active"{% endif %}>Portfolio</a>
+    </div>
+    <div class="daemon-controls" id="daemon-bar"
+         hx-get="/api/daemon/status"
+         hx-trigger="load, every 5s"
+         hx-swap="innerHTML">
+      <span class="status-dot unknown"></span> checking...
+    </div>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

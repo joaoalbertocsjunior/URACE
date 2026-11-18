@@ -1271,12 +1271,12 @@ class R46AdditionsTests(unittest.TestCase):
     def test_construct_digests_in_saved_ref_keys(self):
         # Verify _csr_ref construction includes construct_digests
         import inspect
-        src = inspect.getsource(cli.main)
+        src = inspect.getsource(cli._cmd_derive)
         self.assertIn("construct_digests", src)
 
     def test_pattern_digests_in_saved_ref_keys(self):
         import inspect
-        src = inspect.getsource(cli.main)
+        src = inspect.getsource(cli._cmd_derive)
         self.assertIn("pattern_digests", src)
 
 class R48AdditionsTests(unittest.TestCase):

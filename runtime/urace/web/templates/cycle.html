@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Improvement Cycle{% endblock %}
+
+{% block content %}
+<h1>Improvement Cycle</h1>
+
+<div class="pipeline-bar">
+  <span class="pipeline-stage">Objectives</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-stage">Evidence</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-stage">Decisions</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-stage">Operations</span>
+  <span class="pipeline-arrow">→</span>
+  <span class="pipeline-stage">Checkpoints</span>
+</div>
+
+<div id="cycle-state"
+     hx-get="/api/cycle/state"
+     hx-trigger="load, every 3s"
+     hx-swap="innerHTML">
+  <div class="cycle-loading">Loading...</div>
+</div>
+{% endblock %}
