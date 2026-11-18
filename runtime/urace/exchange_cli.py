@@ -1961,22 +1961,27 @@ def run(args,config):
    _already_rep=any(r.get('kind')=='BUNDLE_REPLICA_REGISTERED' and r.get('feature_id')==args.feature_id and r.get('replica_peer_id')==local_id for r in _rep_rows)
    if _already_rep:result={'status':'already_registered','feature_id':args.feature_id,'replica_peer_id':local_id}
    else:
+    _cg_blocked=False;_cg_err_msg=''
     try:
      from . import cartel_guard as _cg
      _cg.register_replica_guard(exchange,args.feature_id,local_id,chunk_indices=getattr(args,'chunk_indices',None))
     except ValueError as _cg_err:
-     exchange.append_audit_row({'kind':'GAP','severity':'WARNING','gap_type':'cartel_chunk_concentration','feature_id':args.feature_id,'replica_peer_id':local_id,'at_unix':_trep.time(),'at':_dtrep.now(_tzrep.utc).isoformat(),'note':str(_cg_err)})
+     _cg_blocked=True;_cg_err_msg=str(_cg_err)
+     exchange.append_audit_row({'kind':'GAP','severity':'ERROR','gap_type':'cartel_chunk_concentration','feature_id':args.feature_id,'replica_peer_id':local_id,'at_unix':_trep.time(),'at':_dtrep.now(_tzrep.utc).isoformat(),'note':_cg_err_msg})
     except Exception:pass
-    exchange.append_audit_row({'kind':'BUNDLE_REPLICA_REGISTERED','feature_id':args.feature_id,'replica_peer_id':local_id,'artifact_hash':getattr(args,'artifact_hash',''),'chunk_indices':getattr(args,'chunk_indices',''),'at_unix':_trep.time(),'at':_dtrep.now(_tzrep.utc).isoformat()})
-    try:
-     from . import cartel_guard as _cg2
-     _cg2.apply_chunk_concentration_penalty(exchange,args.feature_id)
-    except Exception:pass
-    result={'status':'registered','feature_id':args.feature_id,'replica_peer_id':local_id}
-    try:
-     from . import mime_priority as _mpr
-     _mpr.emit_mime_calibration_event(exchange)
-    except Exception:pass
+    if _cg_blocked:
+     result={'status':'rejected_cartel_concentration','feature_id':args.feature_id,'replica_peer_id':local_id,'note':_cg_err_msg}
+    else:
+     exchange.append_audit_row({'kind':'BUNDLE_REPLICA_REGISTERED','feature_id':args.feature_id,'replica_peer_id':local_id,'artifact_hash':getattr(args,'artifact_hash',''),'chunk_indices':getattr(args,'chunk_indices',''),'at_unix':_trep.time(),'at':_dtrep.now(_tzrep.utc).isoformat()})
+     try:
+      from . import cartel_guard as _cg2
+      _cg2.apply_chunk_concentration_penalty(exchange,args.feature_id)
+     except Exception:pass
+     result={'status':'registered','feature_id':args.feature_id,'replica_peer_id':local_id}
+     try:
+      from . import mime_priority as _mpr
+      _mpr.emit_mime_calibration_event(exchange)
+     except Exception:pass
   elif verb=='auto-buy':
    cfg=_eat.load_config(str(exchange.root));result=_eat.auto_buy(exchange,str(exchange.root),local_id,cfg)
   elif verb=='auto-sell':

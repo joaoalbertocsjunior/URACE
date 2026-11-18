@@ -6,6 +6,7 @@ too many chunks of the same feature (potential cartel reconstruction).
 from __future__ import annotations
 import datetime
 import time
+from .p2p_constants import UNIT as _UNIT
 
 # Threshold: fraction of n_total chunks above which a cluster can deny reconstruction.
 # RS(n_data=4, n_parity=2): reconstruction needs 4/6 chunks.
@@ -202,13 +203,17 @@ def apply_chunk_concentration_penalty(
     })
 
     # Emit CREDIT_DELTA penalty for each cluster peer
+    # penalty: 1-10 tokens per cluster peer, proportional to excess concentration above threshold
+    _excess_conc = max(0.0, concentration - threshold)
+    _penalty_units = max(_UNIT, int(_excess_conc * 10 * _UNIT))  # 1-10 tokens
     for p in cluster:
         exchange.append_audit_row({
             'kind': 'CREDIT_DELTA',
             'direction': 'cartel_chunk_penalty',
             'peer': p,
-            'amount_units': -1,
+            'amount_units': -_penalty_units,
             'feature_id': feature_id,
+            'concentration': round(concentration, 4),
             'at_unix': now,
             'at': at_iso,
         })

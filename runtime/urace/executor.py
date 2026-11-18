@@ -39,60 +39,8 @@ from .executor_routing import (
 
 def _runtime_test_failure_detail(output: str) -> str:
     """Keep bounded unittest diagnostics, including abbreviated reports."""
-    lines = output.splitlines()
-    headings = [i for i, line in enumerate(lines)
-                if re.fullmatch(r"(?:FAIL|ERROR): \S+ \([^\n]+\)", line)]
-    if not headings:
-        return output[-2000:]
-    summary_index = next((i for i in range(headings[0] + 1, len(lines))
-                          if re.fullmatch(r"Ran \d+ tests? in .+", lines[i])), None)
-    summary = []
-    end = len(lines) if summary_index is None else summary_index
-    if summary_index is not None:
-        summary.append(lines[summary_index])
-        verdict = next((line for line in lines[summary_index + 1:]
-                        if re.fullmatch(r"(?:FAILED|OK)(?:\s+\(.+\))?", line)), None)
-        if verdict:
-            summary.append(verdict)
-    headings = [i for i in headings if i < end]
-    blocks = []
-    for position, start in enumerate(headings):
-        stop = headings[position + 1] if position + 1 < len(headings) else end
-        while stop > start and re.fullmatch(r"[=-]{20,}", lines[stop - 1]):
-            stop -= 1
-        blocks.append(lines[start:stop])
-    separator = "\n" + "=" * 70 + "\n"
-    parts = ["\n".join(block) for block in blocks]
-    if summary:
-        parts.append("\n".join(summary))
-    detail = separator.join(parts)
-    if len(detail) <= 6000:
-        return detail
-    marker = "[trace context truncated]"
-    labels = [block[0] for block in blocks]
-    summary_text = "\n".join(summary)
-    fixed = [label + "\n" + marker for label in labels]
-    fixed_size = len(separator.join(fixed + ([summary_text] if summary else [])))
-    if fixed_size > 6000:
-        # A bounded message cannot contain arbitrarily many complete names.
-        # Report omissions explicitly rather than silently losing middle failures.
-        summary_text = summary_text[-500:]
-        kept, size = [], 0
-        for label in labels:
-            if size + len(label) + 1 > 6000 - len(summary_text) - 128:
-                break
-            kept.append(label)
-            size += len(label) + 1
-        return "\n".join(kept + [f"[{len(labels) - len(kept)} failure headers omitted; diagnostic limit]", summary_text])[:6000]
-    allowance = max(0, 6000 - fixed_size - 2 * len(blocks)) // len(blocks)
-    compact = []
-    for label, block in zip(labels, blocks):
-        trace = "\n".join(block[1:])
-        if len(trace) > allowance:
-            prefix = allowance * 2 // 3
-            trace = trace[:prefix] + "\n" + marker + "\n" + trace[-(allowance - prefix):] if allowance else marker
-        compact.append(label + ("\n" + trace if trace else ""))
-    return separator.join(compact + ([summary_text] if summary else []))[:6000]
+    from .failure_formatter import format_failure_output
+    return format_failure_output(output)
 
 
 def pool_availability(settings: dict[str, Any], pool_state: dict[str, Any] | None = None, capability: str = "discovery") -> dict[str, Any]:

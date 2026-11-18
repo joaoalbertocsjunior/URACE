@@ -95,8 +95,12 @@ def lock_mint_stake(exchange, feature_id: str, staker_peer_id: str, stake_units:
             )
             if _nft_result.get('status') == 'ok':
                 _nft_token_id = str(_nft_result.get('token_id', ''))
-    except Exception:
-        pass
+    except Exception as _nft_err:
+        import logging as _nft_log
+        _nft_log.getLogger(__name__).warning(
+            'mint_nft failed for feature %s (stake peer %s): %s',
+            feature_id, staker_peer_id, _nft_err,
+        )
     try:
         from . import asset_registry as _ar
         _ar.register_asset(exchange, feature_id=feature_id, creator_peer_id=staker_peer_id,

@@ -179,7 +179,7 @@ def sell_equity(
                         f'equity-purchase:{feature_id}:{seller_id}→{buyer_id}')
         _cl.earn_units(root, seller_id, price_units,
                        f'equity-sale:{feature_id}:{seller_id}→{buyer_id}',
-                       rep_source=_cl.REP_SOURCE_TRADE)
+                       rep_source=_cl.REP_SOURCE_TRADE, exchange=exchange)
 
     exchange.append_audit_row({
         'kind': 'EQUITY_SELL',

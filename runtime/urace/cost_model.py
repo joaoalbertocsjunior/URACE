@@ -189,6 +189,12 @@ def borrow_feature_cost(config: dict, ask_price_units: int,
     borrow_tax_rate = float(config.get('p2p', {}).get('borrow_tax_rate', 0.15))
     borrow_tax_units = max(1, int(ask_price_units * borrow_tax_rate))
     pre_borrow = borrow_ctx.pre_borrow_total() if borrow_ctx else 0.0
+    if borrow_ctx is None:
+        import logging as _log
+        _log.getLogger(__name__).debug(
+            'borrow_feature_cost: borrow_ctx is None — savings_vs_executor_pct and '
+            'ceiling_compliant exclude executor overhead; pass a BorrowCostContext for accurate comparison'
+        )
     total = ask_price_units + p2p_cost + network_download_cost_units + protocol_fee_units + gas_overhead
     total_with_overhead = total + pre_borrow + borrow_tax_units
 

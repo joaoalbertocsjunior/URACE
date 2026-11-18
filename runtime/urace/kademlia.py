@@ -21,6 +21,8 @@ SCHEMA = 'urace-kademlia-v1'
 K_BUCKET_SIZE = 20
 ALPHA = 3            # concurrency factor
 NODE_ID_BITS = 256   # SHA-256 based IDs
+REPUBLISH_INTERVAL_SECONDS = 3600
+NODE_EXPIRY_SECONDS = 86400
 
 
 def peer_id_to_node_id(peer_id: str) -> int:
@@ -113,6 +115,17 @@ class RoutingTable:
         idx = bucket_index(self.own_id, node_id)
         self._buckets[idx].remove(peer_id)
 
+    def republish(self, expiry_seconds: float = NODE_EXPIRY_SECONDS) -> int:
+        """Remove stale nodes not seen within expiry_seconds. Returns count removed."""
+        cutoff = time.time() - expiry_seconds
+        removed = 0
+        for bucket in self._buckets:
+            stale = [node for node in bucket.nodes() if node.last_seen < cutoff]
+            for node in stale:
+                bucket.remove(node.peer_id)
+                removed += 1
+        return removed
+
     def find_closest(self, target_id: int, count: int = K_BUCKET_SIZE) -> List[NodeInfo]:
         """Sort all known nodes by XOR distance to target_id, return top count."""
         all_nodes: List[NodeInfo] = []
@@ -199,8 +212,28 @@ class IterativeFinder:
     def __init__(self, local_node_id: str, routing_table=None, network_mode: str = 'intranet'):
         self._local_id = local_node_id
         self._routing_table = routing_table  # existing local RoutingTable instance
+        self._table = routing_table
         self._network_mode = network_mode
         self._server = None
+
+    def start_republish_loop(self, interval_seconds: float = REPUBLISH_INTERVAL_SECONDS) -> None:
+        """Start a background daemon thread that removes stale nodes periodically."""
+        import threading as _th
+        import time as _t
+        if getattr(self, '_republish_thread', None) and self._republish_thread.is_alive():
+            return
+        def _loop():
+            while True:
+                _t.sleep(interval_seconds)
+                try:
+                    removed = self._table.republish() if self._table is not None else 0
+                    if removed:
+                        import logging as _log
+                        _log.getLogger(__name__).debug('Kademlia republish: removed %d stale nodes', removed)
+                except Exception:
+                    pass
+        self._republish_thread = _th.Thread(target=_loop, daemon=True, name='urace-kademlia-republish')
+        self._republish_thread.start()
 
     def _use_network(self) -> bool:
         return _KADEMLIA_AVAILABLE and self._network_mode in ('internet', 'hybrid')
@@ -233,6 +266,7 @@ class IterativeFinder:
         if not _KADEMLIA_AVAILABLE or self._network_mode not in ('internet', 'hybrid'):
             return False
         try:
+            self.start_republish_loop()
             import asyncio
             loop = asyncio.new_event_loop()
             self._server = _KademliaServer()

@@ -196,6 +196,8 @@ class Exchange:
    if changes.get('enabled') is False:p['network']=False;p['advertise']=False
    if changes.get('network') is False:p['advertise']=False
    if p['network'] and not p['enabled'] or p['advertise'] and not p['network']:raise ValueError('Enable sharing before networking, networking before advertising')
+   if changes.get('token_settlement') is True and not p.get('token_settlement_since'):
+    p['token_settlement_since']=__import__('time').time()
    atomic(self.root/'policy.json',p);self.event('SETTINGS',changes=changes)
    if p['enabled']:self.identity()
    return p
