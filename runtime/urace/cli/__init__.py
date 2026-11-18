@@ -1331,7 +1331,7 @@ def _cmd_trial(args, parser, config, state, fmt, _unknown, raw_args):
     if args.command == "trial":
         from ..trial import main as trial_main
         trial_args = raw_args[raw_args.index("trial") + 1:]
-        if _fmt and trial_args[:2] in (["status", "resources"], ["status", "scores"]) and "--json" not in trial_args:
+        if fmt and trial_args[:2] in (["status", "resources"], ["status", "scores"]) and "--json" not in trial_args:
             trial_args.append("--json")
         return trial_main(trial_args)
 
@@ -4503,7 +4503,7 @@ def _cmd_executor_status(args, parser, config, state, fmt, _unknown, raw_args):
         return 0
 
 
-def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args):
+def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args, preflight_hints=()):
     if args.command in {"check", "vitals"}:
         state = load_state_for_read(config)
         if state is None:
@@ -4532,7 +4532,7 @@ def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args):
             return 0
         if args.command == "check":
             surface = _build_inspection_surface(state, config)
-            surface['preflight_hints'] = _preflight_hints
+            surface['preflight_hints'] = list(preflight_hints)
             _lw = _ledger_size_warning(state_path(config))
             if _lw is not None:
                 surface['ledger_health'] = _lw
@@ -4709,17 +4709,17 @@ def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args):
                     if not _verbose and any(len(v) > 1 for v in _wrn_groups.values()):
                         print(f"  → urace status --verbose  for full list")
                 # preflight hints
-                if _preflight_hints:
+                if preflight_hints:
                     print(f"\nHINTS:")
-                    for _h in _preflight_hints:
+                    for _h in preflight_hints:
                         print(f"  [{_h['level']}] {_h['message']} — {_h['action']}")
             if args.fail_on and any(_SEVERITY_ORDER.get(g.get("severity", "INFO"), 0) >= _SEVERITY_ORDER.get(args.fail_on, 999) for g in state.get("integrity_gaps", []) if g.get("active", True)):
                 return 1
         else:
             snapshot = vitals_snapshot(config, state)
             if args.json:
-                if _preflight_hints:
-                    snapshot['hints'] = _preflight_hints
+                if preflight_hints:
+                    snapshot['hints'] = list(preflight_hints)
                 print(json.dumps(snapshot, indent=2, sort_keys=True))
             else:
                 print(render_vitals(snapshot))
@@ -6047,6 +6047,7 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     _r = _cmd_qualification(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r
     if args.command == 'config':
+        from .. import config_schema as _cs
         if args.config_verb == 'show-all':
             import json as _jm
             _base = _jm.loads(CONFIG_PATH.read_text())
@@ -6064,6 +6065,80 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                 'resources': resources_cfg,
             }
             print(json.dumps(result, indent=2))
+            return 0
+        if args.config_verb == 'validate':
+            import json as _jm
+            _file = getattr(args, 'config_file', None)
+            try:
+                _raw = (_jm.loads(Path(_file).read_text()) if _file
+                        else _jm.loads(CONFIG_PATH.read_text()))
+            except (OSError, _jm.JSONDecodeError) as _e:
+                _out = {'status': 'error', 'error': str(_e)}
+                print(json.dumps(_out) if args.json else f'error: {_e}')
+                return 1
+            _errors = _cs.validate(_raw)
+            if args.json:
+                print(json.dumps({'status': 'ok' if not _errors else 'invalid', 'errors': _errors}, indent=2))
+            elif _errors:
+                for _err in _errors:
+                    print(f"  {_err['path']}: {_err['error']}")
+            else:
+                print('config ok')
+            return 0 if not _errors else 1
+        if args.config_verb == 'get':
+            _cfg = load_config()
+            try:
+                _val = _cs.get_value(_cfg, args.key)
+            except KeyError:
+                _msg = f'{args.key}: key not found'
+                print(json.dumps({'status': 'error', 'error': _msg}) if args.json else _msg)
+                return 1
+            if args.json:
+                print(json.dumps({'status': 'ok', 'key': args.key, 'value': _val}))
+            else:
+                print(json.dumps(_val) if not isinstance(_val, str) else _val)
+            return 0
+        if args.config_verb == 'set':
+            import json as _jm
+            _base = _jm.loads(CONFIG_PATH.read_text())
+            try:
+                _coerced = _cs.set_value(_base, args.key, args.value)
+            except ValueError as _e:
+                _msg = str(_e)
+                print(json.dumps({'status': 'error', 'error': _msg}) if args.json else _msg)
+                return 1
+            save_config(_base)
+            if args.json:
+                print(json.dumps({'status': 'ok', 'key': args.key, 'value': _coerced}))
+            else:
+                print(f'{args.key} = {json.dumps(_coerced)}')
+            return 0
+        if args.config_verb == 'init':
+            _out_path = getattr(args, 'config_out', None)
+            _force = getattr(args, 'force', False)
+            _template = _cs.init_template()
+            if _out_path:
+                _p = Path(_out_path)
+                if _p.exists() and not _force:
+                    _msg = f'{_out_path} already exists; use --force to overwrite'
+                    print(json.dumps({'status': 'error', 'error': _msg}) if args.json else _msg)
+                    return 1
+                _p.write_text(_template)
+                _msg = f'wrote {_out_path}'
+                print(json.dumps({'status': 'ok', 'path': _out_path}) if args.json else _msg)
+            else:
+                print(_template)
+            return 0
+        if args.config_verb == 'fields':
+            _flds = _cs.fields()
+            if args.json:
+                print(json.dumps({'status': 'ok', 'fields': _flds}, indent=2))
+            else:
+                for _f in _flds:
+                    _opts = f'  [{", ".join(_f["options"])}]' if 'options' in _f else ''
+                    print(f'  {_f["path"]:50s}  {_f["type"]:6s}  default={json.dumps(_f["default"])}{_opts}')
+                    if _f.get('description'):
+                        print(f'    {_f["description"]}')
             return 0
     if args.command == 'security':
         if args.security_verb == 'audit':
@@ -6331,7 +6406,7 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     if _r is not None: return _r
     _r = _cmd_executor_status(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r
-    _r = _cmd_check_vitals(args, parser, config, state, _fmt, _unknown, raw_args)
+    _r = _cmd_check_vitals(args, parser, config, state, _fmt, _unknown, raw_args, preflight_hints=_preflight_hints)
     if _r is not None: return _r
     _r = _cmd_quality(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r

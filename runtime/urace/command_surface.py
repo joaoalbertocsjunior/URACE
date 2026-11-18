@@ -55,10 +55,26 @@ def product(sub):
     return root
 
 def config_showall(sub):
-    root=sub.add_parser('config',help=argparse.SUPPRESS)
+    root=sub.add_parser('config',help='read, write and validate configuration')
     root.set_defaults(command='config')
     verbs=root.add_subparsers(dest='config_verb',required=True)
     p=verbs.add_parser('show-all',help='show complete configuration: controls, executor, exchange, fleet')
+    output_options(p)
+    p=verbs.add_parser('validate',help='check config.json against the schema; print errors if any')
+    p.add_argument('--file',default=None,dest='config_file',help='path to config file (default: active config.json)')
+    output_options(p)
+    p=verbs.add_parser('get',help='read a dotted-path config value (e.g. network.enabled)')
+    p.add_argument('key',help='dotted path: network.enabled, capability_flags.executor_enabled, …')
+    output_options(p)
+    p=verbs.add_parser('set',help='write a dotted-path config value (e.g. network.enabled true)')
+    p.add_argument('key',help='dotted path')
+    p.add_argument('value',help='new value (bool: true/false; int: integer; enum: one of the allowed values)')
+    output_options(p)
+    p=verbs.add_parser('init',help='write a commented default config template to stdout or --out file')
+    p.add_argument('--out',default=None,dest='config_out',help='write to this path instead of stdout')
+    p.add_argument('--force',action='store_true',help='overwrite if the file already exists')
+    output_options(p)
+    p=verbs.add_parser('fields',help='list all schema-defined fields with types, defaults and descriptions')
     output_options(p)
     return root
 

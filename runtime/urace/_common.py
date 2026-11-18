@@ -186,6 +186,13 @@ def load_config() -> dict[str, Any]:
         from .product_creation import validate_entry
         validate_entry(entry,ROOT)
         registry=cfg["product_registry"];cfg={**cfg,**copy_mapping(entry["configuration"]),"product_registry":registry,"active_product":active,"_product_overlay_name":active,"product_improvement_enabled":entry.get("improvement_enabled",True)}
+    try:
+        from .config_schema import validate as _schema_validate
+        for _err in _schema_validate(cfg):
+            import sys as _sys
+            print(f"config warning: {_err['path']}: {_err['error']}",file=_sys.stderr)
+    except Exception:
+        pass
     return cfg
 
 
