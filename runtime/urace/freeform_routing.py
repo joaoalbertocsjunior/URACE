@@ -192,8 +192,8 @@ def _sanitize_feature_description(desc):
     return '\n'.join(lines)
 
 def prompt(text,parser,p2p_context=None,paid_p2p_context=None,state_context=None):
-    from .command_surface import catalog
-    grammar={k:[{'command':c['command'],'actions':c['actions']} for c in commands] for k,commands in catalog(parser).items()}
+    from .command_surface import static_grammar
+    grammar=static_grammar()
     _p2p_hint=''
     if p2p_context:
         _safe_context=[{**f,'description':_sanitize_feature_description(f.get('description',''))} for f in p2p_context]
@@ -351,13 +351,13 @@ def _route(cli,args,config,state,parser):
             return _error(args,'P2P open-asset fetch failed: '+type(_fetch_error).__name__,2)
     settings=config.get('executor',{})
     from .intent_trace import source_coverage
-    from .command_surface import catalog
+    from .command_surface import static_grammar,GRAMMAR_VERSION
     profile={k:settings.get(k) for k in ('kind','model','native_options','providers')}
     # Stable contract version — NOT a hash of this file so routine code changes
     # (comments, refactors) do not wipe user caches.  Bump when grammar or the
     # classification schema changes incompatibly.
     _ROUTING_CONTRACT_VERSION='freeform-routing-v1'
-    contract=hashlib.sha256(json.dumps({'grammar':catalog(parser),'profile':profile,'registry':[(p.get('id'),p.get('name'),p.get('status')) for p in config.get('product_registry',[])],'validator':_ROUTING_CONTRACT_VERSION},sort_keys=True,default=str).encode()).hexdigest()
+    contract=hashlib.sha256(json.dumps({'grammar':static_grammar(),'profile':profile,'registry':[(p.get('id'),p.get('name'),p.get('status')) for p in config.get('product_registry',[])],'validator':_ROUTING_CONTRACT_VERSION,'grammar_version':GRAMMAR_VERSION},sort_keys=True,default=str).encode()).hexdigest()
     # Normalize cache key: casefold + collapse whitespace so trivial rephrases
     # ("Add chart" vs "add chart") share a cache entry without changing raw_text.
     _cache_key_text=re.sub(r'\s+',' ',text.strip().casefold())

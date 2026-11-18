@@ -264,6 +264,98 @@ def catalog(parser):
         groups.setdefault(group,[]).append({'command':name,'actions':nested or (list(actions[0].choices) if actions else []),'usage':p.format_usage().strip(),'help':'urace help '+name})
     return groups
 
+# Bump when adding commands or actions that change freeform routing behavior.
+# Intentionally NOT derived from the live argparse tree so that CLI refactors
+# (new flags, renamed subparsers) do not invalidate the routing cache.
+GRAMMAR_VERSION='freeform-grammar-v1'
+
+# Curated intent vocabulary for freeform routing.  Maintenance commands
+# (compact, decompact, crc, amend) and internal aliases (declare, classify,
+# add-goal …) are omitted — they are unlikely targets for natural-language
+# input and their absence keeps the LLM prompt small and stable.
+STATIC_GRAMMAR={
+ 'Observe':[
+  {'command':'status','actions':['runtime','improvements','vitals','executors','resources','products','fleet','data','quality','compliance','milestones','blockers','integrity','onboarding','configuration','inbox','goals','evaluation','value','scores']},
+  {'command':'watch','actions':['events','dashboard','guard','report']},
+ ],
+ 'Lifecycle':[
+  {'command':'start','actions':[]},
+  {'command':'stop','actions':[]},
+  {'command':'init','actions':[]},
+  {'command':'auto','actions':[]},
+  {'command':'plan','actions':[]},
+  {'command':'pause','actions':[]},
+  {'command':'resume','actions':[]},
+  {'command':'onboard','actions':['status','confirm','help']},
+ ],
+ 'Work and input':[
+  {'command':'add','actions':['context','goal','source','metric','vital','evidence','principal']},
+  {'command':'goal','actions':['list','inspect','forecast','prioritize','schedule','pin','unpin','defer','resume','resolve-update','disable','cancel','delete']},
+  {'command':'context','actions':['list','graph','attention']},
+  {'command':'inbox','actions':['list','status','apply','reject','help']},
+  {'command':'feedback','actions':['list','submit','help']},
+  {'command':'source','actions':['add','list','status','enable','disable','remove','sync','inspect']},
+  {'command':'metric','actions':['list','remove']},
+  {'command':'vital','actions':['list','remove']},
+ ],
+ 'Inspection and evidence':[
+  {'command':'check','actions':[]},
+  {'command':'vitals','actions':[]},
+  {'command':'change','actions':[]},
+  {'command':'why','actions':[]},
+  {'command':'explain','actions':[]},
+  {'command':'decision','actions':['list','inspect','assess']},
+  {'command':'trace','actions':['list','inspect']},
+  {'command':'evidence','actions':['list']},
+  {'command':'quality','actions':[]},
+  {'command':'compliance','actions':[]},
+  {'command':'milestone','actions':[]},
+  {'command':'integrity-signal','actions':['list']},
+  {'command':'blocker','actions':['list','resolve']},
+  {'command':'resource','actions':['status','report']},
+  {'command':'qualification','actions':['replay','list']},
+ ],
+ 'Persistent settings':[
+  {'command':'configuration','actions':['show','workflow','self-evolution','change-explanations','external-metrics','analytics-export','executor-budget','evaluation-minimum','evaluation-weight','value-discovery','decision-feedback','executor-skills','context-guard','runtime-improvement','github-workflow','auto-milestones','auto-goals','effort','executor']},
+  {'command':'evaluation','actions':['show','set-weight','set-minimum']},
+  {'command':'controls','actions':['show','set']},
+  {'command':'budget','actions':['show','set']},
+ ],
+ 'Execution and products':[
+  {'command':'executor','actions':['status','attach','detach','retry-policy','circuit-breaker']},
+  {'command':'product','actions':['list','status','help','switch','register','remove','create','work','value','improvements','exchange']},
+  {'command':'fleet','actions':['run','status','stop','broadcast','capacity','config-push']},
+  {'command':'data','actions':['add','update','remove','list','sync','push','inspect','verify','status','credential']},
+  {'command':'trial','actions':['status','study','work','config','data']},
+  {'command':'portfolio','actions':[]},
+ ],
+ 'Governance':[
+  {'command':'rules','actions':['list','inspect','graph','conflicts','changes']},
+  {'command':'intent','actions':['add','list','supersede','deactivate','rollback']},
+  {'command':'constraint','actions':['add','list','deactivate']},
+  {'command':'govern','actions':['clear','list-gates']},
+ ],
+ 'Maintenance and design':[
+  {'command':'update','actions':['download','explain','apply','resolve','help']},
+  {'command':'derive','actions':[]},
+ ],
+ 'Help and integration':[
+  {'command':'help','actions':[]},
+  {'command':'commands','actions':[]},
+  {'command':'schema','actions':['list','inspect','export']},
+  {'command':'report','actions':['status','export']},
+  {'command':'github','actions':['status','connect','push-goals','trigger-workflow']},
+  {'command':'search','actions':[]},
+ ],
+ 'Crypto and keys':[
+  {'command':'crypto','actions':['wallet']},
+ ],
+}
+
+def static_grammar()->dict:
+    """Stable curated intent vocabulary for freeform routing (not argparse-derived)."""
+    return STATIC_GRAMMAR
+
 
 def status(sub):
     """Read-only subject views; no arbitrary downstream action forwarding."""
