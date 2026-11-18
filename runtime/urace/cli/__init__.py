@@ -2361,20 +2361,23 @@ def _cmd_m2m(args, parser, config, state, fmt, _unknown, raw_args):
         elif getattr(args, 'schema', None):
             _body = args.schema
         if not _body:
-            _err = {'status':'error','error':'Provide JSON body as positional arg or via --stdin'}
-            print(json.dumps(_err)); return 1
+            print(json.dumps({'schema_version':'1.0','status':'error','exit_code':2,'error':'Provide JSON body as positional arg or via --stdin'}))
+            return 2
         try:
             _req = json.loads(_body)
         except json.JSONDecodeError as _je:
-            print(json.dumps({'status':'error','error':f'Invalid JSON: {_je}'})); return 1
-        _cmd = _req.get('command','')
-        _params = _req.get('params', {})
-        if not _cmd:
-            print(json.dumps({'status':'error','error':'Missing "command" field'})); return 1
-        _argv = _cmd.split() + [f'--{k.replace("_","-")}={v}' if not isinstance(v,bool) else (f'--{k.replace("_","-")}' if v else '') for k,v in _params.items() if not isinstance(v,bool) or v]
-        _argv = [a for a in _argv if a]
-        _argv.append('--json')
-        return main(_argv)
+            print(json.dumps({'schema_version':'1.0','status':'error','exit_code':2,'error':f'Invalid JSON: {_je}'}))
+            return 2
+        _m2m_cmd = _req.get('command') or None
+        _m2m_argv = _req.get('argv') or None
+        _m2m_params = _req.get('params') or None
+        if not _m2m_cmd and not _m2m_argv:
+            print(json.dumps({'schema_version':'1.0','status':'error','exit_code':2,'error':'Missing "command" or "argv" field'}))
+            return 2
+        from .. import api_interface as _ai
+        _result = _ai.execute(parser, main, command=_m2m_cmd, params=_m2m_params, argv=_m2m_argv)
+        print(json.dumps(_result, indent=2, sort_keys=True))
+        return 0 if _result.get('exit_code', 0) == 0 else _result.get('exit_code', 2)
 
 
 def _cmd_evidence(args, parser, config, state, fmt, _unknown, raw_args):
@@ -3664,18 +3667,27 @@ def _cmd_api(args, parser, config, state, fmt, _unknown, raw_args):
     ══════════════════════════════════════════
     Machine interface for external tools and automation systems.
 
-    Output surface: API calls wrap every installed command in a stable JSON envelope; streaming uses NDJSON.
-
-    Input surface:
-      urace api commands  -- discover the complete installed grammar
-      urace api call --command <cmd> [--params <json>] [--stream]
+    Single-call JSON interface (identical envelope, two syntaxes):
+      urace m2m '{"command":"status","params":{}}'
+      urace api call --command status [--params <json>] [--stream]
       urace api call --argv <JSON-string-array> [--stream]
-      urace api batch --input-json <path|-> [--continue-on-error] [--json]
 
-    Examples:
-      urace api call --command "product switch" --params '{"name":"ProductB"}' --json
-      urace api batch --input-json batch.json --json
-      echo '[{"command":"check","params":{}}]' | urace api batch --input-json - --json
+    All calls return: {"schema_version","command","status","exit_code","output","stderr","streamed"}
+      See: urace api schema  (full field documentation)
+
+    Discovery and batch:
+      urace api commands           -- complete installed grammar with argument types
+      urace api schema             -- M2M envelope schema and protocol reference
+      urace api batch --input-json <path|-> [--continue-on-error]
+
+    Persistent server:
+      urace api serve              -- MCP stdio (default)
+      urace api serve --transport a2a --port 8765 --token-env URACE_A2A_TOKEN
+
+    Config management via M2M:
+      urace m2m '{"command":"config get","params":{"path":"executor.enabled"}}'
+      urace m2m '{"command":"config set","params":{"path":"executor.enabled","value":"true"}}'
+      urace m2m '{"command":"reload"}'
 
     Machine feedback:
       urace feedback submit <id> --input-json params.json --json
@@ -3683,6 +3695,41 @@ def _cmd_api(args, parser, config, state, fmt, _unknown, raw_args):
 
         if args.action == "commands":
             print(json.dumps(api_interface.metadata(parser),indent=2));return 0
+        if args.action == "schema":
+            _m2m_schema = {
+                "schema_version": "1.0",
+                "protocol": "URACE M2M v1",
+                "request": {
+                    "description": "JSON object sent to urace m2m or as --params to api call",
+                    "fields": {
+                        "command": {"type": "string", "required": "one of command/argv", "description": "Space-separated command path, e.g. \"config set\" or \"status\""},
+                        "params":  {"type": "object", "required": False, "description": "Named arguments; positional args mapped by parser; omit for commands that take no arguments"},
+                        "argv":    {"type": "array",  "required": "one of command/argv", "description": "Exact CLI argument array, alternative to command+params"},
+                    }
+                },
+                "response": {
+                    "description": "JSON envelope returned by every M2M call",
+                    "fields": {
+                        "schema_version": {"type": "string", "value": "1.0"},
+                        "command":    {"type": "string|array", "description": "Echo of the request command or argv"},
+                        "status":     {"type": "string", "values": ["ok", "error"], "description": "ok when exit_code==0"},
+                        "exit_code":  {"type": "integer", "description": "0=success, 1=warning/not-found, 2=bad-input/error"},
+                        "output":     {"type": "object|array|string|null", "description": "Parsed JSON from command stdout, or raw string"},
+                        "stderr":     {"type": "string", "description": "Captured stderr text; empty on success"},
+                        "streamed":   {"type": "boolean", "description": "True when --stream was used; output is null and events arrive as NDJSON"},
+                        "error":      {"type": "string", "description": "Human-readable error when status==error and input was invalid"},
+                    }
+                },
+                "config_paths": "urace api commands | python3 -c \"import json,sys; [print(c['command']) for c in json.load(sys.stdin)['commands']]\"",
+                "examples": [
+                    {"request": {"command": "status"}, "note": "lifecycle + health snapshot"},
+                    {"request": {"command": "config get", "params": {"path": "executor.enabled"}}, "note": "read one config field"},
+                    {"request": {"command": "config set", "params": {"path": "executor.enabled", "value": "true"}}, "note": "write one config field"},
+                    {"request": {"command": "config fields"}, "note": "all schema-defined fields with types and defaults"},
+                    {"request": {"command": "reload"}, "note": "hot-reload config.json without restart"},
+                ],
+            }
+            print(json.dumps(_m2m_schema, indent=2)); return 0
         if args.action == "serve":
             if args.transport == "a2a":
                 from ..a2a_server import serve as serve_a2a

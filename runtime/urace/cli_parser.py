@@ -627,7 +627,7 @@ def _build_parser_template() -> argparse.ArgumentParser:
     capacity_command.add_argument("--retry-at")
     capacity_command.add_argument("--stage", default="portfolio")
     api_command = sub.add_parser("api", help=argparse.SUPPRESS)
-    api_command.add_argument("action", choices=["call", "batch", "help", "watch", "version", "commands", "serve", "protocols"])
+    api_command.add_argument("action", choices=["call", "batch", "help", "watch", "version", "commands", "schema", "serve", "protocols"])
     api_command.add_argument("--argv", help="exact CLI argument array as JSON; alternative to command/params")
     api_command.add_argument("--transport", choices=["stdio", "a2a"], default="stdio", help="MCP stdio or opt-in A2A HTTP transport")
     api_command.add_argument("--policy", help="operator-owned integration capability policy JSON file")
