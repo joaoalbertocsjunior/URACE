@@ -74,6 +74,7 @@ from ..cli_output import (
     _render_report_html, _print_fmt,
     _validate_freeform_query, _resolve_scope_target,
 )
+from ..cli_error import cli_error
 from ..cli_state import (
     start_default_portfolio_owner, attached_portfolio_activity, refresh_analytics,
     record_executor_failure, record_blocker, _maybe_auto_escalate, _auto_resolve_blockers,
@@ -898,11 +899,11 @@ def _cmd_p2p(args, parser, config, state, fmt, _unknown, raw_args):
             for _kp in (args.keys or []):
                 _kpath = _p2p_Path(_kp)
                 if not _kpath.exists():
-                    print(f"error: key file not found: {_kpath}", file=sys.stderr); return 1
+                    return cli_error(f'key file not found: {_kpath}', as_json=getattr(args, 'json', False))
                 try:
                     _priv_raw = bytes.fromhex(_kpath.read_text().strip())
                 except ValueError:
-                    print(f"error: {_kpath} must contain 64 hex chars", file=sys.stderr); return 1
+                    return cli_error(f'{_kpath} must contain 64 hex chars', as_json=getattr(args, 'json', False))
                 _priv_key = _Ed.from_private_bytes(_priv_raw)
                 _pub_hex  = _priv_key.public_key().public_bytes(_Enc.Raw, _PF.Raw).hex()
                 _sign_fns.append((_pub_hex, lambda d, _p=_priv_raw: _Ed.from_private_bytes(_p).sign(d).hex()))
@@ -934,10 +935,10 @@ def _cmd_p2p(args, parser, config, state, fmt, _unknown, raw_args):
             from ..peer_discovery import p2p_update_publish as _p2p_pub_fn
             _key_path = _p2p_Path(args.key)
             if not _key_path.exists():
-                print(f"error: key file not found: {_key_path}", file=sys.stderr); return 1
+                return cli_error(f'key file not found: {_key_path}', as_json=getattr(args, 'json', False))
             _bundle_path = _p2p_Path(args.bundle)
             if not _bundle_path.exists():
-                print(f"error: bundle file not found: {_bundle_path}", file=sys.stderr); return 1
+                return cli_error(f'bundle file not found: {_bundle_path}', as_json=getattr(args, 'json', False))
             _priv_raw = bytes.fromhex(_key_path.read_text().strip())
             _bundle   = json.loads(_bundle_path.read_text())
             _result   = _p2p_pub_fn(_bundle, _priv_raw, bundle_url=getattr(args, 'url', ''))
@@ -966,7 +967,7 @@ def _cmd_p2p(args, parser, config, state, fmt, _unknown, raw_args):
                 _p2p_exch = _pex.Exchange(SYSTEM_ROOT / "urace" / "p2p")
                 _p2p_exch.configure(enabled=True, network=True)
             except Exception as _e:
-                print(f"error: {_e}", file=sys.stderr); return 1
+                return cli_error(str(_e), as_json=getattr(args, 'json', False))
             from ..peer_discovery import p2p_update_check as _p2p_chk
             _chk = _p2p_chk(_p2p_exch, _ra_key)
             if getattr(args, 'json', False):
@@ -984,7 +985,7 @@ def _cmd_p2p(args, parser, config, state, fmt, _unknown, raw_args):
         if _p2p_action == 'apply-update':
             _bundle_path = _p2p_Path(args.bundle)
             if not _bundle_path.exists():
-                print(f"error: bundle file not found: {_bundle_path}", file=sys.stderr); return 1
+                return cli_error(f'bundle file not found: {_bundle_path}', as_json=getattr(args, 'json', False))
             _bundle = json.loads(_bundle_path.read_text())
             from ..evolution_guard import apply_p2p_update_bundle as _p2p_apply_fn, verify_release_signature as _vrs2
             _run_tests = not getattr(args, 'no_tests', False)
@@ -1190,7 +1191,7 @@ def _cmd_qualification(args, parser, config, state, fmt, _unknown, raw_args):
                 parser.error('Unknown qualification action: '+str(action))
             print(json.dumps(result,indent=2,sort_keys=True));return 0
         except FileNotFoundError:
-            print(json.dumps({'status':'error','error':'State not found — run urace init first'},indent=2));return 1
+            return cli_error('State not found — run urace init first', hint='urace init', as_json=args.json)
         except (OSError,ValueError,KeyError) as error:parser.error(str(error))
 
 
@@ -1350,8 +1351,7 @@ def _cmd_watch(args, parser, config, state, fmt, _unknown, raw_args):
             import runtime_snapshot as _rs
             import runtime_trial as _rt
         except ImportError as _e:
-            print(f'error: runtime improvement modules not found: {_e}', file=sys.stderr)
-            return 1
+            return cli_error(f'runtime improvement modules not found: {_e}', as_json=args.json)
         if getattr(args, 'report', False):
             report = _rt.redeployment_report(str(_trial_base))
             print(json.dumps(report, indent=2, sort_keys=True))
