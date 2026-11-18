@@ -1,4 +1,10 @@
-"""DuckDNS DDNS helpers: update API, public IP detection, background IP watcher."""
+"""Optional DDNS infrastructure — DuckDNS update API, public IP detection.
+
+This module is optional infrastructure for nodes that want to maintain a stable
+hostname via DuckDNS (https://www.duckdns.org/). It is not required for nodes
+with a static IP or nodes using Cloudflare tunnels. No extra Python packages
+are needed — only standard-library urllib is used.
+"""
 from __future__ import annotations
 import socket
 import threading

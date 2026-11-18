@@ -416,20 +416,36 @@ REP_SOURCE_TRADE = 'trade'   # purchased / traded — market_rep only, never ear
 # Changing earn amounts (seal_reward_units etc.) has ZERO effect on consensus weight.
 # Trade-source directions always weight 0.0 — they never feed consensus.
 # Adding a new earn path: add it here. Missing key defaults to 0.0 (safe).
+#
+# Weight rationale (five tiers):
+#  Tier 1 (1.00–0.90): PoQ-verified events only. 'earn' is a governance-qualified
+#    delivery receipt. 'delivery_fee'/'challenge_bounty' require two-party agreement.
+#  Tier 2 (0.80–0.70): Network infrastructure. Requires real open ports + latency probes.
+#    Sybil resistance: IP diversity check + relay uptime window (default 48 h).
+#  Tier 3 (0.60): Indirect signals. Referral/composition are weighted half of Tier 1
+#    because they depend on another peer's behaviour, not direct output validation.
+#  Tier 4 (0.40–0.30): Demand-side signals. Borrow/adoption shows asset utility but
+#    not production quality; escrow custody is a temporary role, not a trust proof.
+#  Tier 0 (0.00): Non-earn or adversarial events. These affect balance but carry no
+#    governance weight — they are not evidence of honest productive contribution.
+#
+# Governance: weight profile changes require a governance vote and ≥7-day notice period.
+# Until empirical calibration data (network epoch ≥10) is collected, treat these as
+# informed engineering priors, not calibrated values.
 CONSENSUS_WEIGHTS: dict[str, float] = {
-    # High trust — PoQ-verified quality, direct output signal
+    # Tier 1 — PoQ-verified quality, direct output signal
     'earn':                    1.00,
     'delivery_fee':            0.90,
     'challenge_bounty':        0.90,  # won a challenge → validation accuracy signal
-    # Network service — requires real uptime, hardest to Sybil-fake at scale
+    # Tier 2 — Network service (requires real uptime, hardest to Sybil-fake at scale)
     'seal_reward':             0.80,
     'relay_reward':            0.80,  # relay node open = highest cold-start value
     'bootstrap_reward':        0.75,
     'llm_peer_reward':         0.70,
-    # Referral / composition — indirect signal (follower, not originator)
+    # Tier 3 — Referral / composition (indirect signal, follower not originator)
     'composition_referral':    0.60,
     'provenance_compensation': 0.60,
-    # Borrow / adoption — user of others' work, not creator
+    # Tier 4 — Borrow / adoption (demand-side, not production quality)
     'borrow_earn':             0.40,
     'escrow_custody_earned':   0.30,
     # Stake returns — not earn signals, excluded
@@ -599,7 +615,12 @@ def earn_units(root, peer_id, units: int, reason, bundle_id=None, metadata: dict
             return  # saturated — no earn
         units = minted  # override the passed-in units with the formula result
         adjusted_units = int(units * _velocity_multiplier(root))
-    # Novelty gate: re-borrow of same feature_id earns 50%
+    # Novelty gate: re-borrow of same feature_id earns 50%.
+    # ANTICIPATORY: no current borrow flow calls earn_units() with 'borrow' in reason
+    # (borrow credit goes through asset_registry.record_usage_earn / direct audit rows).
+    # This gate is pre-wired for a future borrow-earn credit path that hasn't been built.
+    # Wire it by calling earn_units(root, peer, units, f'borrow:{feature_id}', metadata={...})
+    # from the borrow settlement path when that path is introduced.
     if reason and 'borrow' in str(reason).lower():
         feature_id = (metadata or {}).get('feature_id')
         if feature_id and feature_id in _peer_held_features(root, peer_id):

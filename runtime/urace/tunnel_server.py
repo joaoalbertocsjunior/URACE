@@ -1,3 +1,10 @@
+"""Optional tunnel infrastructure — Cloudflare/localhost.run NAT traversal.
+
+This module is optional infrastructure for nodes behind NAT that cannot
+accept direct inbound connections. It is not required for LAN or nodes
+with a public IP. Install cloudflared (https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+to use Cloudflare tunnels; no extra Python dependencies are needed.
+"""
 import subprocess, threading, re, time, concurrent.futures
 
 def _parse_cloudflare_url(line: str) -> str | None:

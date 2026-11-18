@@ -153,10 +153,15 @@ def _anchor_config(config: dict) -> dict:
 
 
 def _w3(cfg: dict):
-    """Return a web3.Web3 instance, or None if web3 not installed."""
+    """Return a web3.Web3 instance, or raise NotImplementedError if web3 missing + enabled."""
     try:
         from web3 import Web3  # type: ignore
     except ImportError:
+        if cfg.get("enabled"):
+            raise NotImplementedError(
+                "chain_anchor: enabled=True requires web3.py — install it with: "
+                "pip install web3  (Phase 2+). Set enabled=False for Phase 1 no-op."
+            )
         return None
     rpc = cfg.get("rpc_url") or _PUBLIC_RPC.get(cfg.get("network", ""), "")
     if not rpc:
