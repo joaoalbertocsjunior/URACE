@@ -375,8 +375,9 @@ def _preprocess_args(raw_args: list[str]) -> list[str]:
         return _preprocess_args([_clean] + rest)
 
     # 2. Strip trailing punctuation (status! → status)
+    # Guard: single-word tokens only — multi-word NL prose may end with ? . etc.
     _trail = first_lower.rstrip("!.,;:?")
-    if _trail != first_lower and _trail:
+    if _trail != first_lower and _trail and ' ' not in first_lower:
         return _preprocess_args([_trail] + rest)
 
     # 3. Mixed case (Status → status)
@@ -6015,6 +6016,10 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     _preflight_hints=_preflight_module.hints(_pf_cfg,SYSTEM_ROOT)
     if not args.json and _preflight_hints:
         for _h in _preflight_hints:print(f"hint [{_h['level']}]: {_h['message']} — {_h['action']}",file=sys.stderr)
+    if 'config' not in vars():
+        config = _pf_cfg or load_config()
+    if 'state' not in vars():
+        state = load_state_for_read(config) or {}
     _r = _cmd_features(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r
     _r = _cmd_rollback(args, parser, config, state, _fmt, _unknown, raw_args)
