@@ -744,10 +744,10 @@ def command_catalog() -> dict[str, list[dict[str, str]]]:
 def top_level_help() -> str:
     return """URACE — autonomous product improvement
 
+  urace init                first-time setup: config, state, and directory tree
   urace start               boot daemon, join P2P network, detect executors
   urace stop                graceful shutdown
   urace status              observe: lifecycle, network, executor, goals, health
-  urace reload              hot-reload config.json without restart
   urace                     shell — type goals and questions in plain language
 
 Inside the shell, type naturally:
@@ -763,8 +763,8 @@ Inside the shell, type naturally:
 
 Slash shortcuts: /status  /stop  /reload  /peers  /exit
 
-Configure everything in config.json — see: urace status --json | python3 -m json.tool
-Network, executor, rules, sources, auto_goals — all editable; apply with: urace reload
+Configure in config.json or via freeform: "enable the executor", "set effort to high"
+Apply config changes with: urace reload    (or they take effect on next start)
 
 For integrations (all hidden commands still work):
   urace <command> --help    full reference for any command

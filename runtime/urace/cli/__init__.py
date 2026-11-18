@@ -5955,24 +5955,30 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     raw_args = _preprocess_args(raw_args)
     if not raw_args:
         import sys as _sys
+        # First-run guard: if URACE has never been initialized, guide the user.
+        try:_bare_cfg=load_config()
+        except Exception:_bare_cfg={}
+        _bare_sp=state_path(_bare_cfg)
+        _initialized=_bare_sp.exists() and _bare_sp.stat().st_size>10
+        if not _initialized:
+            from ..inspection import top_level_help as _tlh
+            print(_tlh())
+            print('\nURACE is not initialized. Run:  urace init')
+            return 1
         if hasattr(_sys.stdout,'isatty') and _sys.stdout.isatty():
-            try:_shell_cfg=load_config()
-            except Exception:_shell_cfg={}
             from .. import _daemon as _dm, shell as _sh
-            _pid=_dm._read_pid(_shell_cfg)
+            _pid=_dm._read_pid(_bare_cfg)
             if not _pid or not _dm._is_running(_pid):
                 import argparse as _ap2, threading as _thr2, time as _t2
                 _da=_ap2.Namespace(command='daemon',daemon_action='start',
                                    json=False,format=None,interval_minutes=30.0,
                                    max_cycles=0,cycles=0)
-                _thr2.Thread(target=_dm.dispatch,args=(_da,_shell_cfg),daemon=True).start()
+                _thr2.Thread(target=_dm.dispatch,args=(_da,_bare_cfg),daemon=True).start()
                 _t2.sleep(0.3)  # let daemon write pid before shell checks status
-            return _sh.run_shell(_shell_cfg)
+            return _sh.run_shell(_bare_cfg)
         else:
             from .. import tui as _tui
-            try:_tui_cfg=load_config()
-            except Exception:_tui_cfg={}
-            return _tui.launch(_tui_cfg,SYSTEM_ROOT)
+            return _tui.launch(_bare_cfg,SYSTEM_ROOT)
     if raw_args in (["help"], ["-h"], ["--help"]):
         print(top_level_help())
         return 0
