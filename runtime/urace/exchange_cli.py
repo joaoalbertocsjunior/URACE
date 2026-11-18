@@ -433,261 +433,179 @@ def _format_port_report(report):
             print(f"    \u25cb {f['feature_id'][:16]} \u2014 kpi={f['kpi_score']:+.2f} ({f['total_ratings']} ratings)")
 
 
+def _run_feature(exchange, args, config, verb):
+ result = None
+ if verb in ('catalog','declare','lifecycle'):
+  from .feature_catalog import Catalog
+  catalog=Catalog(exchange.root/'feature-catalog')
+  if verb=='catalog':result=catalog.state()
+  elif verb=='declare':result=catalog.declare(args.feature_id,json.loads(bounded_file(args.manifest,16384)))
+  else:result=catalog.lifecycle(args.atom_id,args.status,args.replacement)
+ elif verb=='policy':result=exchange.feature_policy(args.feature_id,{k:getattr(args,k) for k in ('access','license_id','essential','open_after_unix','resale') if getattr(args,k,None) is not None})
+ elif verb=='rate':
+  import time as _t
+  local_id=config.get('peer_id',exchange.identity().get('peer_id','local'))
+  outcome_row={'kind':'FEATURE_RATING','feature_id':args.feature_id,'outcome':args.outcome,'score':getattr(args,'score',None),'at_unix':_t.time(),'at':str(_t.time()),'peer':local_id}
+  exchange.append_audit_row(outcome_row)
+  # Phase 2a: check auto-delist after every rating write
+  _delist_result=_check_auto_delist(args.feature_id,exchange)
+  # Phase 2c: reputation decay/boost on feature ratings
+  try:
+   from .credit_ledger import feature_creator_id as _fcid
+   _creator=_fcid(args.feature_id,exchange) if hasattr(__import__('urace.credit_ledger',fromlist=['feature_creator_id']),'feature_creator_id') else None
+  except Exception:_creator=None
+  if _creator:
+   _rep_delta=0.3 if args.outcome=='positive' else (-0.5 if args.outcome=='negative' else 0.0)
+   if _rep_delta!=0.0:
+    exchange.append_audit_row({'kind':'REPUTATION_DELTA','peer':_creator,'delta':_rep_delta,'reason':f'feature_rating_{args.outcome}','feature_id':args.feature_id,'at_unix':_t.time()})
+  result={'status':'ok','feature_id':args.feature_id,'outcome':args.outcome,'recorded':True,'auto_delist':_delist_result}
+ elif verb=='recommend':
+  from ._common import SYSTEM_ROOT
+  import json as _json
+  _ledger_jsonl=SYSTEM_ROOT/'exchange'/'initial_ledger'/'initial_ledger.jsonl'
+  # Build KPI scores from FEATURE_RATING audit rows
+  _rating_pos: dict[str,int]={}
+  _rating_neg: dict[str,int]={}
+  _rating_tot: dict[str,int]={}
+  try:
+   for _rr in exchange.audit_rows():
+    if _rr.get('kind')=='FEATURE_RATING':
+     _fid=_rr.get('feature_id','')
+     _oc=_rr.get('outcome','')
+     _rating_tot[_fid]=_rating_tot.get(_fid,0)+1
+     if _oc=='positive':_rating_pos[_fid]=_rating_pos.get(_fid,0)+1
+     elif _oc=='negative':_rating_neg[_fid]=_rating_neg.get(_fid,0)+1
+  except Exception:pass
+  features=[]
+  if _ledger_jsonl.exists():
+   lines=[l for l in _ledger_jsonl.read_text().splitlines() if l.strip()][1:]
+   _candidates=[]
+   for line in lines[:getattr(args,'limit',5)*10]:
+    try:
+     f=_json.loads(line)
+     if f.get('borrow_price_units',0)==0:
+      _fid2=f.get('feature_id','')
+      _pos=_rating_pos.get(_fid2,0);_neg=_rating_neg.get(_fid2,0);_tot=_rating_tot.get(_fid2,1)
+      kpi_score=(_pos-_neg)/max(_tot,1)
+      _kpi_mult=0.5 if kpi_score<-0.3 else 1.0
+      _entry={'feature_id':_fid2,'kind':f.get('kind_label',''),'tags':f.get('tags',[]),'borrow_price_units':0,'kpi_score':round(kpi_score,3)}
+      _candidates.append((_kpi_mult*kpi_score,_entry))
+    except Exception:continue
+   _candidates.sort(key=lambda x:x[0],reverse=True)
+   features=[e for _,e in _candidates[:getattr(args,'limit',5)]]
+  result={'status':'ok','recommended':features,'count':len(features)}
+ else:
+  _lang=getattr(args,'language',None)
+  _feat_result=exchange.feature(args.feature_id,args.depends_on,wanted=args.wanted,offered=args.offered,wants=args.wants)
+  if _lang is not None:
+   with exchange.lock():
+    _p=exchange.load();_p['features'][args.feature_id]['language']=_lang
+    from ._common import atomic_write_json as _awj;_awj(exchange.root/'policy.json',_p)
+   _feat_result['language']=_lang
+  result=_feat_result
+ return result
+
+
+def _run_peer(exchange, args, config, verb):
+ result = None
+ if verb=='list':result=exchange.summary()['peers']
+ elif verb=='identity':
+  if not exchange.load()['enabled']:raise ValueError('Sharing disabled; enable explicitly before creating an identity')
+  result=exchange.identity()
+ elif verb=='add':result=exchange.peer(bounded_file(args.certificate,8192),args.endpoint,json.loads(bounded_file(args.post_quantum_identity,16384)) if args.post_quantum_identity else None)
+ elif verb=='rotate':
+  import hashlib,ssl
+  new_cert_pem=bounded_file(args.new_certificate,8192)
+  new_result=exchange.peer(new_cert_pem)
+  new_peer_id=new_result.get('peer_id','')
+  cfg=exchange.load()
+  old_rules={k:v for k,v in cfg.get('rules',{}).items() if k.startswith(args.old_peer_id+':')}
+  for rule_key,allow in old_rules.items():
+   parts=rule_key.split(':')
+   if len(parts)==3 and parts[0]==args.old_peer_id:
+    exchange.rule(new_peer_id,parts[2],parts[1],allow)
+  exchange.block(args.old_peer_id,True)
+  result={'status':'rotated','old_peer_id':args.old_peer_id,'new_peer_id':new_peer_id,'rules_migrated':len(old_rules)}
+ elif verb=='role':
+  pid=getattr(args,'peer_id',None);role_val=getattr(args,'role_value',None)
+  p2p_cfg=exchange.load();peers_map=p2p_cfg.get('peers',{})
+  if role_val is not None:
+   if pid not in peers_map:result={'status':'error','error':f'Unknown peer: {pid!r}'}
+   else:
+    peers_map[pid]['role']=role_val
+    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',p2p_cfg)
+    result={'status':'ok','peer_id':pid,'role':role_val}
+  else:
+   if pid:result={'peer_id':pid,'role':peers_map.get(pid,{}).get('role','operator')}
+   else:result={'peers':{p:peers_map[p].get('role','operator') for p in peers_map}}
+ else:result=exchange.block(args.peer_id,verb=='block')
+ return result
+
+
+def _run_settings(exchange, args, config, verb):
+ SETTINGS_KEYS=('enabled','network','advertise','auto_select','max_transfers_per_day','max_transfers_per_peer_per_day','max_bytes_per_day','max_rpc_per_day','max_rpc_per_peer_per_day','min_peer_version','feature_borrow_enabled','p2p_mint_enabled','p2p_sell_enabled','compress_enabled','decompress_enabled','bundle_max_age_seconds','relay_only','crypto_network','compress_wire','bandwidth_profile','transfer_chunk_size')
+ changes={k:getattr(args,k) for k in SETTINGS_KEYS if getattr(args,k,None) is not None}
+ if verb=='set':
+  if getattr(args,'consensus_min_threshold',None) is not None:
+   cfg2=exchange.load();cfg2.setdefault('p2p',{})['consensus_trigger_min_peers']=args.consensus_min_threshold
+   from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+  if getattr(args,'baseline_grant_tokens',None) is not None:
+   cfg2=exchange.load();cfg2.setdefault('p2p',{})['baseline_grant_tokens']=args.baseline_grant_tokens
+   from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+  if getattr(args,'network_mode',None) is not None:
+   cfg2=exchange.load();cfg2['network_mode']=args.network_mode
+   from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+  if getattr(args,'internet_gateway',None) is not None:
+   cfg2=exchange.load();cfg2['internet_gateway']=args.internet_gateway
+   from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
+  _settings=exchange.load()
+  for k in ('rpc_provider_url','erc20_contract'):
+   v=getattr(args,k,None)
+   if v is not None:_settings[k]=v
+  if getattr(args,'chain_id',None) is not None:_settings['chain_id']=args.chain_id
+  if getattr(args,'urace_credit_usd_rate',None) is not None:_settings['urace_credit_usd_rate']=args.urace_credit_usd_rate
+  if getattr(args,'relay_bandwidth_kbps',None) is not None:_settings['relay_bandwidth_kbps']=args.relay_bandwidth_kbps
+  if any(getattr(args,k,None) is not None for k in ('rpc_provider_url','erc20_contract','chain_id','urace_credit_usd_rate','relay_bandwidth_kbps')):
+   from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',_settings)
+ return exchange.configure(**changes) if verb=='set' else exchange.summary()
+
+
+def _run_status_audit(exchange, args, config, verb):
+ group = args.exchange_group
+ result=exchange.summary(getattr(args,'detail',False),getattr(args,'limit',50),getattr(args,'offset',0),getattr(args,'peer_id',None),getattr(args,'feature_id',None))
+ if group=='status':
+  from .credit_ledger import summary as cl_summary
+  try:result['credits']=cl_summary(exchange.root)
+  except (OSError,ValueError):result['credits']=None
+ return result
+
+
+def _run_rank(exchange, args, config, verb):
+ from .peer_selection import rank
+ return rank(exchange,args.want)
+
+
 def run(args,config):
  from . import peer_exchange as pe
  exchange=pe.Exchange(pe.directory(config));group=args.exchange_group;verb=getattr(args,'exchange_verb',None);result=None
  if group in ('status','audit'):
-  result=exchange.summary(getattr(args,'detail',False),getattr(args,'limit',50),getattr(args,'offset',0),getattr(args,'peer_id',None),getattr(args,'feature_id',None))
-  if group=='status':
-   from .credit_ledger import summary as cl_summary
-   try:result['credits']=cl_summary(exchange.root)
-   except (OSError,ValueError):result['credits']=None
+  result = _run_status_audit(exchange, args, config, verb)
  elif group=='rank':
-  from .peer_selection import rank
-  result=rank(exchange,args.want)
+  result = _run_rank(exchange, args, config, verb)
  elif group=='settings':
-  SETTINGS_KEYS=('enabled','network','advertise','auto_select','max_transfers_per_day','max_transfers_per_peer_per_day','max_bytes_per_day','max_rpc_per_day','max_rpc_per_peer_per_day','min_peer_version','feature_borrow_enabled','p2p_mint_enabled','p2p_sell_enabled','compress_enabled','decompress_enabled','bundle_max_age_seconds','relay_only','crypto_network','compress_wire','bandwidth_profile','transfer_chunk_size')
-  changes={k:getattr(args,k) for k in SETTINGS_KEYS if getattr(args,k,None) is not None}
-  if verb=='set':
-   if getattr(args,'consensus_min_threshold',None) is not None:
-    cfg2=exchange.load();cfg2.setdefault('p2p',{})['consensus_trigger_min_peers']=args.consensus_min_threshold
-    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
-   if getattr(args,'baseline_grant_tokens',None) is not None:
-    cfg2=exchange.load();cfg2.setdefault('p2p',{})['baseline_grant_tokens']=args.baseline_grant_tokens
-    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
-   if getattr(args,'network_mode',None) is not None:
-    cfg2=exchange.load();cfg2['network_mode']=args.network_mode
-    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
-   if getattr(args,'internet_gateway',None) is not None:
-    cfg2=exchange.load();cfg2['internet_gateway']=args.internet_gateway
-    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',cfg2)
-   _settings=exchange.load()
-   for k in ('rpc_provider_url','erc20_contract'):
-    v=getattr(args,k,None)
-    if v is not None:_settings[k]=v
-   if getattr(args,'chain_id',None) is not None:_settings['chain_id']=args.chain_id
-   if getattr(args,'urace_credit_usd_rate',None) is not None:_settings['urace_credit_usd_rate']=args.urace_credit_usd_rate
-   if getattr(args,'relay_bandwidth_kbps',None) is not None:_settings['relay_bandwidth_kbps']=args.relay_bandwidth_kbps
-   if any(getattr(args,k,None) is not None for k in ('rpc_provider_url','erc20_contract','chain_id','urace_credit_usd_rate','relay_bandwidth_kbps')):
-    from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',_settings)
-  result=exchange.configure(**changes) if verb=='set' else exchange.summary()
+  result = _run_settings(exchange, args, config, verb)
  elif group=='peer':
-  if verb=='list':result=exchange.summary()['peers']
-  elif verb=='identity':
-   if not exchange.load()['enabled']:raise ValueError('Sharing disabled; enable explicitly before creating an identity')
-   result=exchange.identity()
-  elif verb=='add':result=exchange.peer(bounded_file(args.certificate,8192),args.endpoint,json.loads(bounded_file(args.post_quantum_identity,16384)) if args.post_quantum_identity else None)
-  elif verb=='rotate':
-   import hashlib,ssl
-   new_cert_pem=bounded_file(args.new_certificate,8192)
-   new_result=exchange.peer(new_cert_pem)
-   new_peer_id=new_result.get('peer_id','')
-   cfg=exchange.load()
-   old_rules={k:v for k,v in cfg.get('rules',{}).items() if k.startswith(args.old_peer_id+':')}
-   for rule_key,allow in old_rules.items():
-    parts=rule_key.split(':')
-    if len(parts)==3 and parts[0]==args.old_peer_id:
-     exchange.rule(new_peer_id,parts[2],parts[1],allow)
-   exchange.block(args.old_peer_id,True)
-   result={'status':'rotated','old_peer_id':args.old_peer_id,'new_peer_id':new_peer_id,'rules_migrated':len(old_rules)}
-  elif verb=='role':
-   pid=getattr(args,'peer_id',None);role_val=getattr(args,'role_value',None)
-   p2p_cfg=exchange.load();peers_map=p2p_cfg.get('peers',{})
-   if role_val is not None:
-    if pid not in peers_map:result={'status':'error','error':f'Unknown peer: {pid!r}'}
-    else:
-     peers_map[pid]['role']=role_val
-     from ._common import atomic_write_json;atomic_write_json(exchange.root/'policy.json',p2p_cfg)
-     result={'status':'ok','peer_id':pid,'role':role_val}
-   else:
-    if pid:result={'peer_id':pid,'role':peers_map.get(pid,{}).get('role','operator')}
-    else:result={'peers':{p:peers_map[p].get('role','operator') for p in peers_map}}
-  else:result=exchange.block(args.peer_id,verb=='block')
+  result = _run_peer(exchange, args, config, verb)
  elif group=='feature':
-  if verb in ('catalog','declare','lifecycle'):
-   from .feature_catalog import Catalog
-   catalog=Catalog(exchange.root/'feature-catalog')
-   if verb=='catalog':result=catalog.state()
-   elif verb=='declare':result=catalog.declare(args.feature_id,json.loads(bounded_file(args.manifest,16384)))
-   else:result=catalog.lifecycle(args.atom_id,args.status,args.replacement)
-  elif verb=='policy':result=exchange.feature_policy(args.feature_id,{k:getattr(args,k) for k in ('access','license_id','essential','open_after_unix','resale') if getattr(args,k,None) is not None})
-  elif verb=='rate':
-   import time as _t
-   local_id=config.get('peer_id',exchange.identity().get('peer_id','local'))
-   outcome_row={'kind':'FEATURE_RATING','feature_id':args.feature_id,'outcome':args.outcome,'score':getattr(args,'score',None),'at_unix':_t.time(),'at':str(_t.time()),'peer':local_id}
-   exchange.append_audit_row(outcome_row)
-   # Phase 2a: check auto-delist after every rating write
-   _delist_result=_check_auto_delist(args.feature_id,exchange)
-   # Phase 2c: reputation decay/boost on feature ratings
-   try:
-    from .credit_ledger import feature_creator_id as _fcid
-    _creator=_fcid(args.feature_id,exchange) if hasattr(__import__('urace.credit_ledger',fromlist=['feature_creator_id']),'feature_creator_id') else None
-   except Exception:_creator=None
-   if _creator:
-    _rep_delta=0.3 if args.outcome=='positive' else (-0.5 if args.outcome=='negative' else 0.0)
-    if _rep_delta!=0.0:
-     exchange.append_audit_row({'kind':'REPUTATION_DELTA','peer':_creator,'delta':_rep_delta,'reason':f'feature_rating_{args.outcome}','feature_id':args.feature_id,'at_unix':_t.time()})
-   result={'status':'ok','feature_id':args.feature_id,'outcome':args.outcome,'recorded':True,'auto_delist':_delist_result}
-  elif verb=='recommend':
-   from ._common import SYSTEM_ROOT
-   import json as _json
-   _ledger_jsonl=SYSTEM_ROOT/'exchange'/'initial_ledger'/'initial_ledger.jsonl'
-   # Build KPI scores from FEATURE_RATING audit rows
-   _rating_pos: dict[str,int]={}
-   _rating_neg: dict[str,int]={}
-   _rating_tot: dict[str,int]={}
-   try:
-    for _rr in exchange.audit_rows():
-     if _rr.get('kind')=='FEATURE_RATING':
-      _fid=_rr.get('feature_id','')
-      _oc=_rr.get('outcome','')
-      _rating_tot[_fid]=_rating_tot.get(_fid,0)+1
-      if _oc=='positive':_rating_pos[_fid]=_rating_pos.get(_fid,0)+1
-      elif _oc=='negative':_rating_neg[_fid]=_rating_neg.get(_fid,0)+1
-   except Exception:pass
-   features=[]
-   if _ledger_jsonl.exists():
-    lines=[l for l in _ledger_jsonl.read_text().splitlines() if l.strip()][1:]
-    _candidates=[]
-    for line in lines[:getattr(args,'limit',5)*10]:
-     try:
-      f=_json.loads(line)
-      if f.get('borrow_price_units',0)==0:
-       _fid2=f.get('feature_id','')
-       _pos=_rating_pos.get(_fid2,0);_neg=_rating_neg.get(_fid2,0);_tot=_rating_tot.get(_fid2,1)
-       kpi_score=(_pos-_neg)/max(_tot,1)
-       _kpi_mult=0.5 if kpi_score<-0.3 else 1.0
-       _entry={'feature_id':_fid2,'kind':f.get('kind_label',''),'tags':f.get('tags',[]),'borrow_price_units':0,'kpi_score':round(kpi_score,3)}
-       _candidates.append((_kpi_mult*kpi_score,_entry))
-     except Exception:continue
-    _candidates.sort(key=lambda x:x[0],reverse=True)
-    features=[e for _,e in _candidates[:getattr(args,'limit',5)]]
-   result={'status':'ok','recommended':features,'count':len(features)}
-  else:
-   _lang=getattr(args,'language',None)
-   _feat_result=exchange.feature(args.feature_id,args.depends_on,wanted=args.wanted,offered=args.offered,wants=args.wants)
-   if _lang is not None:
-    with exchange.lock():
-     _p=exchange.load();_p['features'][args.feature_id]['language']=_lang
-     from ._common import atomic_write_json as _awj;_awj(exchange.root/'policy.json',_p)
-    _feat_result['language']=_lang
-   result=_feat_result
+  result = _run_feature(exchange, args, config, verb)
  elif group=='rule':
-  if verb=='set':result=exchange.rule(args.peer_id,args.feature_id,args.direction,args.allow)
-  elif verb=='export':
-   cfg=exchange.load();rules=cfg.get('rules',{})
-   payload=json.dumps(rules,indent=2,sort_keys=True)
-   if getattr(args,'export_file',None):Path(args.export_file).write_text(payload);result={'status':'exported','rule_count':len(rules),'file':args.export_file}
-   else:result={'rules':rules,'rule_count':len(rules)}
-  elif verb=='import':
-   import os
-   src=Path(args.import_file)
-   if not src.is_file() or src.stat().st_size>65536:raise ValueError('Invalid import file')
-   new_rules=json.loads(src.read_text())
-   if not isinstance(new_rules,dict):raise ValueError('Rules file must be a JSON object')
-   applied=0
-   for rule_key,allow in new_rules.items():
-    parts=rule_key.split(':')
-    if len(parts)==3:exchange.rule(parts[0],parts[2],parts[1],bool(allow));applied+=1
-   result={'status':'imported','rules_applied':applied}
-  else:raise ValueError(f'Unknown rule verb: {verb!r}')
+  result = _run_rule(exchange, args, config, verb)
  elif group=='ledger':
-  from .credit_ledger import summary as cl_summary,balance as cl_balance,history as cl_history,earned_balance as cl_earned
-  if verb=='summary':result=cl_summary(exchange.root)
-  elif verb=='balance':result={'peer':args.peer_id,'balance':cl_balance(exchange.root,args.peer_id)}
-  elif verb=='earned':result={'peer':args.peer_id,'earned_balance':cl_earned(exchange.root,args.peer_id)}
-  elif verb=='supply-calc':
-   from . import ledger_compaction as _lc
-   result=_lc.p2p_optimal_supply(max_network_peers=args.max_network_peers,target_ledger_mb=args.target_ledger_mb,sync_bandwidth_kbps=args.sync_bandwidth_kbps,target_sync_seconds=args.target_sync_seconds,avg_row_bytes=args.avg_row_bytes if args.avg_row_bytes!=400 else None,rows_per_feature=args.rows_per_feature if args.rows_per_feature!=20 else None,adoption_rate=args.adoption_rate,exchange=exchange)
-  elif verb=='transfer':
-   import time as _t,sys as _sys2
-   from datetime import datetime,timezone
-   if args.amount_units<=0:raise ValueError('Transfer amount must be positive')
-   cfg=exchange.load()
-   if args.peer_id not in cfg.get('peers',{}):raise ValueError(f'Peer {args.peer_id!r} not pinned — add peer first')
-   if cfg.get('peers',{}).get(args.peer_id,{}).get('blocked'):raise ValueError(f'Peer {args.peer_id!r} is blocked')
-   # Item 5: spend confirmation threshold
-   _thresh=config.get('p2p',{}).get('confirm_spend_threshold_units',0)
-   if _thresh>0 and args.amount_units>_thresh and not getattr(args,'yes',False):
-    print(f'Transfer of {args.amount_units} units exceeds confirmation threshold {_thresh}. Add --yes to confirm.',file=_sys2.stderr);return 2
-   local_id=config.get('peer_id',exchange.identity().get('peer_id','local'))
-   # Circular transfer detection: if peer_B has transferred to peer_A within the window, reject
-   _circ_window_h=config.get('p2p',{}).get('circular_transfer_window_hours',24)
-   _circ_window_s=_circ_window_h*3600
-   _now_t=_t.time()
-   _audit_rows=exchange.audit_rows()
-   _reverse_transfers=[r for r in _audit_rows if r.get('kind')=='CREDIT_DELTA' and r.get('direction')=='send' and r.get('local_peer')==args.peer_id and r.get('peer')==local_id and isinstance(r.get('at_unix'),( int,float)) and _now_t-r['at_unix']<=_circ_window_s]
-   if _reverse_transfers:
-    exchange.append_audit_row({'kind': 'WASH_TRADE_BLOCKED', 'sender': local_id, 'attempted_receiver': args.peer_id, 'amount_units': args.amount_units, 'reverse_transfer_at_unix': float(_reverse_transfers[0].get('at_unix', 0)), 'window_secs': _circ_window_s, 'at_unix': _now_t, 'at': datetime.now(timezone.utc).isoformat(), 'auditable': True, 'note': 'Circular transfer blocked: reverse transfer detected within wash window'})
-    raise ValueError('circular transfer detected — potential wash cycle')
-   # Large-transfer flag: emit WARNING gap event but allow
-   _large_flag_thresh=config.get('p2p',{}).get('large_transfer_flag_threshold',500)
-   if args.amount_units>_large_flag_thresh:
-    exchange.append_audit_row({'kind':'GAP','severity':'WARNING','gap_type':'large-transfer-flagged','peer':args.peer_id,'local_peer':local_id,'amount_units':args.amount_units,'at_unix':_now_t,'at':datetime.now(timezone.utc).isoformat()})
-   import hashlib as _hl,json as _jj
-   _new_row={'kind':'CREDIT_DELTA','direction':'send','peer':args.peer_id,'local_peer':local_id,'amount_units':args.amount_units,'reason':'manual_transfer','at_unix':_t.time(),'at':datetime.now(timezone.utc).isoformat(),'sender_peer_id':local_id,'receiver_peer_id':args.peer_id,'auditable':True,'wash_window_secs':_circ_window_s}
-   # PoQ ledger block chaining: on by default for transfers (sha256 overhead is negligible; tamper evidence)
-   if config.get('p2p',{}).get('ledger_block_mode',True):
-    _prev_rows=[r for r in _audit_rows if r.get('previous_hash') is not None or r.get('kind')=='CREDIT_DELTA']
-    _prev_entry=_prev_rows[-1] if _prev_rows else None
-    _prev_hash=_hl.sha256(_jj.dumps(_prev_entry,sort_keys=True,default=str).encode()).hexdigest() if _prev_entry else '0'*64
-    _new_row['previous_hash']=_prev_hash
-   exchange.append_audit_row(_new_row)
-   result={'status':'transferred','to':args.peer_id,'amount_units':args.amount_units}
-   if not exchange.load().get('crypto_network'):result['crypto_network_note']='Token settlement over blockchain is CRYPTO_PENDING — tokens are reputation scores in closed network until crypto_network is configured'
-  else:result={'peer':args.peer_id,'history':cl_history(exchange.root,args.peer_id,args.limit)}
+  result = _run_ledger(exchange, args, config, verb)
  elif group=='bundle':
-  if verb=='prepare':result=exchange.prepare(args.peer_id,args.feature_id,bounded_file(args.file,pe.LIMIT//2,True),args.reviewed)
-  elif verb=='inspect':result=exchange.inspect(args.bundle_id)
-  elif verb=='send':result=pe.send(exchange,args.bundle_id)
-  elif verb=='evaluate':
-   from ._common import SYSTEM_ROOT
-   import sys
-   sys.path.insert(0,str(SYSTEM_ROOT/'trial'))
-   from peer_runtime import enqueue
-   result=enqueue(SYSTEM_ROOT/'trial',args.bundle_id)
-  elif verb=='import':result=exchange.receive(json.loads(bounded_file(args.file,pe.LIMIT)))
-  elif verb=='manifest':
-   from ._common import SYSTEM_ROOT
-   import sys as _sys
-   _sys.path.insert(0,str(SYSTEM_ROOT/'trial'))
-   import runtime_evaluation as _ev
-   receipt=_ev.load_receipt(SYSTEM_ROOT/'trial',args.baseline_evaluation_id,public=True)
-   result=pe.request(exchange,args.peer_id,'exchange.manifest',{'baseline_engine_sha256':receipt['engine_sha256'],'observed_failures':[c for c,p in receipt['case_results'].items() if not p]+args.failures,'session_start_unix':__import__('time').time()})
-  elif verb=='fetch-artifact':
-   _fa_rec=exchange.inspect(args.bundle_id)
-   _fa_sha=_fa_rec.get('bundle',{}).get('payload',{}).get('artifact_ref') or _fa_rec.get('bundle',{}).get('payload',{}).get('sha256','')
-   _fa_size=_fa_rec.get('artifact_size_bytes',0)
-   _fa_stored=_fa_rec.get('artifact_stored',False)
-   if not _fa_sha:raise ValueError(f'Bundle {args.bundle_id!r} has no artifact reference')
-   if getattr(args,'out_path',None):
-    _fa_bytes=exchange.artifact_bytes(_fa_sha)
-    if _fa_bytes is None:raise ValueError(f'Artifact {_fa_sha[:16]}... not in local store — request from peer first')
-    import pathlib as _fap
-    _fap.Path(args.out_path).write_bytes(_fa_bytes)
-    result={'status':'written','sha256':_fa_sha,'size_bytes':len(_fa_bytes),'path':args.out_path}
-   else:
-    result={'sha256':_fa_sha,'size_bytes':_fa_size,'stored_locally':_fa_stored,'bundle_id':args.bundle_id}
-  else:result=exchange.review(args.bundle_id,args.review_status,args.note)
+  result = _run_bundle(exchange, args, config, verb, pe)
  elif group=='chunk':
-  from .chunk_store import ChunkStore as _CS
-  _cs=_CS(exchange.root)
-  if verb=='status':
-   _cs_mf=_cs.manifest(args.artifact_sha256)
-   if _cs_mf is None:result={'artifact_sha256':args.artifact_sha256,'stored':False}
-   else:result={'artifact_sha256':args.artifact_sha256,'stored':True,'n_data':_cs_mf['n_data'],'n_total':_cs_mf['n_total'],'chunks_held':_cs.has_chunks(args.artifact_sha256),'is_reconstructable':_cs.is_reconstructable(args.artifact_sha256),'artifact_size_bytes':_cs_mf.get('artifact_size_bytes',0)}
-  elif verb=='store':
-   import pathlib as _csp
-   _cs_raw=_csp.Path(args.input_path).read_bytes()
-   import hashlib as _csh
-   _cs_actual=_csh.sha256(_cs_raw).hexdigest()
-   if _cs_actual!=args.artifact_sha256:raise ValueError(f'SHA256 mismatch: file={_cs_actual}, expected={args.artifact_sha256}')
-   _cs_mf2=_cs.store(args.artifact_sha256,_cs_raw)
-   result={'status':'stored','artifact_sha256':args.artifact_sha256,'n_total':_cs_mf2['n_total'],'size_bytes':len(_cs_raw)}
-  elif verb=='find-holders':
-   _rt2=exchange.routing_table()
-   _holders=[{'peer_id':n.peer_id,'endpoint':n.endpoint,'last_seen':n.last_seen} for n in _rt2.chunk_holders(args.artifact_sha256,args.chunk_idx)]
-   result={'artifact_sha256':args.artifact_sha256,'chunk_idx':args.chunk_idx,'closest_peers':_holders,'routing_table_size':_rt2.size(),'note':'Peers closest to chunk routing key; actual holder confirmation requires network RPC (v3 stub)'}
+  result = _run_chunk(exchange, args, config, verb)
  elif group=='market':
   if verb=='stats':
    def _escrow_stats(exchange, rows, window_sec, now_unix):

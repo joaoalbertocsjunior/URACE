@@ -204,8 +204,15 @@ def auto_complete(cli, config, _quiet=False):
         result.pop('note', None)
     if not _quiet:
         print(json.dumps(result, indent=2))
-        # Print human-readable guide only on first init and only to TTY
         import sys as _sys
+        if _sys.stdout.isatty():
+            next_cmd = result.get('next_command', 'urace auto')
+            status = result.get('status', '')
+            if status == 'ready':
+                print(f'\n\033[1m→ Next: {next_cmd}\033[0m')
+            elif status == 'needs_attention':
+                print(f'\n\033[33m→ Attention needed — check the steps above, then run: {next_cmd}\033[0m')
+        # Print human-readable guide only on first init and only to TTY
         if _first_init and _sys.stdout.isatty() and result.get('network_guide'):
             try:
                 from .exchange_cli import _print_network_guide

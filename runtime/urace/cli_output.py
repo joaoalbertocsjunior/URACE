@@ -113,42 +113,7 @@ th{{background:#161b22}}pre{{background:#161b22;padding:1rem;overflow:auto}}</st
 </body></html>"""
 
 
-# ── Output format helpers (--format json|xml) ────────────────────────────────
-
-def _json_to_xml(data: object, root: str = "urace", _indent: int = 0) -> str:
-    """Recursively convert a JSON-compatible Python object to XML string.
-
-    Elements-only (no attributes). Lists use repeated <item> children.
-    None becomes <null/>. Root tag wraps the entire output at indent=0.
-    """
-    pad = "  " * _indent
-    if _indent == 0:
-        inner = _json_to_xml(data, root, _indent=1)
-        return f"<{root}>\n{inner}</{root}>"
-    if data is None:
-        return f"{pad}<null/>\n"
-    if isinstance(data, bool):
-        return f"{pad}<bool>{str(data).lower()}</bool>\n"
-    if isinstance(data, (int, float)):
-        return f"{pad}<number>{data}</number>\n"
-    if isinstance(data, str):
-        escaped = data.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return f"{pad}<string>{escaped}</string>\n"
-    if isinstance(data, list):
-        lines = []
-        for item in data:
-            inner = _json_to_xml(item, root, _indent=_indent + 1)
-            lines.append(f"{pad}<item>\n{inner}{pad}</item>\n")
-        return "".join(lines)
-    if isinstance(data, dict):
-        lines = []
-        for key, val in data.items():
-            safe_key = re.sub(r"[^A-Za-z0-9_\-.]", "_", str(key))
-            inner = _json_to_xml(val, root, _indent=_indent + 1)
-            lines.append(f"{pad}<{safe_key}>\n{inner}{pad}</{safe_key}>\n")
-        return "".join(lines)
-    return f"{pad}<value>{data}</value>\n"
-
+# ── Output format helpers (--format json) ────────────────────────────────
 
 def _validate_freeform_query(q: "str | None", max_bytes: int = 4096) -> "str | None":
     """Validate a freeform search/query string.
@@ -171,46 +136,9 @@ def _validate_freeform_query(q: "str | None", max_bytes: int = 4096) -> "str | N
     return q
 
 
-def _print_fmt(data: object, fmt: str, *, root: str = "urace") -> None:
-    """Print data as JSON (default) or XML based on fmt ('json' or 'xml').
-
-    Used by command handlers that support --format json|xml.
-    Graceful fallback: non-JSON-serializable data prints as JSON string.
-    """
-    if fmt == "xml":
-        print(_json_to_xml(data, root))
-    else:
-        print(json.dumps(data, indent=2))
-
-
-class _XmlConvertStream:
-    """Stdout wrapper that converts JSON writes to XML (used when --format xml is active).
-
-    Each call to write() is inspected: if it starts with { or [, it is parsed as JSON
-    and converted to XML. Non-JSON text passes through unchanged. This allows all
-    existing handlers (which call json.dumps) to produce XML output without modification.
-    """
-
-    def __init__(self, underlying: Any) -> None:
-        self._u = underlying
-
-    def write(self, s: str) -> int:
-        stripped = s.strip()
-        if stripped and stripped[0] in ("{", "["):
-            try:
-                data = json.loads(stripped)
-                xml_out = _json_to_xml(data) + "\n"
-                self._u.write(xml_out)
-                return len(s)
-            except (json.JSONDecodeError, ValueError):
-                pass
-        return self._u.write(s)
-
-    def flush(self) -> None:
-        self._u.flush()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._u, name)
+def _print_fmt(data: object, fmt: str = 'json', *, root: str = "urace") -> None:
+    """Print data as JSON. fmt and root params kept for call-site compatibility."""
+    print(json.dumps(data, indent=2, sort_keys=True))
 
 
 def _resolve_scope_target(target_expr: str | None, state_path_dir: str) -> dict:

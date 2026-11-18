@@ -71,7 +71,7 @@ from ..cli_emit import (
 )
 from ..cli_output import (
     _utcnow, _session_context_path, _load_session_context, _save_session_turn,
-    _render_report_html, _json_to_xml, _print_fmt, _XmlConvertStream,
+    _render_report_html, _print_fmt,
     _validate_freeform_query, _resolve_scope_target,
 )
 from ..cli_state import (
@@ -774,8 +774,6 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
         if args.action=='serve' and any(x.split('=')[0] in {'--command','--argv','--params','--input-json','--stream','--follow'} for x in raw_args):parser.error('api serve owns stdio; nested calls and streaming wrappers are not applicable')
     if args.command in {'derive','update'} and getattr(args,'verify',False) and getattr(args,'no_verify',False):parser.error('--verify conflicts with --no-verify')
     args.json = bool(_fmt)  # always set for handler backward compat
-    if _fmt == "xml":
-        sys.stdout = _XmlConvertStream(sys.stdout)
     from .. import preflight as _preflight_module
     try:_pf_cfg=load_config()
     except Exception:_pf_cfg={}
@@ -1675,9 +1673,26 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     if args.command == "help":
         if not args.operation:
             if args.json:
-                print(json.dumps({"schema_version": "1.0", "command": "help", "guide": "Use 'urace help <operation>' to get help for a specific operation."}, indent=2))
+                print(json.dumps({"schema_version": "1.0", "command": "help", "guide": "Use 'urace help <operation>' to get help for a specific operation. Use 'urace commands' for a full command catalog."}, indent=2))
                 return 0
-            parser.print_help()
+            print(top_level_help())
+            print("\n  urace commands            full command catalog")
+            return 0
+        # 'urace help --all' or 'urace help all' → show full command catalog
+        if list(args.operation) in (['--all'], ['all']):
+            catalog = command_catalog()
+            catalog["by_concern"] = command_surface.catalog(parser)
+            if args.json:
+                print(json.dumps(catalog, indent=2, sort_keys=True))
+            else:
+                for group, entries in catalog.items():
+                    if group == "by_concern":
+                        for concern, commands in entries.items():
+                            print(concern + ": " + ", ".join(item["command"] for item in commands))
+                        continue
+                    print(group.replace("_", " ").title() + ":")
+                    for entry in entries:
+                        print(f"  {entry['command']}: {entry['purpose']}")
             return 0
         help_root=parser;help_path=list(args.operation)
         if help_path[0]=="portfolio":
@@ -4757,7 +4772,12 @@ Commands:
                 return 1
         else:
             snapshot = vitals_snapshot(config, state)
-            print(json.dumps(snapshot, indent=2, sort_keys=True) if args.json else render_vitals(snapshot))
+            if args.json:
+                if _preflight_hints:
+                    snapshot['hints'] = _preflight_hints
+                print(json.dumps(snapshot, indent=2, sort_keys=True))
+            else:
+                print(render_vitals(snapshot))
             if args.fail_on and any(_SEVERITY_ORDER.get(g.get("severity", "INFO"), 0) >= _SEVERITY_ORDER.get(args.fail_on, 999) for g in state.get("integrity_gaps", []) if g.get("active", True)):
                 return 1
         return 0
@@ -5645,19 +5665,19 @@ Commands:
                     if getattr(args, "dry_run", False): _mp_argv.append("--dry-run")
                     if getattr(args, "mode", None): _mp_argv += ["--mode", args.mode]
                     if getattr(args, "json", False): _mp_argv.append("--json")
-                    if _mp_fmt == "xml": _mp_argv += ["--format", "xml"]
+                    if _mp_fmt == "json": _mp_argv += ["--format", "json"]
                     _mp_argv += ["--product", _mp_name]
                 elif args.command == "decompact":
                     _mp_argv += [args.compaction_event_id]
                     if getattr(args, "field_path", None): _mp_argv += ["--field-path", args.field_path]
                     if getattr(args, "record_id", None): _mp_argv += ["--record-id", args.record_id]
                     if getattr(args, "json", False): _mp_argv.append("--json")
-                    if _mp_fmt == "xml": _mp_argv += ["--format", "xml"]
+                    if _mp_fmt == "json": _mp_argv += ["--format", "json"]
                     _mp_argv += ["--product", _mp_name]
                 elif args.command == "crc":
                     _mp_argv += [args.action]
                     if getattr(args, "json", False): _mp_argv.append("--json")
-                    if _mp_fmt == "xml": _mp_argv += ["--format", "xml"]
+                    if _mp_fmt == "json": _mp_argv += ["--format", "json"]
                     _mp_argv += ["--product", _mp_name]
                 print(f"  [{_mp_name}]")
                 _rc = main(_mp_argv)
