@@ -4798,9 +4798,9 @@ def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args, pref
                 # network
                 _ns = _net_section.get('status', 'unknown')
                 if _ns == 'not_initialized':
-                    print(f"network:    not_initialized")
+                    print("network:    not_initialized")
                 elif _ns == 'error':
-                    print(f"network:    error reading policy")
+                    print("network:    error reading policy")
                 else:
                     _roles_str = ','.join(_net_section.get('roles', [])) or 'none'
                     _tunnel_str = _net_section.get('tunnel_url', _net_section.get('tunnel', 'down'))
@@ -4828,9 +4828,9 @@ def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args, pref
                         print(f"  [{g.get('kind')}] {g.get('detail', '')}{_sfx}")
                         # actionable hint
                         if g.get('kind') == 'onboard-config-incomplete':
-                            print(f"    → add missing fields to config.json, then: urace reload")
+                            print("    → add missing fields to config.json, then: urace reload")
                         elif g.get('kind') == 'onboard-no-readable-product-files':
-                            print(f"    → check product_files paths in config.json")
+                            print("    → check product_files paths in config.json")
                 # warnings — grouped by kind, capped unless --verbose
                 if _wrn:
                     _wrn_groups = _group_gaps(_wrn_raw)
@@ -4847,10 +4847,10 @@ def _cmd_check_vitals(args, parser, config, state, fmt, _unknown, raw_args, pref
                                 for item in items[1:]:
                                     print(f"    {item.get('detail', '')}")
                     if not _verbose and any(len(v) > 1 for v in _wrn_groups.values()):
-                        print(f"  → urace status --verbose  for full list")
+                        print("  → urace status --verbose  for full list")
                 # preflight hints
                 if preflight_hints:
-                    print(f"\npreflight_hints:")
+                    print("\npreflight_hints:")
                     for _h in preflight_hints:
                         print(f"  [{_h['level']}] {_h['message']} — {_h['action']}")
             if args.fail_on and any(_SEVERITY_ORDER.get(g.get("severity", "INFO"), 0) >= _SEVERITY_ORDER.get(args.fail_on, 999) for g in state.get("integrity_gaps", []) if g.get("active", True)):
@@ -6164,7 +6164,10 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     if not args.json and _preflight_hints:
         for _h in _preflight_hints:print(f"hint [{_h['level']}]: {_h['message']} — {_h['action']}",file=sys.stderr)
     if 'config' not in vars():
-        config = _pf_cfg or load_config()
+        try:
+            config = _pf_cfg or load_config()
+        except Exception:
+            config = {}
     if 'state' not in vars():
         try:
             state = load_state_for_read(config) or {}

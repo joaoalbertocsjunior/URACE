@@ -344,22 +344,28 @@ def runtime_files(config: dict[str, Any]) -> list[str]:
     files = [item for item in config["executor"]["allowed_files_by_scope"]["runtime"] if item.startswith("urace/runtime/")]
     # Recovery includes the installed workflow extension without granting native
     # executors permission to modify that extension or any deployment evidence.
-    core = ROOT / 'urace/runtime/urace'
+    # ROOT may be patched in tests to a temp dir; in production ROOT/'urace' may
+    # not exist if the project dir is capitalised (e.g. URACE).  Resolve the
+    # effective project dir dynamically so both cases work.
+    _urace_dir = ROOT / 'urace'
+    if not (_urace_dir / 'runtime').is_dir():
+        _urace_dir = SYSTEM_ROOT   # production fallback for URACE (uppercase) or stub dirs
+    _runtime_dir = _urace_dir / 'runtime'
+    core = _runtime_dir / 'urace'
     if core.is_dir():
-        files.extend(str(path.relative_to(ROOT)) for path in core.glob('*.py') if path.is_file() and not path.is_symlink())
-    tests=ROOT/'urace/runtime/tests'
-    if tests.is_dir():files.extend(str(path.relative_to(ROOT)) for path in tests.glob('*.py') if path.is_file() and not path.is_symlink())
-    trial = ROOT / 'urace/trial'
+        files.extend("urace/" + str(path.relative_to(_urace_dir)) for path in core.glob('*.py') if path.is_file() and not path.is_symlink())
+    tests = _runtime_dir / 'tests'
+    if tests.is_dir():files.extend("urace/" + str(path.relative_to(_urace_dir)) for path in tests.glob('*.py') if path.is_file() and not path.is_symlink())
+    trial = _urace_dir / 'trial'
     if trial.is_dir():
         for path in trial.iterdir():
             if path.is_file() and not path.is_symlink() and (path.suffix == '.py' or path.name in
                     {'urace','empty-mcp.json','efficiency.example.json','harness-manifest.json','runtime-qualification-config.json','runtime-cycle-installation.json','qualification-dependencies.json'}):
-                files.append(str(path.relative_to(ROOT)))
-    runtime_base = ROOT / 'urace/runtime'
-    if runtime_base.is_dir():
-        for path in runtime_base.iterdir():
+                files.append("urace/" + str(path.relative_to(_urace_dir)))
+    if _runtime_dir.is_dir():
+        for path in _runtime_dir.iterdir():
             if path.is_file() and not path.is_symlink() and path.name.endswith('.json'):
-                files.append(str(path.relative_to(ROOT)))
+                files.append("urace/" + str(path.relative_to(_urace_dir)))
     return sorted(set(files))
 
 
@@ -381,8 +387,11 @@ def write_runtime_snapshot(config: dict[str, Any]) -> None:
             while parent != directory and parent.exists() and not any(parent.iterdir()):
                 parent.rmdir()
                 parent = parent.parent
+    _urace_dir = ROOT / 'urace'
+    if not (_urace_dir / 'runtime').is_dir():
+        _urace_dir = SYSTEM_ROOT
     for relative in runtime_files(config):
-        content = (ROOT / relative).read_text(encoding="utf-8")
+        content = (_urace_dir / relative.removeprefix("urace/")).read_text(encoding="utf-8")
         atomic_write_text(directory / relative, content)
         files[relative] = hashlib.sha256(content.encode()).hexdigest()
     atomic_write_json(manifest_path, {"accepted_at": now(), "files": files})

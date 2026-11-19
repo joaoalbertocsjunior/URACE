@@ -57,5 +57,5 @@ class RuntimeCLIAlignmentTests(unittest.TestCase):
 
 class RecoveryInventoryTests(unittest.TestCase):
  def test_all_core_acceptance_tests_are_recoverable_without_new_execution_authority(self):
-  config=cli.load_config();directory=cli.ROOT/'urace/runtime/tests';expected={str(path.relative_to(cli.ROOT)) for path in directory.glob('*.py') if path.is_file() and not path.is_symlink()}
+  config=cli.load_config();directory=cli.RUNTIME_ROOT/'tests';expected={"urace/"+str(path.relative_to(cli.SYSTEM_ROOT)) for path in directory.glob('*.py') if path.is_file() and not path.is_symlink()}
   self.assertTrue(expected);self.assertTrue(expected<=set(cli.runtime_files(config)))

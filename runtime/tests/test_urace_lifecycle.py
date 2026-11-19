@@ -315,14 +315,20 @@ class UraceLifecycleTests(unittest.TestCase):
             ("validation-timeout", subprocess.TimeoutExpired(["python3"], 1), [], subprocess.TimeoutExpired),
             ("accepted-test-guard", completed_ok, ["accepted tests failed"], RuntimeError),
         )
-        for label, runtime_result, guard_errors, exception_type in cases:
-            with self.subTest(label=label), \
-                 patch.object(executor, "run_routed_codex", side_effect=prepare_candidate), \
-                 patch.object(executor.subprocess, "run", side_effect=runtime_result if isinstance(runtime_result, BaseException) else None, return_value=None if isinstance(runtime_result, BaseException) else runtime_result), \
-                 patch.object(executor.evolution_guard, "validate_candidate", return_value=guard_errors):
-                with self.assertRaises(exception_type) as raised:
-                    executor.execute(TEST_PRODUCT_ROOT, config, state, objective)
-                self.assertEqual(getattr(raised.exception, "__urace_executor_metadata__"), metadata)
+        with tempfile.TemporaryDirectory() as _fixture_tmp:
+            _fixture_root = Path(_fixture_tmp)
+            (_fixture_root / "urace" / "runtime" / "urace").mkdir(parents=True)
+            (_fixture_root / "urace" / "runtime" / "urace" / "executor.py").write_text("# stub", encoding="utf-8")
+            (_fixture_root / "urace" / "runtime" / "urace" / "config.json").write_text("{}", encoding="utf-8")
+            for label, runtime_result, guard_errors, exception_type in cases:
+                with self.subTest(label=label), \
+                     patch.object(executor, "run_routed_codex", side_effect=prepare_candidate), \
+                     patch.object(executor.subprocess, "run", side_effect=runtime_result if isinstance(runtime_result, BaseException) else None, return_value=None if isinstance(runtime_result, BaseException) else runtime_result), \
+                     patch.object(executor.evolution_guard, "validate_candidate", return_value=guard_errors), \
+                     patch.object(executor.evolution_guard, "kernel_hashes", return_value={}):
+                    with self.assertRaises(exception_type) as raised:
+                        executor.execute(_fixture_root, config, state, objective)
+                    self.assertEqual(getattr(raised.exception, "__urace_executor_metadata__"), metadata)
 
     def test_failed_candidate_validation_accounts_usage_without_changing_product(self):
         for reported_cost in (None, 1.25):
@@ -1602,7 +1608,9 @@ class UraceLifecycleTests(unittest.TestCase):
             self.assertEqual(cli.main(["portfolio", "--help"]), 0)
         arguments = forward.call_args.args[0]
         self.assertEqual(arguments[-1], "--help")
-        self.assertTrue(str(arguments[1]).endswith("urace/runtime/urace/portfolio.py"))
+        p = Path(str(arguments[1]))
+        self.assertEqual(p.name, "portfolio.py")
+        self.assertEqual(p.parent.name, "urace")
         with patch.object(cli.command_surface, "forward", return_value=7):
             self.assertEqual(cli.main(["portfolio", "--help"]), 7)
 
