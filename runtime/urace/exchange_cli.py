@@ -1178,6 +1178,133 @@ def _run_asset(exchange, args, config, verb):
  return result
 
 
+def _run_work(exchange, args, config, verb):
+ from . import peer_work_market as _pwm
+ local_id=config.get('peer_id',exchange.identity().get('peer_id','local'))
+ result=None
+ if verb=='list':
+  all_rows=_pwm._request_rows(exchange,None)
+  seen={}
+  for r in all_rows:
+   rid=r.get('request_id')
+   if rid and r.get('kind')=='WORK_REQUEST':seen[rid]=r
+  reqs=list(seen.values())
+  if getattr(args,'state',None):reqs=[r for r in reqs if _pwm.escrow_state(r['request_id'],exchange).get('state')==args.state]
+  result={'requests':reqs,'count':len(reqs)}
+ elif verb=='status':result=_pwm.escrow_state(args.request_id,exchange)
+ elif verb=='create':
+  rid=_pwm.create_work_request(exchange,local_id,args.spec,args.budget,min_combined_rep=args.min_rep,n_nodes=args.nodes,complexity=args.complexity,work_mode=args.work_mode,cohort_rep_floor=args.cohort_rep_floor)
+  result={'status':'ok','request_id':rid}
+ elif verb=='bid':_pwm.submit_bid(exchange,args.request_id,local_id,args.combined_rep);result={'status':'ok','request_id':args.request_id}
+ elif verb=='accept':_pwm.accept_bid(exchange,args.request_id,args.bidder_id,local_id);result={'status':'ok','request_id':args.request_id,'accepted_bidder':args.bidder_id}
+ elif verb=='deliver':_pwm.submit_delivery(exchange,args.request_id,local_id,args.delivery_hash);result={'status':'ok','request_id':args.request_id}
+ elif verb=='verify':_pwm.verify_delivery(exchange,args.request_id,local_id,args.approve,reason=args.reason,dispute_kind=args.dispute_kind);result={'status':'ok','request_id':args.request_id,'approved':args.approve}
+ elif verb=='review':_pwm.submit_peer_review(exchange,args.request_id,local_id,args.approve);result={'status':'ok','request_id':args.request_id}
+ elif verb=='merge':_pwm.merge_work_requests(exchange,args.request_id,local_id,args.co_budget);result={'status':'ok','request_id':args.request_id}
+ elif verb=='arbitrate':arbitrators=_pwm.select_arbitrators(exchange,args.request_id,n=args.n);result={'status':'ok','request_id':args.request_id,'arbitrators':arbitrators}
+ elif verb=='claim':_pwm.claim_ownership(exchange,args.request_id,local_id,mint_value=args.mint_value);result={'status':'ok','request_id':args.request_id}
+ elif verb=='decompose':rids=_pwm.auto_decompose_request(exchange,local_id,args.spec,args.budget,args.complexity);result={'status':'ok','request_ids':rids,'count':len(rids)}
+ elif verb=='chain-root':result={'chain_root':_pwm.audit_chain_root(exchange)}
+ else:raise ValueError(f'Unknown work verb: {verb!r}')
+ return result
+
+
+def _run_equity(exchange, args, config, verb):
+ from . import feature_equity as _fe,equity_auto_trade as _eat
+ local_id=config.get('peer_id',exchange.identity().get('peer_id','local'))
+ result=None
+ if verb=='holdings':result={'feature_id':args.feature_id,'holdings':_fe.equity_holdings(args.feature_id,exchange)}
+ elif verb=='grant':
+  creator=getattr(args,'creator_id',None) or local_id
+  meta={}
+  for k in ('description','tags','include_context','isolate_context','skip_pii_check','spec_context','artifact_path','visibility'):
+   v=getattr(args,k,None)
+   if v is not None:meta[k]=v
+  _fe.grant_equity(exchange,args.feature_id,creator,**meta)
+  result={'status':'ok','feature_id':args.feature_id,'creator':creator}
+ elif verb=='sell':
+  _fe.sell_equity(exchange,str(exchange.root),args.feature_id,local_id,args.buyer_id,args.basis_points,price_units=args.price_units)
+  result={'status':'ok','feature_id':args.feature_id,'buyer':args.buyer_id,'basis_points':args.basis_points}
+ elif verb=='price':
+  listings=_eat.open_listings(exchange,feature_id=args.feature_id)
+  ask=min((l.get('ask_price_units',0) for l in listings),default=None)
+  result={'feature_id':args.feature_id,'ask_price_units':ask,'open_listings':len(listings)}
+ elif verb=='transfers':
+  rows=[r for r in exchange.audit_rows() if r.get('kind')=='EQUITY_SELL' and r.get('feature_id')==args.feature_id]
+  result={'feature_id':args.feature_id,'transfers':rows,'count':len(rows)}
+ elif verb=='list-for-sale':
+  bp=getattr(args,'basis_points',None) or 0;price=getattr(args,'ask_price',None) or 0
+  lid=_eat.list_for_sale(exchange,args.feature_id,local_id,bp,price)
+  result={'status':'ok','listing_id':lid}
+ elif verb=='listings':result={'listings':_eat.open_listings(exchange,feature_id=getattr(args,'feature_id',None))}
+ elif verb=='cancel-listing':_eat.cancel_listing(exchange,args.listing_id,local_id);result={'status':'ok','listing_id':args.listing_id}
+ elif verb=='fill-listing':_eat.fill_listing(exchange,str(exchange.root),args.listing_id,local_id);result={'status':'ok','listing_id':args.listing_id}
+ elif verb=='deprecate':
+  import time as _t
+  exchange.append_audit_row({'kind':'EQUITY_DEPRECATED','feature_id':args.feature_id,'creator_id':args.creator_id,'reason':getattr(args,'reason',''),'at_unix':_t.time(),'at':str(_t.time())})
+  result={'status':'ok','feature_id':args.feature_id}
+ elif verb=='register-replica':
+  import time as _t
+  chunks=getattr(args,'chunk_indices',None)
+  exchange.append_audit_row({'kind':'REPLICA_REGISTERED','feature_id':args.feature_id,'peer_id':local_id,'artifact_hash':getattr(args,'artifact_hash',''),'chunk_indices':chunks,'at_unix':_t.time(),'at':str(_t.time())})
+  result={'status':'ok','feature_id':args.feature_id}
+ elif verb=='auto-buy':result=_eat.auto_buy(exchange,str(exchange.root),local_id,config=config)
+ elif verb=='auto-sell':result=_eat.auto_sell(exchange,str(exchange.root),local_id,config=config)
+ elif verb in ('challenge','resolve-challenge','release-stake','challenge-status'):
+  from . import provenance_stake as _ps
+  if verb=='challenge':
+   stake=getattr(args,'challenger_stake',None)
+   result=_ps.file_challenge(exchange,args.feature_id,args.challenger_id,reference_feature_id=getattr(args,'reference_feature_id',''),evidence=getattr(args,'evidence',''),challenger_stake=stake)
+  elif verb=='resolve-challenge':
+   _ps.resolve_challenge(exchange,args.challenge_id,args.verdict,resolver_id=getattr(args,'resolver_id','local'))
+   result={'status':'ok','challenge_id':args.challenge_id,'verdict':args.verdict}
+  elif verb=='release-stake':released=_ps.release_mint_stake(exchange,args.feature_id);result={'status':'ok','feature_id':args.feature_id,'released':released}
+  else:result=_ps.challenge_status(exchange,args.feature_id)
+ elif verb=='cost':
+  from .cost_model import BorrowCostContext,_ceiling_for_loc
+  op=args.operation;ask=getattr(args,'ask_price_units',0);asize=getattr(args,'artifact_size_bytes',0);ecalls=getattr(args,'executor_calls_saved',1)
+  result={'operation':op,'ask_price_units':ask,'artifact_size_bytes':asize,'executor_calls_saved':ecalls,'note':'cost breakdown via cost_model'}
+ elif verb=='dek-unwrap':
+  from . import session_dek as _sdek
+  import base64
+  priv_hex=args.private_key_hex
+  priv_bytes=bytes.fromhex(priv_hex)
+  all_rows=exchange.audit_rows()
+  listing_row=next((r for r in all_rows if r.get('kind')=='EQUITY_LISTING' and r.get('listing_id')==args.listing_id),None)
+  if not listing_row:raise ValueError(f'Listing {args.listing_id!r} not found or has no wrapped DEK')
+  wrapped=listing_row.get('wrapped_dek')
+  if not wrapped:raise ValueError(f'Listing {args.listing_id!r} has no wrapped DEK')
+  dek=_sdek.unwrap_dek(base64.b64decode(wrapped),priv_bytes)
+  result={'listing_id':args.listing_id,'dek_hex':dek.hex()}
+ elif verb=='escrow-status':
+  from . import escrow_timeout as _et
+  result=_et.list_pending_escrows(exchange) if hasattr(_et,'list_pending_escrows') else {'status':'ok','escrows':[r for r in exchange.audit_rows() if r.get('kind')=='EQUITY_ESCROW']}
+ elif verb=='trade-config':
+  tv=getattr(args,'trade_verb',None)
+  if tv=='show' or tv is None:result=_eat.load_config(str(exchange.root))
+  elif tv=='show-presets':
+   from .equity_auto_trade import apply_preset
+   result={'presets':['conservative','balanced','aggressive'],'note':'use --preset <name> with trade-config set'}
+  else:
+   cfg2=_eat.load_config(str(exchange.root))
+   for k in ('auto_buy_enabled','min_quality_wilson','min_adoption_count','max_price_multiplier','max_bp_per_feature','max_spend_per_run_units','max_adoption_rate','min_supply_pressure','min_remaining_adopters','min_lucrativity_score','lucrativity_window_days','auto_sell_enabled','min_return_multiplier','bp_to_sell_per_trigger','min_hold_bp_to_trigger','sell_on_near_depleted','sell_on_slowing'):
+    v=getattr(args,k,None)
+    if v is not None:
+     section='auto_buy' if 'buy' in k or k in ('min_quality_wilson','min_adoption_count','max_price_multiplier','max_bp_per_feature','max_spend_per_run_units','max_adoption_rate','min_supply_pressure','min_remaining_adopters','min_lucrativity_score','lucrativity_window_days') else 'auto_sell'
+     cfg2.setdefault(section,{})[k]=v
+   preset=getattr(args,'preset',None)
+   if preset:cfg2=_eat.apply_preset(cfg2,preset)
+   if getattr(args,'auto_tune',False):cfg2=_eat.auto_tune_config(exchange,cfg2)
+   _eat.save_config(str(exchange.root),cfg2)
+   result=cfg2
+ elif verb=='visibility':
+  rows=[r for r in exchange.audit_rows() if r.get('kind')=='EQUITY_GRANT' and r.get('feature_id')==args.feature_id]
+  vis=rows[0].get('visibility','public') if rows else 'public'
+  result={'feature_id':args.feature_id,'visibility':vis}
+ else:raise ValueError(f'Unknown equity verb: {verb!r}')
+ return result
+
+
 def run(args,config):
  from . import peer_exchange as pe
  exchange=pe.Exchange(pe.directory(config));group=args.exchange_group;verb=getattr(args,'exchange_verb',None);result=None
@@ -1492,7 +1619,7 @@ def run(args,config):
     'step1':f'Open your router admin page (usually http://{_gateway})',
     'step2':"Find 'Port Forwarding' or 'Virtual Server' section",
     'step3':f'Add rule: External port {_spf_port} → Internal IP {_local_ip} port {_spf_port}, protocol TCP',
-    'step4':f'Save and test: curl {_direct_url}/exchange/ping' if _direct_url else f'Save and test from another device on the internet',
+    'step4':f'Save and test: curl {_direct_url}/exchange/ping' if _direct_url else 'Save and test from another device on the internet',
    }
    if _ddns_url:_instruct['ddns_note']='If your ISP changes your IP, use ddns_url instead of direct_url'
    result={'status':'ok','public_ip':_pub_ip,'local_ip':_local_ip,'gateway':_gateway,'port':_spf_port,'instructions':_instruct}

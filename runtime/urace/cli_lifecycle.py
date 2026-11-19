@@ -791,7 +791,7 @@ def execute_with_executor(config: dict[str, Any], state: dict[str, Any], objecti
         execution_call["outcome"] = "failed"
         operation["status"] = "FAILED"
         if hasattr(error, "__urace_executor_metadata__"):
-            operation["usage"] = _current_route_usage(state, getattr(error, "__urace_executor_metadata__"), prior_route)
+            operation["usage"] = _current_route_usage(state, error.__urace_executor_metadata__, prior_route)
             _retain_call_usage(execution_call, operation["usage"])
         objective.pop("executor_capacity_reservation", None)
         raise

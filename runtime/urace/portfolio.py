@@ -832,7 +832,7 @@ def consume_portfolio_controls() -> int:
             if payload["id"] in data.setdefault("processed_control_ids", []):
                 path.unlink(missing_ok=True); continue
             original_load, original_save = globals()["load"], globals()["save"]
-            globals()["load"] = lambda: data
+            globals()["load"] = lambda _d=data: _d
             globals()["save"] = lambda _data: None
             try:
                 arguments.function(arguments)

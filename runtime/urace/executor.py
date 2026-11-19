@@ -192,7 +192,7 @@ def run_routed_codex(root: Path, settings: dict[str, Any], pool_state: dict[str,
                           outcome="TERMINAL_ERROR")
             aggregate = _aggregate_transport_usage(transport_usage)
             if aggregate is not None:
-                setattr(error, "__urace_executor_metadata__", aggregate)
+                error.__urace_executor_metadata__ = aggregate
             raise
         executor_metadata = result.get("__urace_executor_metadata__")
         transport_usage.append(_transport_receipt(provider_id, executor_metadata))
@@ -231,7 +231,7 @@ def run_routed_codex(root: Path, settings: dict[str, Any], pool_state: dict[str,
     error = ExecutorUnavailable(category, retry_at, detail)
     aggregate = _aggregate_transport_usage(transport_usage)
     if aggregate is not None:
-        setattr(error, "__urace_executor_metadata__", aggregate)
+        error.__urace_executor_metadata__ = aggregate
     raise error
 
 
@@ -425,7 +425,7 @@ def _run_claude(root: Path, settings: dict[str, Any], prompt: str, schema: dict[
                    or classify_unavailability(detail, settings)
                    or RuntimeError(f"Claude executor failed: {detail}"))
         if isinstance(error_envelope, dict):
-            setattr(failure, "__urace_executor_metadata__", _claude_usage_metadata(error_envelope))
+            failure.__urace_executor_metadata__ = _claude_usage_metadata(error_envelope)
         raise failure
     maximum = int(settings.get("max_executor_result_bytes", 1048576))
     if len(stdout.encode("utf-8")) > maximum:
@@ -599,7 +599,7 @@ def _run_codex(
             result = json.loads(text) if schema is not None else {"message": text}
         except Exception as error:
             if usage_metadata is not None:
-                setattr(error, "__urace_executor_metadata__", usage_metadata)
+                error.__urace_executor_metadata__ = usage_metadata
             raise
         if usage_metadata is not None:
             result["__urace_executor_metadata__"] = usage_metadata
@@ -950,7 +950,7 @@ For an update migration, preserve attributable local choices while implementing 
                 # The provider call completed before candidate validation. Preserve its
                 # accounting without changing the validation exception or disposition.
                 if "__urace_executor_metadata__" in result:
-                    setattr(error, "__urace_executor_metadata__", result["__urace_executor_metadata__"])
+                    error.__urace_executor_metadata__ = result["__urace_executor_metadata__"]
                 raise
         return {
             "status": "PREPARED",
