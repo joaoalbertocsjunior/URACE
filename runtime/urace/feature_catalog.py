@@ -14,7 +14,7 @@ Propagation-based rewards:
   With token_settlement=True, only receipt_verified=True borrows credit the creator —
   a gibberish feature cannot pass a real trial and therefore cannot earn borrow credits.
 """
-import hashlib,json,re,time
+import hashlib,re,time
 from pathlib import Path
 from .ledger_crypto import canonical
 from .signed_ledger import Ledger

@@ -44,7 +44,7 @@ class CatalogTests(unittest.TestCase):
    root=Path(tmp)
    a=pe.Exchange(root/'a');b=pe.Exchange(root/'b');c=pe.Exchange(root/'c')
    for e in (a,b,c):e.configure(enabled=True);e.feature('feat',[])
-   aid=a.identity()['peer_id'];bid=b.identity()['peer_id'];cid=c.identity()['peer_id']
+   aid=a.identity()['peer_id'];b.identity()['peer_id'];cid=c.identity()['peer_id']
    canon_fp='a'*64
    # Two distinct peers qualify same artifact
    with b.lock():b.event('APPLIED_AFTER_LOCAL_QUALIFICATION',peer=aid,feature='feat',bundle='b'*64,score_delta=5.0,canonical_fingerprint=canon_fp,outcome_fingerprint='o'*64,affected_files=[],receipt_verified=True,qualification_id=None)
@@ -183,7 +183,7 @@ class CatalogTests(unittest.TestCase):
   from urace.feature_catalog import RULES_V1_ID,RULES_V2_ID
   self.assertNotEqual(RULES_V1_ID,RULES_V2_ID)
   state={'atoms':{},'aliases':{},'contents':{},'schema':'x','rules_sha384':RULES_V1_ID,'native_inference_calls':0,'globally_minimal_features_proven':False,'semantic_deduplication_proven':False,'global_monopoly_prevention_proven':False}
-  from urace.feature_catalog import atom_id,descriptor
+  from urace.feature_catalog import descriptor
   val={'capability':'cap','interface_sha384':'a'*96,'acceptance_sha384':'b'*96,'content_sha384':'c'*96,'dependencies':[],'publisher_id':'pub','license_id':'MIT'}
   key=atom_id(descriptor(val))
   event={'rules_sha384':RULES_V1_ID,'operation':'DECLARE_ATOM','alias':'x','atom':key,'descriptor':val}

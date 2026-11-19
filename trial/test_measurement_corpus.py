@@ -2,7 +2,6 @@
 import json
 import time
 import pytest
-from pathlib import Path
 
 from measurement_corpus import (
     ARM_MARKER, CorpusFrozenError, freeze_corpus, load_corpus, mark_arm_started,

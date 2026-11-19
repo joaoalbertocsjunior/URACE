@@ -1,5 +1,4 @@
 """Tests for content_store, product_type_detector, circuit_breaker, crypto_wallet."""
-import json
 import sys
 import tempfile
 import unittest

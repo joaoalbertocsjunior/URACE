@@ -11,7 +11,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _TRIAL_DIR = _TESTS_DIR.parent

@@ -63,8 +63,7 @@ def broadcast_revocation(exchange, peer_ids: list, reason: str) -> dict:
         'reason': reason,
         'at_unix': time.time(),
     }
-    sig = identity.sign(record, 'key-revocation')
-    signed_record = {'record': record, 'signature': sig}
+    identity.sign(record, 'key-revocation')
 
     exchange.event('IDENTITY_REVOKED', key_id=record['key_id'], reason=reason)
 

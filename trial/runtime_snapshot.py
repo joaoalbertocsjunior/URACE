@@ -1,7 +1,7 @@
 """Per-snapshot summary artifacts for accepted runtime improvements."""
 from pathlib import Path
 from datetime import datetime, timezone
-import hashlib, json, os
+import hashlib, json
 
 SCHEMA = 'runtime-snapshot-v1'
 SNAPSHOTS_DIR = 'runtime-snapshots'

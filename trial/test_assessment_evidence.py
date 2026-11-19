@@ -1,4 +1,4 @@
-import json,tempfile,unittest
+import tempfile,unittest
 from pathlib import Path
 from common import atomic
 from assessment_evidence import assess,wilson

@@ -67,7 +67,7 @@ def format_failure_output(output: str, limit: int = _DEFAULT_LIMIT) -> str:
         return "\n".join(kept + [f"[{len(labels) - len(kept)} failure headers omitted; diagnostic limit]", summary_text])[:limit]
     allowance = max(0, limit - fixed_size - 2 * len(blocks)) // len(blocks)
     compact = []
-    for label, block in zip(labels, blocks):
+    for label, block in zip(labels, blocks, strict=False):
         trace = "\n".join(block[1:])
         if len(trace) > allowance:
             prefix = allowance * 2 // 3

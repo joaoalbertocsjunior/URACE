@@ -17,7 +17,6 @@ from __future__ import annotations
 import sys
 import os
 import csv
-import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

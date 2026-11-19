@@ -1,8 +1,8 @@
 """Core integration scenarios; native study evidence is recorded separately."""
-import copy,hashlib,json,sqlite3,tempfile,unittest
+import json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from urace import _common,cli,resource_usage,auto_goals,authority,validation,data_transport,command_surface,trial_cli,api_interface
+from urace import _common,cli,auto_goals,authority,validation,command_surface,trial_cli,api_interface
 
 class ValueWorkflowIntegration(unittest.TestCase):
  def test_declared_goal_authority_validation_and_reload(self):

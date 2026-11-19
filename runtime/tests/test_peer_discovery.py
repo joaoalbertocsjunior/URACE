@@ -7,7 +7,6 @@ import os
 import socket
 import struct
 import tempfile
-import threading
 import time
 import unittest
 from pathlib import Path
@@ -98,7 +97,6 @@ class LanAnnounceTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
 
     def test_missing_zeroconf_raises(self):
-        from urace import peer_discovery as pd
         e = _make_exchange(self.tmp.name)
         with patch.dict("sys.modules", {"zeroconf": None}):
             import importlib
@@ -144,7 +142,7 @@ class DHTClientTests(unittest.TestCase):
             c.close()
 
     def test_compact_peer_encoding_roundtrip(self):
-        from urace.peer_discovery import _compact_peers, _be, bdecode
+        from urace.peer_discovery import _compact_peers
         raw = socket.inet_aton("192.168.1.1") + struct.pack("!H", 9000)
         peers = _compact_peers(raw)
         self.assertEqual(peers, [("192.168.1.1", 9000)])

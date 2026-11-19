@@ -1,5 +1,4 @@
 """Tests for product_similarity — TF-IDF intent similarity + collaborative feature scoring."""
-import math
 import re
 import time
 from unittest.mock import MagicMock

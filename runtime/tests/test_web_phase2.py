@@ -5,7 +5,6 @@ import importlib.util
 import json
 import queue
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 _MISSING = [
@@ -223,7 +222,7 @@ class TestGoalActions(unittest.TestCase):
 
         c = _client()
         with patch("urace.web.routes.goals._rpc_call", side_effect=_fake_rpc):
-            r = c.post("/api/goals/goal-456/defer", headers=AUTH)
+            c.post("/api/goals/goal-456/defer", headers=AUTH)
         self.assertIn("defer", captured["argv"])
         self.assertIn("goal-456", captured["argv"])
 
@@ -313,7 +312,7 @@ class TestInboxActions(unittest.TestCase):
 
         c = _client()
         with patch("urace.web.routes.inbox._rpc_call", side_effect=_fake_rpc):
-            r = c.post("/api/inbox/item-42/reject", headers=AUTH)
+            c.post("/api/inbox/item-42/reject", headers=AUTH)
         self.assertIn("reject", captured["argv"])
         self.assertIn("item-42", captured["argv"])
 

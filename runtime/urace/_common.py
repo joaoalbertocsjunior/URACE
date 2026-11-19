@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import contextlib
-import hashlib
 import json
 import os
 import tempfile
-import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime as _datetime, timezone
@@ -417,7 +414,7 @@ def orchestrator_record(
 
 def scheduled_task_due(task: dict, now_ts: float) -> bool:
     """Return True if a ScheduledTask is due for execution."""
-    from datetime import datetime, timezone
+    from datetime import datetime
     schedule = task.get("schedule", {})
     kind = schedule.get("kind")
     next_run = schedule.get("next_run_at")

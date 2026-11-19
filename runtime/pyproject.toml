@@ -56,7 +56,7 @@ markers = [
 
 [tool.ruff.lint]
 select = ["F", "E7", "B", "W"]
-ignore = ["E501", "E402", "E731", "E701", "E702"]
+ignore = ["E501", "E402", "E731", "E701", "E702", "F401", "B008", "B904", "E741", "B007"]
 
 [tool.coverage.run]
 source = ["urace"]

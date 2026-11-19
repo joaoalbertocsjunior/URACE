@@ -1,5 +1,4 @@
 import tempfile, unittest
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from conftest import MockExchange
@@ -382,7 +381,6 @@ class DistributionFeeTests(unittest.TestCase):
 
 class HiredNodeEarnTests(unittest.TestCase):
     def setUp(self):
-        import tempfile
         from urace import credit_ledger as cl
         self.cl = cl
         self.tmp = tempfile.mkdtemp()
@@ -470,7 +468,6 @@ class EscrowCustodyRewardTests(unittest.TestCase):
     def _make_verified_exchange(self, request_id='rid1', budget=1000):
         """Build a minimal exchange with a completed work request."""
         import time
-        from urace import peer_work_market as wm
         ex = MockExchange()
         now = time.time()
         ex.append_audit_row({
@@ -617,7 +614,7 @@ class NullAdapterStubBehaviorTests(unittest.TestCase):
 
     def test_handle_purchase_settlement_on_ramp_null_no_crypto_address(self):
         """Without crypto_address in payload, on_ramp is not called — no crash."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
         import urace.purchase_settlement as ps
         mock_exchange = MagicMock()
         mock_exchange.load.return_value = {}
@@ -645,7 +642,7 @@ class NullAdapterStubBehaviorTests(unittest.TestCase):
 
     def test_handle_purchase_settlement_on_ramp_called_with_crypto_address(self):
         """With crypto_address, on_ramp fires via NullAdapter (status=stub)."""
-        from unittest.mock import MagicMock, patch, call
+        from unittest.mock import patch
         import urace.purchase_settlement as ps
         from urace.integration_bridge import NullAdapter
         mock_exchange = MagicMock()

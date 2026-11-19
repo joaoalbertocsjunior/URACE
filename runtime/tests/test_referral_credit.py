@@ -1,5 +1,4 @@
 """Tests for REFERRAL_CREDIT_ISSUED and referral_credit in create_work_request."""
-import time
 import unittest
 
 from conftest import MockExchange
@@ -25,7 +24,7 @@ class TestCreateWorkRequestReferral(unittest.TestCase):
         ex = self._make_exchange()
         with patch('urace.peer_work_market._check_rate_limit'), \
              patch('urace.credit_ledger.consensus_escrow_floor', return_value=0):
-            request_id = create_work_request(
+            create_work_request(
                 ex, 'requester-1', 'do something', 100,
                 referral_credit={'referrer_id': 'ref-1', 'amount': 5}
             )

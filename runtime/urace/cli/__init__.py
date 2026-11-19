@@ -217,7 +217,7 @@ def _lev1(a: str, b: str) -> bool:
     if abs(len(a) - len(b)) > 1:
         return False
     if len(a) == len(b):
-        diffs = [i for i, (x, y) in enumerate(zip(a, b)) if x != y]
+        diffs = [i for i, (x, y) in enumerate(zip(a, b, strict=False)) if x != y]
         if len(diffs) == 1:
             return True
         # adjacent transposition: "relaod" ↔ "reload"

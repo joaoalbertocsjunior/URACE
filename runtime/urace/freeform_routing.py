@@ -29,7 +29,7 @@ def validate(batch,parser):
             argv=api_interface.build_argv(parser,argv=shlex.split(params['command'])+extra)
             if argv[0] in {'classify','api'} or api_interface.persistent(argv):raise ValueError('Generated routing wrappers, classifiers and persistent listeners require an explicit structured operator command')
             with contextlib.redirect_stderr(io.StringIO()):
-                try:parsed=parser.parse_args(argv)
+                try:parser.parse_args(argv)
                 except SystemExit as error:raise ValueError('classifier produced invalid command syntax') from error
             # Parsing alone never dispatches generated commands.
         if kind=='goal':
@@ -296,7 +296,6 @@ def _cancel_latest_queued(cli,config,state):
         # Fall back to goal_control cancel via queue_input
         try:
             from . import api_interface as _ai
-            import shlex as _shlex
             _ai.execute(config if hasattr(config,'parse_known_args') else None,
                         cli.main,argv=['goal','control','--cancel',_id])
         except Exception:pass
@@ -382,7 +381,7 @@ def _route(cli,args,config,state,parser):
             if _c.get('kind')!='freeform-routing':continue
             _at=_c.get('at','')
             try:
-                from datetime import datetime,timezone
+                from datetime import datetime
                 _ts=datetime.fromisoformat(_at).timestamp() if _at else 0.0
             except (ValueError,TypeError):
                 _ts=0.0

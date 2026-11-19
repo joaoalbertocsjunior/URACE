@@ -2,7 +2,7 @@ import copy,io,json,tempfile,unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
-from urace import milestone_feedback as m,primitives,cli,_common
+from urace import milestone_feedback as m,primitives,cli
 from helpers import patch_config_path
 
 class MilestoneFeedbackTests(unittest.TestCase):

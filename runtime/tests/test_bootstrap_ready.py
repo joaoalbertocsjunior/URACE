@@ -1,7 +1,7 @@
 import contextlib,copy,io,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from urace import cli,_common
+from urace import cli
 from helpers import patch_config_path
 class ReadyBootstrap(unittest.TestCase):
  def test_ready_does_not_invent_aggregate_call_caps(self):

@@ -1,8 +1,8 @@
 """Qualified runtime deployment transaction. Caller scores cannot authorize writes."""
 from pathlib import Path
 from datetime import datetime,timezone
-import contextlib,hashlib,json,os,shutil,stat,subprocess,tempfile,uuid
-from common import BASE,atomic
+import contextlib,json,os,shutil,stat,subprocess,tempfile,uuid
+from common import atomic
 import runtime_evaluation as ev
 
 DEPLOY_LOG='runtime-deployments.jsonl'
@@ -97,7 +97,7 @@ def _update_metadata(base,qualification):
   for key in aliases:pins[key]=ev.sha(path)
  atomic(base/'harness-manifest.json',pins)
  if not all(matches(base/key,value) for key,value in pins.items()):raise RuntimeDeploymentError('Source pins failed after publication')
- previous=json.loads((base/'verification-latest.json').read_text());sources={str(p.relative_to(root)):ev.sha(p) for folder in ('runtime/urace','runtime/tests','trial') for p in (root/folder).glob('*.py') if not p.is_symlink()}
+ json.loads((base/'verification-latest.json').read_text());sources={str(p.relative_to(root)):ev.sha(p) for folder in ('runtime/urace','runtime/tests','trial') for p in (root/folder).glob('*.py') if not p.is_symlink()}
  atomic(base/'verification-latest.json',{'schema':'owner-source-qualification-v1','at':ev.now(),'source_sha256':sources,'results':[{'suite':'autonomous runtime candidate full core/trial regression','tests':qualification['regression']['tests'],'failures':0,'errors':0,'skipped':qualification['regression']['skipped'],'log':str(base/'runtime-qualifications'/qualification['id']/'regression.log')}],'previous_qualification_receipt':str(base/'runtime-deployment-journals'/json.loads((base/'runtime-deployment-transaction.json').read_text())['id']/'verification-latest.json'),'live_feature_coverage_complete':False,'notes':'Source-bound private runtime cases plus sealed full regression; not user value or universal comparative proof'})
  _sync_snapshot(base)
 

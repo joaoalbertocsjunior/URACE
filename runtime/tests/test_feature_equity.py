@@ -1,5 +1,5 @@
 """Tests for feature_equity.py — equity model, trading, mint splits."""
-import unittest, time
+import unittest
 
 from conftest import MockExchange
 

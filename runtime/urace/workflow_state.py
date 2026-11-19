@@ -49,7 +49,7 @@ def _version_folder(base: Path, number: int) -> Path:
 
 
 def _context(state: dict, config: dict, base: 'Path | None' = None) -> dict:
-    from . import rules, inspection
+    from . import rules
     # Context describes retained operator work, including work currently blocked or
     # active. Scheduling eligibility must not erase owner intent from the prompt.
     goals = [g for g in state.get('objectives', []) if g.get('status') not in

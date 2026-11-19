@@ -1,7 +1,7 @@
 """Real local cryptography/TLS, with isolated fixture nodes; no external peers or native calls."""
 from pathlib import Path
 from unittest.mock import patch
-import copy,json,ssl,tempfile,threading,unittest
+import json,ssl,tempfile,threading,unittest
 import pytest
 from urace import peer_exchange as pe,exchange_cli,cli,api_interface,command_surface,integration_bridge
 
@@ -63,7 +63,7 @@ class ExchangeTests(unittest.TestCase):
     with self.assertRaises(ValueError):pe.request(self.a,self.bid,'exchange.info',{})
    finally:server.shutdown();thread.join(timeout=5)
  def test_remote_open_asset_catalog_fetches_signed_bytes_to_quarantine(self):
-  import time,hashlib
+  import hashlib
   from urace import remote_assets
   self.pair(True);raw=b'open fixture asset\x00bytes';sha=hashlib.sha256(raw).hexdigest()
   self.a.feature('featureA',[],offered=True)

@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, cli_lifecycle as _cli_lifecycle_m, cli_state as _cli_state_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import analytics, cli, cli_lifecycle as _cli_lifecycle_m, cli_state as _cli_state_m, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -328,7 +328,7 @@ class UraceLifecycleTests(unittest.TestCase):
                      patch.object(executor.evolution_guard, "kernel_hashes", return_value={}):
                     with self.assertRaises(exception_type) as raised:
                         executor.execute(_fixture_root, config, state, objective)
-                    self.assertEqual(getattr(raised.exception, "__urace_executor_metadata__"), metadata)
+                    self.assertEqual(raised.exception.__urace_executor_metadata__, metadata)
 
     def test_failed_candidate_validation_accounts_usage_without_changing_product(self):
         for reported_cost in (None, 1.25):
@@ -616,7 +616,7 @@ class UraceLifecycleTests(unittest.TestCase):
                      patch.object(executor, "_run_with_heartbeats", side_effect=run):
                     with self.assertRaisesRegex(error_type, message) as raised:
                         executor._run_codex(root, settings, "task", {"type": "object"}, "read-only")
-                metadata = getattr(raised.exception, "__urace_executor_metadata__")
+                metadata = raised.exception.__urace_executor_metadata__
                 self.assertEqual(metadata["input_tokens"], 13)
                 self.assertEqual(metadata["output_tokens"], 5)
                 self.assertIsNone(metadata["reported_cost_usd"])

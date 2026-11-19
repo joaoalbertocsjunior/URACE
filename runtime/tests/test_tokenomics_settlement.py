@@ -3,7 +3,7 @@
 Balances are computed from the tamper-evident audit log — no separate
 mutable state file. Tests verify this property explicitly.
 """
-import hashlib, json, tempfile, unittest
+import json, tempfile, unittest
 from pathlib import Path
 
 
@@ -151,7 +151,6 @@ class TokenSettlementIntegrationTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
 
     def test_receive_without_settlement_does_not_check_balance(self):
-        from urace import token_ledger as tl
         a, b, aid, bid = _make_pair(self.tmp.name)
         # token_settlement=False (default) — token balance is never checked.
         # Verify a normal receive works and no token_state.json is created.
@@ -216,7 +215,6 @@ class TokenSettlementIntegrationTests(unittest.TestCase):
         self.assertFalse((b.root / 'tokens' / 'token_state.json').exists())
 
     def test_token_summary_via_exchange(self):
-        from urace import token_ledger as tl
         a, b, aid, bid = _make_pair(self.tmp.name)
         b.configure(token_settlement=True)
         art = 'urace runtime improvement'
@@ -441,7 +439,7 @@ class EthSettlementAdapterTests(unittest.TestCase):
     def test_on_ramp_calls_eth_send_raw_transaction(self):
         from urace.eth_settlement_adapter import EthSettlementAdapter
         import unittest.mock as mock
-        import tempfile, json
+        import tempfile
         with tempfile.TemporaryDirectory() as wdir:
             from urace import crypto_wallet as cw
             cw.wallet_init(wallet_dir=wdir)
@@ -449,7 +447,7 @@ class EthSettlementAdapterTests(unittest.TestCase):
             response_body = json.dumps({'jsonrpc': '2.0', 'result': '0xabc123', 'id': 1}).encode()
             mock_resp = self._make_mock_response(response_body)
             with mock.patch('urllib.request.urlopen', return_value=mock_resp) as mock_open:
-                result = adapter.on_ramp('peer1', 100, '0xABC')
+                adapter.on_ramp('peer1', 100, '0xABC')
             mock_open.assert_called()
             call_args = mock_open.call_args
             req = call_args[0][0]
@@ -460,7 +458,7 @@ class EthSettlementAdapterTests(unittest.TestCase):
         from urace.eth_settlement_adapter import EthSettlementAdapter
         from urace import credit_ledger as cl
         import unittest.mock as mock
-        import tempfile, json
+        import tempfile
         with tempfile.TemporaryDirectory() as wdir:
             from urace import crypto_wallet as cw
             cw.wallet_init(wallet_dir=wdir)
@@ -489,7 +487,7 @@ class EthSettlementAdapterTests(unittest.TestCase):
     def test_off_ramp_calls_rpc(self):
         from urace.eth_settlement_adapter import EthSettlementAdapter
         import unittest.mock as mock
-        import tempfile, json
+        import tempfile
         with tempfile.TemporaryDirectory() as wdir:
             from urace import crypto_wallet as cw
             cw.wallet_init(wallet_dir=wdir)
@@ -505,7 +503,7 @@ class EthSettlementAdapterTests(unittest.TestCase):
     def test_mint_nft_calls_rpc(self):
         from urace.eth_settlement_adapter import EthSettlementAdapter
         import unittest.mock as mock
-        import tempfile, json
+        import tempfile
         with tempfile.TemporaryDirectory() as wdir:
             from urace import crypto_wallet as cw
             cw.wallet_init(wallet_dir=wdir)

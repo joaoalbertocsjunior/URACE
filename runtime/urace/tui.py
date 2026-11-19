@@ -384,7 +384,6 @@ def launch(config: dict[str, Any], root: Path) -> int:
 def _no_tty_fallback() -> int:
     """Print a compact status summary when stdout is not a TTY."""
     from ._common import load_config, load_state_for_read
-    from ._common import SYSTEM_ROOT
     try:
         cfg = load_config()
         state = load_state_for_read(cfg)

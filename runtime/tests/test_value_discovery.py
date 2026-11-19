@@ -73,7 +73,7 @@ class ValueDiscoveryTests(ValueFixture):
   d=self.data();key=d['hypotheses'][0]['id']
   with self.assertRaises(ValueError):v.attach_evidence(d,key,{'claim':'x','source_ref':'s','stance':'supports','hypothesis_id':'other'})
  def test_experiment_contract_must_precede_observations(self):
-  d=self.data();key=d['hypotheses'][0]['id'];p={'id':'experiment','hypothesis_id':key,'primary_indicator':'completion_seconds','baseline_version':'v0','candidate_version':'v1','quality_floor':1,'resource_limit':100};r=v.experiment(d,p);self.assertTrue(r['contract_sha256']);
+  d=self.data();key=d['hypotheses'][0]['id'];p={'id':'experiment','hypothesis_id':key,'primary_indicator':'completion_seconds','baseline_version':'v0','candidate_version':'v1','quality_floor':1,'resource_limit':100};r=v.experiment(d,p);self.assertTrue(r['contract_sha256'])
   with self.assertRaises(ValueError):v.experiment(d,p)
   v.observe(d,key,self.observation());p['id']='posthoc'
   with self.assertRaises(ValueError):v.experiment(d,p)

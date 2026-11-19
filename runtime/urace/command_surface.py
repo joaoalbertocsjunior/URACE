@@ -424,7 +424,7 @@ def status(sub):
     scores=children.add_parser('scores',help='executable workflow scores and version deltas')
     score_arguments(scores);scores.set_defaults(command='check')
     # No subject means runtime; install defaults without adding output options twice.
-    check=sub.choices['check']
+    sub.choices['check']
     root.set_defaults(command='check',fail_on=None,migration_dry_run=False)
     return root
 

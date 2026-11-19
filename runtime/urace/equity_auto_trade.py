@@ -142,7 +142,7 @@ def feature_depletion_status(
     )
 
     supply_pressure = _cl.supply_pressure_multiplier(feature_spend, net)
-    base_borrow = _cl.apply_borrow_cost()
+    _cl.apply_borrow_cost()
     mint_per = _cl.UNIT // 100   # 0.01 tokens per adoption (approximate)
 
     # Revenue per bp = (remaining adopters × mint_per × bp_fraction)
@@ -164,8 +164,6 @@ def feature_depletion_status(
         state = 'HEALTHY'
         notes = f'{adoption_rate:.0%} adopted, supply_pressure={supply_pressure:.3f}. Significant borrow revenue potential remains.'
 
-    from . import credit_ledger as _cl2
-    eq_total = 10_000  # EQUITY_TOTAL_BP
 
     return {
         'feature_id': feature_id,
@@ -385,7 +383,6 @@ def auto_tune_config(exchange, base_config: dict | None = None) -> dict:
     Returns a config dict with optimal values for current network state.
     """
     import copy
-    import math
     cfg = copy.deepcopy(base_config or load_config(str(exchange.root)))
     rows = []
     try:
@@ -658,7 +655,7 @@ def fill_listing(
     Deducts ask_price from buyer and calls sell_equity() to record the transfer.
     Raises ValueError if listing is not open, expired, or buyer can't afford it.
     """
-    from . import feature_equity as _fe, credit_ledger as _cl
+    from . import feature_equity as _fe
 
     lst = _get_listing(exchange, listing_id)
     if lst is None:

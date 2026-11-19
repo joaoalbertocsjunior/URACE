@@ -30,7 +30,7 @@ def _linear_regression_slope(x: list[float], y: list[float]) -> float:
         return 0.0
     sum_x = sum(x)
     sum_y = sum(y)
-    sum_xy = sum(xi * yi for xi, yi in zip(x, y))
+    sum_xy = sum(xi * yi for xi, yi in zip(x, y, strict=False))
     sum_xx = sum(xi * xi for xi in x)
     denom = n * sum_xx - sum_x * sum_x
     if abs(denom) < 1e-15:

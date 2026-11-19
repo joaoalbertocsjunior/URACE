@@ -6,9 +6,7 @@ with a static IP or nodes using Cloudflare tunnels. No extra Python packages
 are needed — only standard-library urllib is used.
 """
 from __future__ import annotations
-import socket
 import threading
-import time
 import urllib.request
 import urllib.parse
 

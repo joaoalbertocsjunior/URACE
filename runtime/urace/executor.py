@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import time
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -18,15 +18,11 @@ from . import evolution_guard
 from .executor_routing import (
     ExecutorUnavailable,
     SUPPORTED_ADAPTERS,
-    EXECUTION_ENVIRONMENT_FAILURES,
-    AUTH_FAILURE_MARKERS,
-    TRANSIENT_NETWORK_MARKERS,
     classify_execution_environment,
     classify_auth_failure,
     classify_transient_network_failure,
-    _env_auto_providers,
-    provider_definitions,
     _provider_timing_error,
+    provider_definitions,  # noqa: F401 — re-exported for circuit_breaker.py
     routed_provider_definitions,
     provider_settings,
     configured_transport_limit,

@@ -68,7 +68,7 @@ class TestContextInjection(unittest.TestCase):
             }))
 
             # Patch sys.path insert and runtime_snapshot import
-            trial_dir = base.parent / 'trial'
+            base.parent / 'trial'
             with patch('sys.path', sys.path.copy()):
                 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / 'trial'))
                 state = self._make_state()

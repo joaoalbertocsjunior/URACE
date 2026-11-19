@@ -452,7 +452,7 @@ def score_features(
         sim_vals = [peer_sim.get(p, 0.5) for p in peers_that_adopted]
         total_trust = sum(trust_vals)
         if total_trust > 0:
-            weighted_sim = sum(t * s for t, s in zip(trust_vals, sim_vals)) / total_trust
+            weighted_sim = sum(t * s for t, s in zip(trust_vals, sim_vals, strict=False)) / total_trust
         else:
             weighted_sim = sum(sim_vals) / peer_count if peer_count > 0 else 0.0
 

@@ -22,7 +22,7 @@ Returns a breakdown dict so callers can explain cost to users.
 """
 from __future__ import annotations
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 SCHEMA = 'urace-cost-model-v1'
 
@@ -624,7 +624,6 @@ def receipt_from_operation(operation: dict) -> dict | None:
 
 
 def _receipts_dir(config: dict):
-    from pathlib import Path
     from urace._common import state_path
     return state_path(config).parent / 'receipts'
 

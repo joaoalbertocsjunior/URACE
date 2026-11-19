@@ -3,7 +3,7 @@ import hashlib
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 def _make_exchange(tmp, name="node"):
@@ -237,7 +237,6 @@ class ReleaseAuthorityKeyTests(unittest.TestCase):
 
         priv     = Ed25519PrivateKey.from_private_bytes(b"\x44" * 32)
         pub_hex  = priv.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw).hex()
-        priv_raw = b"\x44" * 32
 
         remote_fp = "ee" * 32
         sig       = priv.sign(remote_fp.encode()).hex()

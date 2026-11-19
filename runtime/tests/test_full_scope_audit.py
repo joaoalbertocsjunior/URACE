@@ -1,4 +1,4 @@
-import argparse,copy,json,sqlite3,tempfile,unittest
+import argparse,json,sqlite3,tempfile,unittest
 from pathlib import Path
 from urace import validation,api_interface,auto_goals,resource_usage,external_metrics
 

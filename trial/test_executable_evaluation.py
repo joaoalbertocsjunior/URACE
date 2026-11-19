@@ -1,4 +1,4 @@
-import ast,json,tempfile,unittest
+import json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from executable_cases import corpus,manifest,oracle_ready

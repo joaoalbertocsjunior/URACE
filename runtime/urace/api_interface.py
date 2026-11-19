@@ -174,7 +174,7 @@ def _execute(parser,runner,command=None,params=None,argv=None,stream=False,max_o
         # Prefer JSON only where this grammar advertises it. Portfolio has its own per-operation flags.
         current=parser;index=0
         while child_parsers(current) and index<len(args) and args[index] in child_parsers(current):current=child_parsers(current)[args[index]];index+=1
-        accepts_json=any('--json' in a.option_strings for a in current._actions)
+        any('--json' in a.option_strings for a in current._actions)
         if not any(x=='--json' or x=='--format' or x.startswith('--format=') for x in args):args.insert(0,'--json')
         if max_output_bytes is not None and (type(max_output_bytes) is not int or max_output_bytes<1):raise RequestError('Invalid API capture allowance')
         allowance=[max_output_bytes]

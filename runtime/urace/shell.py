@@ -7,7 +7,7 @@ Known commands  → run inline via main() (network discover, status, etc.)
 Freeform text   → routed through NL classifier → executor
 """
 from __future__ import annotations
-import json, os, sys
+import json, sys
 from pathlib import Path
 
 _SLASH_COMMANDS = {

@@ -442,7 +442,6 @@ def _run_rule(exchange, args, config, verb):
   if getattr(args,'export_file',None):Path(args.export_file).write_text(payload);result={'status':'exported','rule_count':len(rules),'file':args.export_file}
   else:result={'rules':rules,'rule_count':len(rules)}
  elif verb=='import':
-  import os
   src=Path(args.import_file)
   if not src.is_file() or src.stat().st_size>65536:raise ValueError('Invalid import file')
   new_rules=json.loads(src.read_text())
@@ -569,7 +568,6 @@ def _run_market(exchange, args, config, verb):
  result = None
  if verb=='stats':
   def _escrow_stats(exchange, rows, window_sec, now_unix):
-   import time as _te
    from . import peer_work_market as _pwm
    try:
     all_reqs = _pwm.list_requests(exchange)
@@ -592,7 +590,6 @@ def _run_market(exchange, args, config, verb):
     'note': 'escrow_capable_peers_estimate counts unblocked pinned peers; actual escrow capability requires token balance and mutual rules',
    }
   import time as _t
-  from . import ledger_compaction as _lc
   from .credit_ledger import summary as cl_summary
   window_hours = getattr(args, 'window_hours', 24)
   window_sec = window_hours * 3600
@@ -638,7 +635,6 @@ def _run_market(exchange, args, config, verb):
     total_features = len(_json.loads(_ledger_json.read_text()).get('features', []))
    except Exception:
     pass
-  from . import ledger_compaction as _lc2
   revenue_fraction = 0.65
   revenue_features = max(1, int(total_features * revenue_fraction))
   free_features = total_features - revenue_features
@@ -759,7 +755,6 @@ def _run_peer(exchange, args, config, verb):
   result=exchange.identity()
  elif verb=='add':result=exchange.peer(bounded_file(args.certificate,8192),args.endpoint,json.loads(bounded_file(args.post_quantum_identity,16384)) if args.post_quantum_identity else None)
  elif verb=='rotate':
-  import hashlib,ssl
   new_cert_pem=bounded_file(args.new_certificate,8192)
   new_result=exchange.peer(new_cert_pem)
   new_peer_id=new_result.get('peer_id','')
@@ -939,7 +934,6 @@ def _run_compact(exchange, args, config, verb):
   from . import equity_auto_trade as _eat
   result=_eat.feature_depletion_status(args.feature_id,exchange,args.network_size)
  elif verb=='search':
-  import re as _re
   q=getattr(args,'query',None)
   try:q=_validate_freeform_query(q,max_bytes=4096)
   except ValueError as _qerr:print(json.dumps({'error':str(_qerr)}));return 1
@@ -1008,7 +1002,6 @@ def _run_compact(exchange, args, config, verb):
   _arch_dir=exchange.root/'p2p_audit_archives'
   if not _arch_dir.exists():result={'archives':[],'note':'no archives found'}
   elif not args.archive_id:
-   import json as _jd
    _arch_files=sorted(_arch_dir.glob('*.json'))
    archives=[]
    for _af2 in _arch_files:
@@ -1116,7 +1109,7 @@ def _run_settle(exchange, args, config, verb):
    result={'status':'not_configured','error':'rpc_provider_url not set — cannot settle'}
   else:
    from .eth_settlement_adapter import EthSettlementAdapter
-   adapter=EthSettlementAdapter(rpc_url=rpc_url,erc20_contract=cfg.get('erc20_contract',''),chain_id=int(cfg.get('chain_id',137)))
+   EthSettlementAdapter(rpc_url=rpc_url,erc20_contract=cfg.get('erc20_contract',''),chain_id=int(cfg.get('chain_id',137)))
    if getattr(args,'dry_run',False):
     result={'status':'dry_run','chain_id':int(cfg.get('chain_id',137)),'rpc_url':rpc_url,'note':'dry-run: no transactions submitted'}
    else:
@@ -1261,7 +1254,6 @@ def _run_equity(exchange, args, config, verb):
   elif verb=='release-stake':released=_ps.release_mint_stake(exchange,args.feature_id);result={'status':'ok','feature_id':args.feature_id,'released':released}
   else:result=_ps.challenge_status(exchange,args.feature_id)
  elif verb=='cost':
-  from .cost_model import BorrowCostContext,_ceiling_for_loc
   op=args.operation;ask=getattr(args,'ask_price_units',0);asize=getattr(args,'artifact_size_bytes',0);ecalls=getattr(args,'executor_calls_saved',1)
   result={'operation':op,'ask_price_units':ask,'artifact_size_bytes':asize,'executor_calls_saved':ecalls,'note':'cost breakdown via cost_model'}
  elif verb=='dek-unwrap':
@@ -1283,7 +1275,6 @@ def _run_equity(exchange, args, config, verb):
   tv=getattr(args,'trade_verb',None)
   if tv=='show' or tv is None:result=_eat.load_config(str(exchange.root))
   elif tv=='show-presets':
-   from .equity_auto_trade import apply_preset
    result={'presets':['conservative','balanced','aggressive'],'note':'use --preset <name> with trade-config set'}
   else:
    cfg2=_eat.load_config(str(exchange.root))
@@ -1472,7 +1463,6 @@ def run(args,config):
      except Exception as _sd_e:result={'status':'rpc_error','endpoint':_sd_ep,'error':str(_sd_e)}
    exchange.append_audit_row({'kind':'SHAMIR_DELIVER_REQUESTED','feature_id':args.feature_id,'holder_peer_id':args.holder_peer_id,'share_index':args.share_index,'at_unix':_tsd.time()})
   elif verb=='tail-sync':
-   import time as _tts
    _ts_settings=exchange.load();_ts_net=_ts_settings.get('network_mode','intranet')
    result={'status':'stub','note':'local only — set network_mode=internet to enable'}
    if _ts_net in ('internet','hybrid'):
@@ -1735,8 +1725,10 @@ def run(args,config):
        print(json.dumps({'status':'info','detail':f'relay bandwidth cap: {_relay_bw} KB/s'}))
       if 'relay' in _serve_roles or 'bootstrap' in _serve_roles or public_urls:
        import threading as _thr
-       def _auto_announce(_imm=immediate,_urls=list(public_urls)):
+       def _auto_announce(_imm=immediate,_urls=None):
         import time as _tat
+        if _urls is None:
+            _urls = list(public_urls)
         if not _imm:
          _tat.sleep(3)
         try:
@@ -1794,7 +1786,7 @@ def run(args,config):
       elif tunnel_proc is not None:
        _all_procs=[tunnel_proc]
       if _all_procs:
-       import threading as _thr2,subprocess as _sp2,urllib.request as _ur
+       import threading as _thr2,urllib.request as _ur
        def _tunnel_watchdog():
         # Reconnect only when ALL tunnel procs have died.
         import time as _twt
@@ -1929,7 +1921,7 @@ def advertise(exchange,host,port):
  if not exchange.load()['advertise']:yield;return
  try:from zeroconf import Zeroconf,ServiceInfo
  except ImportError:raise ValueError('Advertising requires optional python-zeroconf')
- import ipaddress,socket
+ import ipaddress
  address=ipaddress.ip_address(host)
  if address.is_unspecified:raise ValueError('Advertising requires an explicit local interface address')
  identity=exchange.identity()['peer_id'];service=ServiceInfo('_urace-exchange._tcp.local.',identity[:16]+'._urace-exchange._tcp.local.',addresses=[address.packed],port=port,properties={'version':'1','identity':identity},server=identity[:16]+'.local.')

@@ -284,7 +284,7 @@ class TestGitHubPushGoals(unittest.TestCase):
 
         c = _client()
         with patch("urace.web.routes.github_router._dispatch", side_effect=_fake):
-            r = c.post("/api/github/push-goals", json={"dry_run": False}, headers=AUTH)
+            c.post("/api/github/push-goals", json={"dry_run": False}, headers=AUTH)
         self.assertNotIn("--dry-run", captured.get("argv", []))
 
 

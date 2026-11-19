@@ -1,8 +1,8 @@
 """Independent, model-free runtime contracts; expected outputs never enter candidate containers."""
 from pathlib import Path
 from datetime import datetime, timezone
-import ast, copy, hashlib, json, math, os, shutil, subprocess, sys, time, uuid, tempfile
-from common import BASE, atomic
+import ast, copy, hashlib, json, os, shutil, subprocess, time, uuid, tempfile
+from common import atomic
 from executable_sandbox import IMAGE
 
 SCHEMA='runtime-evaluation-v1'

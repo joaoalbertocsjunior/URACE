@@ -37,7 +37,6 @@ def setup_named_tunnel(peer_id: str) -> 'str | None':
     node always reuses the same tunnel after a reconnect.
     """
     from pathlib import Path
-    import threading
 
     cert_path = Path.home() / '.cloudflared' / 'cert.pem'
     if not cert_path.exists():

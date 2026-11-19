@@ -1,8 +1,8 @@
 """Tests for urace reload command and daemon SIGHUP handler."""
-import contextlib, copy, io, json, os, signal, tempfile, threading, time, unittest
+import contextlib, copy, io, json, signal, tempfile, unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-from urace import cli, _daemon
+from unittest.mock import patch
+from urace import cli
 from helpers import patch_config_path
 
 

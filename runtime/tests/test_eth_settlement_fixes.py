@@ -1,6 +1,5 @@
 """Tests for eth_settlement_adapter bug fixes."""
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 def _make_adapter(chain_id=137):

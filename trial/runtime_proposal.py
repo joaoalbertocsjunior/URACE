@@ -1,5 +1,4 @@
 """One admitted runtime proposal, separate product receipts and no filesystem tools."""
-from pathlib import Path
 from datetime import datetime,timezone
 import hashlib,json,os,signal,subprocess,sys,time
 from common import BASE,atomic

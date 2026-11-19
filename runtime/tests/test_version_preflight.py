@@ -14,13 +14,11 @@ class VersionConstantsTests(unittest.TestCase):
 
 class VersionFlagTests(unittest.TestCase):
  def test_version_flag_prints_version_and_exits(self):
-  import sys as _sys
   out=io.StringIO()
   with self.assertRaises(SystemExit) as ctx:
    with redirect_stdout(out):cli.main(['--version'])
   self.assertEqual(ctx.exception.code,0)
  def test_version_output_contains_runtime_version(self):
-  import sys
   out=io.StringIO()
   with self.assertRaises(SystemExit):
    with redirect_stdout(out):cli.main(['--version'])
@@ -120,4 +118,3 @@ class BridgeClientVersionTests(unittest.TestCase):
    p=integration_bridge.Policy(cli.build_parser(),self._policy(client_version=version.MIN_BRIDGE_CLIENT_VERSION),root=self.root,storage=self.root/'jobs')
    self.assertIsNotNone(p)
 
-import sys

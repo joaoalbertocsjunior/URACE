@@ -71,7 +71,7 @@ class TestShellHandler(unittest.TestCase):
              patch('urace._common.load_state_for_read', return_value=None), \
              patch('urace.preflight.hints', return_value=[]):
             try:
-                rc = main(['shell'])
+                main(['shell'])
             except (SystemExit, Exception):
                 pass
         mock_shell.assert_called_once()
@@ -84,7 +84,7 @@ class TestShellHandler(unittest.TestCase):
              patch('urace._common.load_state_for_read', return_value=None), \
              patch('urace.preflight.hints', return_value=[]):
             try:
-                rc = main(['dashboard'])
+                main(['dashboard'])
             except (SystemExit, Exception):
                 pass
         mock_tui.assert_called_once()

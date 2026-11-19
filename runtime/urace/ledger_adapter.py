@@ -15,8 +15,7 @@ Usage::
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
-from typing import Iterator, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 
 @runtime_checkable

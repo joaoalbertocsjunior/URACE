@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 import executable_workflow as w
 import workflow_tasks as tasks
-from executable_cases import public_cases,corpus
+from executable_cases import corpus
 from execution_contract import fingerprint,analysis_fingerprint
 
 SOURCE='\n'.join('def '+name+'(*args):\n    return None' for name in ['quality_delta','evidence_verdict','ready_operations','aggregate_records'])+'\n'

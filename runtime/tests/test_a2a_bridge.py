@@ -1,5 +1,5 @@
 """Real local HTTP/child-process integration; no native inference or secrets."""
-import copy,json,os,subprocess,sys,tempfile,threading,time,unittest
+import copy,json,os,sys,tempfile,threading,unittest
 from http.client import HTTPConnection
 from pathlib import Path
 from unittest.mock import patch

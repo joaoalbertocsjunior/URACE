@@ -1,7 +1,7 @@
 import contextlib,copy,io,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-from urace import cli,_common,freeform_routing
+from urace import cli,freeform_routing
 class FreeformRoutingTests(unittest.TestCase):
  def setUp(self):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup);self.config=copy.deepcopy(cli.load_config());self.config.pop('active_product',None);self.config['state_path']=str(Path(self.tmp.name)/'state.json');self.config['executor']['enabled']=True
@@ -204,7 +204,7 @@ class ClarificationLoopTests(unittest.TestCase):
    config['state_path']=str(Path(tmp)/'state.json')
    state=cli.initial_state(config)
    with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':True}),patch.object(cli.intelligent_executor,'run_routed_codex',return_value={'message':json.dumps(b)}),patch('builtins.input',return_value='cancel'),patch.object(cli,'queue_input',return_value={'id':'q1'}) as queued,patch.object(freeform_routing,'_p2p_free_features',return_value=[]),patch.object(freeform_routing,'_p2p_paid_features',return_value=[]),contextlib.redirect_stdout(io.StringIO()):
-    rc=cli.main(['classify',text,'--confirm'])
+    cli.main(['classify',text,'--confirm'])
   # cancel in clarification loop breaks out; low-confidence item defers, nothing queued
   queued.assert_not_called()
 
@@ -237,7 +237,7 @@ class TokenBudgetTests(unittest.TestCase):
    state=cli.initial_state(config)
    state.setdefault('executor_state',{})['executor_calls']=[{'kind':'freeform-routing','tokens':50,'at':datetime.now(timezone.utc).isoformat()}]
    Path(config['state_path']).write_text(json.dumps(state))
-   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':True}),patch.object(cli.intelligent_executor,'run_routed_codex',return_value={'message':json.dumps(b)}),patch.object(cli,'queue_input',return_value={'id':'q1'}),contextlib.redirect_stdout(io.StringIO()) as out:
+   with patch.object(cli,'load_config',return_value=config),patch.object(cli,'load_state_for_read',return_value=state),patch.object(cli.intelligent_executor,'pool_availability',return_value={'available':True}),patch.object(cli.intelligent_executor,'run_routed_codex',return_value={'message':json.dumps(b)}),patch.object(cli,'queue_input',return_value={'id':'q1'}),contextlib.redirect_stdout(io.StringIO()):
     rc=cli.main(['classify',text,'--json','--confirm'])
   self.assertEqual(rc,0)
 

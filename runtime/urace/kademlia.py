@@ -15,7 +15,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 SCHEMA = 'urace-kademlia-v1'
 K_BUCKET_SIZE = 20

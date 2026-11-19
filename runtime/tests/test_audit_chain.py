@@ -54,7 +54,7 @@ class TestVerifyAuditChain(unittest.TestCase):
     def test_tampered_record(self):
         from urace.peer_exchange import emit_audit_record, verify_audit_chain
         exchange = []
-        rec = emit_audit_record(exchange, "A", "actor", "digest1")
+        emit_audit_record(exchange, "A", "actor", "digest1")
         exchange[0]['operation'] = "TAMPERED"
         ok, broken = verify_audit_chain(exchange)
         self.assertFalse(ok)

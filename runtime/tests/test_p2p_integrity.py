@@ -1,7 +1,6 @@
 """Tests for P2P corpus fingerprint, signed update bundles, and exchange.info integrity."""
-import hashlib, json, tempfile, unittest
+import hashlib, tempfile, unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 
 
 def _make_exchange(tmp, name="node"):
@@ -152,7 +151,7 @@ class ExchangeInfoFingerprintTests(unittest.TestCase):
     def test_exchange_info_rpc_includes_fingerprint(self):
         """exchange.info result must carry p2p_corpus_fingerprint."""
         from urace import peer_exchange as pe
-        e = _make_exchange(self.tmp.name)
+        _make_exchange(self.tmp.name)
         # Simulate the RPC result by inspecting what the handler would return.
         fp = pe._local_corpus_fingerprint()
         self.assertRegex(fp, r'^[a-f0-9]{64}$')
@@ -182,7 +181,7 @@ class CorpusMismatchAuditTests(unittest.TestCase):
         # Simulate post-request logic: fingerprints match → no event emitted
         remote_fp = fake_result["result"]["p2p_corpus_fingerprint"]
         self.assertEqual(local_fp, remote_fp)
-        rows_before = e.audit_rows()
+        e.audit_rows()
         # No event should have been emitted
         mismatch_rows = [r for r in e.audit_rows() if r.get("kind") == "P2P_CORPUS_MISMATCH"]
         self.assertEqual(len(mismatch_rows), 0)

@@ -3,14 +3,12 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import json
-import os
 import queue
 import signal
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import patch
 
 _MISSING = [
     name

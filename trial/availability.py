@@ -1,5 +1,4 @@
 """Metadata-only quota monitor; no credit resets/purchases or inference probes."""
-from pathlib import Path
 from datetime import datetime,timezone
 import fcntl,json,subprocess,sys,time
 from common import operations_root,BASE
@@ -35,7 +34,7 @@ def main():
     with (ROOT/'availability.guard').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         previous=json.loads((ROOT/'availability-latest.json').read_text()) if (ROOT/'availability-latest.json').exists() else {}
-        now=time.time();report={'at':datetime.now(timezone.utc).isoformat(),'probe_interval_seconds':18900,'inference_calls':0,'model_tokens':0,'credit_resets_or_purchases':0,'attribution':'Quota is account-wide, not per-job billed credits','claude':{'credit_availability':'UNKNOWN','reason':'No established metadata-only quota interface; auth success does not prove usable credits'},'maintenance_wakeup_requested':False}
+        time.time();report={'at':datetime.now(timezone.utc).isoformat(),'probe_interval_seconds':18900,'inference_calls':0,'model_tokens':0,'credit_resets_or_purchases':0,'attribution':'Quota is account-wide, not per-job billed credits','claude':{'credit_availability':'UNKNOWN','reason':'No established metadata-only quota interface; auth success does not prove usable credits'},'maintenance_wakeup_requested':False}
         try:report['codex']=probe_codex()
         except Exception as error:report['codex']={'ordinaryUsageAllowed':None,'error':type(error).__name__}
         try:

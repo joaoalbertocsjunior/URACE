@@ -1,4 +1,4 @@
-import copy,unittest
+import unittest
 from datetime import datetime, timedelta, timezone
 
 from urace import executor_routing as er

@@ -1,6 +1,5 @@
 import copy,json,tempfile,unittest
 from pathlib import Path
-from unittest.mock import patch
 from coverage_assessment import paired_metrics,product_context,features,comparative_readiness
 
 class CoverageAssessmentTests(unittest.TestCase):
@@ -22,7 +21,7 @@ class CoverageAssessmentTests(unittest.TestCase):
   pairs=[self.pair(i) for i in range(35)];pairs[0][1]['validated']=False;pairs[0][1]['acceptance']['quality']['gate_passed']=False;r=paired_metrics(pairs,required_families={'navigation'});self.assertTrue(r['ready']);self.assertEqual(r['metrics']['urace']['failed_or_rejected_workflows'],1);self.assertLess(r['metrics']['urace']['validated_delivery_pct'],100);self.assertEqual(r['metrics']['tokens']['observed_reduction_pct'],30)
  def test_zero_candidate_usage_is_known_not_missing(self):
   pairs=[self.pair(i) for i in range(35)]
-  for a,b in pairs:b['tokens']=0
+  for _a,b in pairs:b['tokens']=0
   r=paired_metrics(pairs,required_families={'navigation'});self.assertTrue(r['ready']);self.assertEqual(r['metrics']['tokens']['observed_reduction_pct'],100)
  def test_missing_product_is_not_global_context_success(self):
   with tempfile.TemporaryDirectory() as d:self.assertFalse(product_context(Path(d))['global_semantic_consistency_proven'])

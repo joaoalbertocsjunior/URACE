@@ -6,7 +6,7 @@ launch grants a session; CLI/API/core execution remains authoritative.
 from __future__ import annotations
 import json,sys,threading
 from concurrent.futures import ThreadPoolExecutor
-from .integration_bridge import Policy,Jobs,BridgeError,load_policy,encoded,paused,owner_lifetime
+from .integration_bridge import Jobs,BridgeError,load_policy,owner_lifetime
 
 PROTOCOL='2025-06-18'
 MAX_REQUEST=1048576

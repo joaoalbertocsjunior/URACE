@@ -5,7 +5,6 @@ BudgetTracker improvement task WITHOUT URACE routing.
 """
 from __future__ import annotations
 
-import ast
 import re
 import subprocess
 import sys
@@ -13,7 +12,6 @@ import os
 import time
 import textwrap
 from pathlib import Path
-from typing import Any
 
 # ---------------------------------------------------------------------------
 # Cost helper

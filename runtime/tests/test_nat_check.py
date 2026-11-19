@@ -1,7 +1,6 @@
 """Tests for nat_check module — no real network calls."""
 import sys
 import types
-import pytest
 from unittest.mock import patch, MagicMock
 
 
@@ -11,7 +10,7 @@ def _make_stun_response(ip: str, port: int) -> bytes:
     magic = b"\x21\x12\xa4\x42"
     xip = struct.pack("!I", int.from_bytes(socket.inet_aton(ip), 'big') ^ 0x2112A442)
     xport = struct.pack("!H", port ^ 0x2112)
-    attr = b"\x00\x01" + xip  # family=IPv4, padding
+    b"\x00\x01" + xip  # family=IPv4, padding
     attr_val = bytes([0, 1]) + xport + xip  # family, xport, xip
     attr_full = struct.pack("!HH", 0x0020, len(attr_val)) + attr_val
     # pad to 4 bytes
@@ -119,7 +118,6 @@ def test_check_node_capability_consumer_only(monkeypatch):
 def test_check_node_capability_direct(monkeypatch):
     """Direct IP (VPS) → all roles."""
     from urace import nat_check
-    import socket as _s
     monkeypatch.setattr(nat_check, "detect_nat_type", lambda **kw: {
         "nat_type": "direct", "public_ip": "5.5.5.5", "public_port": 7301, "stun_server": "s"
     })

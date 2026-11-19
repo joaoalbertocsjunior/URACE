@@ -204,7 +204,7 @@ def freeze_plan(tasks: list[dict], identity: dict, *, seed: int) -> dict:
         orders = [['direct_executor', 'p2p_borrow']] * (len(family_tasks) // 2)
         orders += [['p2p_borrow', 'direct_executor']] * (len(family_tasks) - len(orders))
         rng.shuffle(orders)
-        for repeat, (task, order) in enumerate(zip(family_tasks, orders)):
+        for repeat, (task, order) in enumerate(zip(family_tasks, orders, strict=False)):
             pair_id = f"{family}-{repeat + 1:02d}-{task['task_id']}"
             pairs.append({'task': {'pair_id': pair_id, 'task_id': task['task_id'],
                                    'task_sha256': task['task_sha256'],

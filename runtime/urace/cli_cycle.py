@@ -1,24 +1,11 @@
 from __future__ import annotations
 
-import argparse
-import atexit
-import copy
 import hashlib
 import json
 import logging
 import math
-import os
-import re
-import signal
-import subprocess
 import sys
-import tempfile
-import time
-import uuid
-from collections.abc import Callable
-from contextlib import contextmanager, nullcontext
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 
 _logger = logging.getLogger(__name__)
@@ -29,40 +16,23 @@ def _utcnow() -> str:
 
 from . import executor as intelligent_executor
 from . import external_metrics
-from . import analytics
-from . import scope_priority
-from . import updater
 from . import authority as authority_resolver
 from . import destination as destination_anchor
-from . import validation as independent_validation
 from . import value_trajectory
 from . import outcome_verification
-from . import rules as rule_ledger_module
-from . import spec_audit as spec_audit_module
-from .primitives import OUTPUT_SCHEMA_REGISTRY, INTEGRITY_GAP_CATALOG as IGC_KINDS
-from . import decision_record as decision_record_module
 from . import compaction as compaction_module
 from . import cognitive_resume as cognitive_resume_module
-from . import patterns as pattern_catalog_module
 from . import continuation as continuation_module
 from ._common import nullable_limit
-from . import auto_goals, user_controls, command_surface, api_interface, freeform_routing, data_transport
+from . import auto_goals, data_transport
 # Keep build_parser and parse_cycles available from urace.cli for existing API callers.
-from .cli_parser import build_parser, dispatch_parser, parse_cycles
 
 from ._common import (
-    ROOT, CONFIG_PATH, RUNTIME_ROOT, SYSTEM_ROOT,
-    now, identifier, atomic_write_text, atomic_write_json, durable_unlink,
-    process_exists, state_lock, load_config, save_config, state_path, load_state,
-    load_state_for_read, save_state, transaction_path, input_directory,
+    ROOT, now, identifier, state_path, save_state,
 )
-from .inputs import consume_inputs, queue_input, cleanup_consumed_inputs, apply_pending_inputs
 from .inspection import (
-    document_metrics, compare, objective_is_eligible, goal_is_schedulable,
-    objective_score, objective_score_breakdown, goal_portfolio,
-    work_evaluations, context_view, resource_accounting,
-    executor_efficiency_vital, evolution_vital, render, vitals_snapshot,
-    render_vitals, render_cycle, command_catalog, top_level_help,
+    objective_is_eligible, goal_is_schedulable,
+    objective_score, objective_score_breakdown, render_cycle,
 )
 
 from .cli_emit import _emit_gap, _emit_trace, _emit_compliance_record
@@ -77,12 +47,7 @@ from .cli_helpers import (
     _compact_with_chunking, _evaluate_sweet_spot, _executor_independent_work,
     _observe_retention_gaps, _reconcile_unresolved_effects,
     _validate_authority_basis_binding, _validate_citizen_base_conformance,
-    _validate_immutable_fields, _apply_customizations, _check_staleness,
-    _check_scheduled_tasks, _record_quality_delta, _regression_checkpoint_gate_passes,
-    _build_inspection_surface, _refresh_derived_manifests, _refresh_derived_refs,
-    _refresh_derived_construct_sets, _suggest_derive_updates, _derive_milestone_from_state,
-    _capability_envelope_gate_passes, _apply_effect_uncertainty_protocol,
-    _apply_operator_gate,
+    _validate_immutable_fields,
 )
 
 def _csi_relevance_score(state: dict[str, Any], content: str) -> float:
@@ -146,7 +111,7 @@ def _run_csi(config: dict[str, Any], state: dict[str, Any]) -> None:
         s.get("source_ref") for s in state.get("community_signals", []) if s.get("source_ref")
     }
     # Re-score previously filtered signals if objectives changed
-    current_obj_ids = {o.get("id") for o in state.get("objectives", [])}
+    {o.get("id") for o in state.get("objectives", [])}
     for sig in state.get("community_signals", []):
         if sig.get("filtered") and sig.get("signal_quality") == "FILTERED":
             new_rel = _csi_relevance_score(state, sig.get("content", ""))
@@ -178,7 +143,7 @@ def _run_csi(config: dict[str, Any], state: dict[str, Any]) -> None:
             continue
 
         # Attempt to fetch — real adapter would make HTTP call; here we model the contract
-        timeout = int(feed.get("adapter_timeout_seconds", 30))
+        int(feed.get("adapter_timeout_seconds", 30))
         retry_count = int(feed.get("adapter_retry_count", 3))
         feed_failures = feed.get("_adapter_failures", 0)
 

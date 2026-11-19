@@ -1,5 +1,4 @@
 """Tests for executor_receipt: USD calculation, capture, load, and edge cases."""
-import json
 import hashlib
 import pytest
 from pathlib import Path

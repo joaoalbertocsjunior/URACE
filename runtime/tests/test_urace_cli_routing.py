@@ -2,17 +2,14 @@ import copy
 import hashlib
 import io
 import json
-import os
 import subprocess
 import tempfile
-import types
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import cli
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -104,7 +101,7 @@ class AddCommandTests(unittest.TestCase):
 
     def test_add_command_parser_registered(self):
         """urace add subcommand must be parseable."""
-        import subprocess, sys
+        import sys
         result = subprocess.run(
             [sys.executable, "-m", "urace.cli", "add", "--help"],
             capture_output=True, text=True, cwd=str(TEST_RUNTIME_ROOT)
@@ -1012,7 +1009,6 @@ class R24FeedbackTests(unittest.TestCase):
         self.assertEqual(data["progress_vector"], 0.8)
 
     def test_discovery_deferred_surfaces_for_all_deferral_states(self):
-        from urace import inspection
         deferral_states = [
             "SYSTEMATIC_FAILURE_COOLDOWN",
             "DAILY_LIMIT_OR_RESERVE_REACHED",

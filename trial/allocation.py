@@ -25,7 +25,7 @@ def build():
         trial=Path(active['root']);state=json.loads((trial/'status.json').read_text());comparison=json.loads((trial/'version-comparisons.json').read_text())
         report={'at':datetime.now(timezone.utc).isoformat(),'target':'URACE.md','cohort_root':str(trial),'optimal_allocation_established':False,'accepted_versions':state['accepted_improvements'],'version_chain':comparison,'known_tokens':state['known_tokens'],'missing_usage':state['missing_usage'],'known_executor_seconds':state['known_executor_seconds'],'waits':state['waits'],'quality_interpretation':'Editorial model judgments plus structural preservation checks; no executable or customer-value proof','next_learning_step':'Compare accepted specification versions to their parent and committed baseline; preserve rejected work and all costs','shared_resource_policy':json.loads((ROOT/'resource-policy.json').read_text())}
         temp=ROOT/'allocation-latest.json.tmp';temp.write_text(json.dumps(report,indent=2)+'\n');temp.replace(ROOT/'allocation-latest.json');print(json.dumps(report,indent=2));return
-    trial=ROOT.parent/'productive-native-30d-v1';maintenance=ROOT.parent/'autonomous-maintenance-v1'
+    trial=ROOT.parent/'productive-native-30d-v1';ROOT.parent/'autonomous-maintenance-v1'
     marker=ROOT/'comparison-current.json'
     if marker.exists():trial=Path(json.loads(marker.read_text())['root'])
     snapshot=json.loads((ROOT/'availability-latest.json').read_text());receipts=[json.loads(p.read_text()) for p in (trial/'receipts').glob('*-job.json')]

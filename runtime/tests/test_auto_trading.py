@@ -2,12 +2,11 @@
 depletion, listings, auto-buy, auto-sell, auto-mint, settlement state, purchase settlement,
 and ledger compaction / P2P supply."""
 from __future__ import annotations
-import hashlib
 import time
 import tempfile
 import unittest
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from conftest import MockExchange
 
@@ -402,7 +401,7 @@ class DepletionBlocksListingTests(unittest.TestCase):
     def test_depleted_feature_cannot_be_listed(self):
         from urace import equity_auto_trade as eat, feature_equity as fe
         ex = MockExchange()
-        tmpdir = tempfile.mkdtemp()
+        tempfile.mkdtemp()
         fe.grant_equity(ex, 'feat-x', 'alice')
         original = eat.feature_depletion_status
         eat.feature_depletion_status = lambda *a, **kw: {

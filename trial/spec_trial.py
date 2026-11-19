@@ -35,7 +35,7 @@ def read_version(number):
 def sections(text):
     starts=sorted({0, *[m.start() for m in re.finditer(r'^#{1,6} .+',text,re.M)]})
     parts=[]
-    for a,b in zip(starts,starts[1:]+[len(text)]):
+    for a,b in zip(starts,starts[1:]+[len(text)], strict=False):
         remaining=text[a:b]
         while len(remaining.encode())>22000:
             # Exact, lossless windows; full-document gates still protect any
@@ -313,7 +313,7 @@ def main():
         # Bound context without calling an oversized section a complete audit.
         available=[p for p in parts if p.strip() and len(p.encode())<=22000]
         if not available:raise RuntimeError('No section fits the configured evidence context')
-        seen={j.get('context_sha256'):j.get('finished_at','') for j in state['jobs']}
+        {j.get('context_sha256'):j.get('finished_at','') for j in state['jobs']}
         goals=operator_context['value']['objectives'] if operator_context else []
         words=set(re.findall(r'[a-z]{4,}', ' '.join(g.get('title','')+' '+str(g.get('success_measure','')) for g in goals).lower()))
         section=select_section(available,state['jobs'],words)

@@ -1,6 +1,6 @@
 """Quality and accounting fixtures are not native productivity/user-value evidence."""
 from pathlib import Path
-import copy,json,tempfile,time,unittest
+import copy,json,tempfile,unittest
 from unittest.mock import patch
 import accounting,output_quality as quality,repository_tasks as tasks,study_analysis,trial_supervisor,source_integrity
 

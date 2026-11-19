@@ -56,7 +56,6 @@ class P2PReceiptHandler:
         receipt: dict[str, Any],
         peer_id: str | None = None,
     ) -> tuple[bool, str]:
-        from . import trial_receipt as _tr
         from . import peer_exchange as _pe
         receipt_id = receipt.get('id', '')
         if peer_id is None:

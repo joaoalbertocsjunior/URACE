@@ -128,7 +128,7 @@ class ExecutorContextQualificationTests(unittest.TestCase):
 
 class PhaseResourceTests(unittest.TestCase):
  def test_phase_aggregation_keeps_attempts_when_stage_timing_is_unknown(self):
-  import repository_study as study,spec_trial,trial_supervisor,time
+  import spec_trial,trial_supervisor,time
   with tempfile.TemporaryDirectory() as d:
    base=Path(d);root=base/'cohort';root.mkdir();(base/'trial-clock.json').write_text(json.dumps({'ends_unix':time.time()+1000}));settings={'enabled':True,'repetitions':1,'efforts':['medium']};identity={'models':{'codex':'m'},'settings':settings,'qualification_protocol':q.protocol(),'scope':'fixture'};controls={'paused':False,'executor_enabled':True,'auto_goals':True}
    def run(project,**kwargs):

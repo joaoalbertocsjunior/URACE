@@ -45,7 +45,6 @@ class ControlsTests(unittest.TestCase):
         self.assertEqual(task_eligibility(['codex'],controls,rows,114)[0],[])
 
     def test_detached_executor_stops_before_availability_or_model_calls(self):
-        import sys
         import spec_trial as worker
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as directory:

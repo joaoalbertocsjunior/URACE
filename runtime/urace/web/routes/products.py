@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 
 
 def _rpc_call(method: str, **kwargs) -> dict:

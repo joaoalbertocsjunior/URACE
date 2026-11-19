@@ -2,7 +2,7 @@
 import contextlib, copy, io, json, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
-from urace import cli, bootstrap, _common
+from urace import cli, bootstrap
 from helpers import patch_config_path
 
 
@@ -86,7 +86,7 @@ class AutoCompleteQuietTests(unittest.TestCase):
                  patch.object(cli, 'write_runtime_snapshot'), \
                  patch('shutil.which', return_value=None), \
                  contextlib.redirect_stdout(buf):
-                result = bootstrap.auto_complete(cli, config, _quiet=False)
+                bootstrap.auto_complete(cli, config, _quiet=False)
             output = buf.getvalue()
             self.assertIn('"status"', output, "quiet=False must print JSON blob")
 

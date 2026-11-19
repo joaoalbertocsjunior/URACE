@@ -4,10 +4,8 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -44,7 +42,7 @@ def _run_full_suite(product_path: str) -> dict:
     for test_file in FULL_TEST_FILES:
         result = subprocess.run(
             [sys.executable, "-m", "pytest", test_file, "-v", "--tb=no", "--cache-clear",
-             f"--import-mode=importlib"],
+             "--import-mode=importlib"],
             capture_output=True,
             text=True,
             timeout=120,

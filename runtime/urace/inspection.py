@@ -1,17 +1,12 @@
 from __future__ import annotations
 from ._common import nullable_limit
 
-import datetime
-import hashlib
 import json
-import os
 import re
 from datetime import datetime as _datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any
 
 from ._common import now, load_config, transaction_path, ROOT
-from . import scope_priority
 
 
 def document_metrics(config: dict[str, Any]) -> dict[str, float]:

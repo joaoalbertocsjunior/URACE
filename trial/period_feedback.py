@@ -40,7 +40,7 @@ def compare(rows,jobs,now,period='3h'):
                     'known_tokens':sum(known),'total_tokens':sum(known) if rs and len(known)==len(rs) else None,
                     'unknown_usage_attempts':len(rs)-len(known),'known_native_seconds':sum(wall),
                     'token_percentiles':percentiles(known),'credit_decrement':None}
-        profiles[str(identity)]={'requested_identity':dict(zip(('product_id','provider','model','effort','client_version'),identity)),
+        profiles[str(identity)]={'requested_identity':dict(zip(('product_id','provider','model','effort','client_version'),identity, strict=False)),
                 'current':inventory(now-seconds,now),'previous':inventory(now-2*seconds,now-seconds),
                 'qualified_gain_claim':False,'runtime_identity':'Not bound by period inventory; use frozen study cohorts'}
     deltas={}

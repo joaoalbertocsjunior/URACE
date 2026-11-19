@@ -1,13 +1,11 @@
 """Tests for zero-config P2P: BEP 44, TOFU auto-pin, anonymization, auto-pin integration."""
 from __future__ import annotations
 
-import hashlib
 import os
 import tempfile
-import time
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -147,7 +145,6 @@ class TOFUTests(unittest.TestCase):
 
     def test_tofu_cert_change_raises(self):
         from urace.peer_exchange import tofu_check
-        import subprocess
         with tempfile.TemporaryDirectory() as tmp:
             a, b = self._make_pair(tmp)
             b_cert = b.identity()["certificate"]

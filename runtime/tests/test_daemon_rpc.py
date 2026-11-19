@@ -62,7 +62,6 @@ class TestDaemonRPCStatus(unittest.TestCase):
 
 class TestDaemonRPCDispatch(unittest.TestCase):
     def test_dispatch_output_key_present(self):
-        import io, contextlib
 
         def _fake_main(argv):
             print(json.dumps({'status': 'ok', 'argv': argv}))

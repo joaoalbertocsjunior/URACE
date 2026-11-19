@@ -1,5 +1,4 @@
 """Tests for asset_registry.py — asset registration, earn, transfer, portfolio."""
-import time
 import unittest
 
 from conftest import MockExchange

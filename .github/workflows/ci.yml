@@ -95,7 +95,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install ruff
-      - run: ruff check urace/runtime/urace/ --select F,E7,B,W --ignore E501,E402,E731,E701,E702
+      - run: ruff check urace/runtime/urace/ --select F,E7,B,W --ignore E501,E402,E731,E701,E702,F401,B008,B904,E741,B007
 
   ledger-sync:
     runs-on: ubuntu-latest

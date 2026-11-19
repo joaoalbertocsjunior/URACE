@@ -1,6 +1,4 @@
 """Tests for urace.uncertainty_followup — evidence-driven follow-up planning."""
-import hashlib
-import json
 import unittest
 
 

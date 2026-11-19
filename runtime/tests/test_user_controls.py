@@ -1,7 +1,6 @@
 import contextlib,io,json,tempfile,unittest
 from pathlib import Path
-from unittest.mock import patch
-from urace import cli,_common,user_controls,executor
+from urace import cli,user_controls,executor
 from helpers import patch_config_path
 class UserControlsTests(unittest.TestCase):
  def setUp(self):

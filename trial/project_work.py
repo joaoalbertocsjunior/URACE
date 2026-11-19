@@ -1,12 +1,12 @@
 """Outcome-first project work, durable recovery and native-agent execution."""
 from pathlib import Path
 from datetime import datetime,timezone
-import json,hashlib,shutil,time,uuid,fcntl,sys,os
+import json,hashlib,shutil,time,uuid,fcntl
 from common import BASE,atomic
 from controls import effective
 from urace.executor_capabilities import digest as capability_digest
 from repository_tasks import FAMILIES,brief,cases,contract,public_script,ACCEPTANCE_RUNNER
-from project_tools import container,inventory,confined
+from project_tools import container,confined
 
 def load(path,default=None):return json.loads(Path(path).read_text()) if Path(path).exists() else default
 
@@ -212,7 +212,7 @@ def run(project,*,provider='auto',mode='auto',max_seconds=480,adaptive=True,base
      except RuntimeError as error:
       if str(error).startswith('No declared useful work'):return {'id':identifier,'status':'NO_DECLARED_WORK','complete':True,'validated':False,'native_receipts':[]}
       raise
-     result['core']=dict(zip(['config','goal','decision','state'],prepared))
+     result['core']=dict(zip(['config','goal','decision','state'],prepared, strict=False))
    before=result.get('before') or {n:confined(project,n).read_text() for n in manifest['allowed_files']};result['before']=before
    if not workspace.exists():
     workspace.mkdir()
@@ -336,7 +336,6 @@ def run(project,*,provider='auto',mode='auto',max_seconds=480,adaptive=True,base
 
 
 def owner_clarifications(project,base=BASE):
- from urace.executor_capabilities import digest
  rows=load(state_root(project,base)/'owner-clarifications.json',{})
  if not isinstance(rows,dict) or len(rows)>1000 or any(not isinstance(k,str) or not isinstance(v,str) or not 1<=len(v.encode())<=8192 for k,v in rows.items()):raise ValueError('Invalid owner clarification ledger')
  return rows

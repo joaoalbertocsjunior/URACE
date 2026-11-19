@@ -1,18 +1,13 @@
 import copy
-import hashlib
 import io
 import json
-import os
-import subprocess
 import tempfile
-import types
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import cli, compaction as compaction_module
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -242,7 +237,6 @@ class R85ResourceBudgetTests(unittest.TestCase):
     """r85: ResourceBudgetProtocol — RAM mechanism, resource CLI, help subcommands."""
 
     def _base_config(self):
-        import copy
         cfg = isolated_test_config(self)
         cfg["executor"]["enabled"] = False
         return cfg
@@ -646,7 +640,7 @@ class R93ExternalInterfaceTests(unittest.TestCase):
 
     def test_api_batch_stdin(self):
         """api batch --input-json - from stdin → executes entries, returns results array."""
-        import tempfile, sys
+        import tempfile
         batch = json.dumps([{"command": "check", "params": {}}, {"command": "vitals", "params": {}}])
         with tempfile.TemporaryDirectory() as tmpdir:
             config = copy.deepcopy(self.config)
@@ -927,7 +921,7 @@ class R100DeclareTests(unittest.TestCase):
             err = io.StringIO()
             out = io.StringIO()
             with redirect_stdout(out), redirect_stderr(err):
-                rc = cli.main(["add-goal", "x", "--success-measure", "y", "--reason", "z"])
+                cli.main(["add-goal", "x", "--success-measure", "y", "--reason", "z"])
             self.assertIn("deprecated", err.getvalue())
 
 class R101RoutingTests(unittest.TestCase):
@@ -1112,7 +1106,6 @@ class R103HashVerifyTests(unittest.TestCase):
         self.assertEqual(rc, 1)
 
     def test_derive_hash_mismatch_emits_gap_returns_1(self):
-        import hashlib
         manifest_ref = {"manifest_id": "dmr-test-001", "content_hash": "aabbcc"}
         state = cli.initial_state(self.config)
         state["derived_manifest_refs"] = [manifest_ref]
@@ -1769,7 +1762,7 @@ class R106ProductCollapseTests(unittest.TestCase):
             with patch.object(cli, "load_state_for_read", return_value=self.state):
                 buf = io.StringIO()
                 with redirect_stderr(buf):
-                    rc = cli.main(["crc", "show", "--products", "nosuchproduct"])
+                    cli.main(["crc", "show", "--products", "nosuchproduct"])
         # rc=1 because product not in registry; but NOT unrecognized arg
         self.assertNotIn("unrecognized", buf.getvalue())
 

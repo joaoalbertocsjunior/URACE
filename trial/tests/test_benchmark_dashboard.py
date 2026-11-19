@@ -6,7 +6,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _TRIAL_DIR = _TESTS_DIR.parent
@@ -58,4 +57,4 @@ def test_dashboard_all_kpis_pass():
             value = dashboard["kpis"].get(kpi)
             failures.append(f"{kpi}: {value}")
 
-    assert not failures, f"KPIs did not meet thresholds:\n" + "\n".join(failures)
+    assert not failures, "KPIs did not meet thresholds:\n" + "\n".join(failures)

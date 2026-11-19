@@ -91,7 +91,6 @@ class EvaluateTests(unittest.TestCase):
                 pi.evaluate(self.root, "nonexistent")
 
     def test_evaluate_tampered_sha256(self):
-        import hashlib
         path = _write_bundle(self.qdir, "tampered")
         bundle = json.loads(path.read_text())
         bundle["payload"]["sha256"] = "0" * 64
@@ -138,7 +137,6 @@ class MarkQualifiedTests(unittest.TestCase):
         return a, b, aid, bid
 
     def test_mark_qualified_emits_audit_event(self):
-        import hashlib, time
         from urace import peer_improvement as pi
         a, b, aid, bid = self._make_exchange_pair()
         artifact = "urace runtime improvement patch"
@@ -175,7 +173,6 @@ class MarkQualifiedTests(unittest.TestCase):
 
     def test_mark_qualified_duplicate_raises(self):
         """A bundle may only be qualified once — second call must raise ValueError."""
-        import hashlib, time
         from urace import peer_improvement as pi
         a, b, aid, bid = self._make_exchange_pair()
         artifact = "urace runtime improvement patch duplicate check"
@@ -371,7 +368,6 @@ class NetworkConvergenceTests(unittest.TestCase):
                 a.peer(b.identity()["certificate"], "https://127.0.0.1:" + str(server.server_port))
                 from urace import peer_selection as ps
                 # Manually set peer as AVAILABLE in cache
-                import json as _json
                 cache = ps.cache(a)
                 cache["peers"][bid] = {"status": "AVAILABLE", "checked_unix": 1e10, "next_probe_unix": 1e10}
                 pe.atomic(a.root / "selection.json", cache)
@@ -460,7 +456,7 @@ class SanitizeArtifactTests(unittest.TestCase):
     def test_sanitization_recorded_in_audit(self):
         import hashlib, json, tempfile, time
         from pathlib import Path
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
         from urace import peer_improvement as pi
 
         tmp = tempfile.TemporaryDirectory()
@@ -499,4 +495,3 @@ class SanitizeArtifactTests(unittest.TestCase):
         self.assertEqual(row["sanitization"]["verdict"], "PASS")
 
 
-import sys

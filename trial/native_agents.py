@@ -2,7 +2,7 @@
 from pathlib import Path
 from datetime import datetime,timezone
 import json,os,hashlib,time,subprocess
-from common import BASE,atomic,reserve,guard,append,operations_root
+from common import BASE,atomic,guard,operations_root
 from providers import Transport,quota_view,failed_turn_message
 from accounting import claude_usage,codex_usage,metadata_safe
 from stream_usage import StreamUsage,next_claude_controls

@@ -1,6 +1,5 @@
 """Tests for p2p_cost_qualification: simulate warning, failure-path coverage,
 peer_failure_rate Wilson CI, reputation persistence, select_peers_by_reputation."""
-import json
 import tempfile
 import time
 import unittest
