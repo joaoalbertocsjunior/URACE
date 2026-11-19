@@ -14,7 +14,7 @@ class ShamirSplitReconstructTests(unittest.TestCase):
         shares = split(secret, k=3, n=5)
         self.assertEqual(len(shares), 5)
         # each share has correct length
-        for x, sb in shares:
+        for _x, sb in shares:
             self.assertEqual(len(sb), len(secret))
 
     def test_reconstruct_from_exactly_k(self):
@@ -142,7 +142,7 @@ class ShamirDEKTests(unittest.TestCase):
     def test_commitments_match_shares(self):
         dek = os.urandom(32)
         shares = split(dek, k=3, n=5)
-        for x, sb in shares:
+        for _x, sb in shares:
             committed = share_commitment(sb)
             # Commitment is a 64-char hex string
             self.assertEqual(len(committed), 64)

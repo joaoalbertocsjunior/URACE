@@ -1,4 +1,10 @@
-"""Locate an already-installed cloudflared binary. Never downloads or installs."""
+"""Optional tunnel infrastructure — cloudflared binary locator.
+
+Locates an already-installed cloudflared binary. Never downloads or installs.
+This module is optional: it is only used when NAT traversal via Cloudflare
+tunnels is configured. Nodes with a public IP or LAN-only setups do not need it.
+Install cloudflared from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+"""
 import shutil, sys, re, subprocess
 
 
@@ -31,7 +37,6 @@ def setup_named_tunnel(peer_id: str) -> 'str | None':
     node always reuses the same tunnel after a reconnect.
     """
     from pathlib import Path
-    import threading
 
     cert_path = Path.home() / '.cloudflared' / 'cert.pem'
     if not cert_path.exists():

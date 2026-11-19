@@ -34,7 +34,7 @@ def cases(family,public=False,phase=1):
  if family=='receipts':
   for i in range(8 if public else 96):
    rows=[]
-   for j in range(1+rng.randrange(12)):
+   for _j in range(1+rng.randrange(12)):
     usage=rng.choice([{'total_tokens':12},{'input_tokens':7,'output_tokens':3,'cached_input_tokens':6},{'total_tokens':True},{},{'total_tokens':-1},None])
     rows.append({'id':str(rng.randrange(7)),'product':rng.choice(['p','p','other']),'provider':rng.choice(['codex','claude']),'stage':rng.choice(['native','native','specification_adapter']),'usage':usage})
    requests.append({'product':'p','records':rows})

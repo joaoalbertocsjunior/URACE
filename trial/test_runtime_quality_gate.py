@@ -1,7 +1,6 @@
 """Tests for runtime quality gate evaluation."""
 import json, tempfile, unittest
 from pathlib import Path
-from unittest.mock import patch
 import runtime_quality_gate as rqg
 
 

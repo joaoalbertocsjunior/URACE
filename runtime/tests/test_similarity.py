@@ -1,5 +1,4 @@
 """Tests for universal asset similarity enforcement — Layers 1-4."""
-import hashlib
 import tempfile
 import time
 import unittest

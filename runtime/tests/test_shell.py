@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import pytest
 
 
@@ -102,7 +102,7 @@ class TestShellPrompt(unittest.TestCase):
 class TestShellRunCmd(unittest.TestCase):
     def test_run_cmd_returns_exit_code(self):
         from urace.shell import _run_cmd
-        with patch('urace.cli.main', return_value=0) as mock_main:
+        with patch('urace.cli.main', return_value=0):
             rc = _run_cmd(['status'], {})
         self.assertEqual(rc, 0)
 

@@ -1,9 +1,9 @@
 """No-inference MCP/API bridge checks, including real bounded child processes."""
-import copy,contextlib,io,json,os,subprocess,sys,tempfile,time,unittest
+import contextlib,io,json,os,subprocess,sys,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import patch
-from urace import cli,api_interface,_common,resource_usage
-from urace.integration_bridge import Policy,Jobs,BridgeError,load_policy,SCHEMA,operations
+from urace import cli,api_interface,_common
+from urace.integration_bridge import Policy,Jobs,BridgeError,load_policy,operations
 from urace.mcp_server import Server,serve
 
 class Fixture(unittest.TestCase):

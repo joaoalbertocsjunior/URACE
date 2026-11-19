@@ -6,7 +6,7 @@ A crash can leave an uncovered tail; coverage reports it rather than inventing p
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-import hashlib,json,os
+import hashlib,os
 try:
     import fcntl as _fcntl
     _HAS_FCNTL = True

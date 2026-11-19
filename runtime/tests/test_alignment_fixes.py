@@ -4,9 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from urace import auto_goals, cli, launcher, user_controls, workflow_state, resource_usage, inspection
+from urace import auto_goals, cli, launcher, user_controls, workflow_state, resource_usage
 from urace import executor
 from urace import command_surface
+from urace import cli_state
 
 
 class AlignmentFixes(unittest.TestCase):
@@ -27,7 +28,7 @@ class AlignmentFixes(unittest.TestCase):
             for name in ('spec_trial.py','state.json','ledger.jsonl','harness-manifest.json'):(trial/name).write_text('{}')
             config={'executor':{'allowed_files_by_scope':{'runtime':['urace/runtime/urace/cli.py']}}}
             before=copy.deepcopy(config)
-            with patch.object(cli,'ROOT',root):files=cli.runtime_files(config)
+            with patch.object(cli_state,'ROOT',root):files=cli.runtime_files(config)
             self.assertIn('urace/trial/spec_trial.py',files);self.assertIn('urace/trial/harness-manifest.json',files)
             self.assertNotIn('urace/trial/state.json',files);self.assertNotIn('urace/trial/ledger.jsonl',files)
             self.assertEqual(config,before)

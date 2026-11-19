@@ -1,15 +1,11 @@
 """Tests for kademlia.py — Kademlia-style DHT routing table."""
 
 import hashlib
-import json
 import tempfile
-import time
 import unittest
-from pathlib import Path
 
 from urace.kademlia import (
     ALPHA,
-    K_BUCKET_SIZE,
     KBucket,
     NodeInfo,
     RoutingTable,

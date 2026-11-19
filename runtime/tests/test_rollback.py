@@ -67,4 +67,3 @@ class RollbackCLITests(unittest.TestCase):
         self.assertIn("files", data)
 
 
-import sys

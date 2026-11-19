@@ -14,7 +14,9 @@ sys.path.insert(0, str(RUNTIME))
 class TestApsExport(unittest.TestCase):
     def _run(self, argv):
         from urace.cli import main
-        return main(argv)
+        from unittest.mock import patch as _patch
+        with _patch('urace.cli.load_state_for_read', return_value={}):
+            return main(argv)
 
     def test_export_creates_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1,7 +1,7 @@
 """Opt-in, product-scoped signed artifact exchange. Incoming artifacts are quarantined, never executed."""
 from pathlib import Path
 from contextlib import contextmanager
-import base64, gzip, hashlib, hmac, http.client, http.server, ipaddress, json, logging, os, re, socket, ssl, subprocess, tempfile, time, urllib.parse, datetime
+import base64, gzip, hashlib, hmac, http.client, http.server, json, logging, os, re, socket, ssl, subprocess, time, urllib.parse
 
 _logger = logging.getLogger(__name__)
 try:
@@ -196,6 +196,8 @@ class Exchange:
    if changes.get('enabled') is False:p['network']=False;p['advertise']=False
    if changes.get('network') is False:p['advertise']=False
    if p['network'] and not p['enabled'] or p['advertise'] and not p['network']:raise ValueError('Enable sharing before networking, networking before advertising')
+   if changes.get('token_settlement') is True and not p.get('token_settlement_since'):
+    p['token_settlement_since']=__import__('time').time()
    atomic(self.root/'policy.json',p);self.event('SETTINGS',changes=changes)
    if p['enabled']:self.identity()
    return p
@@ -563,7 +565,7 @@ def anonymize_cert_fields(cert_pem: str) -> dict:
 def tls_context(exchange,server=False):
  p=exchange.load()
  if not p['enabled'] or not p['network']:raise ValueError('Network exchange disabled')
- identity=exchange.identity();ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER if server else ssl.PROTOCOL_TLS_CLIENT);ctx.minimum_version=ssl.TLSVersion.TLSv1_3
+ exchange.identity();ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER if server else ssl.PROTOCOL_TLS_CLIENT);ctx.minimum_version=ssl.TLSVersion.TLSv1_3
  if not server:ctx.check_hostname=False # Exact out-of-band certificate fingerprint is checked instead.
  certs='\n'.join(v['certificate'] for v in p['peers'].values() if not v['blocked'])
  if certs:
@@ -630,7 +632,7 @@ def request(exchange,peer,method,params,*,telemetry=None,bootstrap_endpoint=None
  from . import peer_address_book as _pab
  _book=_pab.get_address_book()
  _primary_ep=p['peers'][peer].get('endpoint') or ''
- u=validate_endpoint(_primary_ep);ctx=tls_context(exchange)
+ validate_endpoint(_primary_ep);ctx=tls_context(exchange)
  from .ledger_crypto import encrypt
  nonce=os.urandom(24).hex();local=exchange.identity()['peer_id'];context={'schema':SCHEMA,'sender':local,'recipient':peer,'request_nonce':nonce}
  rpc={'jsonrpc':'2.0','id':nonce,'method':method,'params':params};signed={'rpc':rpc,'signature':exchange.crypto_identity().sign(rpc,'peer-rpc-request')}

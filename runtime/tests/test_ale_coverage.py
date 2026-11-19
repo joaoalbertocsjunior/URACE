@@ -1,9 +1,7 @@
-import hashlib, json, io, zipfile, unittest
+import json, io, zipfile, unittest
 
 from urace.tokenomics import (
-    artifact_fingerprint, _statistical_fingerprint, _field_stats_hash,
-    _xml_fingerprint, _pdf_text_fingerprint, _office_open_xml_fingerprint,
-    winnow_fingerprint,
+    artifact_fingerprint, _statistical_fingerprint, _xml_fingerprint, _pdf_text_fingerprint, _office_open_xml_fingerprint,
 )
 from urace import mime_policy as mp
 

@@ -9,7 +9,7 @@ SCORING='executable-score-v1'
 def equal(a,b):
     if type(b) in (int,float):return type(a) in (int,float) and math.isfinite(a) and abs(a-b)<=1e-9
     if isinstance(b,dict):return isinstance(a,dict) and set(a)==set(b) and all(equal(a[k],b[k]) for k in b)
-    if isinstance(b,list):return isinstance(a,list) and len(a)==len(b) and all(equal(x,y) for x,y in zip(a,b))
+    if isinstance(b,list):return isinstance(a,list) and len(a)==len(b) and all(equal(x,y) for x,y in zip(a,b, strict=False))
     return type(a) is type(b) and a==b
 
 def grade(evaluation,cases):
@@ -98,7 +98,7 @@ def view(base=BASE,version=None,executor='all',history=False,compare='baseline',
     paths=sorted((base/'executable-evaluations'/clock['trial_id']).glob('*/report.json'),key=lambda p:p.stat().st_mtime) if (base/'executable-evaluations'/clock['trial_id']).exists() else []
     reports=[json.loads(p.read_text()) for p in paths]
     invalidated=json.loads((base/'evaluation-invalidations.json').read_text()).get('invalidated_suites',{}) if (base/'evaluation-invalidations.json').exists() else {}
-    valid_paths=[p for p,r in zip(paths,reports) if r.get('suite',{}).get('suite') not in invalidated]
+    valid_paths=[p for p,r in zip(paths,reports, strict=False) if r.get('suite',{}).get('suite') not in invalidated]
     reports=[r for r in reports if r.get('suite',{}).get('suite') not in invalidated];paths=valid_paths
     target=active if version is None else version
     if history:

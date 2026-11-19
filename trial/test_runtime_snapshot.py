@@ -66,7 +66,7 @@ class TestCreate(unittest.TestCase):
 
     def test_duplicate_create_is_idempotent(self):
         with tempfile.TemporaryDirectory() as d:
-            sid = rs.create(d, _change_spec(), _quality_evidence(), snapshot_id='test-snap-001')
+            rs.create(d, _change_spec(), _quality_evidence(), snapshot_id='test-snap-001')
             rs.create(d, _change_spec(), _quality_evidence(), snapshot_id='test-snap-001')
             index = json.loads((Path(d) / rs.SNAPSHOTS_DIR / 'index.json').read_text())
             self.assertEqual(sum(s['snapshot_id'] == 'test-snap-001' for s in index['snapshots']), 1)

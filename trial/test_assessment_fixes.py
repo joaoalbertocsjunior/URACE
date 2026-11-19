@@ -43,7 +43,7 @@ class ReferenceTests(unittest.TestCase):
    text=('# Scope\n'+'é'*1000+'\n')*1000;root=Path(d);r=downstream.prepare_reference(root,self.reference(text));index=json.loads((root/'SPECIFICATION_INDEX.json').read_text());reconstructed=''.join((root/c['file']).read_text() for c in index['chunks']);self.assertEqual(reconstructed,text);self.assertEqual(r['sha256'],hashlib.sha256(text.encode()).hexdigest());self.assertLess(len(tools.inventory(root)),100)
  def test_tampered_reference_never_silently_overwritten(self):
   with tempfile.TemporaryDirectory() as d:
-   root=Path(d);ref=self.reference('# Scope\nTrusted specification');downstream.prepare_reference(root,ref);(root/'SPECIFICATION_000.md').write_text('modified');
+   root=Path(d);ref=self.reference('# Scope\nTrusted specification');downstream.prepare_reference(root,ref);(root/'SPECIFICATION_000.md').write_text('modified')
    with self.assertRaisesRegex(RuntimeError,'changed'):downstream.prepare_reference(root,ref)
  def test_declared_reference_hash_is_checked(self):
   with tempfile.TemporaryDirectory() as d:
@@ -177,5 +177,5 @@ class PhaseGapTests(unittest.TestCase):
     phase=work.declaration(project)['phase'];calls.append(phase)
     if phase==2:self.assertEqual((project/'logic.py').read_text(),'delivered phase1');return {'complete':False,'validated':False,'delivered':False,'status':'AWAITING_EXECUTOR','native_receipts':[]}
     folder=work.state_root(project,b)/'runs/phase-1/workspace';folder.mkdir(parents=True);(folder/'app.py').write_text('app');(folder/'logic.py').write_text('delivered phase1');r={'queued_unix':100,'execution_started_unix':101,'complete':True,'delivered':True,'validated':True,'native_receipts':[]};(folder.parent/'result.json').write_text(json.dumps(r));return r
-   with patch.object(trial_supervisor,'external_owner',return_value=None),patch.object(repository_study,'plan',return_value=(root,identity,settings,controls)),patch.object(repository_study,'status',return_value={'status':'DEFERRED'}) as status,patch.object(repository_study,'FAMILIES',('requirements_change',)),patch.object(spec_trial,'eligible',return_value=(['codex'],{})),patch.object(work,'run',side_effect=phase_work):r=repository_study.run_one(b)
+   with patch.object(trial_supervisor,'external_owner',return_value=None),patch.object(repository_study,'plan',return_value=(root,identity,settings,controls)),patch.object(repository_study,'status',return_value={'status':'DEFERRED'}),patch.object(repository_study,'FAMILIES',('requirements_change',)),patch.object(spec_trial,'eligible',return_value=(['codex'],{})),patch.object(work,'run',side_effect=phase_work):r=repository_study.run_one(b)
    self.assertEqual(calls,[1,2]);self.assertEqual(r['status'],'DEFERRED');self.assertFalse(list(root.glob('*/*/study-result.json')))

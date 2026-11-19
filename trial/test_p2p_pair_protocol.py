@@ -207,9 +207,6 @@ class P2PPairProtocolTests(unittest.TestCase):
                                    'buyer_id': 'buyer-1', 'price_units': 12})
         exchange.append_audit_row({'kind': 'CREDIT_DELTA', 'direction': 'protocol_fee',
                                    'listing_id': 'listing-1', 'amount_units': 1})
-        attested = {'listing_id': 'listing-1', 'feature_id': 'feat-1',
-                    'artifact_sha256': self.artifact_sha, 'seller_id': seller_id,
-                    'buyer_id': 'buyer-1', 'price_units': 12}
         costs_receipt = {
             'schema': protocol.COST_SCHEMA,
             'pair_id': 'pair-1', 'task_sha256': self.task_sha,

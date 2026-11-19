@@ -49,6 +49,7 @@ def balance(exchange, peer_id: str) -> float:
     """
     p = exchange.load()
     settlement = p.get('token_settlement', False)
+    settlement_since = p.get('token_settlement_since', 0.0) if settlement else 0.0
     rows = exchange.audit_rows()
     # Bootstrap grant unlocks on first quality gate pass — Sybil resistance
     _has_quality_pass = any(
@@ -61,7 +62,7 @@ def balance(exchange, peer_id: str) -> float:
         for r in rows
         if r.get('kind') == 'APPLIED_AFTER_LOCAL_QUALIFICATION'
         and r.get('peer') == peer_id
-        and (not settlement or r.get('receipt_verified', False))
+        and (not settlement or r.get('at_unix', 0) < settlement_since or r.get('receipt_verified', False))
     )
     # Count adoption earns: new rows carry precomputed credit_units (network-size-aware,
     # supply-pressure-adjusted, computed at mint time). Old rows fall back to flat _BORROW_CREDIT.
@@ -76,7 +77,7 @@ def balance(exchange, peer_id: str) -> float:
         borrower = r.get('borrower_peer_id', '')
         if not borrower:
             continue
-        if settlement and not r.get('receipt_verified', False):
+        if settlement and r.get('at_unix', 0) >= settlement_since and not r.get('receipt_verified', False):
             continue
         if 'credit_units' in r:
             try: _new_earned_units += int(r['credit_units'])

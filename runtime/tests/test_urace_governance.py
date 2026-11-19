@@ -1,18 +1,12 @@
 import copy
 import hashlib
-import io
-import json
-import os
-import subprocess
 import tempfile
-import types
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, cli_lifecycle as _cli_lifecycle_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import cli, cli_lifecycle as _cli_lifecycle_m, executor
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -41,7 +35,6 @@ class DecisionRecordTests(unittest.TestCase):
         }
 
     def _digest(self) -> str:
-        import hashlib
         return hashlib.sha256(b"{}").hexdigest()
 
     def test_create_decision_record_produces_valid_record(self):
@@ -161,7 +154,6 @@ class CompactionTests(unittest.TestCase):
 
     def test_compaction_summary_validates_correctly(self):
         """A well-formed CompactionSummary passes validation."""
-        import hashlib
         from urace import primitives
         summary = {
             "compaction_event_id": "cmp-abcdef1234",
@@ -261,7 +253,6 @@ class CompactionTests(unittest.TestCase):
 
     def test_compaction_manifest_version_invariant(self):
         """CompactionManifest with version != len(events) fails validation."""
-        import hashlib
         from urace import primitives
         bad_event = {
             "id": "cmp-abcdef1234",
@@ -402,7 +393,6 @@ class ReasoningStepTests(unittest.TestCase):
         }
 
     def _digest(self) -> str:
-        import hashlib
         return hashlib.sha256(b"{}").hexdigest()
 
     def test_reasoning_step_valid(self):
@@ -543,7 +533,6 @@ class ReasoningChainTests(unittest.TestCase):
         }
 
     def _digest(self) -> str:
-        import hashlib
         return hashlib.sha256(b"{}").hexdigest()
 
     def _make_record(self, dr_module, *, kind="OBJECTIVE_SELECTION",
@@ -628,7 +617,6 @@ class CompactionIndexTests(unittest.TestCase):
         }
 
     def _digest(self) -> str:
-        import hashlib
         return hashlib.sha256(b"{}").hexdigest()
 
     def test_compact_field_produces_record_ids_and_kinds(self):
@@ -749,7 +737,6 @@ class CompactionIndexTests(unittest.TestCase):
 
     def test_archive_amendment_validates_correctly(self):
         """A well-formed ArchiveAmendment passes primitives validation."""
-        import hashlib
         from urace import primitives
         amd = {
             "id": "amd-1234567890",
@@ -769,7 +756,7 @@ class CompactionIndexTests(unittest.TestCase):
         import datetime
         from urace.compaction import CompactionEngine
         with tempfile.TemporaryDirectory() as tmpdir:
-            engine = CompactionEngine(tmpdir)
+            CompactionEngine(tmpdir)
         old_ts = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=40)).isoformat()
         new_ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
         records = [
@@ -819,7 +806,6 @@ class ExecutorRobustnessTests(unittest.TestCase):
 
     def test_executor_transport_ceiling_zero_limit_no_index_error(self):
         """Provider with limit=0 and empty history must not raise IndexError."""
-        from datetime import datetime, timezone
 
         settings = {"max_executor_calls_per_24h": 0, "capacity_fallback_seconds": 3600}
         pool_state: dict = {}
@@ -892,7 +878,6 @@ class ExecutorRobustnessTests(unittest.TestCase):
         auth = executor.classify_auth_failure("401 unauthorized", settings)
         self.assertIsNotNone(transient)
         self.assertIsNotNone(auth)
-        from datetime import datetime, timezone
         transient_retry = datetime.fromisoformat(transient.retry_at).timestamp()
         auth_retry = datetime.fromisoformat(auth.retry_at).timestamp()
         self.assertLess(transient_retry, auth_retry)

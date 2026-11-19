@@ -1,15 +1,12 @@
 """Tests for NAT traversal: public endpoint discovery, rendezvous, hole punching,
 relay forwarding, and relay_connect helper.
 """
-import hashlib
-import os
 import socket
 import tempfile
 import threading
-import time
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 
 def _make_exchange(tmp, name="node"):

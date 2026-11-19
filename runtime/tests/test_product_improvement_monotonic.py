@@ -78,7 +78,7 @@ class ObjectiveMonotonicityTests(unittest.TestCase):
         state_path = Path(self.config["state_path"])
         snapshots = []
 
-        def simulated_cycle(argv):
+        def simulated_cycle(argv, **_kw):
             current = json.loads(state_path.read_text()) if state_path.exists() else {}
             objectives = current.get("objectives", [])
             objectives.append({"title": f"goal-{len(objectives)}", "status": "active"})
@@ -106,7 +106,7 @@ class ObjectiveMonotonicityTests(unittest.TestCase):
         state_path = Path(self.config["state_path"])
         snapshots = []
 
-        def stable_cycle(argv):
+        def stable_cycle(argv, **_kw):
             current = json.loads(state_path.read_text()) if state_path.exists() else {}
             objectives = current.get("objectives", [{"title": "initial", "status": "active"}])
             current["objectives"] = objectives
@@ -137,7 +137,7 @@ class OperationMonotonicityTests(unittest.TestCase):
         state_path = Path(self.config["state_path"])
         snapshots = []
 
-        def simulated_cycle(argv):
+        def simulated_cycle(argv, **_kw):
             current = json.loads(state_path.read_text()) if state_path.exists() else {}
             ops = current.get("operations", [])
             ops.append({"kind": "auto", "outcome": "ok", "cycle": len(ops)})
@@ -172,7 +172,7 @@ class StateVersionMonotonicityTests(unittest.TestCase):
         state_path = Path(self.config["state_path"])
         versions = []
 
-        def versioned_cycle(argv):
+        def versioned_cycle(argv, **_kw):
             current = json.loads(state_path.read_text()) if state_path.exists() else {}
             v = current.get("version", 0) + 1
             current["version"] = v
@@ -198,7 +198,7 @@ class StateVersionMonotonicityTests(unittest.TestCase):
         state_path = Path(self.config["state_path"])
         cycle_num = [0]
 
-        def mixed_cycle(argv):
+        def mixed_cycle(argv, **_kw):
             cycle_num[0] += 1
             if cycle_num[0] == 2:
                 raise RuntimeError("simulated cycle failure")
@@ -235,7 +235,7 @@ class MultiCycleFaultResilienceTests(unittest.TestCase):
         cycle_num = [0]
         successful_versions = []
 
-        def alternating(argv):
+        def alternating(argv, **_kw):
             cycle_num[0] += 1
             if cycle_num[0] % 2 == 0:
                 raise RuntimeError("even cycle fails")
@@ -281,7 +281,7 @@ class ReportDeltaMonotonicityTests(unittest.TestCase):
         state_path = Path(self.config["state_path"])
         cycle_count = [0]
 
-        def additive_cycle(argv):
+        def additive_cycle(argv, **_kw):
             cycle_count[0] += 1
             current = json.loads(state_path.read_text()) if state_path.exists() else {}
             ops = current.get("operations", [])

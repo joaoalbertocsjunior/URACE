@@ -1,22 +1,14 @@
 from __future__ import annotations
 
-import argparse
 import atexit
-import copy
 import hashlib
 import json
 import logging
-import math
-import os
 import re
 import signal
 import subprocess
 import sys
-import tempfile
-import time
-import uuid
-from collections.abc import Callable
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -27,42 +19,20 @@ _logger = logging.getLogger(__name__)
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-from . import executor as intelligent_executor
-from . import external_metrics
 from . import analytics
 from . import scope_priority
-from . import updater
-from . import authority as authority_resolver
 from . import destination as destination_anchor
-from . import validation as independent_validation
-from . import value_trajectory
-from . import outcome_verification
 from . import rules as rule_ledger_module
 from . import spec_audit as spec_audit_module
-from .primitives import OUTPUT_SCHEMA_REGISTRY, INTEGRITY_GAP_CATALOG as IGC_KINDS
-from . import decision_record as decision_record_module
-from . import compaction as compaction_module
-from . import cognitive_resume as cognitive_resume_module
-from . import patterns as pattern_catalog_module
-from . import continuation as continuation_module
-from ._common import nullable_limit
-from . import auto_goals, user_controls, command_surface, api_interface, freeform_routing, data_transport
 # Keep build_parser and parse_cycles available from urace.cli for existing API callers.
-from .cli_parser import build_parser, dispatch_parser, parse_cycles
 
 from ._common import (
-    ROOT, CONFIG_PATH, RUNTIME_ROOT, SYSTEM_ROOT,
+    ROOT, RUNTIME_ROOT, SYSTEM_ROOT,
     now, identifier, atomic_write_text, atomic_write_json, durable_unlink,
-    process_exists, state_lock, load_config, save_config, state_path, load_state,
-    load_state_for_read, save_state, transaction_path, input_directory,
+    load_config, state_path, save_state, transaction_path,
 )
-from .inputs import consume_inputs, queue_input, cleanup_consumed_inputs, apply_pending_inputs
 from .inspection import (
-    document_metrics, compare, objective_is_eligible, goal_is_schedulable,
-    objective_score, objective_score_breakdown, goal_portfolio,
-    work_evaluations, context_view, resource_accounting,
-    executor_efficiency_vital, evolution_vital, render, vitals_snapshot,
-    render_vitals, render_cycle, command_catalog, top_level_help,
+    document_metrics, vitals_snapshot,
 )
 
 from .cli_emit import _emit_compaction_event
@@ -344,22 +314,28 @@ def runtime_files(config: dict[str, Any]) -> list[str]:
     files = [item for item in config["executor"]["allowed_files_by_scope"]["runtime"] if item.startswith("urace/runtime/")]
     # Recovery includes the installed workflow extension without granting native
     # executors permission to modify that extension or any deployment evidence.
-    core = ROOT / 'urace/runtime/urace'
+    # ROOT may be patched in tests to a temp dir; in production ROOT/'urace' may
+    # not exist if the project dir is capitalised (e.g. URACE).  Resolve the
+    # effective project dir dynamically so both cases work.
+    _urace_dir = ROOT / 'urace'
+    if not (_urace_dir / 'runtime').is_dir():
+        _urace_dir = SYSTEM_ROOT   # production fallback for URACE (uppercase) or stub dirs
+    _runtime_dir = _urace_dir / 'runtime'
+    core = _runtime_dir / 'urace'
     if core.is_dir():
-        files.extend(str(path.relative_to(ROOT)) for path in core.glob('*.py') if path.is_file() and not path.is_symlink())
-    tests=ROOT/'urace/runtime/tests'
-    if tests.is_dir():files.extend(str(path.relative_to(ROOT)) for path in tests.glob('*.py') if path.is_file() and not path.is_symlink())
-    trial = ROOT / 'urace/trial'
+        files.extend("urace/" + str(path.relative_to(_urace_dir)) for path in core.glob('*.py') if path.is_file() and not path.is_symlink())
+    tests = _runtime_dir / 'tests'
+    if tests.is_dir():files.extend("urace/" + str(path.relative_to(_urace_dir)) for path in tests.glob('*.py') if path.is_file() and not path.is_symlink())
+    trial = _urace_dir / 'trial'
     if trial.is_dir():
         for path in trial.iterdir():
             if path.is_file() and not path.is_symlink() and (path.suffix == '.py' or path.name in
                     {'urace','empty-mcp.json','efficiency.example.json','harness-manifest.json','runtime-qualification-config.json','runtime-cycle-installation.json','qualification-dependencies.json'}):
-                files.append(str(path.relative_to(ROOT)))
-    runtime_base = ROOT / 'urace/runtime'
-    if runtime_base.is_dir():
-        for path in runtime_base.iterdir():
+                files.append("urace/" + str(path.relative_to(_urace_dir)))
+    if _runtime_dir.is_dir():
+        for path in _runtime_dir.iterdir():
             if path.is_file() and not path.is_symlink() and path.name.endswith('.json'):
-                files.append(str(path.relative_to(ROOT)))
+                files.append("urace/" + str(path.relative_to(_urace_dir)))
     return sorted(set(files))
 
 
@@ -381,8 +357,11 @@ def write_runtime_snapshot(config: dict[str, Any]) -> None:
             while parent != directory and parent.exists() and not any(parent.iterdir()):
                 parent.rmdir()
                 parent = parent.parent
+    _urace_dir = ROOT / 'urace'
+    if not (_urace_dir / 'runtime').is_dir():
+        _urace_dir = SYSTEM_ROOT
     for relative in runtime_files(config):
-        content = (ROOT / relative).read_text(encoding="utf-8")
+        content = (_urace_dir / relative.removeprefix("urace/")).read_text(encoding="utf-8")
         atomic_write_text(directory / relative, content)
         files[relative] = hashlib.sha256(content.encode()).hexdigest()
     atomic_write_json(manifest_path, {"accepted_at": now(), "files": files})

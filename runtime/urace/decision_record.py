@@ -8,10 +8,7 @@ No Executor calls are made here; this is pure lifecycle-controller logic.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import os
-import re
 from datetime import datetime, timezone
 from typing import Any
 

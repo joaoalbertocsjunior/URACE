@@ -56,7 +56,7 @@ def execute(path,cases,wall_limit=30):
     requests=[{k:c[k] for k in ('id','function','args')} for c in cases]
     cmd=['docker','run','-i','--rm','--name',name,'--log-driver','none','--network','none','--read-only','--cap-drop','ALL','--security-opt','no-new-privileges','--user',str(os.getuid())+':'+str(os.getgid()),'--pids-limit','32','--memory','256m','--memory-swap','256m','--cpus','1','--tmpfs','/tmp:rw,nosuid,noexec,size=32m','--mount','type=bind,src='+str(Path(path).resolve())+',dst=/artifact.py,readonly',IMAGE,'python3','-I','-c',RUNNER]
     process=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-    started=time.monotonic();payload=memoryview(json.dumps(requests,separators=(',',':')).encode());selector=selectors.DefaultSelector();stdout=bytearray();stderr=bytearray();failure=None
+    started=time.monotonic();payload=memoryview(json.dumps(requests,separators=(',',':')).encode());selector=selectors.DefaultSelector();stdout=bytearray();stderr=bytearray()
     for stream in (process.stdin,process.stdout,process.stderr):os.set_blocking(stream.fileno(),False)
     selector.register(process.stdin,selectors.EVENT_WRITE,'input');selector.register(process.stdout,selectors.EVENT_READ,'output');selector.register(process.stderr,selectors.EVENT_READ,'error')
     try:

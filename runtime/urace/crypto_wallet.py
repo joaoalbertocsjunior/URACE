@@ -11,7 +11,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import secrets
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ec import (
@@ -134,9 +133,6 @@ def wallet_sign(payload: str | bytes, wallet_dir: str | Path | None = None) -> d
         EllipticCurvePrivateNumbers,
         EllipticCurvePublicNumbers,
         SECP256K1 as _SECP,
-    )
-    from cryptography.hazmat.primitives.asymmetric.ec import (
-        generate_private_key as _gpk,
     )
 
     priv_int = int.from_bytes(priv_bytes, "big")

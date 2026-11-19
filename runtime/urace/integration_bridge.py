@@ -15,7 +15,7 @@ _O_NONBLOCK = getattr(os, 'O_NONBLOCK', 0)
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from . import api_interface,command_surface
-from ._common import atomic_write_json,state_lock,SYSTEM_ROOT
+from ._common import atomic_write_json,SYSTEM_ROOT
 from ._chain_adapter_base import ChainAdapter  # re-exported for callers
 from dataclasses import dataclass as _dataclass, field as _field
 

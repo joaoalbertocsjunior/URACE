@@ -351,7 +351,6 @@ class FetchTailFromPeerTests(unittest.TestCase):
         return resp
 
     def test_fetch_tail_calls_correct_url(self):
-        from unittest.mock import MagicMock, patch
         payload = json.dumps({'seal': None, 'tail': []}).encode()
         resp_mock = self._fake_urlopen_response(payload)
         with patch('urllib.request.urlopen', return_value=resp_mock) as mock_open:
@@ -360,7 +359,6 @@ class FetchTailFromPeerTests(unittest.TestCase):
             self.assertTrue(call_req.full_url.endswith('/urace/rpc/v1/ledger-tail'))
 
     def test_fetch_tail_returns_parsed_payload(self):
-        from unittest.mock import patch
         payload = b'{"seal": null, "tail": []}'
         resp_mock = self._fake_urlopen_response(payload)
         with patch('urllib.request.urlopen', return_value=resp_mock):
@@ -371,7 +369,6 @@ class FetchTailFromPeerTests(unittest.TestCase):
 
     def test_fetch_tail_on_error_propagates(self):
         import urllib.error
-        from unittest.mock import patch
         with patch('urllib.request.urlopen', side_effect=urllib.error.URLError('test')):
             with self.assertRaises(urllib.error.URLError):
                 ls.fetch_tail_from_peer('https://peer.example.com')

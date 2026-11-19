@@ -1,5 +1,4 @@
 import copy,unittest
-from unittest.mock import patch
 from urace import auto_goals,cli
 class ProjectAutoGoals(unittest.TestCase):
  def cfg(self,name='Customer billing'):

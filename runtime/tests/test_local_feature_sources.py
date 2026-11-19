@@ -1,5 +1,4 @@
 """Tests for urace.local_feature_sources — ledger binding verifier."""
-import tempfile
 import unittest
 from pathlib import Path
 

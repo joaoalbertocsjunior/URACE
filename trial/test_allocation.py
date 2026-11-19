@@ -1,4 +1,4 @@
-import copy,unittest
+import unittest
 from datetime import datetime,timezone
 from allocation import decide
 class Allocation(unittest.TestCase):

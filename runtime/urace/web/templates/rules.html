@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Rules{% endblock %}
+
+{% block content %}
+<div class="audit-header">
+  <h1>Rules</h1>
+  <button class="btn-secondary" onclick="loadActive()">Refresh</button>
+</div>
+
+<div class="tab-bar">
+  <button id="tab-rules" class="tab-btn tab-active" onclick="switchTab('rules')">Rules</button>
+  <button id="tab-graph" class="tab-btn" onclick="switchTab('graph')">Graph</button>
+  <button id="tab-conflicts" class="tab-btn" onclick="switchTab('conflicts')">Conflicts</button>
+</div>
+
+<div id="panel-rules" class="tab-panel">
+  <div class="filter-bar">
+    <select id="kind-filter" class="filter-select" onchange="loadRules()">
+      <option value="">All kinds</option>
+      <option value="PURPOSE">PURPOSE</option>
+      <option value="PERMISSION">PERMISSION</option>
+      <option value="PROHIBITION">PROHIBITION</option>
+      <option value="DIRECTIVE">DIRECTIVE</option>
+    </select>
+  </div>
+  <div id="rules-table-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<div id="panel-graph" class="tab-panel" style="display:none">
+  <div id="graph-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<div id="panel-conflicts" class="tab-panel" style="display:none">
+  <div id="conflicts-table-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<script>
+const TOKEN = {{ token | tojson }};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function kindBadge(kind) {
+  const cls = {
+    PURPOSE: 'rule-kind-purpose',
+    PERMISSION: 'rule-kind-permission',
+    PROHIBITION: 'rule-kind-prohibition',
+    DIRECTIVE: 'rule-kind-directive',
+  };
+  return `<span class="rule-kind-badge ${cls[kind] || ''}">${escHtml(kind||'—')}</span>`;
+}
+
+let activeTab = 'rules';
+
+function switchTab(tab) {
+  activeTab = tab;
+  ['rules','graph','conflicts'].forEach(t => {
+    document.getElementById('panel-'+t).style.display = t === tab ? '' : 'none';
+    document.getElementById('tab-'+t).className = 'tab-btn' + (t === tab ? ' tab-active' : '');
+  });
+  loadActive();
+}
+
+function loadActive() {
+  if (activeTab === 'rules') loadRules();
+  else if (activeTab === 'graph') loadGraph();
+  else loadConflicts();
+}
+
+async function loadRules() {
+  const kind = document.getElementById('kind-filter').value;
+  const wrap = document.getElementById('rules-table-wrap');
+  wrap.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/rules/list', {headers:{'Authorization':'Bearer '+TOKEN}});
+    let rows = await r.json();
+    if (!Array.isArray(rows)) rows = [];
+    if (kind) rows = rows.filter(r => r.kind === kind);
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="cycle-empty">No rules found.</div>';
+      return;
+    }
+    const thead = `<tr><th>ID</th><th>Kind</th><th>Statement</th><th>Scope</th><th>Confidence</th><th>Created</th></tr>`;
+    const tbody = rows.map(rule => `<tr>
+      <td class="mono-sm" title="${escHtml(rule.id||'')}">${escHtml((rule.id||'').slice(0,8))}</td>
+      <td>${kindBadge(rule.kind)}</td>
+      <td class="reasoning-cell" title="${escHtml(rule.statement||'')}">
+        ${escHtml((rule.statement||'').slice(0,100))}${(rule.statement||'').length > 100 ? '…' : ''}
+      </td>
+      <td class="mono-sm">${escHtml((rule.scope||[]).join(', '))}</td>
+      <td>${rule.confidence != null ? Math.round(rule.confidence * 100) + '%' : '—'}</td>
+      <td class="mono-sm">${escHtml((rule.created_at||'').slice(0,10))}</td>
+    </tr>`).join('');
+    wrap.innerHTML = `<table class="audit-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+  } catch(err) {
+    wrap.innerHTML = `<div class="shell-error">Failed to load rules: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function loadGraph() {
+  const wrap = document.getElementById('graph-wrap');
+  wrap.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/rules/graph', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const rels = data.relationships || [];
+    if (!rels.length) {
+      wrap.innerHTML = '<div class="cycle-empty">No relationships in graph.</div>';
+      return;
+    }
+    const html = rels.map(rel => `
+      <div class="rel-row">
+        <span class="node">${escHtml((rel.from_id||'').slice(0,8))}</span>
+        <span class="rel-type">--[${escHtml(rel.type||'?')}]--&gt;</span>
+        <span class="node">${escHtml((rel.to_id||'').slice(0,8))}</span>
+      </div>
+    `).join('');
+    wrap.innerHTML = `<div class="graph-list">${html}</div>`;
+  } catch(err) {
+    wrap.innerHTML = `<div class="shell-error">Failed to load graph: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function loadConflicts() {
+  const wrap = document.getElementById('conflicts-table-wrap');
+  wrap.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/rules/conflicts', {headers:{'Authorization':'Bearer '+TOKEN}});
+    let rows = await r.json();
+    if (!Array.isArray(rows)) rows = [];
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="cycle-empty">No conflicts detected.</div>';
+      return;
+    }
+    const thead = `<tr><th>Rule A</th><th>Rule B</th><th>Kind</th><th>Overlap Terms</th></tr>`;
+    const tbody = rows.map(c => `<tr class="conflict-row">
+      <td class="mono-sm">${escHtml((c.rule_a||'').slice(0,8))}</td>
+      <td class="mono-sm">${escHtml((c.rule_b||'').slice(0,8))}</td>
+      <td>${escHtml(c.kind||'—')}</td>
+      <td class="reasoning-cell">${escHtml((c.overlap_terms||[]).join(', '))}</td>
+    </tr>`).join('');
+    wrap.innerHTML = `<table class="audit-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+  } catch(err) {
+    wrap.innerHTML = `<div class="shell-error">Failed to load conflicts: ${escHtml(err.message)}</div>`;
+  }
+}
+
+loadRules();
+</script>
+{% endblock %}

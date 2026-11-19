@@ -1,5 +1,4 @@
 """Tests for urace.stun_client — RFC 5389 STUN public address discovery."""
-import os
 import socket
 import struct
 import unittest

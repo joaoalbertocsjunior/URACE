@@ -1,13 +1,10 @@
 """Tests for urace._daemon — pid management and dispatch actions."""
 import json
-import os
-import signal
-import sys
 import tempfile
 import types
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 import pytest
 
 

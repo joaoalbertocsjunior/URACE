@@ -1,4 +1,4 @@
-import copy,unittest
+import unittest
 from urace.feature_policy import DEFAULT,validate,effective
 class FeaturePolicyTests(unittest.TestCase):
  def test_default_has_no_payment_or_copy_prevention_claim(self):

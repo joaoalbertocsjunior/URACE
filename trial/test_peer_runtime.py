@@ -2,7 +2,7 @@
 from pathlib import Path
 from unittest.mock import patch
 import json,tempfile,unittest
-import peer_runtime as pr,runtime_evaluation as ev,runtime_cycle as cycle
+import peer_runtime as pr,runtime_evaluation as ev
 from test_runtime_cycle import Fixture
 from urace import peer_exchange as pe
 

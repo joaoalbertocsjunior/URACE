@@ -120,7 +120,7 @@ def phase_telemetry(phases):
  """Measured controller gaps only; historical missing timestamps remain unknown."""
  from datetime import datetime
  ordered=sorted(phases,key=lambda row:row['phase']);gaps=[]
- for before,after in zip(ordered,ordered[1:]):
+ for before,after in zip(ordered,ordered[1:], strict=False):
   try:
    end=datetime.fromisoformat(before['finished_at']).timestamp();start=after['phase_started_unix']
    if type(start) not in (int,float) or not math.isfinite(start) or start<end:raise ValueError('Invalid phase timing')

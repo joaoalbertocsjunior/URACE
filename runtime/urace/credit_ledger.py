@@ -4,12 +4,13 @@ import random
 import time
 from pathlib import Path
 
+from .p2p_constants import DECIMALS, UNIT, CHAIN_DECIMALS, CHAIN_UNIT, CHAIN_SCALE  # noqa: F401
+
 SCHEMA = 'urace-credit-ledger-v1'
 BASELINE_GRANT = 3  # requests every new peer can make before earning
 
-# Decision 1: 8-decimal precision (satoshi model)
-DECIMALS = 8
-UNIT = 10 ** DECIMALS   # 1.00000000 token = 100_000_000 base units
+# 8-decimal precision — imported from p2p_constants; kept as module-level
+# aliases for backward compatibility with existing callers.
 BASELINE_GRANT_UNITS = BASELINE_GRANT * UNIT
 
 # Decision 3: Credit velocity control
@@ -31,10 +32,7 @@ JACCARD_DERIVATIVE_CAP = 0.70                    # token overlap above this = de
 # Backward-compat alias: minimum governance supply ceiling (bootstrapping floor)
 MAX_MINTABLE_UNITS     = BASE_CAP_UNITS * 10
 
-# Crypto bridge constants — future on-chain integration (EVM 18-decimal standard)
-CHAIN_DECIMALS = 18
-CHAIN_UNIT     = 10 ** CHAIN_DECIMALS
-CHAIN_SCALE    = CHAIN_UNIT // UNIT  # = 10^10: multiply internal units by this for on-chain
+# CHAIN_DECIMALS, CHAIN_UNIT, CHAIN_SCALE imported from p2p_constants above.
 
 # Network supply stabilizer constants
 TARGET_SUPPLY_RATIO     = 0.5   # target: 50% of theoretical max per peer
@@ -323,7 +321,7 @@ def _network_supply_factor(root, exchange) -> float:
     return max(NETWORK_FACTOR_LOW, min(NETWORK_FACTOR_HIGH, raw))
 
 
-def peer_cap_units(root, peer_id: str) -> int:
+def peer_cap_units(root, peer_id: str, exchange=None) -> int:
     """Dynamic per-peer balance cap: three-factor formula.
 
     cap = BASE_CAP_UNITS × trust_factor × quality_factor × network_factor
@@ -331,16 +329,31 @@ def peer_cap_units(root, peer_id: str) -> int:
     trust_factor  ∈ [1.1, 2.0]  — Wilson lower-bound on delivery rate
     quality_factor ∈ [1.0, 1.5] — Wilson lower-bound on feature outcome quality
     network_factor ∈ [0.8, 1.2] — automatic supply stabilizer
+
+    Pass exchange when available — avoids constructing a second Exchange instance.
     """
-    from .peer_exchange import Exchange as _Exchange
-    from pathlib import Path as _Path
     try:
-        exchange = _Exchange(_Path(root).parent / 'exchange')
+        if exchange is None:
+            from .peer_exchange import Exchange as _Exchange
+            from pathlib import Path as _Path
+            # exchange root is state_root/exchange/{hash24}; we need the full path
+            # via directory(config) — use a best-effort glob fallback.
+            _candidates = sorted((_Path(root) / 'exchange').glob('*/policy.json'))
+            if not _candidates:
+                _candidates = sorted((_Path(root).parent / 'exchange').glob('*/policy.json'))
+            if not _candidates:
+                raise FileNotFoundError('No exchange policy.json found near root')
+            exchange = _Exchange(_candidates[-1].parent)
         weights = _peer_trust_weights_from_exchange(exchange)
         trust = weights.get(peer_id, 0.1)
         quality_factor = _peer_quality_weights_from_exchange(exchange, peer_id)
         network_factor = _network_supply_factor(root, exchange)
-    except Exception:
+    except Exception as _exc:
+        import logging as _log
+        _log.getLogger(__name__).warning(
+            'peer_cap_units: exchange lookup failed for %s — using baseline cap: %s',
+            peer_id[:12] if peer_id else '?', _exc,
+        )
         trust = 0.1
         quality_factor = 1.0
         network_factor = 1.0
@@ -403,20 +416,36 @@ REP_SOURCE_TRADE = 'trade'   # purchased / traded — market_rep only, never ear
 # Changing earn amounts (seal_reward_units etc.) has ZERO effect on consensus weight.
 # Trade-source directions always weight 0.0 — they never feed consensus.
 # Adding a new earn path: add it here. Missing key defaults to 0.0 (safe).
+#
+# Weight rationale (five tiers):
+#  Tier 1 (1.00–0.90): PoQ-verified events only. 'earn' is a governance-qualified
+#    delivery receipt. 'delivery_fee'/'challenge_bounty' require two-party agreement.
+#  Tier 2 (0.80–0.70): Network infrastructure. Requires real open ports + latency probes.
+#    Sybil resistance: IP diversity check + relay uptime window (default 48 h).
+#  Tier 3 (0.60): Indirect signals. Referral/composition are weighted half of Tier 1
+#    because they depend on another peer's behaviour, not direct output validation.
+#  Tier 4 (0.40–0.30): Demand-side signals. Borrow/adoption shows asset utility but
+#    not production quality; escrow custody is a temporary role, not a trust proof.
+#  Tier 0 (0.00): Non-earn or adversarial events. These affect balance but carry no
+#    governance weight — they are not evidence of honest productive contribution.
+#
+# Governance: weight profile changes require a governance vote and ≥7-day notice period.
+# Until empirical calibration data (network epoch ≥10) is collected, treat these as
+# informed engineering priors, not calibrated values.
 CONSENSUS_WEIGHTS: dict[str, float] = {
-    # High trust — PoQ-verified quality, direct output signal
+    # Tier 1 — PoQ-verified quality, direct output signal
     'earn':                    1.00,
     'delivery_fee':            0.90,
     'challenge_bounty':        0.90,  # won a challenge → validation accuracy signal
-    # Network service — requires real uptime, hardest to Sybil-fake at scale
+    # Tier 2 — Network service (requires real uptime, hardest to Sybil-fake at scale)
     'seal_reward':             0.80,
     'relay_reward':            0.80,  # relay node open = highest cold-start value
     'bootstrap_reward':        0.75,
     'llm_peer_reward':         0.70,
-    # Referral / composition — indirect signal (follower, not originator)
+    # Tier 3 — Referral / composition (indirect signal, follower not originator)
     'composition_referral':    0.60,
     'provenance_compensation': 0.60,
-    # Borrow / adoption — user of others' work, not creator
+    # Tier 4 — Borrow / adoption (demand-side, not production quality)
     'borrow_earn':             0.40,
     'escrow_custody_earned':   0.30,
     # Stake returns — not earn signals, excluded
@@ -555,7 +584,7 @@ def unlock_grant(root, peer_id: str, delivery_earn_units: int) -> dict:
 
 
 def earn_units(root, peer_id, units: int, reason, bundle_id=None, metadata: dict | None = None,
-               rep_source: str = REP_SOURCE_WORK):
+               rep_source: str = REP_SOURCE_WORK, exchange=None):
     """Credit peer_id with units base units earned from an accepted qualification.
 
     rep_source: REP_SOURCE_WORK (default) or REP_SOURCE_TRADE.
@@ -586,13 +615,18 @@ def earn_units(root, peer_id, units: int, reason, bundle_id=None, metadata: dict
             return  # saturated — no earn
         units = minted  # override the passed-in units with the formula result
         adjusted_units = int(units * _velocity_multiplier(root))
-    # Novelty gate: re-borrow of same feature_id earns 50%
+    # Novelty gate: re-borrow of same feature_id earns 50%.
+    # ANTICIPATORY: no current borrow flow calls earn_units() with 'borrow' in reason
+    # (borrow credit goes through asset_registry.record_usage_earn / direct audit rows).
+    # This gate is pre-wired for a future borrow-earn credit path that hasn't been built.
+    # Wire it by calling earn_units(root, peer, units, f'borrow:{feature_id}', metadata={...})
+    # from the borrow settlement path when that path is introduced.
     if reason and 'borrow' in str(reason).lower():
         feature_id = (metadata or {}).get('feature_id')
         if feature_id and feature_id in _peer_held_features(root, peer_id):
             adjusted_units = adjusted_units // 2
     # Apply trust-dynamic per-peer cap
-    cap = peer_cap_units(root, peer_id)
+    cap = peer_cap_units(root, peer_id, exchange=exchange)
     current = balance(root, peer_id)
     if current + adjusted_units > cap:
         adjusted_units = max(0, cap - current)
@@ -864,10 +898,22 @@ def escrow_release(
 
 
 def escrow_refund(root, request_id: str, requester_id: str, amount: int) -> None:
-    """Refund escrowed credits to requester (on cancel or dispute resolution in their favor)."""
-    if amount > 0:
-        earn_units(root, requester_id, amount, f'escrow-refund:{request_id}',
-                   bundle_id=request_id)
+    """Refund escrowed credits to requester (on cancel or dispute resolution in their favor).
+
+    Idempotent: skips if a refund row for this request_id already exists.
+    """
+    if amount <= 0:
+        return
+    # Idempotency: skip double-refund
+    rows = _credit_rows(root, requester_id)
+    already = any(
+        r.get('direction') in ('earn',) and r.get('reason') == f'escrow-refund:{request_id}'
+        for r in rows
+    )
+    if already:
+        return
+    earn_units(root, requester_id, amount, f'escrow-refund:{request_id}',
+               bundle_id=request_id)
 
 
 # ── Distribution fee ──────────────────────────────────────────────────────────

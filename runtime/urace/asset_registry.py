@@ -14,7 +14,6 @@ On-chain anchoring is handled by chain_anchor.publish_asset_earning() (Phase 3.5
 """
 from __future__ import annotations
 
-import hashlib
 import time
 from datetime import datetime, timezone
 

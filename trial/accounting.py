@@ -83,7 +83,7 @@ def projected(rows):
 def reconcile(base):
     """Append idempotent correction provenance, not replacements for native receipts."""
     from pathlib import Path
-    import json,fcntl,os,hashlib
+    import json,fcntl,hashlib
     base=Path(base);path=base/'ledger.jsonl'
     if not path.exists():return {'corrections':0,'unknown_totals':0}
     rows=[json.loads(line) for line in path.read_text().splitlines() if line];views=projected(rows);audit=base/'usage-corrections.jsonl';new=0

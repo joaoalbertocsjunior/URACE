@@ -115,7 +115,7 @@ class ExecutorPeerTests(unittest.TestCase):
 
 class AuditChainTests(unittest.TestCase):
     def setUp(self):
-        from urace import peer_work_market as wm, credit_ledger as cl
+        from urace import peer_work_market as wm
         self.wm = wm
         self.ex = MockExchange()
 

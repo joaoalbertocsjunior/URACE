@@ -12,11 +12,7 @@ The canonical clean state is in benchmark_product_canonical.py.
 """
 from __future__ import annotations
 
-import csv
-import math
-from collections import Counter
 from datetime import date, datetime
-from typing import Any
 
 
 class BudgetTracker:

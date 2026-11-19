@@ -1,7 +1,5 @@
 """Tests for mime_validator.py — 15+ cases covering each validator (pass + fail) and strict."""
-import io
 import json
-import struct
 import pytest
 
 from urace.mime_validator import validate_asset, validate_asset_strict

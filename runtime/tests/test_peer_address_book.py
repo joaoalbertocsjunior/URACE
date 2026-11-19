@@ -1,11 +1,7 @@
 """Unit tests for peer_address_book (F7-lite)."""
-import json
 import sys
 from pathlib import Path
-import tempfile
-import os
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from urace.peer_address_book import PeerAddressBook, MAX_PEERS, MAX_URLS_PER_PEER

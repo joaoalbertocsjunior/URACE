@@ -1,6 +1,5 @@
 """Provider-independent maintenance eligibility; shared launch guards remain authoritative."""
 from datetime import datetime
-import time
 
 CAPACITY_MARKERS=('rate limit','rate_limit','usage limit','quota','capacity','429','not authenticated','unauthorized','login required','authentication','ordinary usage unavailable')
 

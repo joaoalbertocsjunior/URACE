@@ -1,5 +1,4 @@
 """Tests for urace.work_policy — contract-bound execution choices."""
-import math
 import time
 import unittest
 

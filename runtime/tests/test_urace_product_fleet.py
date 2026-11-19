@@ -1,18 +1,15 @@
 import copy
-import hashlib
 import io
 import json
 import os
-import subprocess
 import tempfile
-import types
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import cli
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -863,7 +860,7 @@ class R72ProductRegistryTests(unittest.TestCase):
 
     def test_state_path_uses_active_product_registry(self):
         """config with product_registry entry + active_product → state_path returns entry's state_path."""
-        from urace._common import state_path, RUNTIME_ROOT
+        from urace._common import state_path
         config = copy.deepcopy(self.config)
         config["product_registry"] = [{
             "id": "prod-test1",
@@ -912,7 +909,7 @@ class R72ProductRegistryTests(unittest.TestCase):
             cli.save_state(config, state)
             with patch.object(cli, "load_config", return_value=config), \
                  patch("urace._common.CONFIG_PATH", new=type("F", (), {"read_text": lambda s, **k: json.dumps(config), "parent": type("P", (), {"mkdir": lambda s, **k: None})()})()) as _mcp, \
-                 patch("urace.cli.save_config") as mock_save_config, \
+                 patch("urace.cli.save_config"), \
                  redirect_stdout(io.StringIO()):
                 # Directly call the state-level logic without persisting config
                 state_fresh = cli.load_state(config)
@@ -1283,7 +1280,7 @@ class R73FleetTests(unittest.TestCase):
                 {"id": "prod-b1", "name": "b", "state_path": state_b_path, "product_files": [], "registered_at": "2026-01-01T00:00:00+00:00", "status": "ACTIVE"},
             ]
             # Write empty states for a and b
-            for name, path in [("a", state_a_path), ("b", state_b_path)]:
+            for name, _path in [("a", state_a_path), ("b", state_b_path)]:
                 mc = dict(config)
                 mc["active_product"] = name
                 ms = cli.initial_state(mc)
@@ -2003,7 +2000,6 @@ class R77ClosedLoopTests(unittest.TestCase):
         payload = _json.loads(out.getvalue())
         self.assertIn("id", payload)
         # Verify state was written with correct AuditRecord fields
-        import os
         written = _json.loads(Path(state_file).read_text(encoding="utf-8"))
         recs = written.get("outcome_feedback_records", [])
         self.assertEqual(len(recs), 1)

@@ -1,5 +1,4 @@
 import copy
-import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -49,6 +48,6 @@ class PublicAuditTests(unittest.TestCase):
   from unittest.mock import patch
   with tempfile.TemporaryDirectory() as folder:
    ledger=Ledger(Path(folder)/'absent');self.assertEqual(ledger.verify()['status'],'NOT_INITIALIZED');self.assertFalse(ledger.root.exists())
-   ledger.append('PUBLIC_AUDIT',{'content_digest':'e'*96});before={p.name:p.read_bytes() for p in ledger.root.iterdir()};(ledger.root/'identity.json').rename(ledger.root/'key-not-needed-for-audit')
+   ledger.append('PUBLIC_AUDIT',{'content_digest':'e'*96});{p.name:p.read_bytes() for p in ledger.root.iterdir()};(ledger.root/'identity.json').rename(ledger.root/'key-not-needed-for-audit')
    with patch('urace.signed_ledger.Identity',side_effect=AssertionError('Private key unavailable')):
     self.assertEqual(ledger.verify()['blocks'],1);page=ledger.page();self.assertNotIn('public',page['rows'][0]);self.assertIn('public',page)

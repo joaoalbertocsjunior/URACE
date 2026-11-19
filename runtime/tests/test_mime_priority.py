@@ -1,6 +1,4 @@
 """Tests for mime_priority.py — 8+ cases."""
-import time
-import pytest
 
 from urace import mime_priority as mp
 from conftest import MockExchange

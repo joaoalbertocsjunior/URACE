@@ -1,7 +1,6 @@
 """Tests for escrow_timeout.py — auto-refund on stalled DEK delivery."""
 
 import time
-import pytest
 from urace.escrow_timeout import (
     DEFAULT_ESCROW_TIMEOUT_HOURS,
     check_escrow_timeouts,

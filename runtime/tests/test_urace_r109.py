@@ -2,12 +2,10 @@
 import unittest
 from urace import primitives as prim
 from urace.primitives import INTEGRITY_GAP_CATALOG
-from urace.cli import initial_state
 
 
 class R109IGCParityTests(unittest.TestCase):
     def setUp(self):
-        from urace import primitives as prim
         self.prim = prim
 
     def test_all_igc_entries_have_severity(self):
@@ -62,7 +60,6 @@ class R109DAGAcyclicityTests(unittest.TestCase):
 
     def _build_dep_graph(self):
         """Build construct_ids adjacency from FEATURE_BUNDLE_REGISTRY."""
-        from urace import primitives as prim
         graph: dict[str, set[str]] = {}
         for name, entry in prim.FEATURE_BUNDLE_REGISTRY.items():
             ids = entry.get("construct_ids", [])
@@ -106,14 +103,12 @@ class R109DAGAcyclicityTests(unittest.TestCase):
 
     def test_feature_bundle_no_self_reference(self):
         """A FeatureBundle MUST NOT list its own name as a construct_id (DAI §62)."""
-        from urace import primitives as prim
         for name, entry in prim.FEATURE_BUNDLE_REGISTRY.items():
             self.assertNotIn(name, entry.get("construct_ids", []),
                 f"FeatureBundle {name!r} self-references its own name in construct_ids (DAI violation)")
 
     def test_igc_vocab_bundle_references_igc_catalog(self):
         """igc-vocabulary bundle must reference IntegrityGapCatalog."""
-        from urace import primitives as prim
         self.assertIn("igc-vocabulary", prim.FEATURE_BUNDLE_REGISTRY)
         bundle = prim.FEATURE_BUNDLE_REGISTRY["igc-vocabulary"]
         self.assertIn("IntegrityGapCatalog", bundle["construct_ids"])
@@ -153,7 +148,6 @@ class R110GapClosureTests(unittest.TestCase):
     """Tests for r110 gap A+B+C: IntentFormulaValidity + AuthorityCeiling + IntentAmbiguityAudit."""
 
     def setUp(self):
-        from urace import primitives as prim
         self.prim = prim
 
     # Gap B: authority-ceiling-reached IGC kind
@@ -962,7 +956,6 @@ class R117DataSourceTests(unittest.TestCase):
         cfg = c.load_config()
 
         import sys
-        from io import StringIO
         old_argv = sys.argv
         sys.argv = ["urace", "data", "add", "mydb", "--type", "postgres", "--connect", "postgresql://localhost/test"]
         try:

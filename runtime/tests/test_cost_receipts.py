@@ -1,5 +1,4 @@
 """Tests for the executor receipt contract in cost_model.py."""
-import json
 import tempfile
 import time
 import unittest

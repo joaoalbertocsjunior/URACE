@@ -1,18 +1,15 @@
 import copy
-import hashlib
 import io
 import json
 import os
 import subprocess
 import tempfile
-import types
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, cli_cycle as _cli_cycle_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import cli, cli_cycle as _cli_cycle_m, executor
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -91,9 +88,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["intent", "--help"])
+                cli.main(["intent", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("rollback", buf.getvalue())
 
     def test_intent_rollback_unknown_version_returns_1(self):
@@ -122,9 +119,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["add", "--help"])
+                cli.main(["add", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("principal", buf.getvalue())
 
     def test_add_principal_creates_record(self):
@@ -147,9 +144,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["check", "--help"])
+                cli.main(["check", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("migration-dry-run", buf.getvalue())
 
     def test_check_migration_dry_run_returns_report(self):
@@ -171,9 +168,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["data", "--help"])
+                cli.main(["data", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("verify", buf.getvalue())
 
     def test_data_status_registered(self):
@@ -181,9 +178,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["data", "--help"])
+                cli.main(["data", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("status", buf.getvalue())
 
     def test_data_credential_registered(self):
@@ -191,9 +188,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["data", "--help"])
+                cli.main(["data", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("credential", buf.getvalue())
 
     def test_data_add_accepts_auto_and_schema_flags(self):
@@ -201,9 +198,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["data", "add", "--help"])
+                cli.main(["data", "add", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("--auto", buf.getvalue())
         self.assertIn("--schema", buf.getvalue())
 
@@ -212,9 +209,9 @@ class R119PrvsCAPTests(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             try:
-                rc = cli.main(["data", "list", "--help"])
+                cli.main(["data", "list", "--help"])
             except SystemExit:
-                rc = 0
+                pass
         self.assertIn("--direction", buf.getvalue())
         self.assertIn("--status", buf.getvalue())
 

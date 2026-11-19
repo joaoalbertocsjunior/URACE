@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 from contextlib import ExitStack,redirect_stdout
 import copy,io,json,tempfile,unittest
-from urace import cli,_common,product_creation as pc,api_interface,integration_bridge,cli_state as _cli_state_m
+from urace import cli,_common,product_creation as pc,integration_bridge,cli_state as _cli_state_m
 
 class ProductCreationTests(unittest.TestCase):
  def setUp(self):

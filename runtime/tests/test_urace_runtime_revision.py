@@ -5,14 +5,13 @@ import json
 import os
 import subprocess
 import tempfile
-import types
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import cli
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -983,7 +982,7 @@ class R44AdditionsTests(unittest.TestCase):
     # --- CLI --from-constraints flag ---
 
     def test_from_constraints_flag_registered(self):
-        import subprocess, sys, os
+        import sys
         result = subprocess.run(
             [sys.executable, "-m", "urace", "derive", "--help"],
             capture_output=True, text=True,
@@ -993,7 +992,7 @@ class R44AdditionsTests(unittest.TestCase):
         self.assertIn("--from-constraints", result.stdout + result.stderr)
 
     def test_from_inspection_flag_registered(self):
-        import subprocess, sys, os
+        import sys
         result = subprocess.run(
             [sys.executable, "-m", "urace", "derive", "--help"],
             capture_output=True, text=True,
@@ -1020,7 +1019,7 @@ class R45AdditionsTests(unittest.TestCase):
     # --- --opt-in-constructs alias ---
 
     def test_opt_in_constructs_flag_registered(self):
-        import subprocess, sys, os
+        import sys
         result = subprocess.run(
             [sys.executable, "-m", "urace", "update", "--help"],
             capture_output=True, text=True,
@@ -1030,7 +1029,6 @@ class R45AdditionsTests(unittest.TestCase):
         self.assertIn("--opt-in-constructs", result.stdout + result.stderr)
 
     def test_opt_in_patterns_alias_still_accepted(self):
-        import copy
         config = isolated_test_config(self)
         mock_result = {
             "status": "REVIEW_REQUIRED", "candidate_sha256": "abc123", "added_lines": 1,
@@ -1045,7 +1043,6 @@ class R45AdditionsTests(unittest.TestCase):
         self.assertIn("opted_in_constructs", mock_result)
 
     def test_opt_in_constructs_accepted(self):
-        import copy
         config = isolated_test_config(self)
         mock_result = {
             "status": "REVIEW_REQUIRED", "candidate_sha256": "abc123", "added_lines": 1,
@@ -1070,7 +1067,7 @@ class R45AdditionsTests(unittest.TestCase):
     # --- _refresh_derived_construct_sets ---
 
     def test_refresh_construct_sets_no_refs(self):
-        import os, tempfile
+        import tempfile
         with tempfile.TemporaryDirectory() as td:
             cfg = {"root": td, "state_path": os.path.join(td, "state.json"),
                    "config_path": os.path.join(td, "config.json"), "product_files": []}
@@ -1080,7 +1077,7 @@ class R45AdditionsTests(unittest.TestCase):
             self.assertIn("no_saved", result[0]["status"])
 
     def test_refresh_construct_sets_refreshes_ref(self):
-        import os, tempfile
+        import tempfile
         with tempfile.TemporaryDirectory() as td:
             cfg = {"root": td, "state_path": os.path.join(td, "state.json"),
                    "config_path": os.path.join(td, "config.json"), "product_files": []}
@@ -1271,12 +1268,12 @@ class R46AdditionsTests(unittest.TestCase):
     def test_construct_digests_in_saved_ref_keys(self):
         # Verify _csr_ref construction includes construct_digests
         import inspect
-        src = inspect.getsource(cli.main)
+        src = inspect.getsource(cli._cmd_derive)
         self.assertIn("construct_digests", src)
 
     def test_pattern_digests_in_saved_ref_keys(self):
         import inspect
-        src = inspect.getsource(cli.main)
+        src = inspect.getsource(cli._cmd_derive)
         self.assertIn("pattern_digests", src)
 
 class R48AdditionsTests(unittest.TestCase):

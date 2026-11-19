@@ -2,14 +2,11 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-import pytest
 
 # Ensure repo root on path
 _TESTS_DIR = Path(__file__).resolve().parent
@@ -178,8 +175,6 @@ def test_each_fix_passes_its_acceptance_test():
     specific acceptance test passes.  Proves MOCK_FIX → acceptance_test is correct
     for every task, making the benchmark verifiable and reproducible.
     """
-    import shutil
-    import tempfile
     from trial.benchmark_corpus import BENCHMARK_TASKS
     from trial.benchmark_control import apply_fix, _extract_test_name
 

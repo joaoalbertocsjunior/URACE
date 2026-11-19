@@ -1,8 +1,6 @@
 """Tests for urace.portfolio_github — git workflow helpers."""
-import subprocess
 import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 

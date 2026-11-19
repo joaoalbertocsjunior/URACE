@@ -3,7 +3,6 @@ import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import pytest
 
 
 def _make_exchange_and_config(tmp_dir, cfg_extra=None):
@@ -273,20 +272,19 @@ def test_install_service_windows_prints_instructions():
 def test_stop_graceful_when_not_initialized():
     """urace stop returns 0 with friendly message when URACE not initialized."""
     import argparse
-    from urace.cli import main as cli_main
     from unittest.mock import patch
     args = argparse.Namespace(command='pause', json=False, format=None)
     with patch('urace.cli.load_config', return_value={}), \
          patch('urace.cli.state_path', side_effect=RuntimeError('URACE is not initialized; run `urace init`')):
         from urace import cli
-        result = cli.main.__wrapped__(args) if hasattr(cli.main, '__wrapped__') else None
+        cli.main.__wrapped__(args) if hasattr(cli.main, '__wrapped__') else None
     # Just verify import and no unhandled exception path — full integration tested manually
 
 
 def test_stop_graceful_load_state_raises():
     """pause handler returns 0 when load_state raises RuntimeError (not initialized)."""
-    import argparse, tempfile
-    from urace import exchange_cli, cli
+    import argparse
+    from urace import cli
     from unittest.mock import patch, MagicMock
     args = argparse.Namespace(command='pause', json=False, format=None)
     with patch('urace.cli.load_config', return_value={'state_path': '/nonexistent/state.json'}), \
@@ -294,7 +292,7 @@ def test_stop_graceful_load_state_raises():
          patch('urace.cli.state_lock', return_value=MagicMock(__enter__=lambda s: s, __exit__=MagicMock(return_value=False))), \
          patch('urace.cli.load_state', side_effect=RuntimeError('URACE is not initialized; run `urace init`')):
         # Import main and call the pause branch directly
-        import io, sys
+        import io
         captured = io.StringIO()
         with patch('sys.stdout', captured):
             try:
@@ -308,7 +306,6 @@ def test_stop_graceful_load_state_raises():
 
 def test_update_duckdns_returns_true_on_ok(monkeypatch):
     """update_duckdns returns True when DuckDNS API responds with 'OK'."""
-    import io
     from unittest.mock import patch, MagicMock
     from urace import ddns
 
@@ -384,13 +381,13 @@ def test_setup_port_forward_basic(tmp_path):
         mock_sock.__exit__ = MagicMock(return_value=False)
         mock_sock.getsockname.return_value = ('192.168.1.5', 0)
 
-        import io, sys
+        import io
         captured = io.StringIO()
         with patch('urace.stun_client.get_public_address', return_value={'ip': '203.0.113.1', 'port': 7301}), \
              patch('socket.socket', return_value=mock_sock), \
              patch('subprocess.run', return_value=MagicMock(stdout='default via 192.168.1.1 dev eth0\n', returncode=0)), \
              patch('sys.stdout', captured):
-            ret = exchange_cli.run(args, config)
+            exchange_cli.run(args, config)
 
     out = captured.getvalue().strip()
     result = json.loads(out)
@@ -435,7 +432,7 @@ def test_setup_port_forward_configures_ddns(tmp_path):
              patch('urllib.request.urlopen', return_value=mock_ddns_resp), \
              patch('urace._common.atomic_write_json', side_effect=fake_awj), \
              patch('sys.stdout', captured):
-            ret = exchange_cli.run(args, config)
+            exchange_cli.run(args, config)
 
     out = captured.getvalue().strip()
     result = json.loads(out)
@@ -495,8 +492,6 @@ def test_guide_cloudflare_needs_login():
 
 def test_guide_localhost_run_fallback():
     from unittest.mock import patch
-    from pathlib import Path
-    import shutil
     from urace.exchange_cli import _build_network_guide
     cap = _guide_cap('symmetric', upnp=False)
     with patch('urace.tunnel_install.find_cloudflared', return_value=None), \
@@ -508,7 +503,6 @@ def test_guide_localhost_run_fallback():
 
 def test_guide_intranet_only():
     from unittest.mock import patch
-    from pathlib import Path
     from urace.exchange_cli import _build_network_guide
     cap = _guide_cap('unknown', upnp=False, can_bootstrap=False, can_relay=False)
     with patch('urace.tunnel_install.find_cloudflared', return_value=None), \
@@ -521,7 +515,7 @@ def test_guide_intranet_only():
 def test_setup_node_guide_flag_no_config_write():
     """setup-node --guide returns guide without writing policy.json."""
     import io, tempfile
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import patch
     from urace import exchange_cli
 
     cap = _guide_cap('cone', upnp=False)

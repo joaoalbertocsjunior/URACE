@@ -1,4 +1,4 @@
-import json,tempfile,unittest
+import tempfile,unittest
 from pathlib import Path
 from urace.authenticated_journal import append_row,coverage
 class JournalTests(unittest.TestCase):

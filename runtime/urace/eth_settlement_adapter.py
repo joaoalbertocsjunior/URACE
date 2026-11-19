@@ -7,7 +7,6 @@ All methods return {status: 'rpc_error', error: str} on failure — never raise.
 from __future__ import annotations
 import hashlib as _hashlib
 import json as _json
-import struct as _struct
 import urllib.request as _ur
 from pathlib import Path
 

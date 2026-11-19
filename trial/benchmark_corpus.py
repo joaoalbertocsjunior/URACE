@@ -1,7 +1,6 @@
 """Benchmark corpus — 10 improvement tasks covering all 10 gaps in BudgetTracker."""
 from __future__ import annotations
 
-from pathlib import Path
 
 BENCHMARK_TASKS = [
     # ------------------------------------------------------------------

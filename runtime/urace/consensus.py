@@ -11,9 +11,7 @@ import json
 import math
 import time
 
-from . import ledger_crypto
 from . import peer_exchange
-from .ledger_sync import latest_seal
 
 
 def consensus_threshold(exchange) -> int:

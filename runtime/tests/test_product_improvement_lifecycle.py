@@ -384,7 +384,7 @@ class ImprovementReportTests(unittest.TestCase):
                 for p in patches:
                     stack.enter_context(p)
                 stack.enter_context(patch("sys.stdout", buf))
-                rc = main(["auto", "--cycles", "1", "--report"])
+                main(["auto", "--cycles", "1", "--report"])
 
         output = buf.getvalue()
         report_lines = [l for l in output.splitlines() if '"schema"' in l and "improvement-report" in l]
@@ -453,7 +453,7 @@ class ResumeSessionTests(unittest.TestCase):
         """--resume must call load_or_generate, not generate, at the cycle boundary."""
         import tempfile
         from contextlib import ExitStack
-        from unittest.mock import patch, call
+        from unittest.mock import patch
         from urace.cli import main
 
         with tempfile.TemporaryDirectory() as tmpdir:

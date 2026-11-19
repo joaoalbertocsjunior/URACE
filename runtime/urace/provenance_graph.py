@@ -8,8 +8,6 @@ Multi-provenance example:
   Component B = Sub-owner P (70%) + Sub-owner Q (30%)
   → Y's provenance: {A_owner: 0.60, P: 0.28, Q: 0.12}
 """
-import hashlib
-from typing import Any
 
 
 def resolve_provenance_weights(feature_id: str, rows: list[dict],

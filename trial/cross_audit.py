@@ -1,7 +1,7 @@
 """Sampled second-provider revalidation; never rewrites historical verdicts."""
 from pathlib import Path
 from datetime import datetime,timezone
-import json,time,uuid
+import json,uuid
 from common import BASE,atomic
 from quality_policy import blind_review_prompt,normalize_review,quality_pass,preserve_decision_contract
 

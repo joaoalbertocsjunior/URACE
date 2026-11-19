@@ -14,7 +14,6 @@ import json
 import math
 import os
 import shutil
-import sys
 import time
 from pathlib import Path
 

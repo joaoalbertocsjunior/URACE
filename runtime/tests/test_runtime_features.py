@@ -102,4 +102,3 @@ class FeaturesCLITests(unittest.TestCase):
   code,text=self._call(['--json','summary'])
   self.assertEqual(code,0);data=json.loads(text);self.assertIn('stable',data)
 
-import sys

@@ -19,7 +19,6 @@ class AutomaticDataRecovery(unittest.TestCase):
   with tempfile.TemporaryDirectory() as directory:
    root=Path(directory);src=root/'input.json';src.write_text('[{"n":1}]')
    record={'id':'source','adapter_kind':'json','auto':True,'direction':'READ','connection_metadata':{'dsn':str(src)}};state={'data_source_records':[record]};config={'data_limits':{'auto_poll_seconds':0}}
-   real=data_transport.perform
    with patch.object(data_transport,'read',side_effect=OSError('transient busy')):
     first=data_transport.auto_sync(state,config,root)
    self.assertEqual(first[0]['status'],'DISCONNECTED')

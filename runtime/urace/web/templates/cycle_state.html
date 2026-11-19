@@ -1,0 +1,85 @@
+{% set lc = lifecycle_state | lower %}
+{% if lc == 'active' %}{% set lc_class = 'active' %}
+{% elif lc == 'dormant' %}{% set lc_class = 'dormant' %}
+{% elif lc == 'blocked' %}{% set lc_class = 'blocked' %}
+{% else %}{% set lc_class = 'unknown' %}{% endif %}
+
+<div class="cycle-lifecycle-row">
+  <span class="lifecycle-badge {{ lc_class }}">{{ lifecycle_state }}</span>
+</div>
+
+{% if not objectives and not evidence and not decisions and not operations and not checkpoints %}
+<div class="cycle-empty">No cycle data yet.</div>
+{% else %}
+<div class="cycle-grid">
+
+  <div class="cycle-col">
+    <div class="cycle-col-header">Objectives <span class="cycle-count">{{ objectives | length }}</span></div>
+    {% for obj in objectives %}
+    <div class="cycle-item">
+      <span class="cycle-item-id" title="{{ obj.id }}">{{ (obj.id or '')[:8] }}</span>
+      {% set st = (obj.status or '') | lower %}
+      <span class="cycle-badge-status status-{{ st }}">{{ obj.status or '—' }}</span>
+      <span class="cycle-item-ts">{{ (obj.deadline or '')[:10] or '—' }}</span>
+    </div>
+    {% else %}
+    <div class="cycle-empty-col">—</div>
+    {% endfor %}
+  </div>
+
+  <div class="cycle-col">
+    <div class="cycle-col-header">Evidence <span class="cycle-count">{{ evidence | length }}</span></div>
+    {% for ev in evidence %}
+    <div class="cycle-item">
+      <span class="cycle-item-id" title="{{ ev.id }}">{{ (ev.id or '')[:8] }}</span>
+      <span class="cycle-badge-status status-evidence">{{ ev.kind or '—' }}</span>
+      <span class="cycle-item-ts">{{ (ev.at or '')[:10] or '—' }}</span>
+    </div>
+    {% else %}
+    <div class="cycle-empty-col">—</div>
+    {% endfor %}
+  </div>
+
+  <div class="cycle-col">
+    <div class="cycle-col-header">Decisions <span class="cycle-count">{{ decisions | length }}</span></div>
+    {% for dec in decisions %}
+    <div class="cycle-item">
+      <span class="cycle-item-id" title="{{ dec.id }}">{{ (dec.id or '')[:8] }}</span>
+      {% set oc = (dec.outcome or '') | lower %}
+      <span class="cycle-badge-status outcome-{{ oc }}">{{ dec.outcome or '—' }}</span>
+      <span class="cycle-item-ts">{{ (dec.at or '')[:10] or '—' }}</span>
+    </div>
+    {% else %}
+    <div class="cycle-empty-col">—</div>
+    {% endfor %}
+  </div>
+
+  <div class="cycle-col">
+    <div class="cycle-col-header">Operations <span class="cycle-count">{{ operations | length }}</span></div>
+    {% for op in operations %}
+    <div class="cycle-item">
+      <span class="cycle-item-id" title="{{ op.id }}">{{ (op.id or '')[:8] }}</span>
+      {% set ops = (op.status or '') | lower %}
+      <span class="cycle-badge-status status-{{ ops }}">{{ op.status or '—' }}</span>
+      <span class="cycle-item-ts">{{ (op.accepted_at or '')[:10] or '—' }}</span>
+    </div>
+    {% else %}
+    <div class="cycle-empty-col">—</div>
+    {% endfor %}
+  </div>
+
+  <div class="cycle-col">
+    <div class="cycle-col-header">Checkpoints <span class="cycle-count">{{ checkpoints | length }}</span></div>
+    {% for cp in checkpoints %}
+    <div class="cycle-item">
+      <span class="cycle-item-id" title="{{ cp.id }}">{{ (cp.id or '')[:8] }}</span>
+      <span class="cycle-badge-status status-checkpoint">{{ cp.kind or '—' }}</span>
+      <span class="cycle-item-ts">{{ (cp.at or '')[:10] or '—' }}</span>
+    </div>
+    {% else %}
+    <div class="cycle-empty-col">—</div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endif %}

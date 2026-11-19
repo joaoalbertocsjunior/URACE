@@ -43,4 +43,3 @@ class GenerateAndSelectDisabledTest(unittest.TestCase):
   result=me.generate_and_select({},{},(lambda *a:{}))
   self.assertIsNone(result)
 
-import sys

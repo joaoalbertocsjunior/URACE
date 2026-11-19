@@ -1,7 +1,6 @@
 """Native MCP project tools. Untrusted programs run only in a networkless container."""
 from pathlib import Path
-import json,os,subprocess,sys,time,hashlib
-from common import atomic
+import json,os,subprocess,sys,time
 from executable_sandbox import IMAGE,SandboxInfrastructureError
 MAX_BYTES=1048576
 TOOLS=[{'name':'list_files','description':'List the isolated project files','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}, {'name':'read_file','description':'Read a UTF-8 file inside the isolated project','inputSchema':{'type':'object','properties':{'path':{'type':'string'},'start_line':{'type':'integer','minimum':1},'end_line':{'type':'integer','minimum':1}},'required':['path'],'additionalProperties':False}}, {'name':'write_file','description':'Write implementation source inside the isolated project','inputSchema':{'type':'object','properties':{'path':{'type':'string'},'content':{'type':'string'}},'required':['path','content'],'additionalProperties':False}}, {'name':'run_checks','description':'Run immutable published development checks, with diagnostic feedback','inputSchema':{'type':'object','properties':{},'additionalProperties':False}}, {'name':'run_python','description':'Run Python with arguments inside the isolated networkless project container','inputSchema':{'type':'object','properties':{'args':{'type':'array','items':{'type':'string'},'maxItems':30}},'required':['args'],'additionalProperties':False}}]

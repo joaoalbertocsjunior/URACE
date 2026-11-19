@@ -71,7 +71,7 @@ class PeerAddressBook:
         if not isinstance(remote_book, dict):
             return
         with _LOCK:
-            local_peers = set(self._book.keys())
+            set(self._book.keys())
             for pid, urls in remote_book.items():
                 if not isinstance(pid, str) or not isinstance(urls, list):
                     continue

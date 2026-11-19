@@ -1,4 +1,4 @@
-import copy,unittest
+import unittest
 from unittest.mock import patch
 from urace import implementation_sequence as seq,inspection,cli
 

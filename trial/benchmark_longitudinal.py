@@ -22,8 +22,7 @@ def run_longitudinal(
 ) -> dict:
     """Model n_cycles URACE cycles and emit longitudinal_report.json."""
     from trial.benchmark_corpus import BENCHMARK_TASKS
-    from trial.benchmark_control import run_control_arm, DIFFICULTY_TOKENS, _compute_cost
-    from trial.executor_receipt import PROVIDER_RATES
+    from trial.benchmark_control import DIFFICULTY_TOKENS, _compute_cost
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

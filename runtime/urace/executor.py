@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import time
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -18,15 +18,11 @@ from . import evolution_guard
 from .executor_routing import (
     ExecutorUnavailable,
     SUPPORTED_ADAPTERS,
-    EXECUTION_ENVIRONMENT_FAILURES,
-    AUTH_FAILURE_MARKERS,
-    TRANSIENT_NETWORK_MARKERS,
     classify_execution_environment,
     classify_auth_failure,
     classify_transient_network_failure,
-    _env_auto_providers,
-    provider_definitions,
     _provider_timing_error,
+    provider_definitions,  # noqa: F401 — re-exported for circuit_breaker.py
     routed_provider_definitions,
     provider_settings,
     configured_transport_limit,
@@ -39,60 +35,8 @@ from .executor_routing import (
 
 def _runtime_test_failure_detail(output: str) -> str:
     """Keep bounded unittest diagnostics, including abbreviated reports."""
-    lines = output.splitlines()
-    headings = [i for i, line in enumerate(lines)
-                if re.fullmatch(r"(?:FAIL|ERROR): \S+ \([^\n]+\)", line)]
-    if not headings:
-        return output[-2000:]
-    summary_index = next((i for i in range(headings[0] + 1, len(lines))
-                          if re.fullmatch(r"Ran \d+ tests? in .+", lines[i])), None)
-    summary = []
-    end = len(lines) if summary_index is None else summary_index
-    if summary_index is not None:
-        summary.append(lines[summary_index])
-        verdict = next((line for line in lines[summary_index + 1:]
-                        if re.fullmatch(r"(?:FAILED|OK)(?:\s+\(.+\))?", line)), None)
-        if verdict:
-            summary.append(verdict)
-    headings = [i for i in headings if i < end]
-    blocks = []
-    for position, start in enumerate(headings):
-        stop = headings[position + 1] if position + 1 < len(headings) else end
-        while stop > start and re.fullmatch(r"[=-]{20,}", lines[stop - 1]):
-            stop -= 1
-        blocks.append(lines[start:stop])
-    separator = "\n" + "=" * 70 + "\n"
-    parts = ["\n".join(block) for block in blocks]
-    if summary:
-        parts.append("\n".join(summary))
-    detail = separator.join(parts)
-    if len(detail) <= 6000:
-        return detail
-    marker = "[trace context truncated]"
-    labels = [block[0] for block in blocks]
-    summary_text = "\n".join(summary)
-    fixed = [label + "\n" + marker for label in labels]
-    fixed_size = len(separator.join(fixed + ([summary_text] if summary else [])))
-    if fixed_size > 6000:
-        # A bounded message cannot contain arbitrarily many complete names.
-        # Report omissions explicitly rather than silently losing middle failures.
-        summary_text = summary_text[-500:]
-        kept, size = [], 0
-        for label in labels:
-            if size + len(label) + 1 > 6000 - len(summary_text) - 128:
-                break
-            kept.append(label)
-            size += len(label) + 1
-        return "\n".join(kept + [f"[{len(labels) - len(kept)} failure headers omitted; diagnostic limit]", summary_text])[:6000]
-    allowance = max(0, 6000 - fixed_size - 2 * len(blocks)) // len(blocks)
-    compact = []
-    for label, block in zip(labels, blocks):
-        trace = "\n".join(block[1:])
-        if len(trace) > allowance:
-            prefix = allowance * 2 // 3
-            trace = trace[:prefix] + "\n" + marker + "\n" + trace[-(allowance - prefix):] if allowance else marker
-        compact.append(label + ("\n" + trace if trace else ""))
-    return separator.join(compact + ([summary_text] if summary else []))[:6000]
+    from .failure_formatter import format_failure_output
+    return format_failure_output(output)
 
 
 def pool_availability(settings: dict[str, Any], pool_state: dict[str, Any] | None = None, capability: str = "discovery") -> dict[str, Any]:
@@ -244,7 +188,7 @@ def run_routed_codex(root: Path, settings: dict[str, Any], pool_state: dict[str,
                           outcome="TERMINAL_ERROR")
             aggregate = _aggregate_transport_usage(transport_usage)
             if aggregate is not None:
-                setattr(error, "__urace_executor_metadata__", aggregate)
+                error.__urace_executor_metadata__ = aggregate
             raise
         executor_metadata = result.get("__urace_executor_metadata__")
         transport_usage.append(_transport_receipt(provider_id, executor_metadata))
@@ -283,7 +227,7 @@ def run_routed_codex(root: Path, settings: dict[str, Any], pool_state: dict[str,
     error = ExecutorUnavailable(category, retry_at, detail)
     aggregate = _aggregate_transport_usage(transport_usage)
     if aggregate is not None:
-        setattr(error, "__urace_executor_metadata__", aggregate)
+        error.__urace_executor_metadata__ = aggregate
     raise error
 
 
@@ -477,7 +421,7 @@ def _run_claude(root: Path, settings: dict[str, Any], prompt: str, schema: dict[
                    or classify_unavailability(detail, settings)
                    or RuntimeError(f"Claude executor failed: {detail}"))
         if isinstance(error_envelope, dict):
-            setattr(failure, "__urace_executor_metadata__", _claude_usage_metadata(error_envelope))
+            failure.__urace_executor_metadata__ = _claude_usage_metadata(error_envelope)
         raise failure
     maximum = int(settings.get("max_executor_result_bytes", 1048576))
     if len(stdout.encode("utf-8")) > maximum:
@@ -651,7 +595,7 @@ def _run_codex(
             result = json.loads(text) if schema is not None else {"message": text}
         except Exception as error:
             if usage_metadata is not None:
-                setattr(error, "__urace_executor_metadata__", usage_metadata)
+                error.__urace_executor_metadata__ = usage_metadata
             raise
         if usage_metadata is not None:
             result["__urace_executor_metadata__"] = usage_metadata
@@ -1002,7 +946,7 @@ For an update migration, preserve attributable local choices while implementing 
                 # The provider call completed before candidate validation. Preserve its
                 # accounting without changing the validation exception or disposition.
                 if "__urace_executor_metadata__" in result:
-                    setattr(error, "__urace_executor_metadata__", result["__urace_executor_metadata__"])
+                    error.__urace_executor_metadata__ = result["__urace_executor_metadata__"]
                 raise
         return {
             "status": "PREPARED",

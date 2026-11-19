@@ -1,8 +1,8 @@
 """Tests for tui.py — model, routing, and collect logic (no curses terminal needed)."""
 import json,tempfile,unittest
 from pathlib import Path
-from unittest.mock import patch,MagicMock
-from urace import tui,version
+from unittest.mock import patch
+from urace import tui
 
 class FormatScoreTests(unittest.TestCase):
  def test_none_returns_na(self):self.assertEqual(tui.format_score(None),'n/a')
@@ -81,7 +81,7 @@ class CollectTests(unittest.TestCase):
 
 class DispatchTests(unittest.TestCase):
  def test_dispatch_success(self):
-  with patch('urace.cli.main',return_value=0) as m:
+  with patch('urace.cli.main',return_value=0):
    r=tui._dispatch(['check'])
   self.assertEqual(r,0)
  def test_dispatch_systemexit_code(self):
@@ -101,4 +101,3 @@ class LaunchNoTtyTests(unittest.TestCase):
     tui.launch({},Path('/tmp'))
   fb.assert_called_once()
 
-import sys

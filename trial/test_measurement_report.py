@@ -129,7 +129,7 @@ def test_no_p2p_receipts_p2p_status_not_available(tmp_path):
     report = build_report(_make_corpus(tmp_path))
     for row in report['per_task']:
         assert row['p2p']['status'] == 'NOT_AVAILABLE'
-    for key, cell in report['summary_table'].items():
+    for _key, cell in report['summary_table'].items():
         if isinstance(cell, dict) and 'p2p' in cell:
             assert cell['p2p'] == 'NOT_AVAILABLE'
 

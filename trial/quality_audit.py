@@ -1,7 +1,6 @@
 """Append-only audit of historical editorial risks and matched strategy observations."""
 from pathlib import Path
-from collections import Counter
-import hashlib,json,time
+import json,time
 from common import atomic
 from quality_policy import preserve_decision_contract,POLICY
 

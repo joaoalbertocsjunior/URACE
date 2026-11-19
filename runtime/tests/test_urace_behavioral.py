@@ -1,18 +1,11 @@
 import copy
 import hashlib
-import io
-import json
-import os
-import subprocess
 import tempfile
-import types
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from urace import analytics, cli, cli_state as _cli_state_m, compaction as compaction_module, evolution_guard, executor, external_metrics, launcher, portfolio, scope_priority, updater
+from urace import cli, cli_state as _cli_state_m, evolution_guard
 
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 TEST_PRODUCT_ROOT = Path(__file__).resolve().parents[3]
@@ -488,7 +481,6 @@ class BehavioralContractTests(unittest.TestCase):
         that permission does not extend to spec (rebootstrap) evolution.
         The evolution guard must separately protect the spec files.
         """
-        from urace import evolution_guard
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "live"
             candidate = Path(directory) / "candidate"

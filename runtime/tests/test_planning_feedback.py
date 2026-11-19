@@ -90,4 +90,3 @@ class ApplyTests(unittest.TestCase):
         self.assertGreater(obj["feedback_priority_adjustment"], 0.0)
 
 
-import sys

@@ -1,7 +1,6 @@
 """Source-bound candidate qualification. Only trusted controller receipts authorize deployment."""
 from pathlib import Path
-from datetime import datetime,timezone
-import hashlib,json,os,shutil,subprocess,time,uuid,zipfile
+import json,os,shutil,subprocess,time,uuid,zipfile
 from common import atomic
 import runtime_evaluation as ev
 

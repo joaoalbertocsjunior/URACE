@@ -1,4 +1,4 @@
-import unittest,tempfile,json
+import unittest,tempfile
 from pathlib import Path
 from urace import authority,validation,cli,cli_state as _cli_state_m,_common,command_surface
 class UserBenefitCoreTests(unittest.TestCase):

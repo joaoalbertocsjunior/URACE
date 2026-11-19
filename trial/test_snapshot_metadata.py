@@ -1,4 +1,4 @@
-import hashlib,json,tempfile,unittest
+import json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 import spec_trial as s

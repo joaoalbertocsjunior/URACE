@@ -1,25 +1,8 @@
 from __future__ import annotations
 
-import argparse
-import atexit
-import copy
-import hashlib
 import json
 import logging
-import math
-import os
-import re
-import signal
-import subprocess
-import sys
-import tempfile
-import time
-import uuid
-from collections.abc import Callable
-from contextlib import contextmanager, nullcontext
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import Any
+from datetime import datetime, timezone
 
 _logger = logging.getLogger(__name__)
 
@@ -27,42 +10,11 @@ _logger = logging.getLogger(__name__)
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
-from . import executor as intelligent_executor
-from . import external_metrics
-from . import analytics
-from . import scope_priority
-from . import updater
-from . import authority as authority_resolver
-from . import destination as destination_anchor
-from . import validation as independent_validation
-from . import value_trajectory
-from . import outcome_verification
-from . import rules as rule_ledger_module
-from . import spec_audit as spec_audit_module
-from .primitives import OUTPUT_SCHEMA_REGISTRY, INTEGRITY_GAP_CATALOG as IGC_KINDS
-from . import decision_record as decision_record_module
 from . import compaction as compaction_module
-from . import cognitive_resume as cognitive_resume_module
-from . import patterns as pattern_catalog_module
-from . import continuation as continuation_module
-from ._common import nullable_limit
-from . import auto_goals, user_controls, command_surface, api_interface, freeform_routing, data_transport
 # Keep build_parser and parse_cycles available from urace.cli for existing API callers.
-from .cli_parser import build_parser, dispatch_parser, parse_cycles
 
 from ._common import (
-    ROOT, CONFIG_PATH, RUNTIME_ROOT, SYSTEM_ROOT,
-    now, identifier, atomic_write_text, atomic_write_json, durable_unlink,
-    process_exists, state_lock, load_config, save_config, state_path, load_state,
-    load_state_for_read, save_state, transaction_path, input_directory,
-)
-from .inputs import consume_inputs, queue_input, cleanup_consumed_inputs, apply_pending_inputs
-from .inspection import (
-    document_metrics, compare, objective_is_eligible, goal_is_schedulable,
-    objective_score, objective_score_breakdown, goal_portfolio,
-    work_evaluations, context_view, resource_accounting,
-    executor_efficiency_vital, evolution_vital, render, vitals_snapshot,
-    render_vitals, render_cycle, command_catalog, top_level_help,
+    state_path,
 )
 
 
@@ -113,42 +65,7 @@ th{{background:#161b22}}pre{{background:#161b22;padding:1rem;overflow:auto}}</st
 </body></html>"""
 
 
-# ── Output format helpers (--format json|xml) ────────────────────────────────
-
-def _json_to_xml(data: object, root: str = "urace", _indent: int = 0) -> str:
-    """Recursively convert a JSON-compatible Python object to XML string.
-
-    Elements-only (no attributes). Lists use repeated <item> children.
-    None becomes <null/>. Root tag wraps the entire output at indent=0.
-    """
-    pad = "  " * _indent
-    if _indent == 0:
-        inner = _json_to_xml(data, root, _indent=1)
-        return f"<{root}>\n{inner}</{root}>"
-    if data is None:
-        return f"{pad}<null/>\n"
-    if isinstance(data, bool):
-        return f"{pad}<bool>{str(data).lower()}</bool>\n"
-    if isinstance(data, (int, float)):
-        return f"{pad}<number>{data}</number>\n"
-    if isinstance(data, str):
-        escaped = data.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        return f"{pad}<string>{escaped}</string>\n"
-    if isinstance(data, list):
-        lines = []
-        for item in data:
-            inner = _json_to_xml(item, root, _indent=_indent + 1)
-            lines.append(f"{pad}<item>\n{inner}{pad}</item>\n")
-        return "".join(lines)
-    if isinstance(data, dict):
-        lines = []
-        for key, val in data.items():
-            safe_key = re.sub(r"[^A-Za-z0-9_\-.]", "_", str(key))
-            inner = _json_to_xml(val, root, _indent=_indent + 1)
-            lines.append(f"{pad}<{safe_key}>\n{inner}{pad}</{safe_key}>\n")
-        return "".join(lines)
-    return f"{pad}<value>{data}</value>\n"
-
+# ── Output format helpers (--format json) ────────────────────────────────
 
 def _validate_freeform_query(q: "str | None", max_bytes: int = 4096) -> "str | None":
     """Validate a freeform search/query string.
@@ -171,46 +88,9 @@ def _validate_freeform_query(q: "str | None", max_bytes: int = 4096) -> "str | N
     return q
 
 
-def _print_fmt(data: object, fmt: str, *, root: str = "urace") -> None:
-    """Print data as JSON (default) or XML based on fmt ('json' or 'xml').
-
-    Used by command handlers that support --format json|xml.
-    Graceful fallback: non-JSON-serializable data prints as JSON string.
-    """
-    if fmt == "xml":
-        print(_json_to_xml(data, root))
-    else:
-        print(json.dumps(data, indent=2))
-
-
-class _XmlConvertStream:
-    """Stdout wrapper that converts JSON writes to XML (used when --format xml is active).
-
-    Each call to write() is inspected: if it starts with { or [, it is parsed as JSON
-    and converted to XML. Non-JSON text passes through unchanged. This allows all
-    existing handlers (which call json.dumps) to produce XML output without modification.
-    """
-
-    def __init__(self, underlying: Any) -> None:
-        self._u = underlying
-
-    def write(self, s: str) -> int:
-        stripped = s.strip()
-        if stripped and stripped[0] in ("{", "["):
-            try:
-                data = json.loads(stripped)
-                xml_out = _json_to_xml(data) + "\n"
-                self._u.write(xml_out)
-                return len(s)
-            except (json.JSONDecodeError, ValueError):
-                pass
-        return self._u.write(s)
-
-    def flush(self) -> None:
-        self._u.flush()
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._u, name)
+def _print_fmt(data: object, fmt: str = 'json', *, root: str = "urace") -> None:
+    """Print data as JSON. fmt and root params kept for call-site compatibility."""
+    print(json.dumps(data, indent=2, sort_keys=True))
 
 
 def _resolve_scope_target(target_expr: str | None, state_path_dir: str) -> dict:

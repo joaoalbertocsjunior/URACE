@@ -1,5 +1,4 @@
 """Inspectable declarative scores. No eval, plugins, executable formulas or hidden weights."""
-from pathlib import Path
 from datetime import datetime,timezone
 import fcntl,hashlib,json,math,re,time
 from common import BASE,atomic

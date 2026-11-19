@@ -1,6 +1,5 @@
 """Matched, tool-enabled native-agent study with an explicit user-benefit gate."""
 from pathlib import Path
-from datetime import datetime,timezone
 import json,hashlib,time,fcntl,sys
 from common import BASE,atomic
 from controls import effective
@@ -79,7 +78,7 @@ def run_one(base=BASE):
   if time.time()>=work.load(base/'trial-clock.json',{}).get('ends_unix',0):return {**status(base),'status':'TRIAL_ENDED'}
   eligible,waits=spec_trial.eligible()
   from qualification_protocol import cells,digest
-  for provider,effort,family,repeat,cell,completed_arms in cells(root,{**identity,'settings':settings},eligible):
+  for provider,effort,family,repeat,cell,_completed_arms in cells(root,{**identity,'settings':settings},eligible):
       if family not in FAMILIES:continue
       fi=FAMILIES.index(family)
       quarantine=work.load(base/'task-contract-quarantine.json',{}).get(contract(family),{})

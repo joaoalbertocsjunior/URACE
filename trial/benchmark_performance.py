@@ -83,7 +83,6 @@ def _run_routing_throughput(output_dir: Path) -> dict:
 
     from urace.freeform_routing import _route
     from urace.command_surface import catalog as _catalog
-    from urace.intent_trace import source_coverage as _source_coverage
 
     N = 10
     text = "add a chart feature"
@@ -183,7 +182,6 @@ def _run_ledger_append_throughput(output_dir: Path) -> dict:
     the underlying disk/crypto cost.  The signed ledger `append` method is
     replaced with a no-op stub so the measurement reflects dispatch logic only.
     """
-    import json as _json
     import time as _time
 
     N = 1000
@@ -333,7 +331,6 @@ def _run_cache_effectiveness(output_dir: Path) -> dict:
 def _run_concurrent_sessions(output_dir: Path) -> dict:
     """3 concurrent classify calls must all complete without error."""
     from urace.freeform_routing import _route
-    from urace import intent_trace
 
     N_THREADS = 3
     results = [None] * N_THREADS

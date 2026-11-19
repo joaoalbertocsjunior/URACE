@@ -133,7 +133,7 @@ class CreditLedgerDecimalsTests(unittest.TestCase):
  def test_dynamic_cap_clamps_balance(self):
   import unittest.mock as mock
   root=self.root/'cap';root.mkdir()
-  BASE=credit_ledger.BASE_CAP_UNITS;UNIT=credit_ledger.UNIT
+  BASE=credit_ledger.BASE_CAP_UNITS
   # trust=0.1 → cap = BASE*1.1; patch both velocity and cap lookup
   with mock.patch.object(credit_ledger,'_velocity_multiplier',return_value=1.0), \
        mock.patch.object(credit_ledger,'peer_cap_units',return_value=int(BASE*1.1)):
@@ -222,7 +222,6 @@ class ThreeFactorCapTests(unittest.TestCase):
  def test_network_factor_deflated_supply_above_1(self):
   """When total supply << target, network_factor clamped to NETWORK_FACTOR_HIGH."""
   import unittest.mock as mock
-  BASE=credit_ledger.BASE_CAP_UNITS
   peers={'p1','p2'}
   class FakeExchange:
    def audit_rows(self): return [{'peer':p} for p in peers]
@@ -541,8 +540,7 @@ class GraphDistanceRepTests(unittest.TestCase):
 
  def test_combined_rep_symmetric_at_equal(self):
   # d=q → same score regardless of which is which
-  import math
-  s1 = credit_ledger.combined_rep_score(0.7, 0.7)
+  credit_ledger.combined_rep_score(0.7, 0.7)
   s2 = credit_ledger.combined_rep_score(0.7, 0.7, beta=1.0)
   # with beta=1.0 (symmetric), should equal geometric mean
   self.assertAlmostEqual(s2, credit_ledger.combined_rep_score(0.7, 0.7, beta=1.0), places=5)

@@ -2,7 +2,7 @@ import copy,io,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from contextlib import redirect_stdout
-from urace import decision_feedback as d,cli,_common,command_surface
+from urace import decision_feedback as d,cli,command_surface
 from helpers import patch_config_path
 
 class DecisionFeedbackTests(unittest.TestCase):
@@ -43,7 +43,7 @@ class DecisionFeedbackTests(unittest.TestCase):
   self.state['operations']=[{'id':'op-one','objective_reference':'goal-one','status':'ACCEPTED'}];self.assertEqual(d.register_forecast(self.state,self.record,self.forecast)['timing'],'RETROSPECTIVE')
  def test_executor_mode_requires_opt_in_and_caches_exact_input(self):
   invoke=__import__('unittest.mock',fromlist=['Mock']).Mock(side_effect=self.response)
-  r=d.assess(self.config,self.state,self.record,invoke=invoke);invoke.assert_not_called()
+  d.assess(self.config,self.state,self.record,invoke=invoke);invoke.assert_not_called()
   config=self.configured();first=d.assess(config,self.state,self.record,invoke=invoke);self.assertEqual(first['executor_assessment']['status'],'ADVISORY_COMPLETE');second=d.assess(config,self.state,self.record,invoke=invoke);self.assertTrue(second['cache_hit']);self.assertEqual(invoke.call_count,1);self.assertEqual(second['additional_model_calls'],0)
  def test_executor_score_does_not_override_blocked_authority(self):
   self.state['objectives'][0]['title']='spend money';r=d.assess(self.configured(),self.state,self.record,invoke=self.response);self.assertEqual(r['status'],'BLOCKED');self.assertEqual(r['executor_assessment']['advice']['expected_benefit_score'],70)
@@ -96,7 +96,7 @@ class DecisionFeedbackCLITests(unittest.TestCase):
 class AssessmentCancellationTests(unittest.TestCase):
  setUp=DecisionFeedbackTests.setUp
  def test_timed_out_advisory_worker_is_terminated_and_never_counted_as_success(self):
-  import subprocess,signal
+  import subprocess
   class Process:
    pid=12345
    def __init__(self):self.calls=0

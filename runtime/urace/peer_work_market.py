@@ -29,6 +29,9 @@ class EscrowNotFoundError(KeyError):
 # ── Autonomous task decomposition ─────────────────────────────────────────────
 DECOMPOSE_THRESHOLD = 0.7   # complexity ≥ this triggers auto-decomposition
 DECOMPOSE_MIN_BP    = 0.25  # minimum complexity per sub-task (prevents infinite recursion)
+assert DECOMPOSE_THRESHOLD > DECOMPOSE_MIN_BP, (
+    f'DECOMPOSE_THRESHOLD ({DECOMPOSE_THRESHOLD}) must exceed DECOMPOSE_MIN_BP ({DECOMPOSE_MIN_BP})'
+)
 
 # ── LLM-as-peer / executor node registration ──────────────────────────────────
 EXECUTOR_PEER_KIND = 'EXECUTOR_PEER_REGISTERED'
@@ -1092,6 +1095,8 @@ def auto_decompose_request(
 
     Returns list of created request_ids (leaf nodes — no further decomposition).
     """
+    if not 0.0 <= complexity <= 1.0:
+        raise ValueError(f'complexity must be in [0.0, 1.0], got {complexity}')
     from . import credit_ledger as _cl
     floor = _cl.consensus_escrow_floor(exchange)
 

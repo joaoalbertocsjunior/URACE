@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Fleet{% endblock %}
+
+{% block content %}
+<h1>Fleet</h1>
+
+<div id="fleet-summary-bar" class="fleet-summary-bar">
+  <div class="vitals-loading">Loading capacity...</div>
+</div>
+
+<div class="goals-section" style="margin-top:1.5rem;">
+  <div class="goals-list-header">
+    <h2 class="section-title">Members</h2>
+    <button class="btn-secondary" onclick="loadFleet()">Refresh</button>
+  </div>
+  <div id="fleet-members-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<div class="goals-section" style="margin-top:1.5rem;">
+  <h2 class="section-title">Actions</h2>
+  <div class="fleet-actions-grid">
+    <div class="fleet-action-card">
+      <div class="fleet-action-title">Run Fleet</div>
+      <div class="form-row" style="margin-top:0.5rem;">
+        <label class="form-label">
+          <input type="checkbox" id="dry-run-check" checked> Dry Run
+        </label>
+      </div>
+      <div style="margin-top:0.75rem;">
+        <button class="btn-primary" onclick="fleetRun()">Run</button>
+        <span id="run-msg" class="inline-msg" style="margin-left:0.5rem;"></span>
+      </div>
+      <pre id="run-result" class="forecast-pre" style="display:none;margin-top:0.75rem;"></pre>
+    </div>
+
+    <div class="fleet-action-card">
+      <div class="fleet-action-title">Config Push</div>
+      <div class="form-row" style="margin-top:0.5rem;">
+        <label class="form-label" for="cfg-key">Key</label>
+        <input id="cfg-key" class="field-input" type="text" placeholder="config.key">
+      </div>
+      <div class="form-row" style="margin-top:0.5rem;">
+        <label class="form-label" for="cfg-val">Value</label>
+        <input id="cfg-val" class="field-input" type="text" placeholder="value">
+      </div>
+      <div style="margin-top:0.75rem;">
+        <button class="btn-primary" onclick="fleetConfigPush()">Push</button>
+        <span id="push-msg" class="inline-msg" style="margin-left:0.5rem;"></span>
+      </div>
+      <pre id="push-result" class="forecast-pre" style="display:none;margin-top:0.75rem;"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN = {{ token | tojson }};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return iso.slice(0, 16).replace('T', ' ');
+}
+
+function boolBadge(val, trueLabel, falseLabel) {
+  if (val) return `<span class="status-badge badge-active">${trueLabel}</span>`;
+  return `<span class="status-badge badge-default">${falseLabel}</span>`;
+}
+
+async function loadCapacity() {
+  const el = document.getElementById('fleet-summary-bar');
+  try {
+    const r = await fetch('/api/fleet/capacity', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    el.innerHTML = `
+      <div class="capacity-stat"><span class="capacity-label">Fleet Size</span><span class="capacity-value">${data.fleet_size ?? 0}</span></div>
+      <div class="capacity-stat"><span class="capacity-label">Available</span><span class="capacity-value">${data.fleet_available ?? 0}</span></div>
+      <div class="capacity-stat"><span class="capacity-label">Parallel Capacity</span><span class="capacity-value">${data.parallel_capacity ?? 0}</span></div>
+      <div class="capacity-stat"><span class="capacity-label">Calls Remaining 24h</span><span class="capacity-value">${data.total_calls_remaining_24h ?? 0}</span></div>`;
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Capacity unavailable: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function loadFleet() {
+  const el = document.getElementById('fleet-members-wrap');
+  el.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const [sRes, cRes] = await Promise.all([
+      fetch('/api/fleet/status', {headers:{'Authorization':'Bearer '+TOKEN}}),
+      fetch('/api/fleet/capacity', {headers:{'Authorization':'Bearer '+TOKEN}}),
+    ]);
+    const statusList = await sRes.json();
+    const capacity = await cRes.json();
+
+    const memberMap = {};
+    for (const m of (capacity.members || [])) {
+      memberMap[m.name] = m;
+    }
+
+    const statuses = Array.isArray(statusList) ? statusList : [];
+    if (!statuses.length) {
+      el.innerHTML = '<div class="cycle-empty">No fleet members.</div>';
+      return;
+    }
+
+    const rows = statuses.map(s => {
+      const cm = memberMap[s.product] || {};
+      const bottleneckCls = cm.bottleneck ? ' style="color:#f97316;"' : '';
+      return `<tr${bottleneckCls}>
+        <td>${escHtml(s.product || '')}</td>
+        <td><span class="status-badge badge-default">${escHtml(s.lifecycle_state || '—')}</span></td>
+        <td>${fmtDate(s.last_cycle)}</td>
+        <td>${boolBadge(s.onboarded, 'Onboarded', 'Not Onboarded')}</td>
+        <td>${boolBadge(cm.available, 'Available', 'Unavailable')}</td>
+        <td>${cm.calls_remaining_24h ?? '—'}</td>
+      </tr>`;
+    }).join('');
+
+    el.innerHTML = `<table class="data-table">
+      <thead><tr>
+        <th>Product</th><th>Lifecycle</th><th>Last Cycle</th><th>Onboarded</th><th>Available</th><th>Calls/24h</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Failed to load fleet: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function fleetRun() {
+  const dryRun = document.getElementById('dry-run-check').checked;
+  const msg = document.getElementById('run-msg');
+  const pre = document.getElementById('run-result');
+  msg.textContent = 'Running...';
+  msg.className = 'inline-msg';
+  try {
+    const r = await fetch('/api/fleet/run', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json'},
+      body: JSON.stringify({dry_run: dryRun}),
+    });
+    const data = await r.json();
+    msg.textContent = 'Done.';
+    msg.className = 'inline-msg msg-ok';
+    pre.textContent = JSON.stringify(data, null, 2);
+    pre.style.display = 'block';
+  } catch(err) {
+    msg.textContent = 'Error: ' + err.message;
+    msg.className = 'inline-msg msg-err';
+  }
+}
+
+async function fleetConfigPush() {
+  const key = document.getElementById('cfg-key').value.trim();
+  const value = document.getElementById('cfg-val').value.trim();
+  const msg = document.getElementById('push-msg');
+  const pre = document.getElementById('push-result');
+  if (!key) { msg.textContent = 'Key required.'; msg.className = 'inline-msg msg-err'; return; }
+  msg.textContent = 'Pushing...';
+  msg.className = 'inline-msg';
+  try {
+    const r = await fetch('/api/fleet/config-push', {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json'},
+      body: JSON.stringify({key, value}),
+    });
+    const data = await r.json();
+    msg.textContent = 'Done.';
+    msg.className = 'inline-msg msg-ok';
+    pre.textContent = JSON.stringify(data, null, 2);
+    pre.style.display = 'block';
+  } catch(err) {
+    msg.textContent = 'Error: ' + err.message;
+    msg.className = 'inline-msg msg-err';
+  }
+}
+
+loadCapacity();
+loadFleet();
+setInterval(loadFleet, 15000);
+</script>
+{% endblock %}

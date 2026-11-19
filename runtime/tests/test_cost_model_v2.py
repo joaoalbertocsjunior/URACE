@@ -10,7 +10,6 @@ Covers:
 - Protocol fee emitted at fill-listing
 - Minimum viable price auto-adjusts ask_price upward (not rejects)
 """
-import math
 import tempfile
 import time
 import unittest
@@ -162,7 +161,7 @@ class BorrowFeatureCostV2Tests(unittest.TestCase):
     def test_total_buyer_cost_includes_all_components(self):
         config = {'p2p': {'bandwidth_cost_per_mb': 1.0, 'protocol_fee_fraction': 0.1}}
         result = cm.borrow_feature_cost(config, ask_price_units=100, artifact_size_bytes=1_000_000)
-        expected = 100 + 1 + 10  # ask + network_download + protocol_fee (p2p_delivery_cost=0 when p2p_bytes_per_unit default)
+        100 + 1 + 10  # ask + network_download + protocol_fee (p2p_delivery_cost=0 when p2p_bytes_per_unit default)
         # p2p_delivery_cost uses p2p_bytes_per_unit=1_000_000, so 1MB/1MB=1
         self.assertIn('network_download_cost_units', result)
         self.assertIn('protocol_fee_units', result)
@@ -301,7 +300,6 @@ class ProtocolFeeIntegrationTests(unittest.TestCase):
     def _make_exchange_and_fill(self, ask_price, config=None):
         """Set up a minimal exchange and simulate the fill-listing protocol fee emission."""
         from urace import equity_auto_trade as eat, feature_equity as fe, peer_exchange as pe, credit_ledger as cl
-        import tempfile
         config = config or {}
         tmpdir = tempfile.mkdtemp()
         ex = pe.Exchange(Path(tmpdir) / 'node')
@@ -385,7 +383,6 @@ class ListForSaleCeilingIntegrationTests(unittest.TestCase):
         now = time.time()
         rows = [{'kind': 'EQUITY_LISTING_FILLED', 'price_units': 999, 'at_unix': now}]
         # Simulate: config sets ref price to 50
-        config_price = 50
         network_price = cm.derive_executor_reference_price(rows)
         # In exchange_cli, config price wins when set
         # This confirms the branching: config → 50, network → 999
@@ -411,8 +408,7 @@ class MinViablePriceAutoAdjustTests(unittest.TestCase):
 
     def test_ask_price_auto_adjusted_not_rejected(self):
         """When ask_price < minimum_viable_price, it's adjusted up, not rejected."""
-        from urace import equity_auto_trade as eat, feature_equity as fe, credit_ledger as cl
-        import tempfile
+        from urace import equity_auto_trade as eat, feature_equity as fe
         tmpdir = tempfile.mkdtemp()
         from urace import peer_exchange as pe
         ex = pe.Exchange(Path(tmpdir) / 'node')
@@ -420,7 +416,7 @@ class MinViablePriceAutoAdjustTests(unittest.TestCase):
         fe.grant_equity(ex, 'feat-minprice', 'alice')
 
         # With zero config, minimum_viable_price({}, 0) == 1, ask_price=1 is fine
-        lid = eat.list_for_sale(ex, 'feat-minprice', 'alice', 1000, 1)
+        eat.list_for_sale(ex, 'feat-minprice', 'alice', 1000, 1)
         rows = ex.audit_rows()
         self.assertTrue(any(r.get('kind') == 'EQUITY_LISTING' for r in rows))
 
@@ -596,7 +592,6 @@ class ListingCeilingMarginTests(unittest.TestCase):
         # Structural invariant: $Y (worst-case 16% of executor) + $Z ceiling < executor
         # At default margin=0.40, full completeness: Z_ceiling = 60% of ref_price
         # Combined: 16% + 60% = 76% < 100%  ✓
-        ref_price = 100  # URACE units ~ executor cost estimate
         y_max_pct = 0.16  # worst-case P2P integration step overhead
         z_ceiling_pct = (1.0 - 0.40)  # 0.60 at default margin, full completeness
         combined = y_max_pct + z_ceiling_pct
