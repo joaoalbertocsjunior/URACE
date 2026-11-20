@@ -227,6 +227,7 @@ def _cmd_api(args, parser, config, state, fmt, _unknown, raw_args):
                         "stderr":     {"type": "string", "description": "Captured stderr text; empty on success"},
                         "streamed":   {"type": "boolean", "description": "True when --stream was used; output is null and events arrive as NDJSON"},
                         "error":      {"type": "string", "description": "Human-readable error when status==error and input was invalid"},
+                        "cost_snapshot": {"type": "object|null", "description": "Cost summary for the call: {records, total_usd, total_tokens, providers}; null when cost tracking is unavailable"},
                     }
                 },
                 "config_paths": "urace api commands | python3 -c \"import json,sys; [print(c['command']) for c in json.load(sys.stdin)['commands']]\"",

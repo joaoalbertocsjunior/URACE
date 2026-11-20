@@ -192,6 +192,12 @@ def _execute(parser,runner,command=None,params=None,argv=None,stream=False,max_o
                 lines=text.splitlines()
                 try:output=[json.loads(line) for line in lines if line.strip()]
                 except ValueError:output=text
-        return {'schema_version':'1.0','command':request,'status':'ok' if rc in (None,0) else 'error','exit_code':rc or 0,'output':output,'stderr':errors,'streamed':stream}
+        _cost_snap = None
+        try:
+            from .cost_tracker import get_default_ledger
+            _cost_snap = get_default_ledger().cost_snapshot() or None
+        except Exception:
+            pass
+        return {'schema_version':'1.0','command':request,'status':'ok' if rc in (None,0) else 'error','exit_code':rc or 0,'output':output,'stderr':errors,'streamed':stream,'cost_snapshot':_cost_snap}
     except (RequestError,ValueError,IndexError) as error:
-        return {'schema_version':'1.0','command':request,'status':'error','exit_code':2,'output':None,'error':str(error),'stderr':'','streamed':False}
+        return {'schema_version':'1.0','command':request,'status':'error','exit_code':2,'output':None,'error':str(error),'stderr':'','streamed':False,'cost_snapshot':None}
