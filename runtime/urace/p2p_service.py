@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .network_adapter import NetworkAdapter
+
 
 class P2PService:
     """Thin orchestration layer over Exchange and satellite P2P modules.
@@ -26,7 +28,7 @@ class P2PService:
     logic lives here — this is a seam, not an implementation.
     """
 
-    def __init__(self, exchange) -> None:
+    def __init__(self, exchange: NetworkAdapter) -> None:
         self._ex = exchange
 
     # ── Credit / token ────────────────────────────────────────────────────────

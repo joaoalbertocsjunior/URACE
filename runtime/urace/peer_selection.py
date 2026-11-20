@@ -1,11 +1,12 @@
 """Explainable local peer selection. No native model calls or global reputation claims."""
 import hashlib,json,math,time
 from . import peer_exchange as pe
+from .network_adapter import NetworkAdapter
 
 SCHEMA='peer-selection-v1'
 FRESH=3600
 
-def offers(exchange,recipient):
+def offers(exchange: NetworkAdapter, recipient: str) -> dict:
  p=exchange.load()
  if recipient not in p['peers'] or p['peers'][recipient]['blocked']:raise ValueError('Peer denied')
  result=[]
@@ -32,11 +33,11 @@ def validate_catalog(value,peer):
   if any(not isinstance(offer[k],str) or len(offer[k])>256 for k in ('terms','quality')):raise ValueError('Bounded offer claims required')
  return value
 
-def cache(exchange):
+def cache(exchange: NetworkAdapter) -> dict:
  path=exchange.root/'selection.json'
  return json.loads(path.read_text()) if path.exists() else {'schema':SCHEMA,'peers':{}}
 
-def refresh(exchange,limit=3,now=None):
+def refresh(exchange: NetworkAdapter, limit: int = 3, now: float | None = None) -> dict:
  if type(limit) is not int or not 1<=limit<=3:raise ValueError('Refresh selects 1–3 peers per round')
  p=exchange.load();now=time.time() if now is None else now
  if not p['enabled'] or not p['network']:raise ValueError('Network selection refresh disabled')
@@ -68,7 +69,7 @@ def refresh(exchange,limit=3,now=None):
   state['peers'][peer]=row;observations.append({'peer_id':peer,'status':row['status'],'next_probe_unix':row['next_probe_unix']})
  return {'schema':SCHEMA,'checks':observations,'native_model_calls':0,'selection':'Oldest eligible observation first; bounded exponential backoff with finite reconsideration'}
 
-def rank(exchange,wanted=None,now=None):
+def rank(exchange: NetworkAdapter, wanted: list[str] | None = None, now: float | None = None) -> dict:
  p=exchange.load();state=cache(exchange);now=time.time() if now is None else now;wanted=set(wanted if wanted is not None else [f for f,v in p['features'].items() if v.get('wanted',False)])
  for feature in wanted:pe.check_id(feature)
  events=exchange.audit_rows();rows=[]

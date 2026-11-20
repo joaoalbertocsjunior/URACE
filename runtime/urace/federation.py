@@ -17,6 +17,8 @@ Audit row kinds:
 from __future__ import annotations
 import time
 
+from .ledger_adapter import LedgerAdapter
+
 SCHEMA = 'urace-federation-v1'
 
 FEDERATION_REP_DISCOUNT  = 0.7    # remote peer rep × 0.7 until local validation
@@ -29,7 +31,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _fed_rows(exchange) -> list[dict]:
+def _fed_rows(exchange: LedgerAdapter) -> list[dict]:
     try:
         rows = exchange.audit_rows()
     except Exception:
@@ -38,7 +40,7 @@ def _fed_rows(exchange) -> list[dict]:
     return [r for r in rows if r.get('kind') in fed_kinds]
 
 
-def announce_network(exchange, network_id: str, endpoint: str, description: str = '') -> None:
+def announce_network(exchange: LedgerAdapter, network_id: str, endpoint: str, description: str = '') -> None:
     """Broadcast this network's existence to the exchange audit log.
 
     Idempotent per sequence: re-announcing with a higher sequence_id updates the
@@ -61,7 +63,7 @@ def announce_network(exchange, network_id: str, endpoint: str, description: str 
     })
 
 
-def federated_networks(exchange) -> list[dict]:
+def federated_networks(exchange: LedgerAdapter) -> list[dict]:
     """Return all known federated networks with their latest endpoint.
 
     Only the highest-sequence announce per network_id is returned.
@@ -77,7 +79,7 @@ def federated_networks(exchange) -> list[dict]:
     return list(latest.values())
 
 
-def query_feature(exchange, feature_id: str, requester_id: str) -> str:
+def query_feature(exchange: LedgerAdapter, feature_id: str, requester_id: str) -> str:
     """Broadcast a FEDERATION_QUERY for a feature across known federated networks.
 
     Returns the query_id for tracking the response via federation_adoption_results().
@@ -96,7 +98,7 @@ def query_feature(exchange, feature_id: str, requester_id: str) -> str:
 
 
 def record_federation_adoption(
-    exchange,
+    exchange: LedgerAdapter,
     query_id: str,
     remote_network_id: str,
     feature_id: str,
@@ -126,13 +128,13 @@ def record_federation_adoption(
     })
 
 
-def federation_adoption_results(exchange, query_id: str) -> list[dict]:
+def federation_adoption_results(exchange: LedgerAdapter, query_id: str) -> list[dict]:
     """Return all FEDERATION_ADOPTION rows for a given query_id."""
     return [r for r in _fed_rows(exchange)
             if r.get('kind') == 'FEDERATION_ADOPTION' and r.get('query_id') == query_id]
 
 
-def federated_adoption_count(exchange, feature_id: str) -> int:
+def federated_adoption_count(exchange: LedgerAdapter, feature_id: str) -> int:
     """Count distinct (network, peer) adoptions from federation for a feature.
 
     Sybil-resistant: deduplicates by (remote_network_id, adopter_peer_id).

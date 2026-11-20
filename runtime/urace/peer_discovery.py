@@ -41,6 +41,8 @@ import threading
 import time
 from typing import Any
 
+from .network_adapter import NetworkAdapter
+
 _logger = logging.getLogger(__name__)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
@@ -92,7 +94,7 @@ def bdecode(data: bytes) -> Any:
 
 # ── LAN: mDNS announce / discover ─────────────────────────────────────────────
 
-def announce(exchange, port: int) -> Any:
+def announce(exchange: NetworkAdapter, port: int) -> Any:
     """Broadcast this node on the LAN as _urace-exchange._tcp.local.
 
     Returns an opaque handle; pass it to stop_announce() to deregister.
@@ -143,7 +145,7 @@ def stop_announce(handle: Any) -> None:
         pass
 
 
-def discover_lan(exchange, seconds: float = 3.0) -> list[dict[str, Any]]:
+def discover_lan(exchange: NetworkAdapter, seconds: float = 3.0) -> list[dict[str, Any]]:
     """Browse LAN for URACE nodes via mDNS.
 
     Returns candidate dicts: {service, addresses, port, peer_id, auto_trusted: False}.
@@ -183,7 +185,7 @@ def discover_lan(exchange, seconds: float = 3.0) -> list[dict[str, Any]]:
 
 # ── WAN: BitTorrent DHT (BEP 5) ───────────────────────────────────────────────
 
-def _dht_node_id(exchange) -> bytes:
+def _dht_node_id(exchange: NetworkAdapter) -> bytes:
     """Derive a stable 20-byte DHT node ID from the exchange's peer identity."""
     peer_id = exchange.identity()["peer_id"]
     return hashlib.sha1(peer_id.encode()).digest()  # noqa: S324 — DHT node ID per BEP5
@@ -191,7 +193,7 @@ def _dht_node_id(exchange) -> bytes:
 
 # ── BEP 44: mutable DHT items (cert publishing / lookup) ──────────────────────
 
-def _derive_announce_key(exchange) -> tuple[bytes, bytes]:
+def _derive_announce_key(exchange: NetworkAdapter) -> tuple[bytes, bytes]:
     """Derive a stable 32-byte ED25519 keypair for DHT BEP 44 announcements.
 
     Uses HKDF-SHA256 with a dedicated salt so the DHT announce key is
@@ -338,7 +340,7 @@ def bep44_get(
         return None
 
 
-def dht_cert_publish(exchange, https_port: int, *, ephemeral: bool = False) -> dict:
+def dht_cert_publish(exchange: NetworkAdapter, https_port: int, *, ephemeral: bool = False) -> dict:
     """Publish this node's certificate to the DHT via BEP 44 mutable item.
 
     If ephemeral=True: fresh random key each call (session-only discoverability).
@@ -411,7 +413,7 @@ def dht_cert_lookup(dht_key_hex: str, timeout: float = 10.0) -> "dict | None":
         return None
 
 
-def dht_key_for(exchange, ephemeral: bool = False) -> str:
+def dht_key_for(exchange: NetworkAdapter, ephemeral: bool = False) -> str:
     """Return the hex DHT key others can use to look up this node's cert.
 
     Ephemeral keys are session-specific; get the key from dht_cert_publish result.
@@ -491,7 +493,7 @@ def p2p_update_publish(
 
 
 def p2p_update_check(
-    exchange,
+    exchange: NetworkAdapter,
     update_pub_key_hex: str,
     author_verify_fn=None,
     *,
@@ -599,7 +601,7 @@ def p2p_update_check(
         return {"available": False, "error": str(exc)}
 
 
-def _run_update_check(exchange) -> None:
+def _run_update_check(exchange: NetworkAdapter) -> None:
     """Check for updates: central hub URL first, then DHT key fallback.
 
     Also called immediately when ≥2 distinct peers are seen running a newer
@@ -615,7 +617,7 @@ def _run_update_check(exchange) -> None:
         pass
 
 
-def _check_and_auto_apply_central_url(exchange, url: str) -> None:
+def _check_and_auto_apply_central_url(exchange: NetworkAdapter, url: str) -> None:
     """Fetch bundle from central URL, verify multi-sig, auto-apply if policy allows.
 
     Called from _reannounce_loop (every ~60 min) and from peer_exchange.request()
@@ -671,7 +673,7 @@ def _check_and_auto_apply_central_url(exchange, url: str) -> None:
         pass
 
 
-def _auto_apply_bundle_from_url(exchange, bundle_url: str, author_verify_fn) -> list[str]:
+def _auto_apply_bundle_from_url(exchange: NetworkAdapter, bundle_url: str, author_verify_fn) -> list[str]:
     """Download, verify, and apply an update bundle from bundle_url.
 
     Used only when p2p.auto_update = true.  Returns [] on success, error list on failure.
@@ -838,7 +840,7 @@ class _DHTClient:
             pass
 
 
-def dht_announce(exchange, port: int) -> dict[str, Any]:
+def dht_announce(exchange: NetworkAdapter, port: int) -> dict[str, Any]:
     """Register this node on the BitTorrent DHT so peers can find it.
 
     Other URACE nodes running dht_discover() will find this IP:port.
@@ -864,7 +866,7 @@ def dht_announce(exchange, port: int) -> dict[str, Any]:
         client.close()
 
 
-def dht_discover(exchange, timeout: float = 15.0) -> list[dict[str, Any]]:
+def dht_discover(exchange: NetworkAdapter, timeout: float = 15.0) -> list[dict[str, Any]]:
     """Search BitTorrent DHT for URACE peers announcing our topic.
 
     Returns candidate dicts: {ip, port, auto_trusted: False, source: "dht"}.
@@ -1095,7 +1097,7 @@ def start(
 
 # ── NAT Traversal: Public endpoint discovery ──────────────────────────────────
 
-def discover_public_endpoint(exchange, timeout: float = 5.0) -> dict[str, Any]:
+def discover_public_endpoint(exchange: NetworkAdapter, timeout: float = 5.0) -> dict[str, Any]:
     """Discover this node's public IP by echoing a BT DHT ping to bootstrap nodes.
 
     Bootstrap nodes (BEP 5) echo the querier's source IP in r["ip"] (4 bytes, IPv4).
@@ -1138,7 +1140,7 @@ def _rdv_infohash(peer_id: str) -> bytes:
     return hashlib.sha1(b"urace-rdv-" + peer_id[:16].encode()).digest()  # noqa: S324 — DHT rendezvous per BEP5
 
 
-def rdv_announce(exchange, target_peer_id: str, https_port: int) -> dict[str, Any]:
+def rdv_announce(exchange: NetworkAdapter, target_peer_id: str, https_port: int) -> dict[str, Any]:
     """Announce on target peer's rendezvous slot to signal we want to connect.
 
     Bootstraps DHT, walks toward _rdv_infohash(target_peer_id), announces there.
@@ -1160,7 +1162,7 @@ def rdv_announce(exchange, target_peer_id: str, https_port: int) -> dict[str, An
         client.close()
 
 
-def rdv_poll(exchange, https_port: int, timeout: float = 5.0) -> list[dict[str, Any]]:
+def rdv_poll(exchange: NetworkAdapter, https_port: int, timeout: float = 5.0) -> list[dict[str, Any]]:
     """Check our own rendezvous slot for peers who want to connect to us.
 
     Returns list of {"ip": ..., "port": N, "source": "rdv_poll"}.
