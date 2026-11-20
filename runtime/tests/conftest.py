@@ -229,6 +229,27 @@ if _PYTEST_AVAILABLE:
         _ensure_product_files_at_root
     )
 
+    @pytest.fixture
+    def temp_config_dir(tmp_path):
+        """Return a (tmp_path, config) pair with a minimal state_path wired in.
+
+        Commonly used pattern across 11+ test setUp methods::
+
+            def setUp(self):
+                tmp = tempfile.TemporaryDirectory()
+                ...
+                config["state_path"] = str(Path(tmp.name) / "state.json")
+
+        With this fixture::
+
+            def test_something(self, temp_config_dir):
+                root, config = temp_config_dir
+        """
+        import copy as _copy
+        config = _copy.deepcopy(_MINIMAL_CONFIG)
+        config["state_path"] = str(tmp_path / "state.json")
+        yield tmp_path, config
+
     @pytest.fixture(scope="session", autouse=True)
     def cleanup_session_tmp(tmp_path_factory):
         """Remove all pytest-managed tmp dirs after the full session."""

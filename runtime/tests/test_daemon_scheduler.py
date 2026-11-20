@@ -1,6 +1,5 @@
 """Phase II-E — daemon_scheduler tests with mocked clock."""
 import threading
-import time
 import unittest
 
 

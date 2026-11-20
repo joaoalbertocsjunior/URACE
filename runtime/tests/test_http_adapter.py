@@ -1,5 +1,4 @@
 """Tests for http_adapter — mocked at the HttpAdapter boundary."""
-import json
 import unittest
 from unittest.mock import MagicMock, patch
 
