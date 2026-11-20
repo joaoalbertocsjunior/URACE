@@ -51,6 +51,36 @@ def _has_capability_expansion_authority(state: dict[str, Any], objective: dict[s
     return False
 
 
+def emit_capability_envelope_gap(state: dict[str, Any], objective: dict[str, Any]) -> None:
+    """Command: record an integrity gap when a CAPABILITY_DEFINING objective lacks authority.
+
+    Pure side-effect — separated from the eligibility predicate so that
+    objective_is_eligible() remains a query with no mutations.
+    """
+    objective_id = objective.get('id', 'unknown')
+    base_id = f"igap-cap-envelope-{objective_id}"
+    gaps = state.setdefault("integrity_gaps", [])
+    assessments = state.get("sweet_spot_assessments", [])
+    maturity = assessments[-1].get("maturity_level") if assessments else None
+    existing_ids = {gap.get("id") for gap in gaps}
+    gap_id, recurrence = base_id, 1
+    while gap_id in existing_ids:
+        recurrence += 1
+        gap_id = f"{base_id}-{recurrence}"
+    gaps.append({
+        "id": gap_id,
+        "objective": objective_id,
+        "kind": "capability-envelope-breach",
+        "severity": "WARNING",
+        "detail": (
+            f"CAPABILITY_DEFINING objective '{objective.get('title', '')}' requires "
+            f"explicit DecisionRecord(kind=AUTHORITY_GRANT) at {maturity} maturity"
+        ),
+        "at": now(),
+        "resolved": False,
+    })
+
+
 def objective_is_eligible(state: dict[str, Any], objective: dict[str, Any]) -> bool:
     # §2571 Capability Envelope Gate: CAPABILITY_DEFINING objectives require explicit
     # authority at CAPABLE or OPTIMIZED maturity.
@@ -59,31 +89,17 @@ def objective_is_eligible(state: dict[str, Any], objective: dict[str, Any]) -> b
         maturity = assessments[-1].get("maturity_level") if assessments else None
         if maturity in {"CAPABLE", "OPTIMIZED"}:
             if not _has_capability_expansion_authority(state, objective):
-                gaps = state.setdefault("integrity_gaps", [])
                 objective_id = objective.get('id', 'unknown')
                 base_id = f"igap-cap-envelope-{objective_id}"
-                if any(not gap.get("resolved")
-                       and gap.get("kind") == "capability-envelope-breach"
-                       and (gap.get("objective") == objective_id or gap.get("id") == base_id)
-                       for gap in gaps):
-                    return False
-                existing_ids = {gap.get("id") for gap in gaps}
-                gap_id, recurrence = base_id, 1
-                while gap_id in existing_ids:
-                    recurrence += 1
-                    gap_id = f"{base_id}-{recurrence}"
-                gaps.append({
-                    "id": gap_id,
-                    "objective": objective_id,
-                    "kind": "capability-envelope-breach",
-                    "severity": "WARNING",
-                    "detail": (
-                        f"CAPABILITY_DEFINING objective '{objective.get('title', '')}' requires "
-                        f"explicit DecisionRecord(kind=AUTHORITY_GRANT) at {maturity} maturity"
-                    ),
-                    "at": now(),
-                    "resolved": False,
-                })
+                gaps = state.get("integrity_gaps", [])
+                already_recorded = any(
+                    not gap.get("resolved")
+                    and gap.get("kind") == "capability-envelope-breach"
+                    and (gap.get("objective") == objective_id or gap.get("id") == base_id)
+                    for gap in gaps
+                )
+                if not already_recorded:
+                    emit_capability_envelope_gap(state, objective)
                 return False
     if objective.get("scope") not in {"runtime", "rebootstrap"}:
         return True
