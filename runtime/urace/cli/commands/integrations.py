@@ -311,6 +311,29 @@ def _cmd_p2p(args, parser, config, state, fmt, _unknown, raw_args):
             else:
                 print(f"  APPLIED  fingerprint: {_bundle.get('corpus_fingerprint')}")
             return 0
+        if _p2p_action == 'settle':
+            _as_json = getattr(args, 'json', False)
+            _peer = getattr(args, 'peer', '') or ''
+            _action = getattr(args, 'settle_action', 'earn')
+            _units = getattr(args, 'units', 0) or 0
+            _reason = getattr(args, 'reason', 'manual') or 'manual'
+            _op_id = getattr(args, 'operation_id', '') or ''
+            if not _peer or not isinstance(_units, int) or _units <= 0:
+                _err = {"status": "error", "error": "peer and positive units required"}
+                print(json.dumps(_err) if _as_json else f"Error: {_err['error']}"); return 1
+            try:
+                from urace import peer_exchange as _pex
+                _p2p_exch = _pex.Exchange(SYSTEM_ROOT / "urace" / "p2p")
+                from urace.exchange_endpoint import handle_credit_settlement, SCHEMA
+                _payload = {"schema": SCHEMA, "action": _action, "peer_id": _peer,
+                            "units": _units, "reason": _reason, "operation_id": _op_id}
+                _result = handle_credit_settlement(_p2p_exch, _peer, _payload)
+            except Exception as _se:
+                _result = {"status": "error", "error": str(_se)}
+            print(json.dumps(_result, indent=2) if _as_json else
+                  (f"Settlement {_action} {_units} units to {_peer}: {_result.get('status')}"
+                   if _result.get("status") == "ok" else f"Error: {_result.get('error')}"))
+            return 0 if _result.get("status") == "ok" else 1
 
 
 def _cmd_product_create(args, parser, config, state, fmt, _unknown, raw_args):
