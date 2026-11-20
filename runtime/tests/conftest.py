@@ -238,17 +238,17 @@ if _PYTEST_AVAILABLE:
 
     @pytest.fixture(autouse=True)
     def reset_event_bus():
-        """Clear event_bus subscriptions between tests (no-op until Phase 4)."""
+        """Clear event_bus subscriptions between tests."""
         yield
-        try:
-            from urace.event_bus import _BUS
-            _BUS._clear_all()
-        except ImportError:
-            pass
+        from urace.event_bus import _BUS
+        _BUS._clear_all()
 
 
 def pytest_sessionfinish(session, exitstatus):
-    """Kill any child processes that survived their test's finally block."""
+    """Kill any child processes that survived their test's finally block.
+
+    Linux-only: skips gracefully on platforms without /proc.
+    """
     my_pid = os.getpid()
     if not Path("/proc").is_dir():
         return
@@ -262,12 +262,9 @@ def pytest_sessionfinish(session, exitstatus):
         if ppid == my_pid:
             child_pid = int(entry.name)
             try:
-                os.killpg(os.getpgid(child_pid), signal.SIGKILL)
+                os.kill(child_pid, signal.SIGKILL)
             except OSError:
-                try:
-                    os.kill(child_pid, signal.SIGKILL)
-                except OSError:
-                    pass
+                pass
 
 
 if __name__ == "__main__":
