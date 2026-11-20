@@ -1,6 +1,8 @@
 """pytest session fixture: ensure a minimal config.json exists at CONFIG_PATH before any test runs."""
 import json
+import os
 import shutil
+import signal
 import sys
 import tempfile
 from pathlib import Path
@@ -243,6 +245,29 @@ if _PYTEST_AVAILABLE:
             _BUS._clear_all()
         except ImportError:
             pass
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Kill any child processes that survived their test's finally block."""
+    my_pid = os.getpid()
+    if not Path("/proc").is_dir():
+        return
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            ppid = int((entry / "status").read_text().split("PPid:")[1].split()[0])
+        except (OSError, IndexError, ValueError):
+            continue
+        if ppid == my_pid:
+            child_pid = int(entry.name)
+            try:
+                os.killpg(os.getpgid(child_pid), signal.SIGKILL)
+            except OSError:
+                try:
+                    os.kill(child_pid, signal.SIGKILL)
+                except OSError:
+                    pass
 
 
 if __name__ == "__main__":

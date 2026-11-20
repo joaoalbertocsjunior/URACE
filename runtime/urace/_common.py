@@ -18,7 +18,6 @@ except ImportError:
 
 RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_ROOT = RUNTIME_ROOT.parent
-ROOT = SYSTEM_ROOT.parent
 # Package config (shipped with pip, overwritten on upgrade — not for user data)
 _PACKAGE_CONFIG_PATH = Path(__file__).with_name("config.json")
 # User-data config dir (~/.urace/config.json) survives pip upgrades.
@@ -28,6 +27,8 @@ _USER_CONFIG_PATH = Path.home() / ".urace" / "config.json"
 _RUN_FROM_PROD_VENV = str(_PACKAGE_CONFIG_PATH).startswith(str(Path.home() / ".urace"))
 CONFIG_PATH = (_USER_CONFIG_PATH if (_RUN_FROM_PROD_VENV and _USER_CONFIG_PATH.exists())
                else _PACKAGE_CONFIG_PATH)
+# Prod installs live under ~/.urace/; dev source trees are self-contained at SYSTEM_ROOT.
+ROOT = Path.home() / ".urace" if _RUN_FROM_PROD_VENV else SYSTEM_ROOT
 
 
 def now() -> str:

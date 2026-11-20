@@ -28,7 +28,7 @@ def interpret(text,registry,active=None):
 
 def validate_entry(entry,root):
  root=Path(root).resolve();rel=Path(entry['root_relative'])
- if rel.is_absolute() or '..' in rel.parts or len(rel.parts)!=3 or rel.parts[:2]!=('urace','products'):raise ValueError('Invalid isolated product root')
+ if rel.is_absolute() or '..' in rel.parts or len(rel.parts)!=2 or rel.parts[0]!='products':raise ValueError('Invalid isolated product root')
  cfg=entry['configuration'];prefix=rel.as_posix()+'/'
  if Path(entry.get('state_path','')).resolve()!=Path(cfg.get('state_path','')).resolve() or not Path(entry.get('state_path','')).resolve().is_relative_to((root/rel).resolve()):raise ValueError('Isolated product state path required')
  if not isinstance(cfg,dict) or cfg.get('product')!=entry['name'] or any(not isinstance(p,str) or not p.startswith(prefix) or '..' in Path(p).parts for p in cfg.get('product_files',[])):raise ValueError('Isolated product configuration required')
@@ -47,9 +47,9 @@ def create(cli,description,name=None,activate=False):
    prior=next((e for e in registry if e.get('kind')=='bootstrapped' and e.get('intent_purpose')==description),None)
    if prior:return {'schema':SCHEMA,'status':'ALREADY_BOOTSTRAPPED','product_id':prior['id'],'name':prior['name'],'native_calls':0,'working_implementation_verified':False,'stage':prior.get('bootstrap_status')}
   if any(e.get('name')==name for e in registry):raise ValueError('Product name already registered; explicit existing-product targeting required')
-  identity=uuid.uuid4().hex;rel=Path('urace/products')/identity;folder=cli.ROOT/rel
-  parent=cli.ROOT/'urace/products'
-  if parent.is_symlink() or parent.exists() and not parent.resolve().is_relative_to(cli.SYSTEM_ROOT.resolve()):raise ValueError('Product root path escape')
+  identity=uuid.uuid4().hex;rel=Path('products')/identity;folder=cli.ROOT/rel
+  parent=cli.ROOT/'products'
+  if parent.is_symlink() or parent.exists() and not parent.resolve().is_relative_to(cli.ROOT.resolve()):raise ValueError('Product root path escape')
   folder.mkdir(parents=True,exist_ok=False)
   purpose=folder/'INTENT.md';product=folder/'PRODUCT.md';draft=folder/'ACCEPTANCE_DRAFT.md'
   purpose.write_text(description);product.write_text('# '+name+'\n\nStatus: draft product definition; implementation not yet validated.\n\nThe complete original owner description is preserved in INTENT.md. Derive explicit testable requirements and independently seal acceptance before evaluating implementation.\n');draft.write_text('# Acceptance design pending\n\nDerive testable criteria from INTENT.md, resolve ambiguities and independently seal acceptance before implementation is evaluated. No working product or passing tests are claimed.\n')

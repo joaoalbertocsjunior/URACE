@@ -193,5 +193,5 @@
     "source": "CI"
   },
   "specification_workflow": {},
-  "state_path": "/tmp/tmpachgu7pp/state/state.json"
+  "state_path": "state/state.json"
 }

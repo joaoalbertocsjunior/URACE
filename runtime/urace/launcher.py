@@ -13,7 +13,6 @@ from . import evolution_guard
 
 RUNTIME_ROOT = Path(__file__).resolve().parents[1]
 SYSTEM_ROOT = RUNTIME_ROOT.parent
-PRODUCT_ROOT = SYSTEM_ROOT.parent
 STATE_PATH = SYSTEM_ROOT / "state/state.json"
 STABLE_RUNTIME = SYSTEM_ROOT / "state/stable-runtime"
 _DEFAULT_STATE_PATH = STATE_PATH
@@ -22,6 +21,8 @@ _DEFAULT_STABLE_RUNTIME = STABLE_RUNTIME
 # False in dev source trees and editable installs — avoids loading ~/.urace/config.json
 # during development. "site-packages" is present in all non-editable install paths.
 _LAUNCHER_IN_PROD_VENV = "site-packages" in str(Path(__file__).resolve())
+# Prod installs live under ~/.urace/; dev source trees are self-contained at SYSTEM_ROOT.
+PRODUCT_ROOT = Path.home() / ".urace" if _LAUNCHER_IN_PROD_VENV else SYSTEM_ROOT
 # In pip/pipx/conda installs PRODUCT_ROOT resolves inside the venv (not the source tree),
 # so PROTECTED_FILES don't exist there. Package-manager hash verification already covers
 # integrity; skip the runtime kernel-hash precomputation for installed packages.
