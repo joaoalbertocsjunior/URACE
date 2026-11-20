@@ -183,6 +183,54 @@ class WalletRotateTests(unittest.TestCase):
    self.assertEqual(result["status"], "ok")
 
 
+class WalletSignVerifyRoundTripTests(unittest.TestCase):
+    """Property tests: sign/verify round-trip using cryptography library directly."""
+
+    def _load_public_key(self, wallet_dir):
+        from cryptography.hazmat.primitives.asymmetric.ec import (
+            EllipticCurvePublicNumbers, SECP256K1,
+        )
+        from cryptography.hazmat.backends import default_backend
+        data = json.loads(Path(wallet_dir, "key.json").read_text())
+        pub = bytes.fromhex(data["public_key"])
+        x = int.from_bytes(pub[1:33], "big")
+        y = int.from_bytes(pub[33:], "big")
+        return EllipticCurvePublicNumbers(x, y, SECP256K1()).public_key(default_backend())
+
+    def test_string_payload_verifies(self):
+        from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+        from cryptography.hazmat.primitives.hashes import SHA256
+        with tempfile.TemporaryDirectory() as td:
+            cw.wallet_init(td)
+            result = cw.wallet_sign("hello world", td)
+            pub_key = self._load_public_key(td)
+            sig = bytes.fromhex(result["signature_der"])
+            pub_key.verify(sig, b"hello world", ECDSA(SHA256()))
+
+    def test_bytes_payload_verifies(self):
+        from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+        from cryptography.hazmat.primitives.hashes import SHA256
+        with tempfile.TemporaryDirectory() as td:
+            cw.wallet_init(td)
+            payload = b"\x00\xFF\xABbinary"
+            result = cw.wallet_sign(payload, td)
+            pub_key = self._load_public_key(td)
+            sig = bytes.fromhex(result["signature_der"])
+            pub_key.verify(sig, payload, ECDSA(SHA256()))
+
+    def test_wrong_message_fails_verify(self):
+        from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+        from cryptography.hazmat.primitives.hashes import SHA256
+        from cryptography.exceptions import InvalidSignature
+        with tempfile.TemporaryDirectory() as td:
+            cw.wallet_init(td)
+            result = cw.wallet_sign("original", td)
+            pub_key = self._load_public_key(td)
+            sig = bytes.fromhex(result["signature_der"])
+            with self.assertRaises(InvalidSignature):
+                pub_key.verify(sig, b"tampered", ECDSA(SHA256()))
+
+
 class DeriveAddressTests(unittest.TestCase):
  def test_address_starts_with_0x(self):
   import secrets
