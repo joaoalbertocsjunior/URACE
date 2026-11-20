@@ -645,6 +645,8 @@ def earn_units(root, peer_id, units: int, reason, bundle_id=None, metadata: dict
         if feature_id:
             row_data['feature_id'] = feature_id
     _ledger(root).append('CREDIT_DELTA', row_data)
+    from .event_bus import _BUS as _eb
+    _eb.publish('ledger.earned', peer_id=peer_id, units=adjusted_units, reason=reason)
 
 
 def spend_units(root, peer_id, units: int, reason, bundle_id=None):
@@ -658,18 +660,8 @@ def spend_units(root, peer_id, units: int, reason, bundle_id=None):
         'direction': 'spend', 'reason': reason,
         'bundle_id': bundle_id, 'at_unix': time.time(),
     })
-
-
-def earn(root, peer_id, delta, reason, bundle_id=None):
-    """Legacy wrapper: delta in tokens, multiplied by UNIT before storing."""
-    if type(delta) not in (int, float) or delta <= 0:
-        raise ValueError('Positive delta required to earn credits')
-    earn_units(root, peer_id, int(round(float(delta))) * UNIT, reason, bundle_id)
-
-
-def spend(root, peer_id, reason, bundle_id=None):
-    """Legacy wrapper: spends 1 token (UNIT base units)."""
-    spend_units(root, peer_id, UNIT, reason, bundle_id)
+    from .event_bus import _BUS as _eb
+    _eb.publish('ledger.spent', peer_id=peer_id, units=units, reason=reason)
 
 
 def balance(root, peer_id) -> int:

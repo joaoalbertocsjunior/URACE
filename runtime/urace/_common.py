@@ -275,21 +275,31 @@ def _check_state_invariants(state: dict) -> None:
         raise ValueError("Invariant violated: authority was present but is now empty")
 
 
+def _post_save_effects(config: dict[str, Any], state: dict[str, Any]) -> None:
+    """Side-effects that run after state is durably written.
+
+    Separated from save_state so tests can patch a single name instead of two
+    module-level imports from resource_usage.
+    """
+    from .resource_usage import archive_calls, write_projection
+    archive_calls(config, state)
+    try:
+        write_projection(config, state)
+    except OSError:
+        import sys
+        print('urace: receipt read model unavailable; full-state fallback retained', file=sys.stderr)
+
+
 def save_state(config: dict[str, Any], state: dict[str, Any]) -> None:
     path = state_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
-    from .resource_usage import archive_calls
-    archive_calls(config, state)
     _check_state_invariants(state)
     state["state_version"] += 1
     state["updated_at"] = now()
     atomic_write_json(path, state)
-    from .resource_usage import write_projection
-    try:write_projection(config,state)
-    except OSError:
-        # State is already durable. Reporting can use its existing full-state fallback.
-        import sys
-        print('urace: receipt read model unavailable; full-state fallback retained',file=sys.stderr)
+    _post_save_effects(config, state)
+    from .event_bus import _BUS as _eb
+    _eb.publish('state.saved', state_version=state["state_version"])
 
 
 def transaction_path(config: dict[str, Any]) -> Path:
