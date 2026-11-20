@@ -85,7 +85,10 @@ class UraceLifecycleTests(unittest.TestCase):
 
     def test_configuration_self_evolution_alias_queues_normative_mode(self):
         config = copy.deepcopy(self.config)
-        with patch.object(cli, "load_config", return_value=config), patch.object(cli, "queue_input", return_value={"id": "input-1"}) as queued, redirect_stdout(io.StringIO()):
+        with patch.object(cli, "load_config", return_value=config), \
+             patch("urace.cli.commands.config.load_config", return_value=config), \
+             patch("urace.cli.commands.config.queue_input", return_value={"id": "input-1"}) as queued, \
+             redirect_stdout(io.StringIO()):
             self.assertEqual(cli.main(["configuration", "self-evolution", "auto"]), 0)
         queued.assert_called_once_with(config, "policy_control", {"name": "self-evolution", "value": "NECESSARY_ONLY"})
 
