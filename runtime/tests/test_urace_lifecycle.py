@@ -85,7 +85,10 @@ class UraceLifecycleTests(unittest.TestCase):
 
     def test_configuration_self_evolution_alias_queues_normative_mode(self):
         config = copy.deepcopy(self.config)
-        with patch.object(cli, "load_config", return_value=config), patch.object(cli, "queue_input", return_value={"id": "input-1"}) as queued, redirect_stdout(io.StringIO()):
+        with patch.object(cli, "load_config", return_value=config), \
+             patch("urace.cli.commands.config.load_config", return_value=config), \
+             patch("urace.cli.commands.config.queue_input", return_value={"id": "input-1"}) as queued, \
+             redirect_stdout(io.StringIO()):
             self.assertEqual(cli.main(["configuration", "self-evolution", "auto"]), 0)
         queued.assert_called_once_with(config, "policy_control", {"name": "self-evolution", "value": "NECESSARY_ONLY"})
 
@@ -152,10 +155,18 @@ class UraceLifecycleTests(unittest.TestCase):
     def test_update_resolve_command_targets_checkpointed_candidate(self):
         config = copy.deepcopy(self.config)
         state = {"objectives": [{"id": "update-1", "status": "awaiting_operator_decision", "update_candidate": {"sha256": "abcdef123456"}}]}
-        with patch.object(cli, "load_config", return_value=config), patch.object(cli, "load_state_for_read", return_value=state), patch.object(cli, "queue_input", return_value={"id": "input-1"}) as queued, redirect_stdout(io.StringIO()):
+        from unittest.mock import MagicMock
+        _qi = MagicMock(return_value={"id": "input-1"})
+        with patch.object(cli, "load_config", return_value=config), \
+             patch.object(cli, "load_state_for_read", return_value=state), \
+             patch.object(cli, "queue_input", _qi), \
+             patch("urace.cli.commands.runtime.load_config", return_value=config), \
+             patch("urace.cli.commands.runtime.load_state_for_read", return_value=state), \
+             patch("urace.cli.commands.runtime.queue_input", _qi), \
+             redirect_stdout(io.StringIO()):
             result = cli.main(["update", "resolve", "abcdef", "--decision", "retain the local policy"])
         self.assertEqual(result, 0)
-        queued.assert_called_once_with(config, "goal_control", {"action": "resolve-update", "id": "update-1", "decision": "retain the local policy"})
+        _qi.assert_called_once_with(config, "goal_control", {"action": "resolve-update", "id": "update-1", "decision": "retain the local policy"})
 
     def test_persistent_autonomy_starts_adaptive_portfolio_when_initialized(self):
         with tempfile.TemporaryDirectory() as directory:

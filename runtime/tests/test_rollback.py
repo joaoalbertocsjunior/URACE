@@ -20,13 +20,13 @@ class RollbackCLITests(unittest.TestCase):
         return code, out.getvalue()
 
     def test_rollback_no_config_returns_error(self):
-        with patch("urace.cli.load_config", side_effect=FileNotFoundError("no config")):
+        with patch("urace.cli.commands.integrations.load_config", side_effect=FileNotFoundError("no config")):
             code, _ = self._call()
         self.assertEqual(code, 1)
 
     def test_rollback_no_snapshot_returns_error(self):
-        with patch("urace.cli.load_config", return_value={}), \
-             patch("urace.cli.stable_path", return_value=self.root / "stable"):
+        with patch("urace.cli.commands.integrations.load_config", return_value={}), \
+             patch("urace.cli.commands.integrations.stable_path", return_value=self.root / "stable"):
             code, _ = self._call()
         self.assertEqual(code, 1)
 
@@ -43,9 +43,9 @@ class RollbackCLITests(unittest.TestCase):
         }
         (snap_dir / "manifest.json").write_text(json.dumps(manifest))
 
-        with patch("urace.cli.load_config", return_value={}), \
-             patch("urace.cli.stable_path", return_value=snap_dir), \
-             patch("urace.cli.ROOT", self.root):
+        with patch("urace.cli.commands.integrations.load_config", return_value={}), \
+             patch("urace.cli.commands.integrations.stable_path", return_value=snap_dir), \
+             patch("urace.cli.commands.integrations.ROOT", self.root):
             code, out = self._call(["--dry-run"])
         self.assertEqual(code, 0)
         # File should NOT be modified since dry-run
@@ -57,9 +57,9 @@ class RollbackCLITests(unittest.TestCase):
         manifest = {"accepted_at": "2026-01-01T00:00:00", "files": {}}
         (snap_dir / "manifest.json").write_text(json.dumps(manifest))
 
-        with patch("urace.cli.load_config", return_value={}), \
-             patch("urace.cli.stable_path", return_value=snap_dir), \
-             patch("urace.cli.ROOT", self.root):
+        with patch("urace.cli.commands.integrations.load_config", return_value={}), \
+             patch("urace.cli.commands.integrations.stable_path", return_value=snap_dir), \
+             patch("urace.cli.commands.integrations.ROOT", self.root):
             code, out = self._call(["--json"])
         self.assertEqual(code, 0)
         data = json.loads(out)
