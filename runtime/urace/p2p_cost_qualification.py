@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from . import peer_exchange
+from .ledger_adapter import LedgerAdapter
 
 _logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ def _pair_hash(peer_a_id: str, peer_b_id: str) -> str:
     return hashlib.sha256(''.join(ordered).encode()).hexdigest()
 
 
-def bootstrap_complete(exchange) -> bool:
+def bootstrap_complete(exchange: LedgerAdapter) -> bool:
     """Return True once >= 30 distinct peer pairs have QUALIFICATION_RECEIPT rows."""
     rows = []
     try:
@@ -44,7 +45,7 @@ def bootstrap_complete(exchange) -> bool:
     return len(distinct_pairs) >= BOOTSTRAP_THRESHOLD
 
 
-def qualification_statistics(exchange) -> dict:
+def qualification_statistics(exchange: LedgerAdapter) -> dict:
     """Compute delivery statistics over all QUALIFICATION_RECEIPT audit rows.
 
     Returns:
@@ -102,7 +103,7 @@ def qualification_statistics(exchange) -> dict:
     }
 
 
-def run_qualification_round(exchange, peer_pairs: list, *, simulate: bool = False) -> dict:
+def run_qualification_round(exchange: LedgerAdapter, peer_pairs: list, *, simulate: bool = False) -> dict:
     """Run a qualification round over the given list of (peer_a_id, peer_b_id) tuples.
 
     If simulate=True all pairs are marked completed without network calls.
@@ -136,7 +137,7 @@ def run_qualification_round(exchange, peer_pairs: list, *, simulate: bool = Fals
     }
 
 
-def record_qualification_receipt(exchange, peer_a_id: str, peer_b_id: str, completed: bool) -> dict:
+def record_qualification_receipt(exchange: LedgerAdapter, peer_a_id: str, peer_b_id: str, completed: bool) -> dict:
     """Emit a QUALIFICATION_RECEIPT audit row for the given peer pair.
 
     Returns the emitted row dict.
@@ -160,7 +161,7 @@ def record_qualification_receipt(exchange, peer_a_id: str, peer_b_id: str, compl
 # P4.1 — Peer Reputation Persistence
 # ---------------------------------------------------------------------------
 
-def save_reputation(exchange, reputation_file=None) -> None:
+def save_reputation(exchange: LedgerAdapter, reputation_file=None) -> None:
     """Persist QUALIFICATION_RECEIPT rows to a JSONL file."""
     path = Path(reputation_file) if reputation_file else Path.home() / '.urace' / 'peer_reputation.jsonl'
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -170,7 +171,7 @@ def save_reputation(exchange, reputation_file=None) -> None:
             _f.write(json.dumps(row) + '\n')
 
 
-def load_reputation(exchange, reputation_file=None) -> None:
+def load_reputation(exchange: LedgerAdapter, reputation_file=None) -> None:
     """Load persisted QUALIFICATION_RECEIPT rows back into the exchange."""
     path = Path(reputation_file) if reputation_file else Path.home() / '.urace' / 'peer_reputation.jsonl'
     if not path.exists():
@@ -184,9 +185,9 @@ def load_reputation(exchange, reputation_file=None) -> None:
             row = json.loads(line)
             if json.dumps(row, sort_keys=True) not in existing:
                 try:
-                    exchange.record(
+                    exchange.event(
                         row.get('kind', 'QUALIFICATION_RECEIPT'),
-                        {k: v for k, v in row.items() if k != 'kind'},
+                        **{k: v for k, v in row.items() if k != 'kind'},
                     )
                 except Exception:
                     pass
@@ -196,7 +197,7 @@ def load_reputation(exchange, reputation_file=None) -> None:
 # P4.2 — Peer Failure Rate (Wilson CI Lower Bound)
 # ---------------------------------------------------------------------------
 
-def peer_failure_rate(exchange, peer_id: str) -> float:
+def peer_failure_rate(exchange: LedgerAdapter, peer_id: str) -> float:
     """Return Wilson CI lower bound on failure rate for *peer_id*.
 
     Lower is better (0.0 = perfect record, 1.0 = always fails).
@@ -219,6 +220,6 @@ def peer_failure_rate(exchange, peer_id: str) -> float:
     return max(0.0, centre - margin)
 
 
-def select_peers_by_reputation(exchange, candidates: list, *, top_n: int = 10) -> list:
+def select_peers_by_reputation(exchange: LedgerAdapter, candidates: list, *, top_n: int = 10) -> list:
     """Return top_n candidates sorted by ascending failure rate (best first)."""
     return sorted(candidates, key=lambda pid: peer_failure_rate(exchange, pid))[:top_n]
