@@ -1644,6 +1644,25 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                         _dr_check("ledger_size", "OK")
                 except Exception as _e:
                     _dr_check("ledger_size", "INFO", str(_e))
+                # 8. Regression guard status
+                try:
+                    from .. import runtime_regression_guard as _dr_rg
+                    _dr_gs = _dr_rg.guard_status(_dr_state or {})
+                    _dr_gs_status = _dr_gs.get("status", "UNKNOWN")
+                    if _dr_gs_status == "OK":
+                        _dr_check("regression_guard", "OK", f"{_dr_gs.get('checked_scopes', 0)} scopes clean")
+                    else:
+                        _dr_check("regression_guard", "WARN", f"status={_dr_gs_status}")
+                except Exception as _e:
+                    _dr_check("regression_guard", "WARN", str(_e))
+                # 9. Cost tracking available
+                try:
+                    from .. import cost_tracker as _dr_ct
+                    _dr_snap = _dr_ct.get_default_ledger().cost_snapshot()
+                    _dr_records = _dr_snap.get("records", 0)
+                    _dr_check("cost_tracking", "OK", f"{_dr_records} record(s) in process ledger")
+                except Exception as _e:
+                    _dr_check("cost_tracking", "WARN", str(_e))
                 _dr_overall = "ERROR" if any(c["status"] == "ERROR" for c in _dr_checks) else ("WARN" if any(c["status"] == "WARN" for c in _dr_checks) else "OK")
                 _dr_result = {"overall": _dr_overall, "checks": _dr_checks}
                 if getattr(args, "doctor_json", False):
