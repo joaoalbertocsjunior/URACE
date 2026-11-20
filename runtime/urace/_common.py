@@ -9,6 +9,10 @@ from datetime import datetime as _datetime, timezone
 from pathlib import Path
 from typing import Any, Generator
 
+from .logging_config import get_logger
+
+_log = get_logger(__name__)
+
 try:
     import fcntl as _fcntl
     _HAS_FCNTL = True
@@ -187,8 +191,7 @@ def load_config() -> dict[str, Any]:
     try:
         from .config_schema import validate as _schema_validate
         for _err in _schema_validate(cfg):
-            import sys as _sys
-            print(f"config warning: {_err['path']}: {_err['error']}",file=_sys.stderr)
+            _log.warning("config warning: %s: %s", _err['path'], _err['error'])
     except Exception:
         pass
     return cfg
@@ -245,11 +248,10 @@ def load_state(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_state_for_read(config: dict[str, Any]) -> dict[str, Any] | None:
-    import sys
     try:
         return load_state(config)
     except (RuntimeError, OSError, json.JSONDecodeError) as error:
-        print(f"urace: {error}", file=sys.stderr)
+        _log.warning("state load failed: %s", error)
         return None
 
 
@@ -286,8 +288,7 @@ def _post_save_effects(config: dict[str, Any], state: dict[str, Any]) -> None:
     try:
         write_projection(config, state)
     except OSError:
-        import sys
-        print('urace: receipt read model unavailable; full-state fallback retained', file=sys.stderr)
+        _log.warning("receipt read model unavailable; full-state fallback retained")
 
 
 def save_state(config: dict[str, Any], state: dict[str, Any]) -> None:

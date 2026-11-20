@@ -99,7 +99,7 @@ def _mutate_command(
     try:
         result, trace_summary = mutate(state)
     except ValueError as exc:
-        print(str(exc), file=sys.stderr)
+        _logger.error("%s", exc)
         return 1
     _emit_trace(state, trace_kind, trace_summary)
     save_state(config, state)
