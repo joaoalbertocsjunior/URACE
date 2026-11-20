@@ -36,25 +36,17 @@ from urace.inspection import context_view
 def _cmd_github(args, parser, config, state, fmt, _unknown, raw_args):
     if args.command == "github":
         import os as _os
+        from urace.github_adapter import make_github_adapter
         _gh_action = getattr(args, "github_action", None)
         _token = _os.environ.get(getattr(args, "token_env", None) or "URACE_GITHUB_TOKEN", "")
         _repo = getattr(args, "repo", None) or config.get("github", {}).get("repo")
         _json_out = getattr(args, "json", False) or getattr(args, "format", None) == "json"
-        def _gh_api(path, *, method="GET", body=None):
-            import urllib.request as _ur
-            _url = f"https://api.github.com/{path.lstrip('/')}"
-            _data = json.dumps(body).encode() if body else None
-            _req = _ur.Request(_url, data=_data, method=method,
-                headers={"Accept": "application/vnd.github+json",
-                         "User-Agent": "urace-github/1",
-                         **({"Authorization": f"Bearer {_token}"} if _token else {})})
-            with _ur.urlopen(_req, timeout=15) as _r:  # noqa: S310
-                return json.loads(_r.read().decode())
+        _adapter = make_github_adapter(token=_token)
         if _gh_action == "status":
             _result = {"github_token_set": bool(_token), "repo": _repo}
             if _repo and _token:
                 try:
-                    _info = _gh_api(f"repos/{_repo}")
+                    _info = _adapter.get_repo(_repo)
                     _result.update({"connected": True, "default_branch": _info.get("default_branch"), "open_issues": _info.get("open_issues_count"), "visibility": _info.get("visibility"), "url": _info.get("html_url")})
                 except Exception as _ge:
                     _result.update({"connected": False, "error": str(_ge)})
@@ -102,7 +94,7 @@ def _cmd_github(args, parser, config, state, fmt, _unknown, raw_args):
                     _created.append({"dry_run": True, "title": _title})
                 else:
                     try:
-                        _issue = _gh_api(f"repos/{_repo}/issues", method="POST", body={"title": _title, "body": _body_md, "labels": ["urace"]})
+                        _issue = _adapter.create_issue(_repo, _title, _body_md, ["urace"])
                         _created.append({"issue": _issue.get("number"), "url": _issue.get("html_url"), "title": _title})
                     except Exception as _ie:
                         _created.append({"error": str(_ie), "title": _title})
@@ -123,7 +115,7 @@ def _cmd_github(args, parser, config, state, fmt, _unknown, raw_args):
                 except json.JSONDecodeError as _je:
                     print(json.dumps({"status": "error", "error": f"Invalid inputs JSON: {_je}"}) if _json_out else "Error: invalid --inputs JSON"); return 1
             try:
-                _gh_api(f"repos/{_repo}/actions/workflows/{_wf}/dispatches", method="POST", body={"ref": _ref, "inputs": _inputs})
+                _adapter.dispatch_workflow(_repo, _wf, _ref, _inputs)
                 _res = {"status": "triggered", "repo": _repo, "workflow": _wf, "ref": _ref}
             except Exception as _we:
                 _res = {"status": "error", "error": str(_we)}
