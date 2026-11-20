@@ -319,3 +319,119 @@ def init_template() -> str:
             lines.append(f'  }}{section_comma}')
     lines.append('}')
     return '\n'.join(lines)
+
+
+# ── Pydantic v2 typed model ──────────────────────────────────────────────────
+# URACEConfig provides structured validation with typed fields.
+# model_validate_config() returns errors in the same format as validate()
+# so callers can switch without changing error-handling code.
+
+try:
+    from pydantic import BaseModel, Field, field_validator, model_validator
+    from typing import Literal
+
+    class _CapabilityFlags(BaseModel):
+        model_config = {"extra": "allow"}
+        executor_enabled: bool = True
+        freeform_enabled: bool = True
+        machine_interface_enabled: bool = True
+        compress_enabled: bool = True
+        decompress_enabled: bool = True
+        p2p_mint_enabled: bool = False
+        p2p_sell_enabled: bool = False
+        p2p_borrow_enabled: bool = False
+        context_mint_enabled: bool = True
+        compliance_mode: bool = False
+
+    class _NetworkConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        enabled: bool = False
+        mode: Literal["intranet", "internet", "hybrid"] = "hybrid"
+        port: int = Field(default=7301, ge=1, le=65535)
+        bootstrap_peers: list[str] = Field(default_factory=list)
+        advertise: bool = False
+        relay_only: bool = False
+
+    class _McpConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        enabled: bool = False
+
+    class _A2aConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        enabled: bool = False
+        port: int = Field(default=8080, ge=1, le=65535)
+
+    class _ApiConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        mcp: _McpConfig = Field(default_factory=_McpConfig)
+        a2a: _A2aConfig = Field(default_factory=_A2aConfig)
+
+    class _ExecutorConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        enabled: bool = False
+        freeform_max_tokens_per_24h: int = Field(default=200000, ge=0)
+        freeform_max_tokens_per_call: int = Field(default=0, ge=0)
+
+    class _ResourcesConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        effort: Literal["low", "medium", "high", "inherit"] = "medium"
+
+    class _AutoGoalsConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        enabled: bool = False
+        replenish_backlog: bool = True
+
+    class _EvaluationSystemConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        minimum_evidence_units: int = Field(default=5, ge=0)
+
+    class _SelfEvolutionPolicy(BaseModel):
+        model_config = {"extra": "allow"}
+        mode: Literal["NECESSARY_ONLY", "CONTINUOUS", "DISABLED"] = "NECESSARY_ONLY"
+
+    class _AnalyticsExport(BaseModel):
+        model_config = {"extra": "allow"}
+        mode: Literal["DISABLED", "ON_DEMAND", "ON_CHECKPOINT"] = "DISABLED"
+
+    class _GithubConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        token_env: str = "URACE_GITHUB_TOKEN"
+        repo: str = ""
+
+    class URACEConfig(BaseModel):
+        """Typed model for config.json. Extra keys are passed through (product overlays)."""
+        model_config = {"extra": "allow"}
+
+        capability_flags: _CapabilityFlags = Field(default_factory=_CapabilityFlags)
+        network: _NetworkConfig = Field(default_factory=_NetworkConfig)
+        executor: _ExecutorConfig = Field(default_factory=_ExecutorConfig)
+        api: _ApiConfig = Field(default_factory=_ApiConfig)
+        resources: _ResourcesConfig = Field(default_factory=_ResourcesConfig)
+        auto_goals: _AutoGoalsConfig = Field(default_factory=_AutoGoalsConfig)
+        evaluation_system: _EvaluationSystemConfig = Field(default_factory=_EvaluationSystemConfig)
+        execution_workflow: Literal["core", "specification-trial"] = "core"
+        self_evolution_policy: _SelfEvolutionPolicy = Field(default_factory=_SelfEvolutionPolicy)
+        analytics_export: _AnalyticsExport = Field(default_factory=_AnalyticsExport)
+        github: _GithubConfig = Field(default_factory=_GithubConfig)
+
+    def model_validate_config(config: dict) -> list[dict]:
+        """Validate config using pydantic. Returns [{path, error}] like validate()."""
+        from pydantic import ValidationError
+        try:
+            URACEConfig.model_validate(config)
+            return []
+        except ValidationError as exc:
+            return [
+                {"path": ".".join(str(loc) for loc in e["loc"]), "error": e["msg"]}
+                for e in exc.errors()
+            ]
+
+    _PYDANTIC_AVAILABLE = True
+
+except ImportError:
+    _PYDANTIC_AVAILABLE = False
+    URACEConfig = None  # type: ignore[assignment,misc]
+
+    def model_validate_config(config: dict) -> list[dict]:
+        """Fallback: delegates to validate() when pydantic is not installed."""
+        return validate(config)
