@@ -15,15 +15,15 @@ class TestApsExport(unittest.TestCase):
     def _run(self, argv):
         from urace.cli import main
         from unittest.mock import patch as _patch
-        with _patch('urace.cli.load_state_for_read', return_value={}):
+        with _patch('urace.cli.commands.reporting.load_state_for_read', return_value={}):
             return main(argv)
 
     def test_export_creates_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             out = os.path.join(tmpdir, 'out.aps.json')
             sp = Path(tmpdir) / 'state.json'
-            with patch('urace.cli.load_config', return_value={}), \
-                 patch('urace.cli.state_path', return_value=sp):
+            with patch('urace.cli.commands.reporting.load_config', return_value={}), \
+                 patch('urace.cli.commands.reporting.state_path', return_value=sp):
                 rc = self._run(['export', '--out', out])
             self.assertEqual(rc, 0)
             self.assertTrue(os.path.exists(out))
@@ -35,8 +35,8 @@ class TestApsExport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             out = os.path.join(tmpdir, 'out.aps.json')
             sp = Path(tmpdir) / 'state.json'
-            with patch('urace.cli.load_config', return_value={}), \
-                 patch('urace.cli.state_path', return_value=sp):
+            with patch('urace.cli.commands.reporting.load_config', return_value={}), \
+                 patch('urace.cli.commands.reporting.state_path', return_value=sp):
                 import io
                 from contextlib import redirect_stdout
                 buf = io.StringIO()
@@ -49,8 +49,8 @@ class TestApsExport(unittest.TestCase):
     def test_import_nonexistent_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             sp = Path(tmpdir) / 'state.json'
-            with patch('urace.cli.load_config', return_value={}), \
-                 patch('urace.cli.state_path', return_value=sp):
+            with patch('urace.cli.commands.reporting.load_config', return_value={}), \
+                 patch('urace.cli.commands.reporting.state_path', return_value=sp):
                 rc = self._run(['import', '/nonexistent/path/file.aps.json'])
         self.assertEqual(rc, 1)
 
@@ -61,8 +61,8 @@ class TestApsExport(unittest.TestCase):
                        "turns": [{"role": "user", "text": "hello"}]}
             Path(out).write_text(json.dumps(payload))
             sp = Path(tmpdir) / 'state.json'
-            with patch('urace.cli.load_config', return_value={}), \
-                 patch('urace.cli.state_path', return_value=sp):
+            with patch('urace.cli.commands.reporting.load_config', return_value={}), \
+                 patch('urace.cli.commands.reporting.state_path', return_value=sp):
                 rc = self._run(['import', out])
             self.assertEqual(rc, 0)
             session_file = Path(tmpdir) / 'session_context.jsonl'
@@ -77,8 +77,8 @@ class TestApsExport(unittest.TestCase):
             session_file = Path(tmpdir) / 'session_context.jsonl'
             session_file.write_text(json.dumps({"role": "user", "text": "hi"}) + "\n")
             out = os.path.join(tmpdir, 'out.aps.json')
-            with patch('urace.cli.load_config', return_value={}), \
-                 patch('urace.cli.state_path', return_value=sp):
+            with patch('urace.cli.commands.reporting.load_config', return_value={}), \
+                 patch('urace.cli.commands.reporting.state_path', return_value=sp):
                 rc = self._run(['export', '--out', out])
             self.assertEqual(rc, 0)
             payload = json.loads(Path(out).read_text())
