@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from .auth import make_verify_token
 from .routes import daemon, shell, config_router, vitals, cycle, goals, inbox, audit
 from .routes import compliance, rules, github_router, exchange
-from .routes import products, fleet, portfolio
+from .routes import products, fleet, portfolio, metrics
 
 _HERE = Path(__file__).parent
 
@@ -92,6 +92,10 @@ def create_app(config: dict, token: str) -> FastAPI:
     app.include_router(
         portfolio.build_router(get_config, verify_token),
         prefix="/api/portfolio",
+    )
+    app.include_router(
+        metrics.build_router(verify_token),
+        prefix="/api/metrics",
     )
 
     from .routes.config_router import _get_fields_and_values
