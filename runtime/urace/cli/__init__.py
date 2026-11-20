@@ -110,7 +110,7 @@ from ..cli_helpers import (
 from ..cli_cycle import (
     _csi_relevance_score, _csi_confidence_score, _signal_quality, _run_csi,
     _run_ppm, _run_feedback_accumulator, _run_ram, _try_p2p_feature,
-    _ts_age, _routing_decision, cycle, emit_cycle_feedback, emit_auto_startup,
+    _routing_decision, cycle, emit_cycle_feedback, emit_auto_startup,
 )
 
 
@@ -6081,6 +6081,50 @@ def _cmd_compact_decompact_amend_why_crc(args, parser, config, state, fmt, _unkn
             return 0
 
 
+# Ordered list of façade handlers tried in sequence.  Each handler returns an
+# int exit code when it owns the command, or None to pass through to the next.
+_FACADE_HANDLERS = [
+    _cmd_features,
+    _cmd_rollback,
+    _cmd_peer_review,
+    _cmd_similarity,
+    _cmd_p2p,
+    _cmd_product_create,
+    _cmd_product_exchange,
+    _cmd_network_exchange,
+    _cmd_executor_skills_config,
+    _cmd_runtime_improvement_config,
+    _cmd_crypto,
+    _cmd_qualification,
+    # config block handled inline in main() — not in this list
+    _cmd_content,
+    _cmd_github_workflow_config,
+    _cmd_auto_milestones_config,
+    _cmd_decision_feedback_config,
+    _cmd_value_discovery_config,
+    _cmd_product_work,
+    _cmd_product_improvements,
+    _cmd_trial,
+]
+
+
+def _run_facade_handlers(
+    handlers: list,
+    args: Any,
+    parser: Any,
+    config: dict[str, Any],
+    state: dict[str, Any],
+    fmt: str | None,
+    unknown: list[str],
+    raw_args: list[str],
+) -> int | None:
+    """Try each handler in order; return the first non-None result."""
+    for handler in handlers:
+        result = handler(args, parser, config, state, fmt, unknown, raw_args)
+        if result is not None:
+            return result
+    return None
+
 
 def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     raw_args = list(sys.argv[1:] if argv is None else argv)
@@ -6173,32 +6217,11 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
             state = load_state_for_read(config) or {}
         except Exception:
             state = {}
-    _r = _cmd_features(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_rollback(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_peer_review(args, parser, config, state, _fmt, _unknown, raw_args)
+    _r = _run_facade_handlers(
+        _FACADE_HANDLERS[:12], args, parser, config, state, _fmt, _unknown, raw_args
+    )
     if _r is not None:
         return _r
-    _r = _cmd_similarity(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_p2p(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None:
-        return _r
-    _r = _cmd_product_create(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_product_exchange(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_network_exchange(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_executor_skills_config(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_runtime_improvement_config(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_crypto(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_qualification(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
     if args.command == 'config':
         from .. import config_schema as _cs
         if args.config_verb == 'show-all':
@@ -6376,24 +6399,18 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                     icon = "v" if c["status"] == "OK" else ("!" if c["status"] == "WARN" else ".")
                     print(f"  [{icon}] {c['check']:30s} {c['status']:6s}  {c['detail']}")
             return 0
-    _r = _cmd_content(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_github_workflow_config(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_auto_milestones_config(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_decision_feedback_config(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_value_discovery_config(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_product_work(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
+    _r = _run_facade_handlers(
+        _FACADE_HANDLERS[12:-2], args, parser, config, state, _fmt, _unknown, raw_args
+    )
+    if _r is not None:
+        return _r
     if args.command=='product' and args.action!='improvements' and args.improvement_product_id is not None:parser.error('Unexpected product argument; use product improvements enable|disable PRODUCT_ID')
     if args.command=='product' and args.all_products and args.action!='improvements':parser.error('--all-products requires product improvements list')
-    _r = _cmd_product_improvements(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
-    _r = _cmd_trial(args, parser, config, state, _fmt, _unknown, raw_args)
-    if _r is not None: return _r
+    _r = _run_facade_handlers(
+        _FACADE_HANDLERS[-2:], args, parser, config, state, _fmt, _unknown, raw_args
+    )
+    if _r is not None:
+        return _r
     if getattr(args,'status_subject',None)=='scores':
         if _unknown:parser.error('unrecognized score arguments: '+' '.join(_unknown))
         from ..trial import main as trial_main
