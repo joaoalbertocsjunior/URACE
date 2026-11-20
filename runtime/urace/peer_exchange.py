@@ -606,21 +606,14 @@ def _wire_chunk_size(p):
 
 def _bootstrap_request(endpoint: str, method: str, params: dict) -> dict:
  """Plain (unauthenticated) JSON-RPC POST to a bootstrap endpoint. Used for bootstrap.* methods."""
- u=validate_endpoint(endpoint)
- import http.client as _hc
- body=json.dumps({'jsonrpc':'2.0','id':'bootstrap','method':method,'params':params},separators=(',',':')).encode()
- ctx=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT);ctx.check_hostname=False;ctx.verify_mode=ssl.CERT_NONE
- c=_hc.HTTPSConnection(u.hostname,u.port or 443,context=ctx,timeout=10)
- try:
-  c.request('POST','/bootstrap-rpc',body,{'Content-Type':'application/json','Content-Length':str(len(body))})
-  r=c.getresponse();data=r.read(LIMIT)
-  if r.status!=200:raise ValueError(f'Bootstrap RPC failed: HTTP {r.status}')
-  resp=json.loads(data)
-  if isinstance(resp,dict) and 'result' in resp:return resp['result']
-  if isinstance(resp,dict) and 'error' in resp:raise ValueError(f'Bootstrap RPC error: {resp["error"]}')
-  return resp
- finally:
-  c.close()
+ from .http_adapter import make_http_adapter
+ validate_endpoint(endpoint)
+ url=f"{endpoint.rstrip('/')}/bootstrap-rpc"
+ payload={'jsonrpc':'2.0','id':'bootstrap','method':method,'params':params}
+ resp=make_http_adapter().post_json(url,payload,timeout=10.0)
+ if isinstance(resp,dict) and 'result' in resp:return resp['result']
+ if isinstance(resp,dict) and 'error' in resp:raise ValueError(f'Bootstrap RPC error: {resp["error"]}')
+ return resp
 
 def request(exchange,peer,method,params,*,telemetry=None,bootstrap_endpoint=None):
  # bootstrap_endpoint: unauthenticated plain-JSON path for bootstrap.* methods (peer=None)
