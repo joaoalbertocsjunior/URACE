@@ -1,11 +1,20 @@
 """Tests for RS erasure-coded chunk store."""
-import hashlib, os, tempfile, unittest
+import hashlib, os, shutil, tempfile, unittest
 import pytest
 from pathlib import Path
 
+_tmp_roots: list[str] = []
 
-def _root():
-    return Path(tempfile.mkdtemp())
+def _root() -> Path:
+    td = tempfile.mkdtemp()
+    _tmp_roots.append(td)
+    return Path(td)
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_tmp_roots():
+    yield
+    for d in _tmp_roots:
+        shutil.rmtree(d, ignore_errors=True)
 
 
 class RSErasureCodingTests(unittest.TestCase):

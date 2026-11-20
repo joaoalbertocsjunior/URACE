@@ -1,4 +1,5 @@
 """Tests for singularity-grade features: federation, decomposition, LLM-peer, audit chain."""
+import shutil
 import unittest
 import time
 
@@ -64,6 +65,7 @@ class AutoDecomposeTests(unittest.TestCase):
         self.cl = cl
         self.ex = MockExchange()
         self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, True)
         cl.earn_units(self.tmpdir, 'alice', 100 * cl.UNIT, 'test-setup')
 
     def test_low_complexity_no_split(self):
@@ -145,6 +147,7 @@ class QuorumStallFallbackTests(unittest.TestCase):
         self.cl = cl
         self.ex = MockExchange()
         self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, True)
         cl.earn_units(self.tmpdir, 'alice', 10 * cl.UNIT, 'test')
         rid = wm.create_work_request(self.ex, 'alice', 'spec', cl.UNIT)
         self.rid = rid

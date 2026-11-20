@@ -1,10 +1,19 @@
-import unittest, time, tempfile
+import shutil, unittest, time, tempfile
+import pytest
 from pathlib import Path
 from urace import provenance_graph as pg, peer_exchange as pe
 
+_tmp_dirs: list[str] = []
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_tmp_dirs():
+    yield
+    for d in _tmp_dirs:
+        shutil.rmtree(d, ignore_errors=True)
 
 def _make_exchange():
     tmp = tempfile.mkdtemp()
+    _tmp_dirs.append(tmp)
     e = pe.Exchange(Path(tmp) / 'node')
     e.configure(enabled=True, network=False)
     e.feature('feat', [])

@@ -1,3 +1,4 @@
+import shutil
 import tempfile, unittest
 from unittest.mock import MagicMock, patch
 
@@ -384,6 +385,7 @@ class HiredNodeEarnTests(unittest.TestCase):
         from urace import credit_ledger as cl
         self.cl = cl
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.root = self.tmp
         self.requester_id = 'requester-peer'
         self.request_id = 'req-hired-001'

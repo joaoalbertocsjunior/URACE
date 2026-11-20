@@ -1,4 +1,5 @@
 """Tests for feature_equity.py — equity model, trading, mint splits."""
+import shutil
 import unittest
 
 from conftest import MockExchange
@@ -37,6 +38,7 @@ class EquityPartialSaleTests(unittest.TestCase):
         self.cl = cl
         self.ex = MockExchange()
         self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, True)
         # Give bob enough balance for purchases
         cl.earn_units(self.tmpdir, 'bob', 10 * cl.UNIT, 'test-setup')
         self.fe.grant_equity(self.ex, 'feat-1', 'alice')
@@ -109,6 +111,7 @@ class MintEquitySplitTests(unittest.TestCase):
         import tempfile
         from urace import credit_ledger as cl
         tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir, True)
         cl.earn_units(tmpdir, 'bob', 5 * cl.UNIT, 'test')
         self.fe.grant_equity(self.ex, 'feat-1', 'alice')
         self.fe.sell_equity(self.ex, tmpdir, 'feat-1', 'alice', 'bob', 3_000)
@@ -120,6 +123,7 @@ class MintEquitySplitTests(unittest.TestCase):
         import tempfile
         from urace import credit_ledger as cl
         tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir, True)
         cl.earn_units(tmpdir, 'bob', 5 * cl.UNIT, 'test')
         cl.earn_units(tmpdir, 'carol', 5 * cl.UNIT, 'test')
         self.fe.grant_equity(self.ex, 'feat-1', 'alice')

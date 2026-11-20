@@ -1,6 +1,7 @@
 import copy
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -1241,6 +1242,7 @@ class R105CompactionGap1AmendDecompactTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def test_get_expected_digest_no_amendments_returns_original(self):
         from urace.compaction import _get_expected_digest, _canonical_digest
@@ -1346,7 +1348,9 @@ class R105CompactionGap2GovernanceTests(unittest.TestCase):
         self.assertEqual(_DEFAULT_GOVERNANCE["objectives"]["compaction_mode"], "PROHIBITED")
 
     def test_active_record_not_eligible_for_compaction(self):
-        engine = compaction_module.CompactionEngine(tempfile.mkdtemp())
+        _td = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, _td, True)
+        engine = compaction_module.CompactionEngine(_td)
         policy = {"id": "p1", "target_field": "community_signals",
                   "compaction_mode": "ROLLING_EVICTION", "max_entries": 1}
         records = [
@@ -1383,7 +1387,9 @@ class R105CompactionGap4TimestampOrderTests(unittest.TestCase):
     """Gap 4: timestamp-oldest eligibility (not positional-oldest)."""
 
     def setUp(self):
-        self.engine = compaction_module.CompactionEngine(tempfile.mkdtemp())
+        self._td = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self._td, True)
+        self.engine = compaction_module.CompactionEngine(self._td)
         self.policy = {"id": "p1", "target_field": "decision_records",
                        "compaction_mode": "ARCHIVE", "max_entries": 2,
                        "archive_subpath": "archives/test"}
@@ -1419,6 +1425,7 @@ class R105CompactionGap5ArchiveCeilingTests(unittest.TestCase):
     def test_gap_emitted_when_archive_count_exceeded(self):
         from urace.compaction import check_archive_ceiling, _DEFAULT_GOVERNANCE
         sp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, sp, True)
         subpath = _DEFAULT_GOVERNANCE["decision_records"]["archive_subpath"]
         archive_dir = Path(sp) / subpath
         archive_dir.mkdir(parents=True)
@@ -1432,11 +1439,14 @@ class R105CompactionGap5ArchiveCeilingTests(unittest.TestCase):
 
     def test_no_gap_below_threshold(self):
         from urace.compaction import check_archive_ceiling
-        self.assertEqual(check_archive_ceiling(tempfile.mkdtemp()), [])
+        _td = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, _td, True)
+        self.assertEqual(check_archive_ceiling(_td), [])
 
     def test_custom_max_archives_respected(self):
         from urace.compaction import check_archive_ceiling, _DEFAULT_GOVERNANCE
         sp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, sp, True)
         subpath = _DEFAULT_GOVERNANCE["decision_records"]["archive_subpath"]
         archive_dir = Path(sp) / subpath
         archive_dir.mkdir(parents=True)
@@ -1453,7 +1463,9 @@ class R105CompactionGap7StatusTests(unittest.TestCase):
 
     def test_status_no_manifest(self):
         from urace.compaction import get_compaction_status
-        status = get_compaction_status(tempfile.mkdtemp())
+        _td = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, _td, True)
+        status = get_compaction_status(_td)
         self.assertFalse(status["has_manifest"])
         self.assertEqual(status["event_count"], 0)
         self.assertIsNone(status["last_compacted_at"])
@@ -1491,6 +1503,7 @@ class R105CompactionGap8AtomicFieldsTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.engine = compaction_module.CompactionEngine(self.tmp)
 
     def test_compact_fields_fails_on_prohibited_field(self):

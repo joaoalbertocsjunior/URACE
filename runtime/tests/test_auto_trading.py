@@ -2,6 +2,7 @@
 depletion, listings, auto-buy, auto-sell, auto-mint, settlement state, purchase settlement,
 and ledger compaction / P2P supply."""
 from __future__ import annotations
+import shutil
 import time
 import tempfile
 import unittest
@@ -219,6 +220,7 @@ class DepletionStatusTests(unittest.TestCase):
         self.cl = cl
         self.ex = MockExchange()
         self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, True)
 
     def test_no_adoption_is_healthy(self):
         d = self.eat.feature_depletion_status('feat-1', self.ex, estimated_network_size=100)
@@ -423,6 +425,7 @@ class LedgerCompactionTests(unittest.TestCase):
         self.cl = cl
         self.ex = MockExchange()
         self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, True)
 
     def _make_released_contract(self, rid_suffix=''):
         cl = self.cl
@@ -489,6 +492,7 @@ class P2PSupplyCalcTests(unittest.TestCase):
         self.lc = lc
         self.ex = MockExchange()
         self.tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmpdir, True)
 
     def test_basic_supply_calc(self):
         result = self.lc.p2p_optimal_supply(max_network_peers=100, target_ledger_mb=10.0)
@@ -539,6 +543,7 @@ class P2PSupplyCalcTests(unittest.TestCase):
                                        'bp_to_sell_per_trigger': 500, 'min_hold_bp_to_trigger': 200,
                                        'sell_on_near_depleted': True, 'sell_on_slowing': False}})
         tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir, True)
         eat.save_config(tmpdir, eat.DEFAULT_CONFIG)
         cfg = eat.load_config(tmpdir)
         self.assertFalse(cfg['auto_buy']['enabled'])

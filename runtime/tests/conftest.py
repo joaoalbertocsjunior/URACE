@@ -1,6 +1,8 @@
 """pytest session fixture: ensure a minimal config.json exists at CONFIG_PATH before any test runs."""
 import json
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -21,8 +23,13 @@ class MockExchange:
     def __init__(self, peer_id='test-peer', root=None):
         self._rows = []
         self._peer_id = peer_id
-        self.root = root or '/tmp/test_mock_exchange'
+        self._tmp_owned = root is None
+        self.root = root or tempfile.mkdtemp(prefix="mock_exchange_")
         self._state = {'token_settlement': False, 'token_baseline_grant': 3, 'peers': {}}
+
+    def cleanup(self):
+        if self._tmp_owned:
+            shutil.rmtree(self.root, ignore_errors=True)
 
     # ── core audit log ───────────────────────────────────────────────────────
 
@@ -219,6 +226,23 @@ if _PYTEST_AVAILABLE:
     _ensure_product_files_at_root = pytest.fixture(scope="session", autouse=True)(
         _ensure_product_files_at_root
     )
+
+    @pytest.fixture(scope="session", autouse=True)
+    def cleanup_session_tmp(tmp_path_factory):
+        """Remove all pytest-managed tmp dirs after the full session."""
+        yield
+        root = tmp_path_factory.getbasetemp()
+        shutil.rmtree(root, ignore_errors=True)
+
+    @pytest.fixture(autouse=True)
+    def reset_event_bus():
+        """Clear event_bus subscriptions between tests (no-op until Phase 4)."""
+        yield
+        try:
+            from urace.event_bus import _BUS
+            _BUS._clear_all()
+        except ImportError:
+            pass
 
 
 if __name__ == "__main__":

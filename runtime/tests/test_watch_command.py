@@ -1,5 +1,7 @@
 """Tests for the urace watch runtime improvement feed command."""
 import json, subprocess, sys, tempfile, unittest
+import pytest
+pytestmark = pytest.mark.slow
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

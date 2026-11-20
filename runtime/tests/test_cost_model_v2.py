@@ -10,6 +10,7 @@ Covers:
 - Protocol fee emitted at fill-listing
 - Minimum viable price auto-adjusts ask_price upward (not rejects)
 """
+import shutil
 import tempfile
 import time
 import unittest
@@ -302,6 +303,7 @@ class ProtocolFeeIntegrationTests(unittest.TestCase):
         from urace import equity_auto_trade as eat, feature_equity as fe, peer_exchange as pe, credit_ledger as cl
         config = config or {}
         tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir, True)
         ex = pe.Exchange(Path(tmpdir) / 'node')
         cl.earn_units(ex.root, 'alice', 10 * cl.UNIT, 'setup')
         cl.earn_units(ex.root, 'bob', 10 * cl.UNIT, 'setup')
@@ -410,6 +412,7 @@ class MinViablePriceAutoAdjustTests(unittest.TestCase):
         """When ask_price < minimum_viable_price, it's adjusted up, not rejected."""
         from urace import equity_auto_trade as eat, feature_equity as fe
         tmpdir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmpdir, True)
         from urace import peer_exchange as pe
         ex = pe.Exchange(Path(tmpdir) / 'node')
 

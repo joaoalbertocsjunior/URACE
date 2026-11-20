@@ -7,23 +7,26 @@ on:
     branches: [main]
 
 jobs:
-  test-311:
+  test:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
         with:
           path: urace
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
       - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
-      - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/tests -m "not slow" -x -q
+      - run: python -m pytest urace/runtime/tests/ -m "not slow" -x -q --timeout=600 --tb=short
+      - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q --timeout=600 --tb=short
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/tests -m "not slow" -x -q --timeout=600 --tb=short
 
-  test-312:
+  coverage:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -35,27 +38,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q --cov=urace --cov-report=term-missing
-      - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/tests -m "not slow" -x -q
+      - run: python -m pytest urace/runtime/tests/ -m "not slow" -x -q --timeout=600 --tb=short --cov=urace --cov-report=term-missing --cov-fail-under=60
 
-  test-313:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/ -n auto -m "not slow" -x -q
-      - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/tests -m "not slow" -x -q
-
-  test-network-extras:
+  benchmarks:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -67,21 +52,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/test_kademlia.py -x -q
-
-  test-benchmarks:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install -e "urace/runtime/[test]"
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/tests/ -x -q
+      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/tests/ -x -q --timeout=600 --tb=short
 
   lint:
     runs-on: ubuntu-latest
@@ -124,7 +95,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install -e "urace/runtime/"
+      - run: pip install -e "urace/runtime/" pip-audit
       - run: python -c "import urace; from urace.cli import main; print('import ok')"
       - run: python -c "from urace.credit_ledger import CONSENSUS_WEIGHTS, UNIT; assert UNIT == 100_000_000"
       - run: python -c "from urace.cost_model import BorrowCostContext, _ceiling_for_loc; assert _ceiling_for_loc(25)==0.05"
+      - run: pip-audit --desc on urace/runtime/ || true

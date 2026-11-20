@@ -1,4 +1,5 @@
 """Tests for content_store, product_type_detector, circuit_breaker, crypto_wallet."""
+import shutil
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ from urace.product_type_detector import detect_product_types, normalize_types
 class TestContentStore(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.root = Path(self.tmp)
 
     def test_ref_registers_file(self):
@@ -53,6 +55,7 @@ class TestContentStore(unittest.TestCase):
 class TestProductTypeDetector(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.root = Path(self.tmp)
 
     def _write(self, name: str, content: str = ""):

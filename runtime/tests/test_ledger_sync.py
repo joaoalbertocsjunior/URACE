@@ -2,6 +2,7 @@ import pytest
 pytestmark = pytest.mark.slow
 import hashlib
 import json
+import shutil
 import tempfile
 import time
 import unittest
@@ -313,6 +314,7 @@ class RequestTailPayloadTests(unittest.TestCase):
     def _make_exchange(self):
         from urace import peer_exchange as pe
         tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
         e = pe.Exchange(Path(tmp) / 'node')
         e.configure(enabled=True, network=False)
         e.feature('feat', [])
@@ -328,6 +330,7 @@ class RequestTailPayloadTests(unittest.TestCase):
         from urace import ledger_compaction as lc
         e = self._make_exchange()
         tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
         lc.seal_ledger_block(e, tmp)
         # Add a row after the seal by appending an audit event
         e.event('POST_SEAL_EVENT', note='tail_row')

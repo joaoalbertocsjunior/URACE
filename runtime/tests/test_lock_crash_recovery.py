@@ -8,6 +8,8 @@ import sys
 import tempfile
 import time
 import unittest
+import pytest
+pytestmark = pytest.mark.slow
 from unittest.mock import patch
 
 from urace import _common
