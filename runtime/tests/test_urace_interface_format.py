@@ -393,6 +393,7 @@ class R90ProductRemoveTests(unittest.TestCase):
 
             with patch.object(cli, "load_config", return_value=config), \
                  patch("urace.cli.save_config", side_effect=fake_save_config), \
+                 patch("urace.cli.commands.product.save_config", side_effect=fake_save_config), \
                  redirect_stdout(out):
                 rc = cli.main(argv)
         return rc, out.getvalue(), captured_config
@@ -430,6 +431,7 @@ class R90ProductRemoveTests(unittest.TestCase):
             out = io.StringIO()
             with patch.object(cli, "load_config", return_value=config), \
                  patch("urace.cli.save_config", side_effect=fake_save_config), \
+                 patch("urace.cli.commands.product.save_config", side_effect=fake_save_config), \
                  redirect_stdout(out):
                 cli.main(["product", "remove", "ActiveProduct", "--force", "--json"])
             saved = cli.load_state_for_read(config)
@@ -497,6 +499,7 @@ class R91ProductToggleTests(unittest.TestCase):
 
             with patch.object(cli, "load_config", return_value=config), \
                  patch("urace.cli.save_config", side_effect=fake_save_config), \
+                 patch("urace.cli.commands.product.save_config", side_effect=fake_save_config), \
                  redirect_stdout(out):
                 rc = cli.main(argv)
         return rc, out.getvalue(), captured_config
@@ -530,6 +533,7 @@ class R91ProductToggleTests(unittest.TestCase):
             out = io.StringIO()
             with patch.object(cli, "load_config", return_value=config), \
                  patch("urace.cli.save_config", lambda c: None), \
+                 patch("urace.cli.commands.product.save_config", lambda c: None), \
                  redirect_stdout(out):
                 cli.main(["product", "deactivate", "ActiveProduct", "--json"])
             saved = cli.load_state_for_read(config)
@@ -554,6 +558,7 @@ class R91ProductToggleTests(unittest.TestCase):
             out = io.StringIO()
             with patch.object(cli, "load_config", return_value=config), \
                  patch("urace.cli.save_config", side_effect=lambda c: captured_config.update(c)), \
+                 patch("urace.cli.commands.product.save_config", side_effect=lambda c: captured_config.update(c)), \
                  redirect_stdout(out):
                 rc = cli.main(["product", "activate", "OtherProduct", "--json"])
         self.assertEqual(rc, 0)
@@ -597,6 +602,8 @@ class R93ExternalInterfaceTests(unittest.TestCase):
             cli.seed_confirmed_onboard(config, s)
             cli.save_state(config, s)
             with patch.object(cli, "load_config", return_value=config), \
+                 patch("urace.cli.commands.work.load_config", return_value=config), \
+                 patch("urace.cli.commands.work.load_state_for_read", side_effect=lambda c: cli.load_state_for_read(c)), \
                  redirect_stdout(out):
                 rc = cli.main(argv)
         return rc, out.getvalue()
@@ -803,7 +810,9 @@ class R100DeclareTests(unittest.TestCase):
 
     def test_add_context_queues(self):
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-1"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-1"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-1"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "context", "some important context"])
@@ -825,7 +834,9 @@ class R100DeclareTests(unittest.TestCase):
 
     def test_add_goal_subcommand_queues(self):
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-3"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-3"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-3"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "goal", "Fix login", "--success-measure", "users can login", "--reason", "critical bug"])
@@ -836,7 +847,9 @@ class R100DeclareTests(unittest.TestCase):
 
     def test_add_metric_queues(self):
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-4"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-4"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-4"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "metric", "error_rate", "--source", "src-1", "--path", "$.errors"])
@@ -846,7 +859,9 @@ class R100DeclareTests(unittest.TestCase):
 
     def test_add_vital_queues(self):
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-5"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-5"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-5"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "vital", "uptime", "--numerator", "met-1"])
@@ -856,7 +871,9 @@ class R100DeclareTests(unittest.TestCase):
 
     def test_add_source_queues(self):
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-6"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-6"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-6"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "source", "src-1", "--kind", "http", "--location", "http://example.com"])
@@ -874,7 +891,9 @@ class R100DeclareTests(unittest.TestCase):
     def test_declare_deprecated_context(self):
         """declare context still works but prints deprecation warning."""
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-d1"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-d1"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-d1"}) as qi:
             err = io.StringIO()
             out = io.StringIO()
             with redirect_stdout(out), redirect_stderr(err):
@@ -888,7 +907,9 @@ class R100DeclareTests(unittest.TestCase):
     def test_declare_deprecated_goal(self):
         """declare goal still works but prints deprecation warning."""
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-d2"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-d2"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-d2"}) as qi:
             err = io.StringIO()
             out = io.StringIO()
             with redirect_stdout(out), redirect_stderr(err):
@@ -991,7 +1012,9 @@ class R101AddSubcommandTests(unittest.TestCase):
 
     def test_add_context_queues(self):
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-1"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-1"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-1"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "context", "important context"])
@@ -1000,7 +1023,9 @@ class R101AddSubcommandTests(unittest.TestCase):
 
     def test_add_goal_queues(self):
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-2"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-2"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-2"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "goal", "Fix login", "--success-measure", "works", "--reason", "bug"])
@@ -1010,7 +1035,9 @@ class R101AddSubcommandTests(unittest.TestCase):
     def test_declare_deprecated_routes_to_add(self):
         """declare context still works but prints deprecation."""
         with patch.object(cli, "load_config", return_value=self._cfg()), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-3"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self._cfg()), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-3"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-3"}) as qi:
             err = io.StringIO()
             out = io.StringIO()
             with redirect_stdout(out), redirect_stderr(err):
@@ -1054,7 +1081,9 @@ class R102AddEvidenceTests(unittest.TestCase):
 
     def test_add_evidence_cli_routes_to_queue(self):
         with patch.object(cli, "load_config", return_value=self.config), \
-             patch.object(cli, "queue_input", return_value={"id": "inp-ev-1"}) as qi:
+             patch("urace.cli.commands.work.load_config", return_value=self.config), \
+             patch.object(cli, "queue_input", return_value={"id": "inp-ev-1"}), \
+             patch("urace.cli.commands.work.queue_input", return_value={"id": "inp-ev-1"}) as qi:
             out = io.StringIO()
             with redirect_stdout(out):
                 rc = cli.main(["add", "evidence", "--kind", "test-pass", "--summary", "green"])
@@ -1227,12 +1256,13 @@ class R104MultiProductTests(unittest.TestCase):
         captured_state = {}
         def _capture_save(c, s):
             captured_state.update(s)
-        with patch.object(cli, "load_config", return_value=cfg):
-            with patch.object(cli, "load_state_for_read", return_value=self.state):
-                with patch.object(cli, "save_state", side_effect=_capture_save):
-                    buf = io.StringIO()
-                    with redirect_stderr(buf):
-                        rc = cli.main(["crc", "show", "--products", "A,B"])
+        with patch.object(cli, "load_config", return_value=cfg), \
+             patch.object(cli, "load_state_for_read", return_value=self.state), \
+             patch.object(cli, "save_state", side_effect=_capture_save), \
+             patch("urace.cli.commands.work.save_state", side_effect=_capture_save):
+            buf = io.StringIO()
+            with redirect_stderr(buf):
+                rc = cli.main(["crc", "show", "--products", "A,B"])
         self.assertEqual(rc, 1)
         gap_kinds = [g.get("kind") for g in captured_state.get("integrity_gaps", [])]
         self.assertIn("multi-product-compact-cycle", gap_kinds)
@@ -1857,12 +1887,16 @@ class R106OutputFormatContractTests(unittest.TestCase):
         cli.seed_confirmed_onboard(self.config, self.state)
 
     def _run(self, argv):
-        with patch.object(cli, "load_config", return_value=self.config):
-            with patch.object(cli, "load_state_for_read", return_value=self.state):
-                buf_out = io.StringIO()
-                buf_err = io.StringIO()
-                with redirect_stdout(buf_out), redirect_stderr(buf_err):
-                    rc = cli.main(argv)
+        with patch.object(cli, "load_config", return_value=self.config), \
+             patch.object(cli, "load_state_for_read", return_value=self.state), \
+             patch("urace.cli.commands.metrics.load_config", return_value=self.config), \
+             patch("urace.cli.commands.metrics.load_state_for_read", return_value=self.state), \
+             patch("urace.cli.commands.work.load_config", return_value=self.config), \
+             patch("urace.cli.commands.work.load_state_for_read", return_value=self.state):
+            buf_out = io.StringIO()
+            buf_err = io.StringIO()
+            with redirect_stdout(buf_out), redirect_stderr(buf_err):
+                rc = cli.main(argv)
         return rc, buf_out.getvalue(), buf_err.getvalue()
 
     def test_check_format_json(self):

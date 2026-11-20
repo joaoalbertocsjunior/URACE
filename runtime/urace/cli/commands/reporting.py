@@ -140,7 +140,7 @@ def _cmd_help(args, parser, config, state, fmt, _unknown, raw_args):
             return 0
         help_root=parser;help_path=list(args.operation)
         if help_path[0]=="portfolio":
-            from .. import portfolio as _portfolio_help
+            from urace import portfolio as _portfolio_help
             help_root=_portfolio_help.parser();help_path=help_path[1:]
         try:operation=command_surface.help_parser(help_root,help_path)
         except ValueError as error:parser.error(str(error))
