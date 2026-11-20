@@ -240,53 +240,59 @@ def dispatch(args, config: dict) -> int:
         print(f"URACE daemon started (pid={os.getpid()}, interval={interval_minutes}m, max_cycles={limit_label}). Ctrl+C to stop.")
 
     from . import cli as _cli
+    from .daemon_scheduler import make_scheduler
     count = 0
-    try:
-        while not stopped[0]:
-            if _reload_flag[0]:
-                _reload_flag[0] = False
-                try:
-                    from ._common import CONFIG_PATH as _cp
-                    import json as _j
-                    _new_config = _j.loads(_cp.read_text())
-                    _old_net = config.get('network', {})
-                    _new_net = _new_config.get('network', {})
-                    _changed = [k for k in set(list(_old_net.keys()) + list(_new_net.keys()))
-                                if _old_net.get(k) != _new_net.get(k)]
-                    config.update(_new_config)
-                    if as_json:
-                        print(json.dumps({"event": "reloaded", "changed_sections": list(set(
-                            k.split('.')[0] for k in _changed)) or ["none"]}))
-                        sys.stdout.flush()
-                    else:
-                        print("[daemon] config reloaded")
-                except Exception as _e:
-                    if as_json:
-                        print(json.dumps({"event": "reload_error", "error": str(_e)}))
-                    else:
-                        print(f"[daemon] reload error: {_e}")
-            if max_cycles and count >= max_cycles:
-                break
-            if as_json:
-                print(json.dumps({"event": "cycle_start", "cycle": count + 1}))
-                sys.stdout.flush()
-            else:
-                print(f"[daemon] cycle {count + 1}" + (f"/{max_cycles}" if max_cycles else ""))
+
+    def _run_one_cycle():
+        nonlocal count
+        if stopped[0]:
+            return
+        if _reload_flag[0]:
+            _reload_flag[0] = False
             try:
-                _cli.main(["auto", "--cycles", "1", "--quiet"] + (["--json"] if as_json else []), _config=config)
-            except SystemExit:
-                pass
-            except Exception as exc:
+                from ._common import CONFIG_PATH as _cp
+                import json as _j
+                _new_config = _j.loads(_cp.read_text())
+                _old_net = config.get('network', {})
+                _new_net = _new_config.get('network', {})
+                _changed = [k for k in set(list(_old_net.keys()) + list(_new_net.keys()))
+                            if _old_net.get(k) != _new_net.get(k)]
+                config.update(_new_config)
                 if as_json:
-                    print(json.dumps({"event": "cycle_error", "cycle": count + 1, "error": str(exc)}))
+                    print(json.dumps({"event": "reloaded", "changed_sections": list(set(
+                        k.split('.')[0] for k in _changed)) or ["none"]}))
+                    sys.stdout.flush()
                 else:
-                    print(f"[daemon] cycle error: {exc}")
-            count += 1
-            if stopped[0] or (max_cycles and count >= max_cycles):
-                break
-            deadline = time.monotonic() + interval_sec
-            while time.monotonic() < deadline and not stopped[0]:
-                time.sleep(min(5.0, deadline - time.monotonic()))
+                    print("[daemon] config reloaded")
+            except Exception as _e:
+                if as_json:
+                    print(json.dumps({"event": "reload_error", "error": str(_e)}))
+                else:
+                    print(f"[daemon] reload error: {_e}")
+        if max_cycles and count >= max_cycles:
+            stopped[0] = True
+            return
+        if as_json:
+            print(json.dumps({"event": "cycle_start", "cycle": count + 1}))
+            sys.stdout.flush()
+        else:
+            print(f"[daemon] cycle {count + 1}" + (f"/{max_cycles}" if max_cycles else ""))
+        try:
+            _cli.main(["auto", "--cycles", "1", "--quiet"] + (["--json"] if as_json else []), _config=config)
+        except SystemExit:
+            pass
+        except Exception as exc:
+            if as_json:
+                print(json.dumps({"event": "cycle_error", "cycle": count + 1, "error": str(exc)}))
+            else:
+                print(f"[daemon] cycle error: {exc}")
+        count += 1
+        if max_cycles and count >= max_cycles:
+            stopped[0] = True
+
+    scheduler = make_scheduler(interval_sec, _run_one_cycle, stop_flag=stopped)
+    try:
+        scheduler.run_blocking()
     except KeyboardInterrupt:
         stopped[0] = True
     finally:
