@@ -96,114 +96,72 @@ def create_app(config: dict, token: str) -> FastAPI:
 
     from .routes.config_router import _get_fields_and_values
 
+    def _ctx(active: str, **extra):
+        return {"active": active, "token": token, **extra}
+
     @app.get("/", include_in_schema=False)
     async def index():
         return RedirectResponse(url="/shell")
 
     @app.get("/shell", response_class=HTMLResponse, include_in_schema=False)
     async def page_shell(request: Request):
-        return templates.TemplateResponse(
-            request, "shell.html",
-            context={"active": "shell", "token": token},
-        )
+        return templates.TemplateResponse(request, "shell.html", context=_ctx("shell"))
 
     @app.get("/config", response_class=HTMLResponse, include_in_schema=False)
     async def page_config(request: Request):
         fields, values = _get_fields_and_values(config)
-        return templates.TemplateResponse(
-            request, "config.html",
-            context={"active": "config", "fields": fields, "values": values, "token": token},
-        )
+        return templates.TemplateResponse(request, "config.html", context=_ctx("config", fields=fields, values=values))
 
     @app.get("/vitals", response_class=HTMLResponse, include_in_schema=False)
     async def page_vitals(request: Request):
-        return templates.TemplateResponse(
-            request, "vitals.html",
-            context={"active": "vitals", "token": token},
-        )
+        return templates.TemplateResponse(request, "vitals.html", context=_ctx("vitals"))
 
     @app.get("/wallet", response_class=HTMLResponse, include_in_schema=False)
     async def page_wallet(request: Request):
-        return templates.TemplateResponse(
-            request, "wallet.html",
-            context={"active": "wallet", "token": token},
-        )
+        return templates.TemplateResponse(request, "wallet.html", context=_ctx("wallet"))
 
     @app.get("/cycle", response_class=HTMLResponse, include_in_schema=False)
     async def page_cycle(request: Request):
-        return templates.TemplateResponse(
-            request, "cycle.html",
-            context={"active": "cycle", "token": token},
-        )
+        return templates.TemplateResponse(request, "cycle.html", context=_ctx("cycle"))
 
     @app.get("/goals", response_class=HTMLResponse, include_in_schema=False)
     async def page_goals(request: Request):
-        return templates.TemplateResponse(
-            request, "goals.html",
-            context={"active": "goals", "token": token},
-        )
+        return templates.TemplateResponse(request, "goals.html", context=_ctx("goals"))
 
     @app.get("/inbox", response_class=HTMLResponse, include_in_schema=False)
     async def page_inbox(request: Request):
-        return templates.TemplateResponse(
-            request, "inbox.html",
-            context={"active": "inbox", "token": token},
-        )
+        return templates.TemplateResponse(request, "inbox.html", context=_ctx("inbox"))
 
     @app.get("/audit", response_class=HTMLResponse, include_in_schema=False)
     async def page_audit(request: Request):
-        return templates.TemplateResponse(
-            request, "audit.html",
-            context={"active": "audit", "token": token},
-        )
+        return templates.TemplateResponse(request, "audit.html", context=_ctx("audit"))
 
     @app.get("/compliance", response_class=HTMLResponse, include_in_schema=False)
     async def page_compliance(request: Request):
-        return templates.TemplateResponse(
-            request, "compliance.html",
-            context={"active": "compliance", "token": token},
-        )
+        return templates.TemplateResponse(request, "compliance.html", context=_ctx("compliance"))
 
     @app.get("/rules", response_class=HTMLResponse, include_in_schema=False)
     async def page_rules(request: Request):
-        return templates.TemplateResponse(
-            request, "rules.html",
-            context={"active": "rules", "token": token},
-        )
+        return templates.TemplateResponse(request, "rules.html", context=_ctx("rules"))
 
     @app.get("/github", response_class=HTMLResponse, include_in_schema=False)
     async def page_github(request: Request):
-        return templates.TemplateResponse(
-            request, "github.html",
-            context={"active": "github", "token": token},
-        )
+        return templates.TemplateResponse(request, "github.html", context=_ctx("github"))
 
     @app.get("/exchange", response_class=HTMLResponse, include_in_schema=False)
     async def page_exchange(request: Request):
-        return templates.TemplateResponse(
-            request, "exchange.html",
-            context={"active": "exchange", "token": token},
-        )
+        return templates.TemplateResponse(request, "exchange.html", context=_ctx("exchange"))
 
     @app.get("/products", response_class=HTMLResponse, include_in_schema=False)
     async def page_products(request: Request):
-        return templates.TemplateResponse(
-            request, "products.html",
-            context={"active": "products", "token": token},
-        )
+        return templates.TemplateResponse(request, "products.html", context=_ctx("products"))
 
     @app.get("/fleet", response_class=HTMLResponse, include_in_schema=False)
     async def page_fleet(request: Request):
-        return templates.TemplateResponse(
-            request, "fleet.html",
-            context={"active": "fleet", "token": token},
-        )
+        return templates.TemplateResponse(request, "fleet.html", context=_ctx("fleet"))
 
     @app.get("/portfolio", response_class=HTMLResponse, include_in_schema=False)
     async def page_portfolio(request: Request):
-        return templates.TemplateResponse(
-            request, "portfolio.html",
-            context={"active": "portfolio", "token": token},
-        )
+        return templates.TemplateResponse(request, "portfolio.html", context=_ctx("portfolio"))
 
     return app

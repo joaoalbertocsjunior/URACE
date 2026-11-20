@@ -33,6 +33,13 @@ from .executor_routing import (
 )
 
 
+def _temporary_workspace_root(root: Path) -> Path:
+    """Return (and create) the standard directory for executor temp workspaces."""
+    path = root / "urace" / "generated" / "temporary"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def _runtime_test_failure_detail(output: str) -> str:
     """Keep bounded unittest diagnostics, including abbreviated reports."""
     from .failure_formatter import format_failure_output
@@ -539,8 +546,7 @@ def _run_codex(
         raise RuntimeError("Codex executor is enabled but the `codex` executable was not found")
     if sandbox != "read-only" and not settings.get("workspace_write_validated", False):
         raise RuntimeError("Codex workspace-write adapter has not passed local confinement validation")
-    temporary_root = root / "urace" / "generated" / "temporary"
-    temporary_root.mkdir(parents=True, exist_ok=True)
+    temporary_root = _temporary_workspace_root(root)
     with tempfile.TemporaryDirectory(prefix="codex-", dir=temporary_root) as directory:
         output = Path(directory) / "last-message.json"
         command = [
@@ -847,8 +853,7 @@ def execute(root: Path, config: dict[str, Any], state: dict[str, Any], objective
     settings = config["executor"]
     scope = objective.get("scope", "documentation")
     allowed = _expand_allowed(root, settings["allowed_files_by_scope"][scope])
-    temporary_root = root / "urace" / "generated" / "temporary"
-    temporary_root.mkdir(parents=True, exist_ok=True)
+    temporary_root = _temporary_workspace_root(root)
     with tempfile.TemporaryDirectory(prefix="operation-", dir=temporary_root) as directory:
         workspace = Path(directory)
         base_hashes = {}
