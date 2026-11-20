@@ -59,12 +59,12 @@ def _cmd_watch(args, parser, config, state, fmt, _unknown, raw_args):
             print(json.dumps(report, indent=2, sort_keys=True))
             return 0
         if getattr(args, 'guard', False):
-            try:
-                import runtime_regression_guard as _rg
-                guard_result = _rg.check(str(_trial_base),load_config())
-                print(json.dumps(guard_result, indent=2, sort_keys=True))
-            except ImportError as _ge:
-                print(json.dumps({'error': f'runtime_regression_guard not available: {_ge}'}))
+            from urace import runtime_regression_guard as _rg
+            from urace._common import load_state_for_read
+            _cfg = load_config()
+            _st = load_state_for_read(_cfg) or {}
+            guard_result = _rg.guard_status(_st)
+            print(json.dumps(guard_result, indent=2, sort_keys=True))
             return 0
         if getattr(args, 'dashboard', False):
             import runtime_dashboard as _dashboard
@@ -104,16 +104,14 @@ def _cmd_watch(args, parser, config, state, fmt, _unknown, raw_args):
         _guard_header = ''
         if not args.json:
             try:
-                import runtime_regression_guard as _rg
-                _gr = _rg.check(str(_trial_base),load_config())
+                from urace import runtime_regression_guard as _rg
+                from urace._common import load_state_for_read as _lsr
+                _gr = _rg.guard_status(_lsr(load_config()) or {})
                 _gs = _gr['status']
-                _gc = _gr.get('current_score')
-                _ga = _gr.get('accepted_score')
-                _gd = _gr.get('delta')
                 if _gs == 'OK':
-                    _guard_header = f'Guard: OK (current={_gc}, accepted={_ga})'
+                    _guard_header = f'Guard: OK ({_gr.get("checked_scopes", 0)} scopes clean)'
                 elif _gs == 'REGRESSION':
-                    _guard_header = f'Guard: REGRESSION delta={_gd:.2f}'
+                    _guard_header = f'Guard: REGRESSION — run urace check --guard for details'
                 else:
                     _guard_header = f'Guard: {_gs}'
             except Exception:

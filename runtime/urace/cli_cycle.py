@@ -1043,6 +1043,29 @@ def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool =
         state["checkpoints"].append({"id": identifier("checkpoint"), "at": now(), "kind": "assessment", "digest": digest})
     # --- §62z: attach continuation_confidence to outcome ---
     outcome["continuation_confidence"] = state.get("continuation_confidence", 1.0)
+
+    # --- Phase III-A: regression guard hard gate —————————————————————————————
+    # If the latest QualityDelta for the active scope is REGRESSION with no
+    # subsequent CHECKPOINT_ACCEPTANCE, block state persistence by returning a
+    # 'regression_blocked' outcome before any save_state() in the caller.
+    _obj_scope = (outcome.get("objective") or {}).get("scope") if isinstance(outcome.get("objective"), dict) else None
+    try:
+        from . import runtime_regression_guard as _rg
+        _rg_status = _rg.check(state, scope=_obj_scope)
+        if _rg_status == "REGRESSION":
+            _rg_record = _rg.record_blocked(state, scope=_obj_scope)
+            _emit_trace(state, "BLOCKED", "regression guard: cycle blocked", cycle_id=_cycle_id)
+            _eb.publish('cycle.completed', cycle_id=_cycle_id, outcome='regression_blocked')
+            return {
+                "outcome": "regression_blocked",
+                "scope": _obj_scope,
+                "reason": "Most recent QualityDelta is REGRESSION; run `urace check --guard` for details",
+                "decision_id": _rg_record["id"],
+                "continuation_confidence": outcome["continuation_confidence"],
+            }
+    except Exception:
+        pass  # guard failure is non-fatal; cycle continues
+
     _eb.publish('cycle.completed', cycle_id=_cycle_id, outcome=outcome.get('outcome'))
     return outcome
 
