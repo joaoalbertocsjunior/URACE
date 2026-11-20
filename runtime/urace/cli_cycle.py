@@ -447,83 +447,31 @@ def _try_p2p_feature(config: dict[str, Any], state: dict[str, Any]) -> dict[str,
     """P2P-first gate: return a planned objective sourced from the peer network when the
     recommendation score clears the ROI threshold AND authority/intent are respected.
 
-    The recommendation threshold adapts to resource pressure so P2P candidates
-    may be considered earlier when executor-call capacity or exchange credits
-    are constrained. This is a routing heuristic, not evidence that P2P is cheaper:
-        adjusted_threshold = BASE × (1 − 0.5 × budget_pressure)
-
+    P2P scoring and Exchange construction are delegated to p2p_service so that
+    this module does not import peer_exchange / credit_ledger directly.
     Returns a 'planned' objective dict or None.  Never raises.
     """
     try:
-        if not config.get("p2p", {}).get("feature_borrow_enabled", False):
-            return None
-        from . import peer_exchange as _pe
-        exchange_root = state_path(config).parent / "exchange"
-        if not exchange_root.exists():
-            return None
-        exchange = _pe.Exchange(exchange_root)
-        policy = exchange.load()
-        if not policy.get("enabled"):
+        from . import p2p_service as _p2p_svc
+        candidate = _p2p_svc.find_p2p_feature_candidate(config, state)
+        if candidate is None:
             return None
 
-        from . import product_similarity as _ps
-        candidates = _ps.score_features(config, state, exchange, timeout_seconds=2.0)
-        if not candidates:
-            return None
-
-        # --- Enrichment 1: Credit-based budget pressure (combined with call-count pressure) ---
-        from . import credit_ledger as _cl
-        _exec_state = state.get("executor_state", {})
-        _calls_24h = [c for c in _exec_state.get("executor_calls", [])
-                      if _ts_age(c.get("at", now())) < 86400]
-        _limit = nullable_limit(config.get("executor", {}), "max_executor_calls_per_24h", 2)
-        call_pressure = min(1.0, len(_calls_24h) / _limit) if _limit else 0.0
-        _local_id = config.get("peer_id", "local")
-        _bal = _cl.balance(state_path(config).parent, _local_id)
-        _baseline = _cl.BASELINE_GRANT_UNITS
-        credit_pressure = max(0.0, min(1.0, 1.0 - _bal / max(1, _baseline * 10)))
-        budget_pressure = max(call_pressure, credit_pressure)
-
-        BASE_THRESHOLD = float(config.get("p2p", {}).get("p2p_roi_threshold", 0.55))
-        adjusted = BASE_THRESHOLD * (1.0 - 0.5 * budget_pressure)
-
-        # --- Enrichment 5: Cold-start confidence gate (select best then gate) ---
-        best = candidates[0]
-        if best.get("score", 0.0) < adjusted:
-            return None
-
-        if best.get("cold_start") and budget_pressure < 0.8:
-            _non_cold = [c for c in candidates if not c.get("cold_start") and c.get("score", 0) >= adjusted]
-            if not _non_cold:
-                return None
-            best = _non_cold[0]
-
-        feature_id = best["feature_id"]
-
-        # --- Enrichment 3: Intent affinity floor ---
-        _intent_floor = max(0.15, 0.30 * (1.0 - budget_pressure))
-        if best.get("intent_similarity", 0.0) < _intent_floor:
-            return None
-
-        # --- Enrichment 4: Credit affordability gate ---
-        _borrow_cost = _cl.feature_borrow_cost_units()
-        if _cl.balance(state_path(config).parent, _local_id) < _borrow_cost:
-            return None
-
+        feature_id = candidate['feature_id']
         _ts = now()
         obj = {
             "id": identifier("objective"),
             "title": f"Apply peer-sourced feature: {feature_id}",
             "reason": (
-                f"P2P recommendation score {best['score']:.3f} ≥ threshold {adjusted:.3f} "
-                f"(budget_pressure={budget_pressure:.0%}, peers={best['peer_count']}, "
-                f"confidence={best['confidence']})"
+                f"P2P recommendation score {candidate['score']:.3f} ≥ threshold {candidate['adjusted_threshold']:.3f} "
+                f"(budget_pressure={candidate['budget_pressure']:.0%}, peers={candidate['peer_count']}, "
+                f"confidence={candidate['confidence']})"
             ),
             "success_measure": f"Feature {feature_id!r} applied and qualifies locally",
             "scope": "runtime",
             "status": "planned",
             "created_at": _ts, "updated_at": _ts,
-            "expected_value": best["score"],
+            "expected_value": candidate['score'],
             # Ranking requires a 0..1 heuristic. Keep neutral and label the
             # economic comparison unavailable; do not encode P2P as near-free.
             "estimated_cost": 0.5,
@@ -532,9 +480,9 @@ def _try_p2p_feature(config: dict[str, Any], state: dict[str, Any]) -> dict[str,
             "urgency": 0.4,
             "source": "p2p_recommendation",
             "p2p_feature_id": feature_id,
-            "p2p_score": best["score"],
+            "p2p_score": candidate['score'],
             "input_links": ["p2p-recommendation"],
-            "necessity_evidence": best.get("rationale", ""),
+            "necessity_evidence": candidate['rationale'],
             "lower_impact_route_sufficient": True,
         }
         # Authority check: p2p feature objectives require delegated runtime authority
@@ -544,12 +492,12 @@ def _try_p2p_feature(config: dict[str, Any], state: dict[str, Any]) -> dict[str,
             "id": identifier("evidence"), "at": _ts,
             "kind": "p2p-feature-candidate",
             "feature_id": feature_id,
-            "score": best["score"],
-            "adjusted_threshold": adjusted,
+            "score": candidate['score'],
+            "adjusted_threshold": candidate['adjusted_threshold'],
             "budget_pressure": {
-                "combined": budget_pressure,
-                "call_pressure": call_pressure,
-                "credit_pressure": credit_pressure,
+                "combined": candidate['budget_pressure'],
+                "call_pressure": candidate['call_pressure'],
+                "credit_pressure": candidate['credit_pressure'],
             },
         })
         return obj
@@ -557,67 +505,66 @@ def _try_p2p_feature(config: dict[str, Any], state: dict[str, Any]) -> dict[str,
         return None
 
 
-def _ts_age(ts_iso: str) -> float:
-    """Seconds since an ISO timestamp."""
-    try:
-        return datetime.now(timezone.utc).timestamp() - datetime.fromisoformat(ts_iso).timestamp()
-    except Exception:
-        return float("inf")
-
-
 def _routing_decision(config: dict[str, Any], state: dict[str, Any]) -> dict:
     """Compute executor vs. network-hire routing score.
 
-    Returns peer_work_market.routing_score() result or a default executor dict.
+    Delegates to p2p_service.routing_decision so that this module does not
+    import peer_exchange / credit_ledger / peer_work_market directly.
     Never raises — safe to call at any cycle point.
     """
-    try:
-        from . import peer_exchange as _pe
-        from . import credit_ledger as _cl
-        from . import peer_work_market as _pwm
+    from . import p2p_service as _p2p_svc
+    return _p2p_svc.routing_decision(config, state)
 
-        exchange_root = state_path(config).parent / "exchange"
-        if not exchange_root.exists():
-            return {'route': 'executor', 'confidence': 0.5, 'reason': 'no exchange dir'}
-        exchange = _pe.Exchange(exchange_root)
-        if not exchange.load().get("enabled"):
-            return {'route': 'executor', 'confidence': 0.5, 'reason': 'exchange disabled'}
 
-        _local_id = config.get("peer_id", "local")
-        balance = _cl.balance(state_path(config).parent, _local_id)
-        baseline = _cl.BASELINE_GRANT_UNITS
-        executor_cost = int(config.get("executor", {}).get("cost_per_call_units", _cl.UNIT))
+def _apply_authority_gate(
+    state: dict[str, Any],
+    objective: dict[str, Any],
+    config: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Authority-resolution middleware.  Returns objective on pass, None on deny/escalate.
 
-        # Derive spec complexity from current planned objective if available
-        _planned = [o for o in state.get("objectives", []) if o.get("status") == "planned"]
-        complexity = 0.4
-        if _planned:
-            _obj = _planned[0]
-            _loc_est = int(_obj.get("estimated_loc", 0))
-            complexity = min(1.0, 0.3 + _loc_est / 500.0) if _loc_est else 0.4
-
-        # Gather peers with combined_rep from exchange audit rows
-        peers = []
-        try:
-            for row in exchange.audit_rows():
-                if row.get('kind') == 'PEER_ANNOUNCE' and row.get('peer_id'):
-                    peers.append({
-                        'peer_id': row['peer_id'],
-                        'combined_rep': float(row.get('combined_rep', 0.0)),
-                    })
-        except Exception:
-            pass
-
-        return _pwm.routing_score(
-            exchange=exchange,
-            local_credit_balance=balance,
-            baseline_grant_units=baseline,
-            spec_complexity=complexity,
-            executor_cost_units=executor_cost,
-            available_peers=peers,
-        )
-    except Exception:
-        return {'route': 'executor', 'confidence': 0.5, 'reason': 'routing_score error'}
+    Side effects: updates objective.status, appends evidence records, sets
+    lifecycle_state on escalation.  Extracted from cycle() to allow isolated testing.
+    """
+    cached_auth = objective.get("authority_resolution")
+    if cached_auth:
+        cached_at = cached_auth.get("resolved_at", "")
+        if cached_at:
+            try:
+                age_seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(cached_at)).total_seconds()
+                if age_seconds > 3600:
+                    objective.pop("authority_resolution", None)
+            except (ValueError, TypeError):
+                pass
+    if not objective.get("authority_resolution"):
+        auth_result = authority_resolver.resolve(objective, config, state)
+        objective["authority_resolution"] = auth_result
+        authority_resolver.record_resolution(state, objective, auth_result)
+        outcome_code = auth_result["outcome"]
+        if outcome_code == authority_resolver.DENIED:
+            objective["status"] = "policy_blocked"
+            state.setdefault("evidence", []).append({
+                "id": identifier("evidence"), "at": now(),
+                "kind": "authority-resolution-denied",
+                "objective": objective.get("id"),
+                "basis": auth_result["basis"],
+                "gate": auth_result["gate"],
+            })
+            _emit_compliance_record(state, "governance", "DECLINING",
+                objective.get("id"), "authority denial — compliance record", objective.get("scope"))
+            return None
+        if outcome_code == authority_resolver.REQUIRES_AUTHORITATIVE_DECISION:
+            objective["status"] = "awaiting_operator_decision"
+            state["lifecycle_state"] = "WAITING_FOR_AUTHORITATIVE_DECISION"
+            state.setdefault("evidence", []).append({
+                "id": identifier("evidence"), "at": now(),
+                "kind": "authority-resolution-escalated",
+                "objective": objective.get("id"),
+                "basis": auth_result["basis"],
+                "gate": auth_result["gate"],
+            })
+            return None
+    return objective
 
 
 def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool = True) -> dict[str, Any]:
@@ -630,6 +577,8 @@ def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool =
     _validate_citizen_base_conformance(state)
     # --- r75: emit CYCLE trace at cycle entry ---
     _emit_trace(state, "CYCLE", "cycle started", cycle_id=_cycle_id)
+    from .event_bus import _BUS as _eb
+    _eb.publish('cycle.started', cycle_id=_cycle_id)
     if config.get("product_improvement_enabled") is False:
         state["lifecycle_state"]="WAITING_FOR_CONDITION"
         save_state(config,state);return {"outcome":"disabled_product","reason":"Owner disabled improvement for this product; no native call"}
@@ -989,47 +938,8 @@ def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool =
             state.setdefault("runtime_efficiency", {})["last_independent_work_at"] = now()
 
     if objective:
-        # --- R4: Authority resolution cache TTL invalidation (3600s) ---
-        cached_auth = objective.get("authority_resolution")
-        if cached_auth:
-            cached_at = cached_auth.get("resolved_at", "")
-            if cached_at:
-                try:
-                    age_seconds = (datetime.now(timezone.utc) - datetime.fromisoformat(cached_at)).total_seconds()
-                    if age_seconds > 3600:
-                        objective.pop("authority_resolution", None)
-                except (ValueError, TypeError):
-                    pass
-        # --- Authority resolution gate (spec §14-16) ---
-        if not objective.get("authority_resolution"):
-            auth_result = authority_resolver.resolve(objective, config, state)
-            objective["authority_resolution"] = auth_result
-            authority_resolver.record_resolution(state, objective, auth_result)
-            outcome_code = auth_result["outcome"]
-            if outcome_code == authority_resolver.DENIED:
-                objective["status"] = "policy_blocked"
-                objective["authority_resolution"] = auth_result
-                state.setdefault("evidence", []).append({
-                    "id": identifier("evidence"), "at": now(),
-                    "kind": "authority-resolution-denied",
-                    "objective": objective.get("id"),
-                    "basis": auth_result["basis"],
-                    "gate": auth_result["gate"],
-                })
-                _emit_compliance_record(state, "governance", "DECLINING",
-                    objective.get("id"), "authority denial — compliance record", objective.get("scope"))
-                objective = None
-            elif outcome_code == authority_resolver.REQUIRES_AUTHORITATIVE_DECISION:
-                objective["status"] = "awaiting_operator_decision"
-                state["lifecycle_state"] = "WAITING_FOR_AUTHORITATIVE_DECISION"
-                state.setdefault("evidence", []).append({
-                    "id": identifier("evidence"), "at": now(),
-                    "kind": "authority-resolution-escalated",
-                    "objective": objective.get("id"),
-                    "basis": auth_result["basis"],
-                    "gate": auth_result["gate"],
-                })
-                objective = None
+        # --- R4 + §14-16: Authority resolution (TTL cache + gate) ---
+        objective = _apply_authority_gate(state, objective, config)
 
     if objective:
         if not any(item["id"] == objective.get("id") for item in comparison):
@@ -1133,6 +1043,7 @@ def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool =
         state["checkpoints"].append({"id": identifier("checkpoint"), "at": now(), "kind": "assessment", "digest": digest})
     # --- §62z: attach continuation_confidence to outcome ---
     outcome["continuation_confidence"] = state.get("continuation_confidence", 1.0)
+    _eb.publish('cycle.completed', cycle_id=_cycle_id, outcome=outcome.get('outcome'))
     return outcome
 
 
