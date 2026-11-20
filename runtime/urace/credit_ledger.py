@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from .p2p_constants import DECIMALS, UNIT, CHAIN_DECIMALS, CHAIN_UNIT, CHAIN_SCALE  # noqa: F401
+from .ledger_adapter import LedgerAdapter
 
 SCHEMA = 'urace-credit-ledger-v1'
 BASELINE_GRANT = 3  # requests every new peer can make before earning
@@ -138,7 +139,7 @@ def _wilson_lower(k: int, n: int, z: float = 1.645) -> float:
     return max(0.0, min(1.0, (centre + z2 / (2.0 * n) - margin) / denom))
 
 
-def _peer_quality_weights_from_exchange(exchange, peer_id: str) -> float:
+def _peer_quality_weights_from_exchange(exchange: LedgerAdapter, peer_id: str) -> float:
     """Quality factor for peer_id.
 
     Signal: QUALITY_VERIFICATION rows (issuer == peer_id) among APPLIED_AFTER_LOCAL_QUALIFICATION.
@@ -291,7 +292,7 @@ def _peer_quality_weights_from_exchange(exchange, peer_id: str) -> float:
     return 1.0 + 0.5 * quality_rate
 
 
-def _network_supply_factor(root, exchange) -> float:
+def _network_supply_factor(root, exchange: LedgerAdapter) -> float:
     """Automatic supply stabilizer.
 
     target_supply / total_supply clamped to [NETWORK_FACTOR_LOW, NETWORK_FACTOR_HIGH].
@@ -321,7 +322,7 @@ def _network_supply_factor(root, exchange) -> float:
     return max(NETWORK_FACTOR_LOW, min(NETWORK_FACTOR_HIGH, raw))
 
 
-def peer_cap_units(root, peer_id: str, exchange=None) -> int:
+def peer_cap_units(root, peer_id: str, exchange: LedgerAdapter | None = None) -> int:
     """Dynamic per-peer balance cap: three-factor formula.
 
     cap = BASE_CAP_UNITS × trust_factor × quality_factor × network_factor
@@ -361,7 +362,7 @@ def peer_cap_units(root, peer_id: str, exchange=None) -> int:
     return int(BASE_CAP_UNITS * trust_factor * quality_factor * network_factor)
 
 
-def _peer_trust_weights_from_exchange(exchange) -> dict:
+def _peer_trust_weights_from_exchange(exchange: LedgerAdapter) -> dict:
     """Extract trust weights using Wilson lower-bound on delivery rate."""
     from collections import defaultdict
     rows = exchange.audit_rows()
@@ -584,7 +585,7 @@ def unlock_grant(root, peer_id: str, delivery_earn_units: int) -> dict:
 
 
 def earn_units(root, peer_id, units: int, reason, bundle_id=None, metadata: dict | None = None,
-               rep_source: str = REP_SOURCE_WORK, exchange=None):
+               rep_source: str = REP_SOURCE_WORK, exchange: LedgerAdapter | None = None):
     """Credit peer_id with units base units earned from an accepted qualification.
 
     rep_source: REP_SOURCE_WORK (default) or REP_SOURCE_TRADE.
@@ -841,7 +842,7 @@ def combined_rep_score(
     return f_score * approved_mult
 
 
-def feature_creator_id(canonical_fp: str, exchange) -> str | None:
+def feature_creator_id(canonical_fp: str, exchange: LedgerAdapter) -> str | None:
     """Return the peer_id that first broadcast a feature with this canonical fingerprint.
 
     Scans APPLIED_AFTER_LOCAL_QUALIFICATION audit rows for 'canonical_fingerprint' field.
@@ -946,7 +947,7 @@ def pay_distribution_fee(
     root,
     borrow_cost: int,
     feature_id: str,
-    exchange,
+    exchange: LedgerAdapter,
     fallback_peer: str = '',
     quality_score: float | None = None,
 ) -> int:
@@ -989,7 +990,7 @@ def _jaccard_token_sim(feature_id_a: str, feature_id_b: str) -> float:
     return len(both) / len(either) if either else 0.0
 
 
-def _network_complexity_floor(exchange=None) -> float:
+def _network_complexity_floor(exchange: LedgerAdapter | None = None) -> float:
     """Consensus complexity floor from approved features seen in audit rows.
 
     Scans APPLIED_AFTER_LOCAL_QUALIFICATION rows for loc/test_count metadata.
@@ -1058,7 +1059,7 @@ def mint_per_adoption(
     parent_feature_id: str = "",
     feature_id: str = "",
     complexity_floor: float = 0.5,
-    exchange=None,
+    exchange: LedgerAdapter | None = None,
     estimated_network_size: int = 1,
 ) -> int:
     """Mint amount for one adoption event.
@@ -1130,7 +1131,7 @@ def _jitter(value: int, frac: float) -> int:
     return max(1, value + random.randint(-delta, delta))
 
 
-def consensus_borrow_floor(exchange=None, estimated_network_size: int = 1) -> int:
+def consensus_borrow_floor(exchange: LedgerAdapter | None = None, estimated_network_size: int = 1) -> int:
     """Network-consensus minimum borrow cost.
 
     Computes median observed borrow cost from recent spend audit rows.
@@ -1176,7 +1177,7 @@ def apply_borrow_cost(
     test_count: int = 0,
     quality_verifications: int = 0,
     total_adoptions: int = 0,
-    exchange=None,
+    exchange: LedgerAdapter | None = None,
     estimated_network_size: int = 1,
 ) -> int:
     """Final borrow cost with consensus floor and jitter.
@@ -1198,7 +1199,7 @@ def apply_borrow_cost(
 ESCROW_JITTER_FRAC = 0.04   # ±4% — between earn ±5% and borrow ±3%
 
 
-def consensus_escrow_floor(exchange=None) -> int:
+def consensus_escrow_floor(exchange: LedgerAdapter | None = None) -> int:
     """Network-consensus minimum escrow budget from recent WORK_REQUEST rows.
 
     Peers cannot post budgets below 50% of network median.
@@ -1225,7 +1226,7 @@ def consensus_escrow_floor(exchange=None) -> int:
 
 def escrow_budget_units(
     base_borrow_cost: int,
-    exchange=None,
+    exchange: LedgerAdapter | None = None,
     premium: float = 1.5,
 ) -> int:
     """Final escrow budget: base × premium, consensus floor, ±4% jitter.
@@ -1253,7 +1254,7 @@ import weakref as _weakref
 _split_shares_cache: _weakref.WeakKeyDictionary = _weakref.WeakKeyDictionary()
 
 
-def consensus_split_shares(exchange=None) -> tuple[float, float]:
+def consensus_split_shares(exchange: LedgerAdapter | None = None) -> tuple[float, float]:
     """Dynamic requester/hired mint split derived from past approved releases.
 
     Reads split_ratio_requester from WORK_VERIFIED rows (approved=True).
@@ -1294,7 +1295,7 @@ def consensus_split_shares(exchange=None) -> tuple[float, float]:
 # ── Dynamic budget ceiling ───────────────────────────────────────────────────
 
 def dynamic_budget_ceiling_multiplier(
-    exchange=None,
+    exchange: LedgerAdapter | None = None,
     total_minted: int = 0,
     network_size: int = 1,
     executor_cost_units: int = 0,
@@ -1348,7 +1349,7 @@ def dynamic_budget_ceiling_multiplier(
 
 def feature_market_price(
     feature_id: str,
-    exchange,
+    exchange: LedgerAdapter,
     base_borrow_cost: int,
     quality_wilson: float = 0.5,
     adoption_count: int = 0,
@@ -1404,7 +1405,7 @@ def feature_market_price(
     return _jitter(price, BORROW_JITTER_FRAC)
 
 
-def apply_cartel_penalty(exchange, peer_id: str) -> dict:
+def apply_cartel_penalty(exchange: LedgerAdapter, peer_id: str) -> dict:
     """Check if peer is operating as cartel member and apply penalty if so.
 
     Cartel detection: avg earn rate > 3× network median over last 30 days.
