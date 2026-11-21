@@ -231,10 +231,19 @@ class Catalog:
   state=self.state()
   atom=state["aliases"].get(atom_key_or_alias,atom_key_or_alias)
   if atom not in state["atoms"]:raise ValueError(f"Unknown atom: {atom_key_or_alias!r}")
+  # Phase 5E: trial-first check — warn when receipt_verified=False and token_settlement enabled.
+  token_settlement=getattr(exchange,"token_settlement",False)
+  if token_settlement and not receipt_verified:
+   # Non-blocking warning recorded in result; creator cannot earn without verified receipt.
+   _trial_warning="receipt_verified=False: creator cannot earn tokens under token_settlement mode"
+  else:
+   _trial_warning=None
   rows=exchange.audit_rows()
   applied=[r for r in rows if r.get("kind")=="APPLIED_AFTER_LOCAL_QUALIFICATION" and r.get("canonical_fingerprint")==canonical_fp and r.get("peer")]
   creator_peer_id=applied[0]["peer"] if applied else "unknown"
   borrower_peer_id=exchange.identity()["peer_id"]
   with exchange.lock():
    exchange.event("FEATURE_BORROWED",atom=atom,canonical_fingerprint=canonical_fp,creator_peer_id=creator_peer_id,borrower_peer_id=borrower_peer_id,outcome_delta=round(float(outcome_delta),4),receipt_verified=bool(receipt_verified))
-  return {"status":"BORROWED","atom":atom,"creator_peer_id":creator_peer_id,"borrower_peer_id":borrower_peer_id,"outcome_delta":outcome_delta,"receipt_verified":receipt_verified}
+  result={"status":"BORROWED","atom":atom,"creator_peer_id":creator_peer_id,"borrower_peer_id":borrower_peer_id,"outcome_delta":outcome_delta,"receipt_verified":receipt_verified}
+  if _trial_warning:result["warning"]=_trial_warning
+  return result
