@@ -11,6 +11,7 @@ from .auth import make_verify_token
 from .routes import daemon, shell, config_router, vitals, cycle, goals, inbox, audit
 from .routes import compliance, rules, github_router, exchange
 from .routes import products, fleet, portfolio, metrics
+from .routes import logs, skills, sources
 
 _HERE = Path(__file__).parent
 
@@ -96,6 +97,18 @@ def create_app(config: dict, token: str) -> FastAPI:
     app.include_router(
         metrics.build_router(verify_token),
         prefix="/api/metrics",
+    )
+    app.include_router(
+        logs.build_router(get_config, verify_token),
+        prefix="/api/logs",
+    )
+    app.include_router(
+        skills.build_router(get_config, verify_token),
+        prefix="/api/skills",
+    )
+    app.include_router(
+        sources.build_router(get_config, verify_token),
+        prefix="/api/sources",
     )
 
     from .routes.config_router import _get_fields_and_values
