@@ -544,115 +544,35 @@ def _handle_data_command(args: Any, state: dict, config: dict) -> int:
 
 
 def _handle_source_add_unified(args: Any, config: dict, parser: Any) -> int:
-    """Dispatch `urace source add --kind <kind>` to underlying add handlers."""
+    """Dispatch `urace source add --kind <kind>` via SOURCE_REGISTRY."""
+    from ..source_adapters import SOURCE_REGISTRY
+    from .._common import identifier as _identifier
+
     kind = getattr(args, "kind", None)
     if not kind:
-        parser.error("source add requires --kind (file|csv|json|sqlite|api|connector|executor|metric|vital|github|product|peer)")
-    _name = getattr(args, "id", None) or getattr(args, "name", None) or ""
-    _fmt = ["--json"] if getattr(args, "format", None) == "json" else []
+        known = "|".join(SOURCE_REGISTRY.kinds())
+        parser.error(f"source add requires --kind ({known})")
 
-    if kind in {"file", "csv", "json", "sqlite", "api"}:
-        _argv = ["data", "add", _name,
-                 "--type", getattr(args, "adapter_kind", None) or kind,
-                 "--connect", getattr(args, "dsn", None) or ""]
-        _argv += ["--direction", getattr(args, "direction", "read")]
-        if not getattr(args, "auto", True):
-            _argv += ["--auto", "false"]
-        if getattr(args, "schema_hint", None):
-            _argv += ["--schema", args.schema_hint]
-        return main(_argv + _fmt)
+    adapter = SOURCE_REGISTRY.get(kind)
+    if adapter is None:
+        parser.error(f"unknown source kind {kind!r}. Known: {', '.join(SOURCE_REGISTRY.kinds())}")
 
-    if kind == "connector":
-        _loc = getattr(args, "location", None) or ""
-        if not _loc:
-            parser.error("source add --kind connector requires --location")
-        print("Note: `urace add source` is also available for connector sources.", file=sys.stderr)
-        _argv = ["add", "source", _name, "--kind", "connector",
-                 "--location", _loc, "--visibility", getattr(args, "visibility", "private")]
-        if getattr(args, "credential_env", None):
-            _argv += ["--credential-env", args.credential_env]
-        return main(_argv + _fmt)
+    try:
+        kwargs = adapter.validate(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 
-    if kind == "executor":
-        _argv = ["executor", "attach"]
-        if _name:
-            _argv += ["--id", _name]
-        if getattr(args, "executor_binary", None):
-            _argv += ["--command", args.executor_binary]
-        if getattr(args, "adapter", None):
-            _argv += ["--adapter", args.adapter]
-        _argv += ["--priority", str(getattr(args, "priority", 100))]
-        for cap in (getattr(args, "capability", []) or []):
-            _argv += ["--capability", cap]
-        for cp in (getattr(args, "capability_priority", []) or []):
-            _argv += ["--capability-priority", cp]
-        if getattr(args, "max_calls_24h", None) is not None:
-            _argv += ["--max-calls-24h", str(args.max_calls_24h)]
-        if getattr(args, "max_calls_30d", None) is not None:
-            _argv += ["--max-calls-30d", str(args.max_calls_30d)]
-        return main(_argv + _fmt)
+    source_id = getattr(args, "id", None) or getattr(args, "name", None) or _identifier("source")
+    with state_lock(config):
+        state = load_state(config)
+        record = adapter.add(config, state, source_id, **{k: v for k, v in kwargs.items() if k != 'kind'})
+        save_state(config, state)
 
-    if kind == "metric":
-        _mname = _name
-        _src = getattr(args, "metric_source", None) or ""
-        _path = getattr(args, "metric_path", None) or ""
-        if not _mname:
-            parser.error("source add --kind metric requires a name (positional id or --name)")
-        if not _src:
-            parser.error("source add --kind metric requires --metric-source")
-        if not _path:
-            parser.error("source add --kind metric requires --metric-path")
-        print("Note: `urace add metric` is also available directly.", file=sys.stderr)
-        _dir = getattr(args, "direction", "nondecreasing")
-        if _dir not in {"nondecreasing", "nonincreasing"}:
-            _dir = "nondecreasing"
-        _argv = ["add", "metric", _mname, "--source", _src, "--path", _path, "--direction", _dir]
-        if getattr(args, "metric_target", None) is not None:
-            _argv += ["--target", str(args.metric_target)]
-        return main(_argv + _fmt)
-
-    if kind == "vital":
-        _vname = _name
-        _num = getattr(args, "numerator", None) or ""
-        if not _vname:
-            parser.error("source add --kind vital requires a name (positional id or --name)")
-        if not _num:
-            parser.error("source add --kind vital requires --numerator")
-        print("Note: `urace add vital` is also available directly.", file=sys.stderr)
-        _argv = ["add", "vital", _vname, "--numerator", _num]
-        if getattr(args, "denominator", None):
-            _argv += ["--denominator", args.denominator]
-        if getattr(args, "window", None):
-            _argv += ["--window", args.window]
-        if getattr(args, "description", None):
-            _argv += ["--description", args.description]
-        return main(_argv + _fmt)
-
-    if kind == "github":
-        _repo = getattr(args, "repo", None) or _name or ""
-        if not _repo:
-            parser.error("source add --kind github requires --repo owner/repo")
-        print("Note: `urace github connect` is also available directly.", file=sys.stderr)
-        _argv = ["github", "connect", _repo]
-        if getattr(args, "token_env", None):
-            _argv += ["--token-env", args.token_env]
-        return main(_argv + _fmt)
-
-    if kind == "product":
-        if not _name:
-            parser.error("source add --kind product requires a product id (positional id or --name)")
-        _argv = ["product", "register", _name]
-        return main(_argv + _fmt)
-
-    if kind == "peer":
-        _target = _name or getattr(args, "location", None) or ""
-        if not _target:
-            parser.error("source add --kind peer requires an address (positional id or --location)")
-        _argv = ["exchange", "network", "peer-add", _target]
-        return main(_argv + _fmt)
-
-    parser.error(f"unknown source kind: {kind}")
-    return 1  # unreachable
+    if getattr(args, "format", None) == "json":
+        print(json.dumps({"status": "ok", "source": record}, indent=2))
+    else:
+        print(f"source {source_id!r} added (kind={kind}, status={record.get('status')})")
+    return 0
 
 
 def _build_route_graph(prompt: str, state: dict) -> dict:
