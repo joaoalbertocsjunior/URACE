@@ -89,6 +89,47 @@ class Catalog:
     self._apply(state,row["payload"]["details"])
    offset+=len(page["rows"])
   state["head"]=report["head"];return state
+ def scan_similar(self, value: dict) -> dict:
+  """Scan catalog for structurally similar atoms (Phase 2C).
+
+  Checks (in priority order):
+    1. content_sha384 exact match → definite duplicate (same bytes)
+    2. interface_sha384 exact match → identical interface (likely duplicate)
+    3. acceptance_sha384 exact match → identical acceptance criteria (behavioral duplicate)
+
+  Returns {similarity_warning: bool, similar_atoms: list[str], reason: str}.
+  Non-blocking: declare() calls this and includes the warning in its result.
+  qualify() uses outcome_fingerprint to hard-block semantic duplicates.
+  """
+  try:
+   val = descriptor(value)
+  except (ValueError, KeyError):
+   return {"similarity_warning": False, "similar_atoms": [], "reason": ""}
+  state = self.state()
+  similar = []
+  reasons = []
+  # Check content_sha384 (exact content duplicate)
+  content_matches = [a for a in state["contents"].get(val["content_sha384"], []) if a != atom_id(val)]
+  if content_matches:
+   similar.extend(content_matches)
+   reasons.append("identical content_sha384")
+  # Check interface_sha384 and acceptance_sha384 across all atoms
+  for existing_key, existing_atom in state["atoms"].items():
+   if existing_key in similar:
+    continue
+   d = existing_atom["descriptor"]
+   if d.get("interface_sha384") == val["interface_sha384"] and val["interface_sha384"] != "0" * 96:
+    similar.append(existing_key)
+    reasons.append("identical interface_sha384")
+   elif d.get("acceptance_sha384") == val["acceptance_sha384"] and val["acceptance_sha384"] != "0" * 96:
+    similar.append(existing_key)
+    reasons.append("identical acceptance_sha384")
+  return {
+   "similarity_warning": bool(similar),
+   "similar_atoms": similar[:10],
+   "reason": "; ".join(dict.fromkeys(reasons)) if reasons else "",
+  }
+
  def declare(self,alias,value):
   value=descriptor(value);key=atom_id(value)
   # Serialize the read/check/append transaction independently of ledger's inner lock.
@@ -97,9 +138,11 @@ class Catalog:
   with state_lock(self.root/"catalog-transaction"):
    state=self.state()
    if state["aliases"].get(alias)==key:return {"status":"ALREADY_DECLARED","atom_id":key,"new_reward_units":0}
+   # Phase 2C: scan for similar atoms before writing (non-blocking warning)
+   sim = self.scan_similar(value)
    event={"rules_sha384":RULES_ID,"operation":"DECLARE_ATOM","alias":alias,"atom":key,"descriptor":value};self._apply(state,event)
    self.ledger.append("FEATURE_CATALOG_EVENT",event)
-   return {"status":"DECLARED","atom_id":key,"canonical_content_id":value["content_sha384"],"content_stored_on_ledger":False,"new_reward_units":0,"granularity":"DECLARED_ATOMIC_REQUIRES_INDEPENDENT_REVIEW","ownership_proven":False}
+   return {"status":"DECLARED","atom_id":key,"canonical_content_id":value["content_sha384"],"content_stored_on_ledger":False,"new_reward_units":0,"granularity":"DECLARED_ATOMIC_REQUIRES_INDEPENDENT_REVIEW","ownership_proven":False,"similarity_warning":sim["similarity_warning"],"similar_atoms":sim["similar_atoms"],"similarity_reason":sim["reason"]}
  def lifecycle(self,key,status,replacement=None):
   from ._common import state_lock
   with state_lock(self.root/"catalog-transaction"):
@@ -133,6 +176,15 @@ class Catalog:
    atom=state["aliases"].get(atom_key_or_alias,atom_key_or_alias)
    if atom not in state["atoms"]:raise ValueError(f"Unknown atom: {atom_key_or_alias!r}")
    if state["atoms"][atom].get("quality_proven"):return {"atom_id":atom,"status":"ALREADY_QUALIFIED","reward_eligible":True}
+   # Phase 2C: hard-block if another qualified atom has the same outcome_fingerprint
+   outcome_fp=str(evidence.get("outcome_fingerprint",""))[:64]
+   if outcome_fp:
+    for existing_key,existing_atom in state["atoms"].items():
+     if existing_key==atom:continue
+     if not existing_atom.get("quality_proven"):continue
+     existing_ev=existing_atom.get("qualification_evidence",{})
+     if existing_ev.get("outcome_fingerprint")==outcome_fp:
+      raise ValueError(f"Semantic duplicate: outcome_fingerprint {outcome_fp!r} already proven by atom {existing_key!r}. Use SET_LIFECYCLE deprecated on this atom instead.")
    ev={"peer_count":peer_count,"canonical_fingerprint":canon_fp,"outcome_fingerprint":str(evidence.get("outcome_fingerprint",""))[:64],"at_unix":float(evidence.get("at_unix",time.time()))}
    event={"rules_sha384":RULES_V2_ID,"operation":"SET_QUALITY_PROVEN","atom":atom,"qualification_evidence":ev}
    self._apply(state,event);self.ledger.append("FEATURE_CATALOG_EVENT",event)
