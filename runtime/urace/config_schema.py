@@ -103,6 +103,65 @@ SCHEMA: dict[str, Any] = {
         '_description': 'GitHub integration settings.',
         'token_env': _s('URACE_GITHUB_TOKEN', 'Environment variable holding the GitHub token'),
     },
+    'logging': {
+        '_description': 'Runtime logging configuration.',
+        'level':      _e(['DEBUG', 'INFO', 'WARNING', 'ERROR'], 'WARNING',
+                         'Root log level; filters all categories unless overridden per-component'),
+        'format':     _e(['text', 'json'], 'text', 'Log line format: human-readable text or JSON-lines'),
+        'file':       _s('', 'Path for rotating log file; empty string = stderr only'),
+        'max_bytes':  _i(10_485_760, 'Rotating log file max size in bytes (default 10 MB)'),
+        'backup_count': _i(5, 'Number of rotated log files to keep'),
+        'audit_tier': _b(True,  'Write audit-tier events to the signed journal'),
+        'm2m_stream': _b(True,  'Publish events to the M2M log stream endpoint'),
+        'm2m_diagnostic': _b(False, 'Include diagnostic-tier events (executor I/O) in M2M stream'),
+        'redact_executor_output': _b(True, 'Strip executor prompt/response text from operational events'),
+        'components': {
+            '_description': 'Per-component level overrides. true=inherit root level, false=silent.',
+            'source':    _b(True, 'Source adapter lifecycle and sync events'),
+            'm2m':       _b(True, 'M2M API request/response events'),
+            'config':    _b(True, 'Config read/write events'),
+            'lifecycle': _b(True, 'Runtime process lifecycle events'),
+            'cycle':     _b(True, 'Improvement cycle events'),
+            'cost':      _b(True, 'Credit and cost events'),
+            'exchange':  _b(True, 'P2P exchange events'),
+            'executor':  _b(True, 'Executor call events'),
+            'security':  _b(True, 'Security events (cannot be disabled)'),
+            'audit':     _b(True, 'Audit journal events (cannot be disabled)'),
+        },
+    },
+    'p2p': {
+        '_description': 'P2P feature economics settings.',
+        'mint': {
+            '_description': 'Feature minting constraints.',
+            'min_evidence_borrows': _i(5,  'Minimum verified borrows before REPRICE_OBSERVED fires'),
+            'trial_escrow_pct':     _i(10, 'Percent of borrow cost held in escrow during trial'),
+        },
+        'pricing': {
+            '_description': 'Pricing jitter and floor parameters.',
+            'jitter_frac':                 _i(0, 'Borrow jitter fraction ×1000 (3 = 0.3 %)'),
+            'earn_jitter_frac':            _i(0, 'Earn jitter fraction ×1000 (5 = 0.5 %)'),
+            'consensus_floor_multiplier':  _i(0, 'Consensus floor multiplier ×100 (50 = 0.50)'),
+        },
+    },
+    'feature_matching': {
+        '_description': 'Product-to-market feature matching weights (must sum to 1.0).',
+        'layer1_strict':            _b(True, 'Hard-block on MIME/dep/license mismatch (layer 1)'),
+        'layer2_tfidf_weight':      _i(0, 'TF-IDF similarity weight ×100 (40 = 0.40)'),
+        'layer2_outcome_weight':    _i(0, 'Outcome fingerprint weight ×100 (40 = 0.40)'),
+        'layer2_propagation_weight': _i(0, 'Propagation score weight ×100 (20 = 0.20)'),
+    },
+    'mime_policy': {
+        '_description': 'MIME type enforcement settings.',
+        'network_policy': _e(
+            ['quality_gate_only', 'hard_protected_only', 'all_allowed', 'custom'],
+            'quality_gate_only',
+            'Network-level MIME gate applied to all receive/mint/replicate paths',
+        ),
+    },
+    'sources': {
+        '_description': 'Source adapter settings.',
+        'auto_sync_interval_s': _i(300, 'Seconds between automatic source sync cycles (0=disabled)'),
+    },
 }
 
 # ── helpers ─────────────────────────────────────────────────────────────────
