@@ -1,7 +1,20 @@
 """Local, source-bound skill selection and requirement clarification. No model calls or host setup."""
 import hashlib,json,re
+from pathlib import Path
 
 def digest(v):return hashlib.sha256(json.dumps(v,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
+
+# Phase 4A — canonical skill family vocabulary; maps family key → description.
+SKILL_VOCABULARY = {
+    'receipts':           'Usage accounting, cost receipts, and billing reconciliation',
+    'recovery':           'Checkpoint recovery, replay safety, and rollback correctness',
+    'interruption':       'Interrupted-state detection and safe continuation',
+    'requirements_change':'Requirement versioning and constraint propagation',
+    'feature_quality':    'Feature atom correctness, deduplication, and qualification evidence',
+    'audit':              'Audit-chain integrity and event-sequence validation',
+    'security':           'Authority boundary, permission gate, and secret-handling review',
+    'cost_model':         'Borrow-cost formula correctness and REPRICE_OBSERVED anchoring',
+}
 
 BUILTINS=[
  {'id':'urace-receipt-review','version':'1','providers':['codex','claude'],'families':['receipts'],'terms':['receipt','accounting'],'expected_benefit':'Avoid duplicate usage accounting and false known-cost claims','instructions':'Trace each receipt identity to its producing attempt. Count failed attempts and retries. Deduplicate identical receipt identities; conflicting duplicates invalidate exact cost. Preserve unknown usage as unknown. Cached/reasoning subtotals are nested unless the native contract says otherwise. Keep product/provider scopes separate. Use public development checks; never change acceptance or quota guards.'},
@@ -93,3 +106,32 @@ def feedback(packet,events):
  reads=[e.get('path') for e in events if e.get('tool')=='read_file' and not e.get('error')];questions=[e['clarification'] for e in events if e.get('clarification') and not e.get('error')];required={k for k,v in packet['requirements'].items() if v.get('requires_explicit_context_read') is True};read_ids={p[len('@requirement/'):] for p in reads if isinstance(p,str) and p.startswith('@requirement/')}
  unresolved=[q for q in questions if q['status']=='NEEDS_OWNER_CLARIFICATION'];missing=sorted(required-read_ids)
  return {'schema':'job-context-feedback-v1','status':'AWAITING_OWNER_CLARIFICATION' if unresolved else 'MISSING_REQUIRED_CONTEXT' if missing else 'PROTOCOL_SATISFIED','unresolved_questions':unresolved,'missing_required_context':missing,'requirement_source_sha256':packet['requirement_source_sha256'],'context_response_bytes':sum(e.get('response_bytes') or 0 for e in events if isinstance(e.get('path'),str) and e['path'].startswith('@')),'requirements_total':len(packet['requirements']),'explicit_requirement_reads':sorted(read_ids),'skill_instruction_reads':sorted(set(p[len('@skill/'):] for p in reads if isinstance(p,str) and p.startswith('@skill/'))),'understanding_proven':False,'meaning':'Provided source, retrieval and clarification receipts are distinct from semantic comprehension; independent acceptance still required'}
+
+# Phase 4B — probe contract: return supported skills without running a task.
+def probe(config,provider):
+ """Return executor skill contract for *provider* (no task execution, safe at startup)."""
+ if not isinstance(provider,str) or provider not in ('codex','claude'):raise ValueError('provider must be codex or claude')
+ cfg=settings(config)
+ supported=[{'id':s['id'],'families':s['families'],'terms':s['terms']} for s in [*BUILTINS,*cfg['catalog']] if provider in s['providers']]
+ return {'schema':'executor-probe-v1','provider':provider,'supported_families':sorted({f for s in supported for f in s['families']}),'skills':supported,'contract_sha256':digest(contract(config)),'skill_vocabulary':SKILL_VOCABULARY}
+
+# Phase 4C — suggest skills relevant to a goal dict (from auto_goals or manual objective).
+def suggest_skills_for_goal(config,goal,provider=None):
+ """Return skill IDs relevant to *goal* based on family and intent matching."""
+ family=goal.get('family','');intent=str(goal.get('intent','') or goal.get('description','')).lower()
+ cfg=settings(config);matches=[]
+ for skill in [*BUILTINS,*cfg['catalog']]:
+  if provider and provider not in skill['providers']:continue
+  if family in skill['families'] or any(t.lower() in intent for t in skill['terms']):
+   matches.append({'id':skill['id'],'families':skill['families'],'match_reason':'family' if family in skill['families'] else 'intent'})
+ return matches
+
+# Phase 4D — register a skill-produced artifact to the feature catalog.
+def register_skill_artifact(root,skill_id,artifact_descriptor,alias=None):
+ """Declare a skill artifact to the feature catalog; returns catalog.declare() result.
+
+ Does NOT call qualify() — multi-peer evidence required for qualification.
+ """
+ from .feature_catalog import Catalog
+ _alias=alias or 'skill-{}-{}'.format(re.sub(r'[^a-zA-Z0-9_.-]','-',str(skill_id))[:40],str(artifact_descriptor.get('content_sha384',''))[:12])
+ return Catalog(Path(root)).declare(_alias,artifact_descriptor)
