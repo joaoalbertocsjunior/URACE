@@ -702,20 +702,53 @@ def feature_complexity_score(
     dependency_count: int = 0,
     test_count: int = 0,
     *,
+    descriptor: dict | None = None,
     complexity_metrics: dict | None = None,
     domain: str = 'software',
 ) -> float:
-    """Complexity score in [1.0, ∞). Domain-agnostic via complexity_metrics dict.
+    """Complexity score in [1.0, ∞).
 
-    Software (default): loc, dependency_count, test_count.
-    Generic (any domain): pass complexity_metrics={'primary_size': N, 'integration_count': N,
-      'validation_count': N} — maps to loc/dependency_count/test_count respectively.
+    Phase 2A/2B: Primary input is *descriptor* (from the signed DECLARE_ATOM block).
+    Callers should not supply loc/dep/test directly — those are derived from the
+    descriptor's signed content artifacts so they cannot be tampered by callers.
+
+    Formula (Phase 2B):
+        1.0 + log2(1 + interface_symbol_count/10 + dependency_count
+                     + test_count*3 + acceptance_criterion_count/5)
+
+    - interface_symbol_count/10 replaces loc/50 (harder to game: counts exported
+      symbols not raw lines)
+    - dependency_count*1 replaces *2 (dependency inflation now costs less)
+    - test_count*3 unchanged (behavioral specs are the strongest signal)
+    - acceptance_criterion_count/5 new (behavioral claims from requirements)
+
+    Fallback: when descriptor is absent, loc/5 approximates interface_symbol_count
+    to remain comparable to pre-2B values (loc/5 ≈ loc/50 × 10).
     """
+    if descriptor is not None:
+        # Phase 2A: derive metrics from signed descriptor fields
+        m = descriptor.get('complexity_metrics') or {}
+        interface_symbols = int(m.get('interface_symbol_count', 0))
+        dep_cnt = int(m.get('dependency_count', dependency_count))
+        tst_cnt = int(m.get('test_count', test_count))
+        acc_cnt = int(m.get('acceptance_criterion_count', 0))
+        # Fallback: when interface_symbol_count absent, estimate from loc
+        if interface_symbols == 0:
+            interface_symbols = int(m.get('loc', loc)) // 5
+        return 1.0 + math.log2(
+            1 + interface_symbols / 10 + dep_cnt + tst_cnt * 3 + acc_cnt / 5
+        )
+
     if complexity_metrics is not None:
         loc = int(complexity_metrics.get('primary_size', loc))
         dependency_count = int(complexity_metrics.get('integration_count', dependency_count))
         test_count = int(complexity_metrics.get('validation_count', test_count))
-    return 1.0 + math.log2(1 + loc / 50 + dependency_count * 2 + test_count * 3)
+
+    # Legacy path (no descriptor): use updated formula with loc/5 approximation
+    interface_symbols_approx = loc // 5
+    return 1.0 + math.log2(
+        1 + interface_symbols_approx / 10 + dependency_count + test_count * 3
+    )
 
 
 def feature_borrow_cost_units(loc: int = 0, dependency_count: int = 0, test_count: int = 0) -> int:
@@ -1171,19 +1204,95 @@ def apply_borrow_cost(
     total_adoptions: int = 0,
     exchange: LedgerAdapter | None = None,
     estimated_network_size: int = 1,
+    *,
+    atom_id: str = '',
+    descriptor: dict | None = None,
 ) -> int:
-    """Final borrow cost with consensus floor and jitter.
+    """Final borrow cost with consensus floor, REPRICE_OBSERVED anchor, and jitter.
 
-    Combines rep-weighted formula cost with consensus network floor.
-    Applies ±3% jitter to prevent exact price optimization by AI actors.
+    Phase 2A/2B: When *descriptor* is supplied, complexity is derived from signed
+    content metrics rather than caller-supplied loc/dep/test.
+
+    Phase 2D: When a REPRICE_OBSERVED record exists for *atom_id* with ≥5 verified
+    borrows, that record's observed_median_outcome_delta × network_rate is used as
+    the primary cost signal (overrides formula + consensus floor).
     """
-    formula_cost = feature_borrow_cost_with_rep(
-        loc, dependency_count, test_count,
-        quality_verifications, total_adoptions,
-    )
+    # Phase 2D: check for REPRICE_OBSERVED anchor
+    if atom_id and exchange is not None:
+        repriced = _get_reprice_observed(exchange, atom_id)
+        if repriced is not None:
+            anchored = int(repriced.get('anchored_cost_units', 0))
+            if anchored > 0:
+                floor = consensus_borrow_floor(exchange, estimated_network_size)
+                return _jitter(max(anchored, floor), BORROW_JITTER_FRAC)
+
+    if descriptor is not None:
+        # Phase 2A: derive complexity from descriptor
+        complexity = feature_complexity_score(descriptor=descriptor)
+        formula_cost = max(UNIT // 10_000, int(complexity * UNIT // 10))
+    else:
+        formula_cost = feature_borrow_cost_with_rep(
+            loc, dependency_count, test_count,
+            quality_verifications, total_adoptions,
+        )
     floor = consensus_borrow_floor(exchange, estimated_network_size)
     cost = max(formula_cost, floor)
     return _jitter(cost, BORROW_JITTER_FRAC)
+
+
+def _get_reprice_observed(exchange: LedgerAdapter, atom_id: str) -> dict | None:
+    """Return the most recent REPRICE_OBSERVED record for atom_id, or None."""
+    try:
+        rows = exchange.audit_rows()
+    except Exception:
+        return None
+    for row in reversed(rows):
+        if row.get('operation') == 'REPRICE_OBSERVED' and row.get('atom') == atom_id:
+            return row
+    return None
+
+
+def write_reprice_observed(
+    exchange: LedgerAdapter,
+    atom_id: str,
+    observed_median_outcome_delta: float,
+    borrow_count: int,
+    network_rate: float = 1.0,
+) -> dict | None:
+    """Write a REPRICE_OBSERVED event when ≥5 verified borrows have been recorded.
+
+    Phase 2D: anchors the borrow cost to observed network performance rather than
+    the initial formula. Only fires when bootstrap_complete().
+    Returns the written record or None if preconditions not met.
+    """
+    if borrow_count < 5:
+        return None
+    try:
+        from .p2p_cost_qualification import bootstrap_complete as _bootstrap_complete
+        if not _bootstrap_complete(exchange):
+            return None
+    except Exception:
+        pass
+
+    import time
+    anchored_cost = max(
+        UNIT // 10_000,
+        int(abs(observed_median_outcome_delta) * network_rate * UNIT),
+    )
+    record = {
+        'operation': 'REPRICE_OBSERVED',
+        'atom': atom_id,
+        'observed_median_outcome_delta': observed_median_outcome_delta,
+        'borrow_count': borrow_count,
+        'anchored_at_unix': int(time.time()),
+        'network_rate': network_rate,
+        'anchored_cost_units': anchored_cost,
+    }
+    try:
+        exchange.append_audit_row(record)
+    except Exception:
+        return None
+    return record
 
 
 # ── Escrow budget anti-gamification ─────────────────────────────────────────
