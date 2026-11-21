@@ -51,12 +51,16 @@ class JsonFormatterTests(unittest.TestCase):
 
 class ConfigureLoggingTests(unittest.TestCase):
     def setUp(self):
+        import urace.logging_config as _lc
+        _lc._CONFIGURED = False
         self._root = logging.getLogger()
         self._original_handlers = list(self._root.handlers)
         for h in list(self._root.handlers):
             self._root.removeHandler(h)
 
     def tearDown(self):
+        import urace.logging_config as _lc
+        _lc._CONFIGURED = False
         for h in list(self._root.handlers):
             self._root.removeHandler(h)
         for h in self._original_handlers:

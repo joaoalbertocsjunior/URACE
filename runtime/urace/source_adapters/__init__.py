@@ -50,6 +50,18 @@ from . import (  # noqa: E402, F401
     product_adapter,
     metric_adapter,
     vital_adapter,
+    # Phase 3A — local
+    folder,
+    shell_adapter,
+    environment_adapter,
+    # Phase 3B — observation
+    codebase,
+    testsuite_adapter,
+    # Phase 3C — remote/push
+    webhook,
+    database,
+    # Phase 3D — network
+    p2p_catalog_adapter,
 )
 
 __all__ = ['SOURCE_REGISTRY', 'SourceAdapter', 'NullSourceAdapter']
