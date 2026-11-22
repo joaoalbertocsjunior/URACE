@@ -47,6 +47,7 @@ class FileAdapter(NullSourceAdapter):
                 'dsn': kwargs.get('dsn', ''),
                 'adapter_kind': kwargs.get('adapter_kind', 'file'),
                 'direction': kwargs.get('direction', 'read'),
+                'enabled_actions': [],
             },
         }
 

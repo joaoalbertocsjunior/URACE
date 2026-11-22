@@ -45,6 +45,7 @@ class P2PCatalogAdapter(NullSourceAdapter):
                 'endpoint': kwargs.get('endpoint', ''),
                 'last_sync_at': None,
                 'atom_count': None,
+                'enabled_actions': [],
             },
         }
 

@@ -7,7 +7,7 @@ MIN_BRIDGE_CLIENT_VERSION = 1
 
 # Phase 9A — protocol versioning
 FEATURE_CATALOG_SCHEMA_VERSION  = 2  # rules v2 (SET_QUALITY_PROVEN, outcome_fingerprint)
-SOURCE_ADAPTER_PROTOCOL_VERSION = 1  # Phase 1C SourceAdapter Protocol
+SOURCE_ADAPTER_PROTOCOL_VERSION = 2  # Protocol v2: act(), supported_actions(), ACTED lifecycle
 EXCHANGE_AUDIT_SCHEMA_VERSION   = 1  # exchange audit row format
 EXECUTOR_PROBE_SCHEMA_VERSION   = 1  # executor-probe-v1 (Phase 4B)
 CONFIG_SCHEMA_VERSION           = 2  # Phase 1A: logging, p2p, feature_matching, mime_policy, sources

@@ -43,6 +43,7 @@ class EnvironmentAdapter(NullSourceAdapter):
                 'vars': kwargs.get('vars', []),
                 'last_scan_at': None,
                 'var_count': None,
+                'enabled_actions': [],
             },
         }
 

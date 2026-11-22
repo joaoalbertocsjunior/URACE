@@ -37,6 +37,7 @@ class ConnectorAdapter(NullSourceAdapter):
             'adapter_state': {
                 'location': kwargs.get('location', ''),
                 'visibility': kwargs.get('visibility', 'private'),
+                'enabled_actions': [],
             },
         }
 

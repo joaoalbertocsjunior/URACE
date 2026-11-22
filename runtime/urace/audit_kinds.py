@@ -84,6 +84,13 @@ PROVENANCE_CHALLENGE                = 'PROVENANCE_CHALLENGE'
 PROVENANCE_CHALLENGE_RESOLVED       = 'PROVENANCE_CHALLENGE_RESOLVED'
 DECISION_EVALUATION_ONLY            = 'DECISION_EVALUATION_ONLY'
 
+# ── Source adapter act path ───────────────────────────────────────────────────
+SOURCE_ACTED                        = 'SOURCE_ACTED'
+SOURCE_ACT_DENIED                   = 'SOURCE_ACT_DENIED'
+SOURCE_ACT_FAILED                   = 'SOURCE_ACT_FAILED'
+SOURCE_SYNCED                       = 'SOURCE_SYNCED'
+SOURCE_SYNC_FAILED                  = 'SOURCE_SYNC_FAILED'
+
 # ── Ledger / RPC ─────────────────────────────────────────────────────────────
 LEDGER_BLOCK_SEAL                   = 'LEDGER_BLOCK_SEAL'
 LEDGER_CHECKPOINT                   = 'LEDGER_CHECKPOINT'

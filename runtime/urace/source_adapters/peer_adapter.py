@@ -31,7 +31,7 @@ class PeerAdapter(NullSourceAdapter):
             'added_at': now(),
             'status': 'CONFIGURED',
             'status_history': [{'status': 'CONFIGURED', 'at': now()}],
-            'adapter_state': {'location': kwargs.get('location', '')},
+            'adapter_state': {'location': kwargs.get('location', ''), 'enabled_actions': []},
         }
 
 

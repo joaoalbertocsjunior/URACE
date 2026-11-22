@@ -310,7 +310,7 @@ STATIC_GRAMMAR={
   {'command':'context','actions':['list','graph','attention']},
   {'command':'inbox','actions':['list','status','apply','reject','help']},
   {'command':'feedback','actions':['list','submit','help']},
-  {'command':'source','actions':['add','list','status','enable','disable','remove','sync','inspect']},
+  {'command':'source','actions':['add','list','status','enable','disable','remove','sync','inspect','act','actions','enable-action','disable-action']},
   {'command':'metric','actions':['list','remove']},
   {'command':'vital','actions':['list','remove']},
  ],
@@ -486,5 +486,5 @@ def read_only(argv):
         if action in {'effort','auto-goals'}:return len(argv)<=2 or (len(argv)>2 and argv[2]=='status')
         if action=='executor':return not any(x in argv for x in ('--model','--native-effort','--inherit-model'))
         return len(argv)<=2 or (len(argv)>2 and argv[2]=='status')
-    actions={'goal':{'list','inspect','forecast'},'context':{'list','graph','attention'},'source':{'list'},'metric':{'list'},'vital':{'list'},'executor':{'status'},'product':{'list','status'},'fleet':{'status'},'onboard':{'status'},'data':{'list','inspect','status'},'trace':{'list','inspect'},'decision':{'list','inspect'},'evidence':{'list'},'rules':{'list','inspect','graph','conflicts','changes'},'inbox':{'list','status'},'report':{'status'},'resource':{'status','report'},'schema':{'list','inspect'},'api':{'help','commands','schema','version','protocols'},'portfolio':{'status','feedback','explain','rank','agora-show','commands','policy-status','accepted-state-source-status'}}
+    actions={'goal':{'list','inspect','forecast'},'context':{'list','graph','attention'},'source':{'list','status','actions','act','enable-action','disable-action'},'metric':{'list'},'vital':{'list'},'executor':{'status'},'product':{'list','status'},'fleet':{'status'},'onboard':{'status'},'data':{'list','inspect','status'},'trace':{'list','inspect'},'decision':{'list','inspect'},'evidence':{'list'},'rules':{'list','inspect','graph','conflicts','changes'},'inbox':{'list','status'},'report':{'status'},'resource':{'status','report'},'schema':{'list','inspect'},'api':{'help','commands','schema','version','protocols'},'portfolio':{'status','feedback','explain','rank','agora-show','commands','policy-status','accepted-state-source-status'}}
     return action in actions.get(command,set())

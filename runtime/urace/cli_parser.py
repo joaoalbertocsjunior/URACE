@@ -419,9 +419,16 @@ def _build_parser_template() -> argparse.ArgumentParser:
     explain_cmd.add_argument("--format", choices=["json"], default=None, dest="format", help="output format: json")
     explain_cmd.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
     source_command = sub.add_parser("source", help=argparse.SUPPRESS)
-    source_command.add_argument("action", choices=["add", "list", "status", "enable", "disable", "remove", "sync", "inspect"])
+    source_command.add_argument("action", choices=["add", "list", "status", "enable", "disable", "remove", "sync", "inspect", "act", "actions", "enable-action", "disable-action"])
     source_command.add_argument("id", nargs="?", help="source id or name")
-    source_command.add_argument("--kind", default=None, choices=["file", "csv", "json", "sqlite", "api", "connector", "executor", "metric", "vital", "github", "product", "peer"], help="source kind (required for add)")
+    source_command.add_argument("--kind", default=None,
+                                choices=["file", "csv", "json", "sqlite", "api", "connector",
+                                         "executor", "metric", "vital", "github", "product", "peer",
+                                         "folder", "shell", "environment", "codebase", "test_suite",
+                                         "webhook", "database", "p2p_catalog", "git", "s3",
+                                         "ci_pipeline", "event_stream", "inbox", "mcp_server",
+                                         "log_file", "package_registry"],
+                                help="source kind (required for add)")
     source_command.add_argument("--connect", default=None, dest="dsn", help="DSN or connection string (data sources)")
     source_command.add_argument("--type", dest="adapter_kind", default=None, help="adapter type (data sources)")
     source_command.add_argument("--direction", choices=["read", "write", "both", "nondecreasing", "nonincreasing"], default="read")
@@ -447,6 +454,12 @@ def _build_parser_template() -> argparse.ArgumentParser:
     source_command.add_argument("--window", default="current", help="vital time window (vital kind)")
     source_command.add_argument("--description", default="", help="description (vital kind)")
     source_command.add_argument("--name", default=None, help="name alias for source id")
+    source_command.add_argument("--source-action", dest="source_action", default=None,
+                                help="action name for 'act' and 'enable-action'/'disable-action'")
+    source_command.add_argument("--payload", default=None,
+                                help="JSON payload for 'act' (e.g. '{\"key\": \"val\"}')")
+    source_command.add_argument("--enable-actions", dest="enable_actions", default=None,
+                                help="Comma-separated action names to enable on a source")
     source_command.add_argument("--format", choices=["json"], default=None, dest="format", help="output format: json")
     source_command.add_argument("--json", action="store_const", const="json", dest="format", help=argparse.SUPPRESS)
     metric_command = sub.add_parser("metric", help=argparse.SUPPRESS)

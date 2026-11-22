@@ -62,6 +62,15 @@ from . import (  # noqa: E402, F401
     database,
     # Phase 3D — network
     p2p_catalog_adapter,
+    # Protocol v2 — new kinds (optional deps, all Apache 2.0 compatible)
+    git_adapter,
+    s3_adapter,
+    ci_pipeline_adapter,
+    event_stream_adapter,
+    inbox_adapter,
+    mcp_server_adapter,
+    log_file_adapter,
+    package_registry_adapter,
 )
 
 __all__ = ['SOURCE_REGISTRY', 'SourceAdapter', 'NullSourceAdapter']
