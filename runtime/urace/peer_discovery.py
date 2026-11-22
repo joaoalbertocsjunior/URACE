@@ -1217,6 +1217,22 @@ class DiscoverySession:
                 self._relay_candidates: list = []
             else:
                 self._relay_candidates = discover_relay_peers(_dht)
+        try:
+            from .signed_records import sign_node_record, persist_node_identity
+            _key = persist_node_identity(
+                getattr(self, '_state_dir', '.'),
+                getattr(self, '_peer_id', 'unknown'),
+            )
+            _rec = sign_node_record(
+                getattr(self, '_peer_id', 'unknown'),
+                b'start',
+                seq=1,
+                key=_key,
+            )
+            # record available for diagnostics via self._node_record
+            self._node_record = _rec
+        except Exception:
+            pass
         return self
 
     def stop(self) -> None:
