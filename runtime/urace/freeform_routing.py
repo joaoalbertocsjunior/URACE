@@ -1,5 +1,5 @@
 """Validate semantic sections before routing; preserve ambiguity and Authority."""
-import contextlib,io,json,math,shlex,time,hashlib,os,re,unicodedata
+import contextlib,functools as _functools,io,json,math,shlex,time,hashlib,os,re,unicodedata
 from pathlib import Path
 from contextvars import ContextVar
 from . import api_interface,primitives,command_surface
@@ -114,6 +114,17 @@ def _build_idf(features: list[dict]) -> dict[str, float]:
     return {tok: math.log((n + 1) / (cnt + 1)) + 1.0 for tok, cnt in df.items()}
 
 
+@_functools.lru_cache(maxsize=4)
+def _cached_idf(feature_corpus_hash: str, features_json: str) -> dict:
+    return _build_idf(json.loads(features_json))
+
+
+def _get_idf(features: list[dict]) -> dict:
+    corpus_hash = hashlib.md5(json.dumps([f.get('id', '') for f in features], sort_keys=True).encode()).hexdigest()
+    features_json = json.dumps(features, sort_keys=True)
+    return _cached_idf(corpus_hash, features_json)
+
+
 def _feature_tokens(feature: dict) -> set[str]:
     """All tokens from a feature entry (mirrors _semantic_score field extraction)."""
     result: set[str] = set()
@@ -197,7 +208,7 @@ def _rank_p2p_features(text: str, features: list[dict], top_n: int = 8,
     if scorer == 'embedding':
         return _rank_p2p_features_embedding(text, features, top_n=top_n)
     if scorer == 'tfidf' and features:
-        idf = _build_idf(features)
+        idf = _get_idf(features)
         scored = [(f, _semantic_score_tfidf(text, f, idf)) for f in features]
     else:
         scored = [(f, _semantic_score(text, f)) for f in features]

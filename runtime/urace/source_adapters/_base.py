@@ -33,6 +33,12 @@ class SourceActDeniedError(PermissionError):
 class SourceUnavailableError(RuntimeError):
     """Raised when an optional dep is missing (install hint in message)."""
 
+class SourceAuthError(SourceUnavailableError):
+    """Authentication failed for this source."""
+
+class SourceQuotaError(SourceUnavailableError):
+    """Source quota or rate limit exceeded."""
+
 
 # ── Protocol (contract) ───────────────────────────────────────────────────────
 

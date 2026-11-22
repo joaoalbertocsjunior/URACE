@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._base import NullSourceAdapter, SourceAdapter
+from ._base import NullSourceAdapter, SourceAdapter, SourceUnavailableError, SourceAuthError, SourceQuotaError
 
 
 class _Registry:
@@ -70,4 +70,4 @@ from . import (  # noqa: E402, F401
     cost_adapter,
 )
 
-__all__ = ['SOURCE_REGISTRY', 'SourceAdapter', 'NullSourceAdapter']
+__all__ = ['SOURCE_REGISTRY', 'SourceAdapter', 'NullSourceAdapter', 'SourceUnavailableError', 'SourceAuthError', 'SourceQuotaError']

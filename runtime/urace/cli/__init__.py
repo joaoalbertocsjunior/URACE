@@ -934,6 +934,8 @@ def _run_facade_handlers(
 
 
 def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
+    from ..cli_helpers import _install_error_handler as _ieh
+    _ieh(debug='--debug' in sys.argv or os.environ.get('URACE_DEBUG') == '1')
     raw_args = list(sys.argv[1:] if argv is None else argv)
     from ..runtime_product import mutation_blocker
     _blocked=mutation_blocker(SYSTEM_ROOT,raw_args)

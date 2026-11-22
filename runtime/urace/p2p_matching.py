@@ -1,9 +1,23 @@
 """Intent-aware P2P asset retrieval. Scores rank candidates; they are not quality probabilities."""
 from __future__ import annotations
 
+import functools as _functools
+import hashlib as _hashlib
+import json as _json
 import math
 
 from . import freeform_routing as _legacy
+
+
+@_functools.lru_cache(maxsize=4)
+def _cached_idf(feature_corpus_hash: str, features_json: str) -> dict:
+    return _legacy._build_idf(_json.loads(features_json))
+
+
+def _get_idf(features: list[dict]) -> dict:
+    corpus_hash = _hashlib.md5(_json.dumps([f.get('id', '') for f in features], sort_keys=True).encode()).hexdigest()
+    features_json = _json.dumps(features, sort_keys=True)
+    return _cached_idf(corpus_hash, features_json)
 
 MATCHER_VERSION = 'intent-fields-v1'
 _ACTIONABLE = {'goal': ('title', 'success_measure'), 'intent': ('statement',)}
@@ -34,7 +48,7 @@ def rank_candidates(batch: dict, raw_text: str, features: list[dict], *,
         raise ValueError('top_n must be between 1 and 100')
     queries = intent_queries(batch, raw_text)
     # Build IDF once over the full corpus for TF-IDF scoring
-    idf = _legacy._build_idf(features) if scorer == 'tfidf' and features else {}
+    idf = _get_idf(features) if scorer == 'tfidf' and features else {}
     # Embedding scorer: single pass over raw_text for all features; falls back to tfidf on error
     emb_map: dict[str, float] = {}
     _effective_scorer = scorer
@@ -57,7 +71,7 @@ def rank_candidates(batch: dict, raw_text: str, features: list[dict], *,
         except Exception:
             emb_map = {}
             _effective_scorer = 'tfidf'
-            idf = _legacy._build_idf(features) if features else {}
+            idf = _get_idf(features) if features else {}
     scored = []
     for feature in features:
         fid = str(feature.get('feature_id') or id(feature))

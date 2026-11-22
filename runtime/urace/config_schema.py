@@ -74,6 +74,8 @@ SCHEMA: dict[str, Any] = {
         'freeform_cache_ttl_seconds':   _i(3600,   'Freeform routing cache TTL in seconds (0 = disable cache)'),
         'freeform_semantic_scorer':     _s('tfidf','P2P candidate scorer: lexical or tfidf'),
         'freeform_confidence_thresholds': _d('Per-item-type confidence overrides e.g. {"command":0.9,"goal":0.75}'),
+        'agora_quorum_threshold':       _f(0.5,   'Minimum fraction of cohort that must vote for quorum (0–1)'),
+        'agora_proposal_ttl_hours':     _i(72,    'Hours before a proposal expires and can no longer be voted on or decided'),
     },
     'api': {
         '_description': 'MCP and A2A server settings.',
@@ -462,6 +464,8 @@ try:
         freeform_cache_ttl_seconds: int = Field(default=3600, ge=0)
         freeform_semantic_scorer: str = 'tfidf'
         freeform_confidence_thresholds: dict = Field(default_factory=dict)
+        agora_quorum_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
+        agora_proposal_ttl_hours: int = Field(default=72, ge=1)
 
     class _ResourcesConfig(BaseModel):
         model_config = {"extra": "allow"}

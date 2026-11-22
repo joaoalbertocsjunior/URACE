@@ -54,6 +54,10 @@ MAX_ADVISORY_TEXT = 4000
 MAX_AGORA_RECORDS = 10000
 
 
+class AuthIntegrityError(ValueError):
+    """Raised when HMAC verification of ledger or archive fails."""
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -92,7 +96,7 @@ def verify_ledger(data: dict) -> None:
     digest = ledger_digest(data)
     expected = hmac.new(integrity_key(), digest.encode(), hashlib.sha256).hexdigest()
     if seal.get("algorithm") != "HMAC-SHA256" or seal.get("digest") != digest or not hmac.compare_digest(str(seal.get("authentication_tag", "")), expected):
-        raise SystemExit("Portfolio authenticated-chain verification failed; preserve evidence and restore the last trusted ledger and integrity key")
+        raise AuthIntegrityError("Portfolio authenticated-chain verification failed; preserve evidence and restore the last trusted ledger and integrity key")
 
 
 def verify_agora(data: dict) -> None:
@@ -112,7 +116,10 @@ def verify_agora(data: dict) -> None:
         raise SystemExit("Agora head hash does not match its append-only record chain")
 
 
-def _real_load() -> dict:
+_load_cache: dict = {}  # {path_str: (mtime, data)}
+
+
+def _load_uncached() -> dict:
     if not DATA.exists():
         raise SystemExit("Initialize a portfolio first")
     data = json.loads(DATA.read_text(encoding="utf-8"))
@@ -122,6 +129,21 @@ def _real_load() -> dict:
     verify_agora(data)
     data["_loaded_digest"] = data.get("integrity", {}).get("digest")
     return data
+
+
+def _real_load() -> dict:
+    import copy
+    path = DATA
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        raise SystemExit("Initialize a portfolio first")
+    cached = _load_cache.get(str(path))
+    if cached and cached[0] == mtime:
+        return copy.deepcopy(cached[1])
+    result = _load_uncached()
+    _load_cache[str(path)] = (mtime, copy.deepcopy(result))
+    return result
 
 
 def load() -> dict:
@@ -160,6 +182,7 @@ def _real_save(data: dict) -> None:
         try: os.fsync(directory)
         finally: os.close(directory)
         data["_loaded_digest"] = digest
+        _load_cache.pop(str(DATA), None)
     finally:
         _flock_un(descriptor); os.close(descriptor)
 
@@ -227,7 +250,7 @@ def verify_authenticated_archive(path: Path) -> None:
     seal = envelope.get("integrity", {})
     expected = hmac.new(integrity_key(), digest.encode(), hashlib.sha256).hexdigest()
     if seal.get("digest") != digest or seal.get("algorithm") != "HMAC-SHA256" or not hmac.compare_digest(str(seal.get("authentication_tag", "")), expected):
-        raise SystemExit(f"Authenticated archive verification failed: {path}")
+        raise AuthIntegrityError(f"Authenticated archive verification failed: {path}")
 
 
 def cmd_verify(args: argparse.Namespace) -> None:

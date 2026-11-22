@@ -3,14 +3,38 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import sys
 import time
+import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 _logger = logging.getLogger(__name__)
+
+
+def _install_error_handler(debug: bool = False) -> None:
+    """Install a global sys.excepthook that logs unhandled exceptions.
+
+    In normal mode only prints a one-line message with an error_id.
+    In debug mode (--debug flag or URACE_DEBUG=1) also shows the full traceback.
+    """
+    _log = logging.getLogger('urace.cli')
+
+    def _handler(exc_type, exc_val, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_val, exc_tb)
+            return
+        error_id = uuid.uuid4().hex[:8]
+        _log.exception("unhandled exception id=%s", error_id, exc_info=(exc_type, exc_val, exc_tb))
+        if debug:
+            sys.__excepthook__(exc_type, exc_val, exc_tb)
+        else:
+            print(f"Unexpected error (id: {error_id}). Check logs for detail.", file=sys.stderr)
+
+    sys.excepthook = _handler
 
 
 def _utcnow() -> str:

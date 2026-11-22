@@ -32,6 +32,7 @@ from .portfolio_storage import (
     RETIRED_PORTFOLIOS_ROOT, DATA, LEDGER_LOCK, OPERATION_LOCK,
     CONTROL_INBOX, VARIANTS, INTEGRITY_KEY,
     SAFE_NAME, MAX_ADVISORY_TEXT, MAX_AGORA_RECORDS,
+    AuthIntegrityError,
     now, integrity_key, canonical, ledger_digest, verify_ledger,
     load, save, record_payload, append_agora,
     write_authenticated_archive, verify_authenticated_archive,
@@ -239,9 +240,25 @@ def cmd_agora_propose(args: argparse.Namespace) -> None:
 
 
 def cmd_agora_vote(args: argparse.Namespace) -> None:
+    from datetime import datetime, timezone, timedelta
     data = load(); voter = variant(data, args.voter); proposal = agora_proposal(data, args.proposal)
     if proposal_status(data, proposal) != "OPEN":
         raise SystemExit("Voting is closed for this proposal")
+    try:
+        from urace.cli import load_config as _load_config
+        _cfg = _load_config()
+    except Exception:
+        _cfg = {}
+    _ttl_hours = _cfg.get('executor', {}).get('agora_proposal_ttl_hours', 72)
+    _created = proposal.get('created_at') or proposal.get('at')
+    if _created:
+        try:
+            _age_hours = (datetime.now(timezone.utc) - datetime.fromisoformat(_created)).total_seconds() / 3600
+            if _age_hours > _ttl_hours:
+                print(json.dumps({"status": "proposal_expired", "age_hours": round(_age_hours, 1), "ttl_hours": _ttl_hours}))
+                return 1
+        except (ValueError, TypeError):
+            pass  # malformed date — allow through
     if voter.get("generation") != proposal.get("generation"):
         raise SystemExit("Only variants admitted to the proposal generation may vote")
     args.reason = bounded_text(args.reason, "reason"); args.evidence = bounded_text(args.evidence, "evidence")
@@ -258,10 +275,35 @@ def cmd_agora_vote(args: argparse.Namespace) -> None:
 
 
 def cmd_agora_decide(args: argparse.Namespace) -> None:
+    from datetime import datetime, timezone, timedelta
     data = load(); proposal = agora_proposal(data, args.proposal)
     if proposal_status(data, proposal) != "OPEN":
         raise SystemExit("Proposal already has a controller decision")
+    try:
+        from urace.cli import load_config as _load_config
+        _cfg = _load_config()
+    except Exception:
+        _cfg = {}
+    _ttl_hours = _cfg.get('executor', {}).get('agora_proposal_ttl_hours', 72)
+    _created = proposal.get('created_at') or proposal.get('at')
+    if _created:
+        try:
+            _age_hours = (datetime.now(timezone.utc) - datetime.fromisoformat(_created)).total_seconds() / 3600
+            if _age_hours > _ttl_hours:
+                print(json.dumps({"status": "proposal_expired", "age_hours": round(_age_hours, 1), "ttl_hours": _ttl_hours}))
+                return 1
+        except (ValueError, TypeError):
+            pass  # malformed date — allow through
     tally = agora_tally(data, args.proposal)
+    _quorum_threshold = _cfg.get('executor', {}).get('agora_quorum_threshold', 0.5)
+    _cohort_size = data.get('workflow', {}).get('cohort_size', 1)
+    _vote_count = tally.get('yes', 0) + tally.get('no', 0)
+    if _cohort_size > 1 and _vote_count / _cohort_size < _quorum_threshold:
+        print(json.dumps({"status": "quorum_not_reached",
+                          "votes": _vote_count,
+                          "cohort_size": _cohort_size,
+                          "threshold": _quorum_threshold}))
+        return 1
     if proposal.get("scope", "candidate") == "portfolio-system" and args.outcome == "adopt":
         raise SystemExit("portfolio-system proposals may be referred for independent review, not adopted by variants")
     if args.outcome == "refer" and proposal.get("scope", "candidate") != "portfolio-system":
