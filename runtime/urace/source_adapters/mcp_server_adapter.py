@@ -1,6 +1,7 @@
 """MCP server source adapter — observes an MCP tool server; acts with call_tool.
 
-Requires: pip install "urace[sources-mcp]"  (mcp, MIT)
+Uses MCP JSON-RPC over HTTP via httpx.
+Requires: pip install "urace[sources-http]"
 """
 from __future__ import annotations
 
@@ -11,16 +12,16 @@ from . import SOURCE_REGISTRY
 from .._common import now
 
 try:
-    import mcp.client as _mcp_client  # type: ignore[import]
+    import httpx as _httpx
     _AVAILABLE = True
 except ImportError:
-    _mcp_client = None  # type: ignore[assignment]
+    _httpx = None  # type: ignore[assignment]
     _AVAILABLE = False
 
 
-def _require_mcp() -> None:
+def _require_httpx() -> None:
     if not _AVAILABLE:
-        raise SourceUnavailableError('pip install "urace[sources-mcp]"')
+        raise SourceUnavailableError('pip install "urace[sources-http]"')
 
 
 class MCPServerAdapter(NullSourceAdapter):
@@ -59,7 +60,7 @@ class MCPServerAdapter(NullSourceAdapter):
         }
 
     def _sync(self, config: dict, state: dict, source_id: str) -> dict:
-        _require_mcp()
+        _require_httpx()
         record = _get_source(state, source_id)
         if not record:
             return {'synced': False, 'reason': 'source not found'}
@@ -68,10 +69,8 @@ class MCPServerAdapter(NullSourceAdapter):
         if not url:
             return {'synced': False, 'reason': 'no url configured'}
         try:
-            # Use httpx directly to list tools via MCP HTTP transport
-            import httpx
-            resp = httpx.post(f'{url.rstrip("/")}/tools/list', timeout=10,
-                              json={'jsonrpc': '2.0', 'method': 'tools/list', 'id': 1})
+            resp = _httpx.post(f'{url.rstrip("/")}/tools/list', timeout=10,
+                               json={'jsonrpc': '2.0', 'method': 'tools/list', 'id': 1})
             resp.raise_for_status()
             tools = resp.json().get('result', {}).get('tools', [])
             tool_names = [t.get('name', '') for t in tools]
@@ -87,6 +86,7 @@ class MCPServerAdapter(NullSourceAdapter):
              action: str, payload: dict) -> dict:
         if action != 'call_tool':
             return {'acted': False, 'reason': f'unknown action: {action}'}
+        _require_httpx()
         record = _get_source(state, source_id)
         if not record:
             return {'acted': False, 'reason': 'source not found'}
@@ -97,8 +97,7 @@ class MCPServerAdapter(NullSourceAdapter):
         if not url or not tool_name:
             return {'acted': False, 'reason': 'call_tool requires tool in payload'}
         try:
-            import httpx
-            resp = httpx.post(
+            resp = _httpx.post(
                 f'{url.rstrip("/")}/tools/call',
                 timeout=30,
                 json={

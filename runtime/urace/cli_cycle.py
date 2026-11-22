@@ -617,7 +617,6 @@ def _apply_authority_gate(
 
 
 def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool = True) -> dict[str, Any]:
-    global _loaded_state_snapshot
     # --- r75: generate cycle_id for ObservabilityContract trace records ---
     _cycle_id = identifier("cycle-")
     # --- §62z: reset continuation confidence at cycle boundary ---
@@ -640,7 +639,7 @@ def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool =
     _source_adapter_auto_sync(config, state)
     # --- r54: capture immutable-field snapshot for pre-save mutation detection ---
     import copy as _copy
-    _loaded_state_snapshot = _copy.deepcopy({
+    _immutable_snapshot = _copy.deepcopy({
         k: state.get(k, [])
         for k in ["goal_records", "intent_records", "constraint_records",
                   "decision_records", "evidence", "operations"]
@@ -1077,7 +1076,7 @@ def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool =
     state["technique_application_log"] = state["technique_application_log"][-100:]
 
     # --- r54: immutable field mutation detection before save ---
-    _validate_immutable_fields(state, _loaded_state_snapshot)
+    _validate_immutable_fields(state, _immutable_snapshot)
 
     # --- r75: emit CYCLE trace at cycle exit ---
     _emit_trace(state, "CYCLE", f"cycle ended: {outcome.get('outcome', 'unknown')}", cycle_id=_cycle_id)

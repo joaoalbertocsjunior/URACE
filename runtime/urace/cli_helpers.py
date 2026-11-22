@@ -233,9 +233,6 @@ def _validate_citizen_base_conformance(state: dict[str, Any]) -> None:
                     observations[key]['condition_still_present'] = False
 
 
-_loaded_state_snapshot: dict[str, Any] | None = None
-
-
 def _validate_immutable_fields(current_state: dict[str, Any], previous_state: dict[str, Any] | None) -> None:
     """Check that id and created_at haven't been mutated on existing records (A6 r54)."""
     if not previous_state:
