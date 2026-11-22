@@ -253,6 +253,24 @@ def verify_authenticated_archive(path: Path) -> None:
         raise AuthIntegrityError(f"Authenticated archive verification failed: {path}")
 
 
+def cmd_backup(args: argparse.Namespace) -> None:
+    data = load()
+    dest = Path(args.dest) if getattr(args, 'dest', None) else \
+        RETIRED_PORTFOLIOS_ROOT / f"backup_{now().replace(':', '-').replace('+', '_')}.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    write_authenticated_archive(dest, "backup", data)
+    print(json.dumps({"status": "ok", "path": str(dest)}))
+
+
+def cmd_restore(args: argparse.Namespace) -> None:
+    src = Path(args.src)
+    verify_authenticated_archive(src)
+    envelope = json.loads(src.read_text(encoding='utf-8'))
+    data = envelope['payload']
+    save(data)
+    print(json.dumps({"status": "ok", "restored_from": str(src)}))
+
+
 def cmd_verify(args: argparse.Namespace) -> None:
     data = load()
     archives = sorted((DATA.parent / "archive").glob("*.json"))

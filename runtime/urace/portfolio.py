@@ -39,6 +39,7 @@ from .portfolio_storage import (
     cmd_verify, verify_agora, bounded_text, name,
     rotate_integrity_key, cmd_rotate_integrity_key,
     unit_interval,
+    cmd_backup, cmd_restore,
 )
 
 from .portfolio_product import (
@@ -532,6 +533,8 @@ def parser() -> argparse.ArgumentParser:
     command = sub.add_parser("accepted-state-source-status"); command.add_argument("--json", action="store_true"); command.set_defaults(function=cmd_accepted_state_source_status)
     command = sub.add_parser("preflight"); command.add_argument("workflow"); command.add_argument("--json", action="store_true"); command.set_defaults(function=cmd_preflight)
     command = sub.add_parser("verify"); command.add_argument("--json", action="store_true"); command.set_defaults(function=cmd_verify)
+    command = sub.add_parser("backup"); command.add_argument("--dest"); command.set_defaults(function=cmd_backup)
+    command = sub.add_parser("restore"); command.add_argument("src"); command.set_defaults(function=cmd_restore)
     command = sub.add_parser("launch"); command.add_argument("workflow"); command.set_defaults(function=cmd_launch)
     command = sub.add_parser("auto"); command.add_argument("workflow"); command.add_argument("--cycles", type=parse_cycle_limit, default=None); command.set_defaults(function=cmd_auto)
     command = sub.add_parser("next"); command.add_argument("workflow"); command.set_defaults(function=cmd_next)
