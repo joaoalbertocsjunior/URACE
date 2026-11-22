@@ -4,7 +4,7 @@ Discovery surfaces UNVERIFIED candidates only. A candidate becomes a trusted
 peer only after explicit exchange.peer() + exchange.rule() pinning.
 
 LAN layer:  mDNS/Zeroconf, service _urace-exchange._tcp.local.
-            Requires: pip install zeroconf  (optional — manual pinning works without it)
+            Requires: pip install "urace[p2p]" (optional — manual pinning works without it)
 WAN layer:  BitTorrent DHT (BEP 5), stdlib only (socket + struct + asyncio).
             Topic infohash = SHA1(b"urace-exchange-v1")  [20 bytes]
             Announced value = HTTPS port only; certificate retrieved via exchange.info RPC.
@@ -98,12 +98,12 @@ def announce(exchange: NetworkAdapter, port: int) -> Any:
     """Broadcast this node on the LAN as _urace-exchange._tcp.local.
 
     Returns an opaque handle; pass it to stop_announce() to deregister.
-    Requires: pip install zeroconf
+    Requires: pip install "urace[p2p]"
     """
     try:
         from zeroconf import ServiceInfo, Zeroconf
     except ImportError:
-        raise ValueError("LAN announce requires: pip install zeroconf")
+        raise ValueError('LAN announce requires: pip install "urace[p2p]"')
 
     peer_id = exchange.identity()["peer_id"]
     addrs: list[bytes] = []
@@ -149,12 +149,12 @@ def discover_lan(exchange: NetworkAdapter, seconds: float = 3.0) -> list[dict[st
     """Browse LAN for URACE nodes via mDNS.
 
     Returns candidate dicts: {service, addresses, port, peer_id, auto_trusted: False}.
-    Requires: pip install zeroconf
+    Requires: pip install "urace[p2p]"
     """
     try:
         from zeroconf import ServiceBrowser, ServiceStateChange, Zeroconf
     except ImportError:
-        raise ValueError("LAN discovery requires: pip install zeroconf")
+        raise ValueError('LAN discovery requires: pip install "urace[p2p]"')
 
     rows: dict[str, dict] = {}
 

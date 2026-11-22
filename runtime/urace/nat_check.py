@@ -107,7 +107,7 @@ def detect_nat_type(timeout: float = 5.0) -> dict:
 def detect_upnp(port: int = DEFAULT_LISTEN_PORT, timeout_ms: int = 2000) -> dict:
     """Probe router for UPnP IGD. Returns {available, external_ip, mapped_port, error}.
 
-    Requires miniupnpc (now in base install). Never raises.
+    Requires miniupnpc (pip install "urace[p2p]"). Never raises.
     """
     try:
         import miniupnpc

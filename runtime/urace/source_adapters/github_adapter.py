@@ -1,4 +1,4 @@
-"""GitHub repository source adapter — uses ghapi (urace[github] extra)."""
+"""GitHub repository source adapter — uses ghapi (urace[sources-github] extra)."""
 from __future__ import annotations
 
 import os
@@ -18,7 +18,7 @@ except ImportError:
 
 def _require_ghapi() -> None:
     if not _AVAILABLE:
-        raise SourceUnavailableError('pip install "urace[github]"')
+        raise SourceUnavailableError('pip install "urace[sources-github]"')
 
 
 class GithubAdapter(NullSourceAdapter):

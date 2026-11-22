@@ -1743,7 +1743,7 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                         ('kafka',      'sources-kafka'),
                         ('redis',      'sources-redis'),
                         ('sqlalchemy', 'sources-db'),
-                        ('ghapi',      'github'),
+                        ('ghapi',      'sources-github'),
                     ]:
                         try:
                             __import__(_dep_pkg)

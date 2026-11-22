@@ -13,7 +13,7 @@ Usage::
         from zeroconf import Zeroconf, ServiceBrowser
         ...
     else:
-        raise ValueError('LAN discovery requires optional python-zeroconf')
+        raise ValueError('LAN discovery requires pip install "urace[p2p]"')
 
     if CAPS.aesgcm:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM

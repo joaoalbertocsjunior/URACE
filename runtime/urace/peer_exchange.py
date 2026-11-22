@@ -975,7 +975,7 @@ def discover(exchange,seconds=3):
  if not exchange.load()['network'] or not exchange.load()['enabled']:raise ValueError('Network discovery disabled')
  if not 0<seconds<=15:raise ValueError('Discovery must be bounded to 1–15 seconds')
  try:from zeroconf import Zeroconf,ServiceBrowser,ServiceStateChange
- except ImportError:raise ValueError('LAN discovery requires optional python-zeroconf; manual pinned HTTPS peers work without it')
+ except ImportError:raise ValueError('LAN discovery requires pip install "urace[p2p]"; manual pinned HTTPS peers work without it')
  rows={}
  def changed(zeroconf,service_type,name,state_change):
   if state_change is ServiceStateChange.Removed:return

@@ -1920,7 +1920,7 @@ from contextlib import contextmanager
 def advertise(exchange,host,port):
  if not exchange.load()['advertise']:yield;return
  try:from zeroconf import Zeroconf,ServiceInfo
- except ImportError:raise ValueError('Advertising requires optional python-zeroconf')
+ except ImportError:raise ValueError('Advertising requires pip install "urace[p2p]"')
  import ipaddress
  address=ipaddress.ip_address(host)
  if address.is_unspecified:raise ValueError('Advertising requires an explicit local interface address')
