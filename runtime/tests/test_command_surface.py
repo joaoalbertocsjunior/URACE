@@ -112,7 +112,7 @@ class CommandSurfaceTests(unittest.TestCase):
  def test_api_errors_captured_and_do_not_abort_process(self):
   result=api_interface.execute(self.parser,cli.main,argv=['goal','nonsense']);self.assertEqual(result['exit_code'],2);self.assertIn('invalid choice',result['stderr'])
  def test_api_discovery_includes_nested_and_delegated_commands(self):
-  catalog=api_interface.metadata(self.parser);roots={e['command']:e for e in catalog['commands']};self.assertEqual(set(roots),set(command_surface.child_parsers(self.parser)));self.assertEqual(len(roots['portfolio']['children']),30)
+  catalog=api_interface.metadata(self.parser);roots={e['command']:e for e in catalog['commands']};self.assertEqual(set(roots),set(command_surface.child_parsers(self.parser)));self.assertEqual(len(roots['portfolio']['children']),31)
 
 
 class ExecutableScoreCommandTests(unittest.TestCase):
