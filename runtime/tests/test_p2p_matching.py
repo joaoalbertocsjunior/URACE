@@ -153,5 +153,57 @@ class DemandCounterTests(unittest.TestCase):
         self.assertIn('window_seconds', payload[0])
 
 
+class ThroughputTrackerTests(unittest.TestCase):
+
+    def setUp(self):
+        from urace.p2p_matching import ThroughputTracker, TPS_WEIGHT_MIN, TPS_WEIGHT_MAX
+        self.tracker = ThroughputTracker()
+        self.weight_min = TPS_WEIGHT_MIN
+        self.weight_max = TPS_WEIGHT_MAX
+
+    def test_cold_node_returns_neutral_weight(self):
+        # No samples → neutral 1.0
+        w = self.tracker.get_routing_weight('exec-1', 'model-a')
+        self.assertEqual(w, 1.0)
+
+    def test_fewer_than_min_samples_returns_neutral(self):
+        # 2 samples (< _TPS_MIN_SAMPLES=3) → still neutral
+        self.tracker.record_tps('exec-2', 'model-a', tokens_generated=100, elapsed_seconds=10.0)
+        self.tracker.record_tps('exec-2', 'model-a', tokens_generated=100, elapsed_seconds=10.0)
+        w = self.tracker.get_routing_weight('exec-2', 'model-a')
+        self.assertEqual(w, 1.0)
+
+    def test_fast_executor_clamped_to_max(self):
+        # 1000 tok/s with reference 10 → raw weight 100x, clamped to TPS_WEIGHT_MAX
+        for _ in range(5):
+            self.tracker.record_tps('fast-exec', 'model-b', tokens_generated=10000, elapsed_seconds=10.0)
+        w = self.tracker.get_routing_weight('fast-exec', 'model-b', reference_tps=10.0)
+        self.assertAlmostEqual(w, self.weight_max, places=5)
+
+    def test_slow_executor_clamped_to_min(self):
+        # 0.001 tok/s with reference 10 → raw weight ~0, clamped to TPS_WEIGHT_MIN
+        for _ in range(5):
+            self.tracker.record_tps('slow-exec', 'model-c', tokens_generated=1, elapsed_seconds=1000.0)
+        w = self.tracker.get_routing_weight('slow-exec', 'model-c', reference_tps=10.0)
+        self.assertAlmostEqual(w, self.weight_min, places=5)
+
+    def test_rank_candidates_with_tracker_reorders_slow_peer(self):
+        from urace.p2p_matching import rank_candidates, _THROUGHPUT
+        # Give peer-slow very slow TPS so it should rank lower
+        for _ in range(5):
+            self.tracker.record_tps('peer-slow', '', tokens_generated=1, elapsed_seconds=1000.0)
+        features = [
+            {'id': 'f1', 'title': 'fast feature', 'seller_peer_id': 'peer-fast', 'description': 'improve routing'},
+            {'id': 'f2', 'title': 'slow feature', 'seller_peer_id': 'peer-slow', 'description': 'improve routing'},
+        ]
+        batch = {'text': 'improve routing', 'type': 'goal'}
+        results = rank_candidates(batch, 'improve routing', features,
+                                  throughput_tracker=self.tracker, model='')
+        # peer-slow should not be ranked first
+        if len(results) >= 2:
+            top_seller = results[0].get('seller_peer_id', '')
+            self.assertNotEqual(top_seller, 'peer-slow')
+
+
 if __name__ == '__main__':
     unittest.main()

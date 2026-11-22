@@ -57,6 +57,79 @@ class DemandCounter:
 _DEMAND = DemandCounter()
 
 
+# Throughput tracking constants (concept-borrowed from mesh-llm Apache 2.0:
+# mesh/crates/mesh-llm-membership/src/advertised_throughput.rs)
+TPS_WEIGHT_MIN: float = 0.3   # floor weight for slow/cold executors
+TPS_WEIGHT_MAX: float = 2.0   # ceiling weight for fast executors
+THROUGHPUT_SCALE_MILLI: int = 1000  # fixed-point precision for TPS calculations
+_TPS_MIN_SAMPLES: int = 3     # cold node threshold — fewer samples → neutral weight
+
+
+class ThroughputTracker:
+    """Rolling per-executor token throughput tracker.
+
+    Thread-safe. Maintains bounded deque of (tokens, elapsed_secs, timestamp)
+    per (executor_id, model) key. get_routing_weight() returns 1.0 (neutral)
+    for cold nodes (fewer than _TPS_MIN_SAMPLES samples).
+    """
+    _MAX_ENTRIES = 500
+
+    def __init__(self) -> None:
+        self._records: dict[str, _collections.deque] = {}
+        self._lock = _threading_dm.Lock()
+
+    def _key(self, executor_id: str, model: str) -> str:
+        return f"{executor_id}\x00{model}"
+
+    def record_tps(
+        self,
+        executor_id: str,
+        model: str,
+        tokens_generated: int,
+        elapsed_seconds: float,
+        at: float | None = None,
+    ) -> None:
+        at = at if at is not None else _time_dm.time()
+        if elapsed_seconds <= 0 or tokens_generated <= 0:
+            return
+        key = self._key(executor_id, model)
+        with self._lock:
+            if key not in self._records:
+                self._records[key] = _collections.deque(maxlen=self._MAX_ENTRIES)
+            self._records[key].append((tokens_generated / elapsed_seconds, at))
+
+    def get_mean_tps(
+        self, executor_id: str, model: str, window_seconds: int = 900
+    ) -> float | None:
+        """Return mean tok/s in window, or None if cold (< _TPS_MIN_SAMPLES)."""
+        cutoff = _time_dm.time() - window_seconds
+        key = self._key(executor_id, model)
+        with self._lock:
+            entries = [(tps, t) for tps, t in self._records.get(key, []) if t >= cutoff]
+        if len(entries) < _TPS_MIN_SAMPLES:
+            return None
+        return sum(tps for tps, _ in entries) / len(entries)
+
+    def get_routing_weight(
+        self,
+        executor_id: str,
+        model: str,
+        window_seconds: int = 900,
+        reference_tps: float = 10.0,
+        weight_min: float = TPS_WEIGHT_MIN,
+        weight_max: float = TPS_WEIGHT_MAX,
+    ) -> float:
+        """Routing weight: 1.0 neutral for cold nodes, clamped [min, max] otherwise."""
+        mean = self.get_mean_tps(executor_id, model, window_seconds)
+        if mean is None:
+            return 1.0  # neutral — cold node gets equal chance
+        raw = mean / max(reference_tps, 0.001)
+        return max(weight_min, min(weight_max, raw))
+
+
+_THROUGHPUT = ThroughputTracker()
+
+
 @_functools.lru_cache(maxsize=4)
 def _cached_idf(feature_corpus_hash: str, features_json: str) -> dict:
     return _legacy._build_idf(_json.loads(features_json))
@@ -90,7 +163,8 @@ def intent_queries(batch: dict, raw_text: str = '') -> list[dict]:
 
 
 def rank_candidates(batch: dict, raw_text: str, features: list[dict], *,
-                    top_n: int = 10, scorer: str = 'tfidf') -> list[dict]:
+                    top_n: int = 10, scorer: str = 'tfidf',
+                    throughput_tracker=None, model: str = '', **kwargs) -> list[dict]:
     """Rank catalog candidates against each extracted intent, retaining match provenance."""
     if type(top_n) is not int or not 1 <= top_n <= 100:
         raise ValueError('top_n must be between 1 and 100')
@@ -143,6 +217,10 @@ def rank_candidates(batch: dict, raw_text: str, features: list[dict], *,
             continue
         item = dict(feature)
         item['match_score'] = max(match['score'] for match in matches)
+        if throughput_tracker is not None:
+            _seller = item.get('seller_peer_id', '')
+            _weight = throughput_tracker.get_routing_weight(_seller, model)
+            item['match_score'] = item['match_score'] * _weight
         item['match_method'] = MATCHER_VERSION
         item['match_score_interpretation'] = 'heuristic lexical relevance; not calibrated quality or equivalence'
         item['local_implementation_available'] = (
