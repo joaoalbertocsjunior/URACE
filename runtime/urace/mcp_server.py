@@ -93,6 +93,15 @@ class Server:
             with self.lock:self.active.pop(identifier,None);self.cancelled.discard(identifier)
     def receive(self,request):
         if not isinstance(request,dict) or request.get('jsonrpc')!='2.0' or not isinstance(request.get('method'),str):self.error(None,-32600,'Invalid JSON-RPC request');return
+        # MIME boundary check: reject tool calls that supply a disallowed content_type.
+        _params=request.get('params',{})
+        if isinstance(_params,dict) and _params.get('name') in {'urace_call','urace_submit'}:
+            _args=_params.get('arguments',{})
+            if isinstance(_args,dict) and 'content_type' in _args:
+                from . import mime_policy as _mmp
+                _ct=_args['content_type'] or 'application/octet-stream'
+                _ct_ok,_ct_reason=_mmp.is_network_allowed(_ct)
+                if not _ct_ok:self.error(request.get('id'),-32602,f'Disallowed content_type {_ct!r}: {_ct_reason}');return
         identifier=request.get('id')
         if 'id' not in request:
             if request['method']=='notifications/initialized' and self.initialized:self.ready=True

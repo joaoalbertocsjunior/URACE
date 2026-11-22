@@ -98,3 +98,31 @@ class MimePolicyConfig(BaseModel, frozen=True):
 def mime_policy_cfg(config: dict) -> MimePolicyConfig:
     raw: dict[str, Any] = config.get('mime_policy', {}) if isinstance(config, dict) else {}
     return MimePolicyConfig.model_validate(raw)
+
+
+# ── Config version migration ──────────────────────────────────────────────────
+
+import logging as _logging
+_config_access_log = _logging.getLogger('urace.config')
+
+CURRENT_CONFIG_VERSION = 1
+
+
+def check_config_version(config: dict) -> dict:
+    """Normalize config_version: default missing to 1; warn if newer than known version.
+
+    Returns config with config_version guaranteed to be present.
+    Does not raise on unknown future versions — forward-compatibility is preserved.
+    """
+    if not isinstance(config, dict):
+        return config
+    version = config.get('config_version')
+    if version is None:
+        config = {**config, 'config_version': 1}
+    elif isinstance(version, int) and version > CURRENT_CONFIG_VERSION:
+        _config_access_log.warning(
+            "config_version=%d is newer than known version %d; "
+            "some settings may be ignored",
+            version, CURRENT_CONFIG_VERSION,
+        )
+    return config

@@ -184,7 +184,10 @@ def _rank_p2p_features_embedding(text: str, features: list[dict],
         scored = [(f, _cosine(q_vec, vecs[i + 1])) for i, f in enumerate(features)]
         scored.sort(key=lambda x: x[1], reverse=True)
         return [f for f, s in scored[:top_n] if s > 0.0]
-    except Exception:
+    except Exception as e:
+        import logging as _logging
+        _log = _logging.getLogger(__name__)
+        _log.warning("embedding scorer fallback: feature_count=%d error=%s", len(features), str(e))
         return _rank_p2p_features(text, features, top_n=top_n, scorer='tfidf')
 
 

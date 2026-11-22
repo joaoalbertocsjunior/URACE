@@ -174,6 +174,8 @@ def _wire_bus_to_logger(config: dict | None) -> None:
             enabled = components_cfg.get(component, True)
             if not enabled and component not in _ALWAYS_ON:
                 return
+            if lvl >= logging.ERROR or _topic.endswith('.failed') or _topic.endswith('.act_failed'):
+                payload = {**payload, 'error_id': __import__('uuid').uuid4().hex[:8]}
             logger.log(lvl, "bus:%s %s", _topic, json.dumps(payload, default=str))
 
         return _handler
@@ -199,6 +201,7 @@ def _wire_bus_to_logger(config: dict | None) -> None:
 
         def _act_audit_handler(*, _topic: str = '', **payload: Any) -> None:
             if 'act_failed' in _topic or 'act_denied' in _topic:
+                payload = {**payload, 'error_id': __import__('uuid').uuid4().hex[:8]}
                 _act_logger.warning("bus:%s %s", _topic, json.dumps(payload, default=str))
             else:
                 _act_logger.info("bus:%s %s", _topic, json.dumps(payload, default=str))

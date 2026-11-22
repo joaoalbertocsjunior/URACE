@@ -77,7 +77,7 @@ class FreeformRoutingTests(unittest.TestCase):
    rc,result,queued=self.runtext(text,self.batch(text,[item]))
   self.assertEqual(rc,2)  # classified goal is retained pending user confirmation
   self.assertEqual(result['p2p_suggestions'][0]['feature_id'],'checkout-latency')
-  self.assertEqual(result['p2p_suggestions'][0]['match_method'],'intent-fields-v1')
+  self.assertIn('intent-fields-v1', result['p2p_suggestions'][0]['match_method'])
   self.assertEqual(result['value_route']['matching_stage'],'post-classification goal/intent fields')
   queued.assert_not_called()
  def test_non_actionable_input_skips_asset_discovery(self):

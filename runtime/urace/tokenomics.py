@@ -30,19 +30,32 @@ def canonical_fingerprint(source_delta):
             canonical[name] = ' '.join(text.split())
     return hashlib.sha256(_encoded(canonical)).hexdigest()
 
-def outcome_fingerprint(baseline_engine_sha256, affected_files, score_delta):
+def outcome_fingerprint(baseline_engine_sha256, affected_files, score_delta, item=None):
     """Near-copy detection: same outcome regardless of surface form.
 
     baseline_engine_sha256: engine_sha256 of the evaluation baseline.
     affected_files: iterable of changed filenames.
     score_delta: float; bucketed to nearest int to absorb trivial variance.
+    item: optional dict; if present and contains 'test_output' or 'evaluate_output',
+          a hash of that field (stdout + returncode) is included for stronger dedup.
     Two patches are near-copies iff they fix the same files for the same score gain from the same baseline.
     """
-    return hashlib.sha256(_encoded({
+    payload: dict = {
         'baseline': baseline_engine_sha256,
         'files': sorted(affected_files),
         'delta_bucket': round(float(score_delta)),
-    })).hexdigest()
+    }
+    if isinstance(item, dict):
+        for _key in ('test_output', 'evaluate_output'):
+            _val = item.get(_key)
+            if _val is not None:
+                _stdout = _val.get('stdout', '') if isinstance(_val, dict) else str(_val)
+                _rc = _val.get('returncode', 0) if isinstance(_val, dict) else 0
+                payload['test_run_hash'] = hashlib.sha256(
+                    (_stdout + '\x00' + str(_rc)).encode('utf-8', errors='replace')
+                ).hexdigest()
+                break
+    return hashlib.sha256(_encoded(payload)).hexdigest()
 
 def fingerprint_index(evaluations_dir):
     """Build outcome fingerprint index from stored qualification receipts.

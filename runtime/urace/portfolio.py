@@ -262,6 +262,29 @@ def save(data: dict) -> None:
         _flock_un(descriptor); os.close(descriptor)
 
 
+def rotate_integrity_key() -> dict:
+    """Rotate the portfolio HMAC integrity key. Re-signs current ledger with new key."""
+    old_key_path = INTEGRITY_KEY
+    backup_path = Path(str(INTEGRITY_KEY) + '.prev')
+    # Backup old key
+    if old_key_path.exists():
+        shutil.copy2(old_key_path, backup_path)
+    # Generate new key
+    new_key = os.urandom(32)
+    old_key_path.parent.mkdir(parents=True, exist_ok=True)
+    old_key_path.write_bytes(new_key)
+    old_key_path.chmod(0o600)
+    # Re-sign current ledger
+    data = load()
+    save(data)
+    return {"status": "ok", "backup": str(backup_path)}
+
+
+def cmd_rotate_integrity_key(args: argparse.Namespace) -> None:
+    result = rotate_integrity_key()
+    print(json.dumps(result, indent=2))
+
+
 def name(value: str) -> str:
     if not SAFE_NAME.fullmatch(value):
         raise argparse.ArgumentTypeError("use 1-64 letters, numbers, dots, underscores, or hyphens")
@@ -2400,6 +2423,7 @@ def parser() -> argparse.ArgumentParser:
     command = sub.add_parser("agora-decide"); command.add_argument("proposal", type=name); command.add_argument("--outcome", choices=["adopt", "refer", "reject", "defer"], required=True); command.add_argument("--approved-by", required=True); command.add_argument("--reason", required=True); command.add_argument("--applicability"); command.add_argument("--minimum-support", type=int, default=1); command.add_argument("--inherit-from", type=name); command.set_defaults(function=cmd_agora_decide)
     command = sub.add_parser("agora-confirm-system"); command.add_argument("proposal", type=name); command.add_argument("--approved-by", required=True); command.add_argument("--validation-evidence", required=True); command.add_argument("--experiment-benefit", required=True); command.add_argument("--invariants-preserved", action="store_true"); command.add_argument("--bonus", type=unit_interval, default=0); command.set_defaults(function=cmd_agora_confirm_system)
     sub.add_parser("agora-show").set_defaults(function=cmd_agora_show)
+    sub.add_parser("rotate-integrity-key").set_defaults(function=cmd_rotate_integrity_key)
     command = sub.add_parser("lesson"); command.add_argument("--from-variants", required=True); command.add_argument("--statement", required=True); command.add_argument("--evidence", required=True); command.add_argument("--counterevidence", required=True); command.add_argument("--applicability", required=True); command.add_argument("--confidence", type=unit_interval, required=True); command.add_argument("--approved-by", required=True); command.set_defaults(function=cmd_lesson)
     sub.add_parser("explain").set_defaults(function=cmd_explain)
     sub.add_parser("status").set_defaults(function=cmd_status)

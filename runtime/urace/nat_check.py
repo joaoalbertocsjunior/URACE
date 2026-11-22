@@ -22,10 +22,22 @@ def _stun_probe(stun_host: str, stun_port: int, local_sock: socket.socket, timeo
     tid = os.urandom(12)
     req = struct.pack("!HH", 0x0001, 0) + magic + tid
     local_sock.settimeout(timeout)
-    try:
-        local_sock.sendto(req, (stun_host, stun_port))
-        data, _ = local_sock.recvfrom(2048)
-    except (OSError, socket.timeout):
+    _delays = [0.0, 0.2, 0.5]
+    data = None
+    for _attempt, _delay in enumerate(_delays):
+        if _delay > 0.0:
+            time.sleep(_delay)
+        try:
+            local_sock.sendto(req, (stun_host, stun_port))
+            data, _ = local_sock.recvfrom(2048)
+            break
+        except socket.timeout:
+            if _attempt == len(_delays) - 1:
+                return None
+            continue
+        except OSError:
+            return None
+    if data is None:
         return None
     if len(data) < 20 or struct.unpack("!H", data[:2])[0] != 0x0101:
         return None

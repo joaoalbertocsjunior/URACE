@@ -122,6 +122,10 @@ class NullSourceAdapter:
         self._log_source_event('add', source_id=source_id,
                                **{k: v for k, v in kwargs.items() if not k.endswith('_secret')})
         record = self._add(config, state, source_id, **kwargs)
+        if not isinstance(record, dict):
+            raise ValueError("add() record must be a dict")
+        if 'id' not in record:
+            raise ValueError("add() record must have 'id' field")
         _set_source(state, source_id, record)
         _BUS.publish('source.added', source_id=source_id, kind=self.kind)
         return record

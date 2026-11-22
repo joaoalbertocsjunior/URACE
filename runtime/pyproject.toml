@@ -6,8 +6,8 @@ readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"
 dependencies = [
-    "cryptography>=50,<51",
-    "pydantic>=2.0",
+    "cryptography>=50,<51",  # version policy: pin major+minor, allow patch
+    "pydantic>=2.0,<3",      # version policy: pin major+minor, allow patch
 ]
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
@@ -21,7 +21,7 @@ classifiers = [
     "Environment :: Console",
 ]
 
-[project.optional-dependencies]
+[project.optional-dependencies]  # version policy: pin major+minor, allow patch
 evm            = ["pysha3>=1.0,<2; python_version < '3.13'", "eth-account>=0.10"]
 report         = ["openpyxl"]
 media          = ["Pillow"]

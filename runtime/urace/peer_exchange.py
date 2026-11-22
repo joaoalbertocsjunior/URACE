@@ -417,6 +417,13 @@ class Exchange:
    if not _bct_ok:
     self.event('RECEIVE_REJECTED_MIME_POLICY',peer=b.get('sender',''),feature=b.get('feature',''),content_type=_bct,reason=_bct_reason)
     return self.counter_receipt('0'*64,b,'REJECTED_MIME_POLICY')
+   # Boundary check: reject if any file entry within the bundle has a disallowed MIME type.
+   for _file_entry in (b.get('files') or []):
+    _fct=(_file_entry.get('content_type','') if isinstance(_file_entry,dict) else '') or 'application/octet-stream'
+    _fct_ok,_fct_reason=_mmp.is_network_allowed(_fct)
+    if not _fct_ok:
+     self.event('RECEIVE_REJECTED_MIME_POLICY',peer=b.get('sender',''),feature=b.get('feature',''),content_type=_fct,reason=_fct_reason)
+     raise ValueError(f'Bundle file entry has disallowed MIME type {_fct!r}: {_fct_reason}')
    bid=digest(bundle);folder=self.root/'quarantine';folder.mkdir(exist_ok=True);target=folder/(bid+'.json')
    _art_ref=b.get('artifact_ref') or b.get('sha256','')
    _art_inline=b.get('artifact')
