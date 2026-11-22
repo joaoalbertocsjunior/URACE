@@ -1,3 +1,5 @@
+# PROTOCOL_GENERATION constants (N1) concept-adapted from mesh-llm
+# (https://github.com/Mesh-LLM/mesh-llm), Apache License 2.0.
 from __future__ import annotations
 
 import json

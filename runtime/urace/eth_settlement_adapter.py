@@ -1,3 +1,6 @@
+# TopologyLock and ArchitectureCertificate stubs concept-adapted from
+# mesh-llm SKIPPY_SPLITS protocol (https://github.com/Mesh-LLM/mesh-llm),
+# Apache License 2.0. Full implementation deferred to Phase X3.
 """eth_settlement_adapter.py — EVM settlement adapter for URACE token bridge.
 
 Broadcasts signed ERC-20 transfer transactions to a configured JSON-RPC endpoint.

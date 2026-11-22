@@ -1,3 +1,7 @@
+# Portions of this file are concept-adapted from mesh-llm
+# (https://github.com/Mesh-LLM/mesh-llm), Apache License 2.0.
+# Adapted concepts: affinity routing (cache_key/session_hint extraction),
+# cache-aware routing cost model, local route reputation with exponential decay.
 """Validate semantic sections before routing; preserve ambiguity and Authority."""
 import contextlib,functools as _functools,io,json,math,shlex,time,hashlib,os,re,unicodedata
 from pathlib import Path
