@@ -3,6 +3,12 @@
 Broadcasts signed ERC-20 transfer transactions to a configured JSON-RPC endpoint.
 Only active when token_settlement=True and rpc_provider_url is set in exchange config.
 All methods return {status: 'rpc_error', error: str} on failure — never raise.
+
+Module-level stubs (CPU-local scaffold, no live RPC required):
+  await_finality(tx_hash, confirmations=12) -> dict
+  submit_cartel_penalty(peer_id, evidence)  -> dict
+Both are active without an EthSettlementAdapter instance and return simulated results
+until an RPC provider is configured.
 """
 from __future__ import annotations
 import hashlib as _hashlib
@@ -350,3 +356,92 @@ class EthSettlementAdapter(ChainAdapter):
             return {"status": "ok", "verified": False, "block_number": None, "chain_id": None}
         except Exception as e:
             return {"status": "rpc_error", "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Module-level stubs — CPU-local scaffold, no live RPC required
+# ---------------------------------------------------------------------------
+
+import logging as _logging
+_log = _logging.getLogger(__name__)
+
+
+def await_finality(tx_hash: str, confirmations: int = 12) -> dict:
+    """Wait for a transaction to reach the required confirmation depth.
+
+    CPU-local stub — no live RPC polling is performed.  Replace this
+    implementation with a real eth_getBlockByNumber loop once an RPC
+    provider URL is configured in the exchange config.
+
+    Args:
+        tx_hash:       Hex transaction hash (0x-prefixed).
+        confirmations: Target confirmation depth (default 12, ~Ethereum finality).
+
+    Returns:
+        dict with keys: status, tx_hash, confirmations, simulated.
+    """
+    _log.info("awaiting finality: tx_hash=%s confirmations=%d", tx_hash, confirmations)
+    return {
+        "status": "finalized",
+        "tx_hash": tx_hash,
+        "confirmations": confirmations,
+        "simulated": True,
+    }
+
+
+def submit_cartel_penalty(peer_id: str, evidence: dict) -> dict:
+    """Submit cartel detection evidence for on-chain penalty.
+
+    CPU-local stub — computes the penalty amount using the local
+    ledger_economics.apply_cartel_penalty logic against a minimal
+    in-memory exchange derived from *evidence*, then returns a
+    simulated submission receipt.  Wire this to an actual on-chain
+    slash contract once an RPC provider is available.
+
+    Args:
+        peer_id:  The offending peer identifier.
+        evidence: Dict that may contain 'audit_rows' (list of audit row
+                  dicts) used to compute the penalty, or raw earn/spend
+                  amounts for a quick estimate.
+
+    Returns:
+        dict with keys: status, peer_id, penalty_units, simulated.
+        penalty_units is 0 when evidence is insufficient for a penalty.
+    """
+    penalty_units = 0
+    try:
+        from .ledger_economics import apply_cartel_penalty as _apply
+
+        # Build a minimal in-memory exchange adapter from the evidence rows.
+        audit_rows: list = evidence.get("audit_rows", [])
+
+        class _EvidenceExchange:
+            """Minimal LedgerAdapter backed by the provided evidence rows."""
+            _rows: list
+
+            def __init__(self, rows: list) -> None:
+                self._rows = list(rows)
+
+            def audit_rows(self):
+                return self._rows
+
+            def append_audit_row(self, row: dict) -> None:  # capture side-effects
+                self._rows.append(row)
+
+        result = _apply(_EvidenceExchange(audit_rows), peer_id)
+        if result.get("applied"):
+            penalty_units = int(result.get("penalty_units", 0))
+    except Exception as exc:
+        _log.warning("submit_cartel_penalty: ledger_economics unavailable — %s", exc)
+
+    _log.info(
+        "submit_cartel_penalty: peer_id=%s penalty_units=%d simulated=True",
+        peer_id,
+        penalty_units,
+    )
+    return {
+        "status": "submitted",
+        "peer_id": peer_id,
+        "penalty_units": penalty_units,
+        "simulated": True,
+    }
