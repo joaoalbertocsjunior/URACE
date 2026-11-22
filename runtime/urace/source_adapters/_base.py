@@ -68,6 +68,24 @@ class SourceAdapter(Protocol):
         ...
 
 
+def verify_adapter(adapter: object) -> list[str]:
+    """Phase 7A — verify an object satisfies the SourceAdapter Protocol.
+
+    Returns a list of missing/invalid attribute names.  Empty list = OK.
+    """
+    issues: list[str] = []
+    required_attrs = ('kind', 'add_args', 'validate', 'add', 'list', 'status',
+                      'sync', 'inspect', 'enable', 'disable', 'remove')
+    for attr in required_attrs:
+        if not hasattr(adapter, attr):
+            issues.append(f'missing: {attr}')
+        elif attr != 'kind' and not callable(getattr(adapter, attr)):
+            issues.append(f'not callable: {attr}')
+    if hasattr(adapter, 'kind') and not isinstance(adapter.kind, str):
+        issues.append('kind must be str')
+    return issues
+
+
 def _get_source(state: dict, source_id: str) -> dict | None:
     sources = state.get('sources', {})
     if isinstance(sources, dict):

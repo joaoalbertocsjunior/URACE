@@ -516,3 +516,27 @@ def emit_audit_row(exchange, *, kind: str, **fields) -> dict:
     }
     exchange.append_audit_row(row)
     return row
+
+
+# ── Phase 7B — state key migration helpers ────────────────────────────────────
+
+def migrate_state_keys(state: dict[str, Any]) -> dict[str, Any]:
+    """Migrate deprecated state keys to canonical names (non-destructive).
+
+    connector_sources (list) → sources (dict): only migrates if sources is absent.
+    trace_records (list)     → traces (list): only migrates if traces is absent.
+
+    Returns the mutated state dict (same object).
+    """
+    # connector_sources → sources
+    if 'connector_sources' in state and 'sources' not in state:
+        legacy = state['connector_sources']
+        if isinstance(legacy, list):
+            state['sources'] = {
+                s['id']: s for s in legacy
+                if isinstance(s, dict) and 'id' in s
+            }
+    # trace_records → traces
+    if 'trace_records' in state and 'traces' not in state:
+        state['traces'] = state['trace_records']
+    return state
