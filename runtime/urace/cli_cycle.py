@@ -34,7 +34,8 @@ def _source_adapter_auto_sync(config: dict, state: dict) -> None:
     Appends a 'source-sync-observation' Evidence record when a sync returns
     new data, bridging source observations into the main lifecycle.
     """
-    interval = config.get('sources', {}).get('auto_sync_interval_s', 300)
+    _sources_cfg = config.get('sources', {})
+    interval = _sources_cfg.get('auto_sync_interval_s', 300) if isinstance(_sources_cfg, dict) else 300
     if interval == 0:
         return
     sources = state.get('sources', {})
