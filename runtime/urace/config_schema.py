@@ -32,6 +32,9 @@ def _f(default: float, description: str = '') -> dict:
 def _l(description: str = '') -> dict:
     return {'type': 'list', 'default': [], 'description': description}
 
+def _d(description: str = '') -> dict:
+    return {'type': 'object', 'default': {}, 'description': description}
+
 # ── schema ──────────────────────────────────────────────────────────────────
 # Structure: {section: {field: leaf_node | nested_section}}
 # A dict without a "type" key is a nested section.
@@ -70,6 +73,7 @@ SCHEMA: dict[str, Any] = {
         'freeform_p2p_top_n':           _i(10,     'Max P2P candidates surfaced per freeform route (1–100)'),
         'freeform_cache_ttl_seconds':   _i(3600,   'Freeform routing cache TTL in seconds (0 = disable cache)'),
         'freeform_semantic_scorer':     _s('tfidf','P2P candidate scorer: lexical or tfidf'),
+        'freeform_confidence_thresholds': _d('Per-item-type confidence overrides e.g. {"command":0.9,"goal":0.75}'),
     },
     'api': {
         '_description': 'MCP and A2A server settings.',
@@ -237,6 +241,9 @@ def validate(config: dict) -> list[dict]:
         elif expected == 'list':
             if not isinstance(value, list):
                 errors.append({'path': path, 'error': f'expected list, got {type(value).__name__}'})
+        elif expected == 'object':
+            if not isinstance(value, dict):
+                errors.append({'path': path, 'error': f'expected object, got {type(value).__name__}'})
     return errors
 
 
@@ -311,6 +318,13 @@ def set_value(config: dict, path: str, raw_value: str) -> Any:
             coerced = [v.strip() for v in raw_value.split(',') if v.strip()]
         if not isinstance(coerced, list):
             raise ValueError(f'{path}: expected a JSON array or comma-separated list')
+    elif leaf['type'] == 'object':
+        try:
+            coerced = json.loads(raw_value)
+        except json.JSONDecodeError:
+            raise ValueError(f'{path}: expected a JSON object')
+        if not isinstance(coerced, dict):
+            raise ValueError(f'{path}: expected a JSON object')
     else:
         coerced = raw_value
 
@@ -445,6 +459,7 @@ try:
         freeform_p2p_top_n: int = Field(default=10, ge=1, le=100)
         freeform_cache_ttl_seconds: int = Field(default=3600, ge=0)
         freeform_semantic_scorer: str = 'tfidf'
+        freeform_confidence_thresholds: dict = Field(default_factory=dict)
 
     class _ResourcesConfig(BaseModel):
         model_config = {"extra": "allow"}

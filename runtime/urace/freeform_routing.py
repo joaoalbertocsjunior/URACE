@@ -162,9 +162,37 @@ def _semantic_score_tfidf(text: str, feature: dict, idf: dict[str, float]) -> fl
     return min(dot / (mag_q * mag_f), 1.0)
 
 
+def _rank_p2p_features_embedding(text: str, features: list[dict],
+                                   top_n: int = 8, model: str = 'text-embedding-3-small') -> list[dict]:
+    """Rank features using embedding cosine similarity; falls back to tfidf on any error."""
+    try:
+        import litellm as _ll
+        corpus = [
+            f"{f.get('feature_id', '')} {f.get('description', '')} {' '.join(f.get('tags') or [])}".strip()
+            for f in features
+        ]
+        resp = _ll.embedding(model=model, input=[text] + corpus)
+        vecs = [item['embedding'] for item in resp.data]
+        q_vec = vecs[0]
+
+        def _cosine(a: list, b: list) -> float:
+            dot = sum(x * y for x, y in zip(a, b))
+            mag_a = math.sqrt(sum(x * x for x in a))
+            mag_b = math.sqrt(sum(x * x for x in b))
+            return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
+
+        scored = [(f, _cosine(q_vec, vecs[i + 1])) for i, f in enumerate(features)]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [f for f, s in scored[:top_n] if s > 0.0]
+    except Exception:
+        return _rank_p2p_features(text, features, top_n=top_n, scorer='tfidf')
+
+
 def _rank_p2p_features(text: str, features: list[dict], top_n: int = 8,
                         scorer: str = 'tfidf') -> list[dict]:
     """Rank features by semantic match score; return top_n scoring above zero."""
+    if scorer == 'embedding':
+        return _rank_p2p_features_embedding(text, features, top_n=top_n)
     if scorer == 'tfidf' and features:
         idf = _build_idf(features)
         scored = [(f, _semantic_score_tfidf(text, f, idf)) for f in features]
@@ -172,6 +200,38 @@ def _rank_p2p_features(text: str, features: list[dict], top_n: int = 8,
         scored = [(f, _semantic_score(text, f)) for f in features]
     scored.sort(key=lambda x: x[1], reverse=True)
     return [f for f, s in scored[:top_n] if s > 0.0]
+
+
+_SOURCE_ACT_VERB_MAP = {
+    'sync': 'sync', 'fetch': 'sync', 'pull': 'sync', 'refresh': 'sync', 'update': 'sync',
+    'trigger': 'trigger', 'run': 'trigger', 'start': 'trigger', 'execute': 'trigger',
+    'cancel': 'cancel', 'stop': 'cancel', 'abort': 'cancel',
+}
+
+def _try_source_act_fast_path(text: str, observed_sources: dict, parser) -> list[str] | None:
+    """Return argv for a source-act command if input unambiguously names a known source+action.
+    Returns None if the fast-path cannot be applied — routing falls through to LLM.
+    """
+    if not observed_sources:
+        return None
+    text_lower = text.strip().lower()
+    # Check if any known source ID appears verbatim in the text
+    for source_id, record in observed_sources.items():
+        if source_id.lower() not in text_lower:
+            continue
+        enabled_actions = record.get('adapter_state', {}).get('enabled_actions') or []
+        if not enabled_actions:
+            continue
+        # Try to find a verb in the text that maps to an enabled action
+        words = re.findall(r'[^\W_]+', text_lower)
+        for word in words:
+            mapped = _SOURCE_ACT_VERB_MAP.get(word)
+            if mapped and mapped in enabled_actions:
+                return ['source', 'act', '--name', source_id, '--source-action', mapped]
+        # If only one enabled action, any mention of the source ID is enough
+        if len(enabled_actions) == 1:
+            return ['source', 'act', '--name', source_id, '--source-action', enabled_actions[0]]
+    return None
 
 
 def _p2p_free_features(config):
@@ -248,11 +308,26 @@ def _p2p_paid_features(config):
     except Exception:
         return []
 
-def _sanitize_feature_description(desc):
-    """Strip lines that contain OPERATOR_INPUT_JSON= to prevent prompt injection via feature descriptions."""
-    if not isinstance(desc,str):
+_INJECTION_RE = re.compile(
+    r'OPERATOR_INPUT_JSON'
+    r'|\bignore\s+(all\s+)?previous\s+instructions?\b'
+    r'|\byou\s+are\s+(now\s+)?a\b'
+    r'|\bnew\s+instructions?[:\s]'
+    r'|^system\s*:\s*'
+    r'|^assistant\s*:\s*'
+    r'|^user\s*:\s*'
+    r'|\bact\s+as\s+(a|an)\b'
+    r'|\bpretend\s+(to\s+be|you\s+are)\b',
+    re.IGNORECASE | re.MULTILINE,
+)
+
+def _sanitize_feature_description(desc: str) -> str:
+    """Strip lines matching injection patterns; normalize homoglyphs."""
+    if not isinstance(desc, str):
         return ''
-    lines=[l for l in desc.splitlines() if 'OPERATOR_INPUT_JSON=' not in l]
+    # Normalize unicode homoglyphs before pattern matching
+    normalized = unicodedata.normalize('NFKC', desc)
+    lines = [l for l in normalized.splitlines() if not _INJECTION_RE.search(l)]
     return '\n'.join(lines)
 
 def prompt(text,parser,p2p_context=None,paid_p2p_context=None,state_context=None):
@@ -425,6 +500,9 @@ def _route(cli,args,config,state,parser):
             return _error(args,'P2P open-asset fetch failed: '+type(_fetch_error).__name__,2)
     settings=config.get('executor',{})
     _conf_threshold = float(settings.get('freeform_confidence_threshold', 0.8))
+    _conf_thresholds_by_type: dict = settings.get('freeform_confidence_thresholds', {})
+    def _item_threshold(kind: str) -> float:
+        return float(_conf_thresholds_by_type.get(kind, _conf_threshold))
     _max_cl_turns = int(settings.get('freeform_max_clarification_turns', 2))
     _p2p_top_n = int(settings.get('freeform_p2p_top_n', 10))
     _cache_ttl = int(settings.get('freeform_cache_ttl_seconds', 3600))
@@ -487,6 +565,20 @@ def _route(cli,args,config,state,parser):
         # Protocol v2 source adapters — tells executor which sources are observed/act-capable
         'observed_sources':[{'id':sid,'kind':r.get('kind'),'status':r.get('status'),'enabled_actions':r.get('adapter_state',{}).get('enabled_actions',[])} for sid,r in (state.get('sources') or {}).items() if isinstance(r,dict) and r.get('status') in ('OBSERVED','ACTED') and r.get('enabled',True)][:10],
     } if cached is None else {}
+    # Rule-based fast-path: bypass LLM for unambiguous source-act commands
+    if cached is None and (_observed_fast_path := _try_source_act_fast_path(
+            text,
+            {sid: r for sid, r in (state.get('sources') or {}).items()
+             if isinstance(r, dict) and r.get('status') in ('OBSERVED', 'ACTED') and r.get('enabled', True)},
+            parser)):
+        result = api_interface.execute(parser, cli.main, argv=_observed_fast_path)
+        if args.json:
+            print(json.dumps({'status': 'source_act_fast_path', 'argv': _observed_fast_path,
+                              'result': result}, ensure_ascii=False))
+        else:
+            print(result.get('output', '') if isinstance(result.get('output'), str)
+                  else json.dumps(result, ensure_ascii=False))
+        return result.get('exit_code', 0)
     instruction=prompt(text,parser,state_context=_state_context or None) if cached is None else None;batch=cached;failures=[];usage=[]
     # One corrective retry is justified by a specific rejected response, not blind repetition.
     for attempt in range(0 if cached is not None else 2):
@@ -545,7 +637,7 @@ def _route(cli,args,config,state,parser):
         _cl_turns=0
         while _cl_turns < _max_cl_turns:
             _cq=(batch.get('clarifying_question') or '').strip() if isinstance(batch,dict) else ''
-            _low=[i for i in (batch.get('items') or []) if isinstance(i.get('confidence'),(int,float)) and i['confidence']<_conf_threshold]
+            _low=[i for i in (batch.get('items') or []) if isinstance(i.get('confidence'),(int,float)) and i['confidence']<_item_threshold(i.get('type', ''))]
             if not _cq or not _low:break
             print(_cq)
             try:_ans=input('› ').strip()
@@ -638,7 +730,7 @@ def _route(cli,args,config,state,parser):
     for item in items:
         kind=item['type'];p=item['parameters']
         if kind=='response':responses.append(p['text']);continue
-        if item['confidence']<_conf_threshold:
+        if item['confidence']<_item_threshold(kind):
             deferred.append(item);rc=2;continue
         if kind=='command':
             argv=shlex.split(p['command'])+p.get('args',[])

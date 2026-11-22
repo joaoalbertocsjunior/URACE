@@ -35,17 +35,48 @@ def rank_candidates(batch: dict, raw_text: str, features: list[dict], *,
     queries = intent_queries(batch, raw_text)
     # Build IDF once over the full corpus for TF-IDF scoring
     idf = _legacy._build_idf(features) if scorer == 'tfidf' and features else {}
+    # Embedding scorer: single pass over raw_text for all features; falls back to tfidf on error
+    emb_map: dict[str, float] = {}
+    _effective_scorer = scorer
+    if scorer == 'embedding' and features:
+        try:
+            import litellm as _ll, math as _m
+            corpus_texts = [
+                f"{f.get('feature_id', '')} {f.get('description', '')} {' '.join(f.get('tags') or [])}".strip()
+                for f in features
+            ]
+            resp = _ll.embedding(model='text-embedding-3-small', input=[raw_text] + corpus_texts)
+            vecs = [item['embedding'] for item in resp.data]
+            q_vec = vecs[0]
+            def _cos(a: list, b: list) -> float:
+                d = sum(x * y for x, y in zip(a, b))
+                ma = _m.sqrt(sum(x * x for x in a)); mb = _m.sqrt(sum(x * x for x in b))
+                return d / (ma * mb) if ma and mb else 0.0
+            emb_map = {str(f.get('feature_id') or i): _cos(q_vec, vecs[i + 1])
+                       for i, f in enumerate(features)}
+        except Exception:
+            emb_map = {}
+            _effective_scorer = 'tfidf'
+            idf = _legacy._build_idf(features) if features else {}
     scored = []
     for feature in features:
+        fid = str(feature.get('feature_id') or id(feature))
         matches = []
-        for query in queries:
-            if scorer == 'tfidf' and idf:
-                score = _legacy._semantic_score_tfidf(query['query'], feature, idf)
-            else:
-                score = _legacy._semantic_score(query['query'], feature)
+        if _effective_scorer == 'embedding':
+            score = emb_map.get(fid, 0.0)
             if score > 0:
-                matches.append({'intent_id': query['intent_id'], 'kind': query['kind'],
+                # Use a synthetic intent_id covering the whole raw_text
+                matches.append({'intent_id': 'raw-embedding', 'kind': 'embedding',
                                 'score': round(score, 4)})
+        else:
+            for query in queries:
+                if _effective_scorer == 'tfidf' and idf:
+                    score = _legacy._semantic_score_tfidf(query['query'], feature, idf)
+                else:
+                    score = _legacy._semantic_score(query['query'], feature)
+                if score > 0:
+                    matches.append({'intent_id': query['intent_id'], 'kind': query['kind'],
+                                    'score': round(score, 4)})
         if not matches:
             continue
         item = dict(feature)
