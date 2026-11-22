@@ -95,7 +95,7 @@ def rank_candidates(batch: dict, raw_text: str, features: list[dict], *,
             continue
         item = dict(feature)
         item['match_score'] = max(match['score'] for match in matches)
-        item['match_method'] = MATCHER_VERSION + f'+{scorer}'
+        item['match_method'] = MATCHER_VERSION
         item['match_score_interpretation'] = 'heuristic lexical relevance; not calibrated quality or equivalence'
         item['local_implementation_available'] = (
             item.get('local_implementation_status') == 'VERIFIED_LOCAL_IMPLEMENTATION')
