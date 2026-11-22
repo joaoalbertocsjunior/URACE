@@ -489,6 +489,13 @@ from .inputs import queue_input as queue_input  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
+# Protocol generation negotiation (N1 — version-gate for mesh-llm integration)
+# ---------------------------------------------------------------------------
+PROTOCOL_GENERATION: int = 1
+PROTOCOL_GENERATION_MIN_SUPPORTED: int = 1
+
+
+# ---------------------------------------------------------------------------
 # Named fee constants (P2.2 — single source of truth for economic rates)
 # ---------------------------------------------------------------------------
 MINT_STAKE_UNITS: int = 3

@@ -41,6 +41,7 @@ import threading
 import time
 from typing import Any
 
+from ._common import PROTOCOL_GENERATION, PROTOCOL_GENERATION_MIN_SUPPORTED
 from .network_adapter import NetworkAdapter
 
 _logger = logging.getLogger(__name__)
@@ -364,9 +365,10 @@ def dht_cert_publish(exchange: NetworkAdapter, https_port: int, *, ephemeral: bo
 
         identity = exchange.identity()
         value = {
-            b"cert":    identity["certificate"].encode(),
-            b"port":    https_port,
-            b"peer_id": identity["peer_id"].encode(),
+            b"cert":               identity["certificate"].encode(),
+            b"port":               https_port,
+            b"peer_id":            identity["peer_id"].encode(),
+            b"protocol_generation": PROTOCOL_GENERATION,
         }
         nid    = os.urandom(20)
         client = _DHTClient(nid)
@@ -404,13 +406,20 @@ def dht_cert_lookup(dht_key_hex: str, timeout: float = 10.0) -> "dict | None":
 
         if value is None:
             return None
-        return {
+        result = {
             "certificate": value[b"cert"].decode(),
             "port":        value[b"port"],
             "peer_id":     value[b"peer_id"].decode(),
         }
+        result['protocol_generation'] = value.get(b'protocol_generation', 0)
+        return result
     except Exception:
         return None
+
+
+def peer_protocol_generation(peer_cert: dict) -> int:
+    """Extract protocol_generation from a peer cert dict. Returns 0 if absent (pre-N1 peer)."""
+    return int(peer_cert.get('protocol_generation', 0))
 
 
 def dht_key_for(exchange: NetworkAdapter, ephemeral: bool = False) -> str:

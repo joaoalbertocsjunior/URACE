@@ -306,6 +306,25 @@ class DiscoverySessionTests(unittest.TestCase):
             self.assertIsNone(s._thread)
 
 
+# ── Protocol generation (N1) ─────────────────────────────────────────────────
+
+class ProtocolGenerationTests(unittest.TestCase):
+    def test_protocol_generation_constant_equals_one(self):
+        from urace._common import PROTOCOL_GENERATION, PROTOCOL_GENERATION_MIN_SUPPORTED
+        self.assertEqual(PROTOCOL_GENERATION, 1)
+        self.assertGreaterEqual(PROTOCOL_GENERATION_MIN_SUPPORTED, 1)
+
+    def test_peer_protocol_generation_returns_zero_for_missing_field(self):
+        from urace.peer_discovery import peer_protocol_generation
+        self.assertEqual(peer_protocol_generation({}), 0)
+        self.assertEqual(peer_protocol_generation({'some': 'field'}), 0)
+
+    def test_peer_protocol_generation_reads_field(self):
+        from urace.peer_discovery import peer_protocol_generation
+        self.assertEqual(peer_protocol_generation({'protocol_generation': 1}), 1)
+        self.assertEqual(peer_protocol_generation({'protocol_generation': 2}), 2)
+
+
 # ── Live DHT (real internet — opt-in) ────────────────────────────────────────
 
 @unittest.skipUnless(os.environ.get("URACE_NETWORK_TESTS"), "set URACE_NETWORK_TESTS=1")
