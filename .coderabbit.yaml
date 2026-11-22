@@ -1,0 +1,40 @@
+# CodeRabbit AI reviewer configuration
+# https://docs.coderabbit.ai/getting-started/configure-coderabbit
+version: "2"
+
+reviews:
+  # Auto-review every PR
+  auto_review:
+    enabled: true
+    drafts: false
+
+  # Focus areas for inline comments
+  profile: "chill"  # less noise for a small team; use "assertive" for more feedback
+
+  # Path-level instructions
+  path_instructions:
+    - path: "runtime/urace/authenticated_journal.py"
+      instructions: |
+        Review for append-only invariants: no row may be deleted or mutated
+        after write. Flag any code path that could allow overwriting existing entries.
+    - path: "runtime/urace/credit_ledger*.py"
+      instructions: |
+        Review for double-spend risks. All token debits must check balance before
+        deducting. Flag any non-atomic read-modify-write sequences.
+    - path: "runtime/urace/peer_discovery.py"
+      instructions: |
+        Review for peer admission safety: untrusted peers must pass the
+        AdmissionGate before receiving routing traffic.
+    - path: "runtime/tests/test_security.py"
+      instructions: |
+        Security tests are intentionally adversarial. Do not suggest weakening
+        assertions or catching exceptions that the test is designed to surface.
+
+  # Custom review instructions for all files
+  finishing_touches:
+    docstrings:
+      enabled: false  # project convention: no multi-line docstrings in hot paths
+
+chat:
+  # Allow @coderabbitai commands in PR comments
+  auto_reply: true

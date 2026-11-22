@@ -15,6 +15,7 @@
 !/MAINTAINERS
 !/OPERATORS.md
 !/SECURITY.md
+!/.coderabbit.yaml
 !/.github/
 !/packaging/
 !/runtime/
