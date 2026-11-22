@@ -208,7 +208,7 @@ def dispatch(args, config: dict) -> int:
     _rpc_thread = _threading.Thread(target=_run_rpc_server, args=(config, stopped), daemon=True)
     _rpc_thread.start()
 
-    def _handle_signal(signum, frame):
+    def _handle_signal(_signum, _frame):
         stopped[0] = True
         # Terminate the P2P exchange server subprocess so it doesn't orphan.
         # Wait up to 2s for the thread to assign the proc ref (eliminates start-up race).
@@ -224,7 +224,7 @@ def dispatch(args, config: dict) -> int:
 
     _reload_flag = [False]
 
-    def _handle_sighup(signum, frame):
+    def _handle_sighup(_signum, _frame):
         _reload_flag[0] = True
 
     try:

@@ -102,7 +102,7 @@ def owner_lifetime():
     if threading.current_thread() is not threading.main_thread():
         yield
         return
-    previous=signal.signal(signal.SIGTERM,lambda signum,frame:(_ for _ in ()).throw(KeyboardInterrupt()))
+    previous=signal.signal(signal.SIGTERM,lambda _s,_f:(_ for _ in ()).throw(KeyboardInterrupt()))
     stop=threading.Event();watcher=None
     if os.environ.get('URACE_LAUNCHER_CHILD')=='1':
         parent=os.getppid();ticks=pid_ticks(parent)

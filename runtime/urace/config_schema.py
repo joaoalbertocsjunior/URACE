@@ -170,6 +170,7 @@ SCHEMA: dict[str, Any] = {
             'Network-level MIME gate applied to all receive/mint/replicate paths',
         ),
     },
+    'config_version': {"type": "integer", "minimum": 1, "default": 1},
     'sources': {
         '_description': 'Source adapter settings.',
         'auto_sync_interval_s': _i(300, 'Seconds between automatic source sync cycles (0=disabled)'),
@@ -410,7 +411,7 @@ def init_template() -> str:
 # so callers can switch without changing error-handling code.
 
 try:
-    from pydantic import BaseModel, Field, field_validator, model_validator
+    from pydantic import BaseModel, Field
     from typing import Literal
 
     class _CapabilityFlags(BaseModel):
@@ -452,6 +453,7 @@ try:
     class _ExecutorConfig(BaseModel):
         model_config = {"extra": "allow"}
         enabled: bool = False
+        config_version: int = Field(default=1, ge=1)
         freeform_max_tokens_per_24h: int = Field(default=200000, ge=0)
         freeform_max_tokens_per_call: int = Field(default=0, ge=0)
         freeform_confidence_threshold: float = Field(default=0.8, ge=0.0, le=1.0)

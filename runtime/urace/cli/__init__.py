@@ -1244,7 +1244,7 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     elif _unknown:
         # Unknown flags → let argparse report the error properly
         parser.parse_args(raw_args)
-    def _sigterm_handler(signum, frame):  # noqa: ARG001
+    def _sigterm_handler(_signum, _frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, _sigterm_handler)
     _r = _cmd_watch(args, parser, config, state, _fmt, _unknown, raw_args)
@@ -1478,7 +1478,7 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                 # backward-compat: also set product_type as first element for old readers
                 product_type = product_types[0] if product_types else "software"
                 _ptype = product_type
-                if product_types != ["software"] or True:
+                if product_types != ["software"]:
                     import json as _jm
                     _base = _jm.loads(CONFIG_PATH.read_text())
                     _base["product_type"] = _ptype

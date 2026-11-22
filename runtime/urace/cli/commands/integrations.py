@@ -200,7 +200,7 @@ def _cmd_p2p(args, parser, config, state, fmt, _unknown, raw_args):
                 print(_kg['instructions'])
             return 0
         if _p2p_action == 'build-update':
-            from urace.evolution_guard import build_p2p_update_bundle as _p2p_build_fn, RELEASE_AUTHORITY_KEYS as _ra_keys
+            from urace.evolution_guard import build_p2p_update_bundle as _p2p_build_fn
             from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as _Ed
             from cryptography.hazmat.primitives.serialization import Encoding as _Enc, PublicFormat as _PF
             _sign_fns = []

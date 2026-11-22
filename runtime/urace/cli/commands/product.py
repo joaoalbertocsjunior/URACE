@@ -566,7 +566,7 @@ def _cmd_fleet(args, parser, config, state, fmt, _unknown, raw_args):
             if not args.json:
                 print(f"Fleet running ({len(procs)} members). Ctrl-C to stop.")
 
-            def _stop_all(signum=None, frame=None):
+            def _stop_all(_signum=None, _frame=None):
                 for p in procs.values():
                     try:
                         p.terminate()

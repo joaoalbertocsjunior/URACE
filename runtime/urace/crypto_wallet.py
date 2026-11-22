@@ -26,7 +26,7 @@ from cryptography.hazmat.primitives.serialization import (
 from cryptography.hazmat.backends import default_backend
 
 try:
-    import sha3 as _sha3_module  # pysha3
+    import sha3 as _sha3_module  # pysha3; probe import — name unused, presence sets _HAS_KECCAK  # noqa: F401
     _HAS_KECCAK = True
 except ImportError:
     _HAS_KECCAK = False
