@@ -1,14 +1,19 @@
-"""SourceAdapter Protocol and NullSourceAdapter base.
+"""SourceAdapter Protocol v2 and NullSourceAdapter base.
 
 Every source kind MUST inherit NullSourceAdapter (not just implement
 SourceAdapter) so structured logging and lifecycle enforcement are injected
 uniformly at every action boundary.
 
 Lifecycle stages (§60):
-    CONFIGURED → AVAILABLE → AUTHENTICATED → AUTHORIZED → OBSERVED
+    CONFIGURED → AVAILABLE → AUTHENTICATED → AUTHORIZED → OBSERVED → ACTED
 
-A source that has never synced successfully stays at CONFIGURED.
-On first successful sync it transitions to OBSERVED.
+OBSERVED: first successful sync completed.
+ACTED: first successful act() completed (opt-in; requires allow_act config gate).
+
+act() safety contract:
+  - global gate: config['sources']['allow_act'] must be True (default False)
+  - per-source gate: adapter_state['enabled_actions'] must list the action name
+  - violations raise SourceActDeniedError (never silently no-op)
 """
 from __future__ import annotations
 
@@ -20,62 +25,53 @@ from .._common import now, identifier
 
 _log = logging.getLogger('urace.source_adapters')
 
+# ── Exceptions ────────────────────────────────────────────────────────────────
+
+class SourceActDeniedError(PermissionError):
+    """Raised when act() is blocked by the global or per-source gate."""
+
+class SourceUnavailableError(RuntimeError):
+    """Raised when an optional dep is missing (install hint in message)."""
+
+
+# ── Protocol (contract) ───────────────────────────────────────────────────────
 
 @runtime_checkable
 class SourceAdapter(Protocol):
-    """Interface every source adapter must satisfy."""
+    """Interface every source adapter must satisfy (v2)."""
 
     kind: str
 
-    def add_args(self, subparser: Any) -> None:
-        """Register kind-specific argparse arguments onto *subparser*."""
-        ...
+    def add_args(self, subparser: Any) -> None: ...
+    def validate(self, args: Any) -> dict[str, Any]: ...
+    def add(self, config: dict, state: dict, source_id: str, **kwargs: Any) -> dict: ...
+    def list(self, state: dict) -> list[dict]: ...
+    def status(self, state: dict, source_id: str) -> dict: ...
+    def sync(self, config: dict, state: dict, source_id: str) -> dict: ...
+    def inspect(self, state: dict, source_id: str) -> dict: ...
+    def enable(self, state: dict, source_id: str) -> None: ...
+    def disable(self, state: dict, source_id: str) -> None: ...
+    def remove(self, state: dict, source_id: str) -> None: ...
 
-    def validate(self, args: Any) -> dict[str, Any]:
-        """Validate parsed args; return source dict or raise ValueError."""
-        ...
+    # v2 act path
+    def act(self, config: dict, state: dict, source_id: str,
+            action: str, payload: dict | None = None) -> dict: ...
+    def supported_actions(self, state: dict, source_id: str) -> list[str]: ...
 
-    def add(self, config: dict, state: dict, source_id: str, **kwargs: Any) -> dict:
-        """Register a new source entry. Returns the created source record."""
-        ...
 
-    def list(self, state: dict) -> list[dict]:
-        """Return all sources of this kind from state."""
-        ...
-
-    def status(self, state: dict, source_id: str) -> dict:
-        """Return current lifecycle status and adapter_state for source_id."""
-        ...
-
-    def sync(self, config: dict, state: dict, source_id: str) -> dict:
-        """Run a sync cycle; update adapter_state; advance lifecycle."""
-        ...
-
-    def inspect(self, state: dict, source_id: str) -> dict:
-        """Return full detail for source_id (state + recent history)."""
-        ...
-
-    def enable(self, state: dict, source_id: str) -> None:
-        """Mark source as enabled (un-pause sync)."""
-        ...
-
-    def disable(self, state: dict, source_id: str) -> None:
-        """Mark source as disabled (pause sync without removing)."""
-        ...
-
-    def remove(self, state: dict, source_id: str) -> None:
-        """Remove source record from state."""
-        ...
-
+# ── Protocol verifier ─────────────────────────────────────────────────────────
 
 def verify_adapter(adapter: object) -> list[str]:
-    """Phase 7A — verify an object satisfies the SourceAdapter Protocol.
+    """Verify an object satisfies the SourceAdapter Protocol v2.
 
-    Returns a list of missing/invalid attribute names.  Empty list = OK.
+    Returns a list of issue strings.  Empty list = fully conformant.
     """
     issues: list[str] = []
-    required_attrs = ('kind', 'add_args', 'validate', 'add', 'list', 'status',
-                      'sync', 'inspect', 'enable', 'disable', 'remove')
+    required_attrs = (
+        'kind', 'add_args', 'validate', 'add', 'list', 'status',
+        'sync', 'inspect', 'enable', 'disable', 'remove',
+        'act', 'supported_actions',
+    )
     for attr in required_attrs:
         if not hasattr(adapter, attr):
             issues.append(f'missing: {attr}')
@@ -86,15 +82,10 @@ def verify_adapter(adapter: object) -> list[str]:
     return issues
 
 
+# ── State helpers ─────────────────────────────────────────────────────────────
+
 def _get_source(state: dict, source_id: str) -> dict | None:
-    sources = state.get('sources', {})
-    if isinstance(sources, dict):
-        return sources.get(source_id)
-    # Legacy list format (connector_sources)
-    for s in state.get('connector_sources', []):
-        if s.get('id') == source_id:
-            return s
-    return None
+    return state.get('sources', {}).get(source_id)
 
 
 def _set_source(state: dict, source_id: str, record: dict) -> None:
@@ -106,28 +97,30 @@ def _advance_lifecycle(record: dict, new_status: str) -> None:
     record.setdefault('status_history', []).append({'status': new_status, 'at': now()})
 
 
-class NullSourceAdapter:
-    """Base class providing logging injection and lifecycle utilities.
+# ── NullSourceAdapter base ────────────────────────────────────────────────────
 
-    Subclasses override _add, _sync, etc.  This class wraps every public
-    method with _log_source_event() so logging is injected uniformly.
+class NullSourceAdapter:
+    """Base class: injects logging, lifecycle, event-bus, and act() safety gate.
+
+    Subclass by overriding _add / _sync / _act / _inspect.
+    Never override the public methods — the injection happens there.
     """
 
     kind: str = 'null'
 
-    # ── argparse registration ─────────────────────────────────────────────────
+    # ── argparse ──────────────────────────────────────────────────────────────
 
     def add_args(self, subparser: Any) -> None:
-        """Default: no extra arguments."""
+        pass
 
     def validate(self, args: Any) -> dict[str, Any]:
-        """Default: return empty dict (subclasses extend)."""
         return {}
 
-    # ── public API (logging-injected) ─────────────────────────────────────────
+    # ── observe path (logging-injected) ──────────────────────────────────────
 
     def add(self, config: dict, state: dict, source_id: str, **kwargs: Any) -> dict:
-        self._log_source_event('add', source_id=source_id, **{k: v for k, v in kwargs.items() if not k.endswith('_secret')})
+        self._log_source_event('add', source_id=source_id,
+                               **{k: v for k, v in kwargs.items() if not k.endswith('_secret')})
         record = self._add(config, state, source_id, **kwargs)
         _set_source(state, source_id, record)
         _BUS.publish('source.added', source_id=source_id, kind=self.kind)
@@ -176,11 +169,52 @@ class NullSourceAdapter:
 
     def remove(self, state: dict, source_id: str) -> None:
         self._log_source_event('remove', source_id=source_id)
-        sources = state.get('sources', {})
-        sources.pop(source_id, None)
+        state.get('sources', {}).pop(source_id, None)
         _BUS.publish('source.removed', source_id=source_id, kind=self.kind)
 
-    # ── internal (override in subclasses) ─────────────────────────────────────
+    # ── act path (v2, safety-gated) ───────────────────────────────────────────
+
+    def act(self, config: dict, state: dict, source_id: str,
+            action: str, payload: dict | None = None) -> dict:
+        """Execute *action* on the source.
+
+        Safety gates (both must pass):
+          1. config['sources']['allow_act'] is True
+          2. action is in adapter_state['enabled_actions'] for this source
+        """
+        if not config.get('sources', {}).get('allow_act', False):
+            raise SourceActDeniedError(
+                f"act() blocked: config['sources']['allow_act'] is False"
+            )
+        record = _get_source(state, source_id) or {}
+        enabled = record.get('adapter_state', {}).get('enabled_actions', [])
+        if action not in enabled:
+            raise SourceActDeniedError(
+                f"act() blocked: action '{action}' not in enabled_actions {enabled}"
+            )
+        self._log_source_event('act', source_id=source_id, source_action=action)
+        try:
+            result = self._act(config, state, source_id, action, payload or {})
+            # Advance lifecycle on first successful act
+            fresh = _get_source(state, source_id) or {}
+            if fresh.get('status') == 'OBSERVED':
+                _advance_lifecycle(fresh, 'ACTED')
+                _set_source(state, source_id, fresh)
+            _BUS.publish('source.acted', source_id=source_id, kind=self.kind, source_action=action)
+            return result
+        except SourceActDeniedError:
+            raise
+        except Exception as exc:
+            self._log_source_event('act_failed', source_id=source_id, source_action=action, error=str(exc))
+            _BUS.publish('source.act_failed', source_id=source_id, kind=self.kind,
+                         source_action=action, error=str(exc))
+            raise
+
+    def supported_actions(self, state: dict, source_id: str) -> list[str]:
+        record = _get_source(state, source_id) or {}
+        return list(record.get('adapter_state', {}).get('enabled_actions', []))
+
+    # ── internal hooks (override in subclasses) ───────────────────────────────
 
     def _add(self, config: dict, state: dict, source_id: str, **kwargs: Any) -> dict:
         return {
@@ -190,7 +224,7 @@ class NullSourceAdapter:
             'added_at': now(),
             'status': 'CONFIGURED',
             'status_history': [{'status': 'CONFIGURED', 'at': now()}],
-            'adapter_state': {},
+            'adapter_state': {'enabled_actions': []},
             **kwargs,
         }
 
@@ -201,7 +235,11 @@ class NullSourceAdapter:
         return []
 
     def _sync(self, config: dict, state: dict, source_id: str) -> dict:
-        return {'synced': False, 'reason': 'no-op sync (base class)'}
+        return {'synced': False, 'reason': 'stub — override _sync()'}
+
+    def _act(self, config: dict, state: dict, source_id: str,
+             action: str, payload: dict) -> dict:
+        return {'acted': False, 'reason': 'stub — override _act()'}
 
     def _inspect(self, state: dict, source_id: str) -> dict:
         return _get_source(state, source_id) or {'id': source_id, 'kind': self.kind, 'status': 'UNKNOWN'}

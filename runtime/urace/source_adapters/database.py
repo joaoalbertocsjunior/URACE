@@ -52,6 +52,7 @@ class DatabaseAdapter(NullSourceAdapter):
                 'query': kwargs.get('query', ''),
                 'last_run_at': None,
                 'row_count': None,
+                'enabled_actions': [],
             },
         }
 

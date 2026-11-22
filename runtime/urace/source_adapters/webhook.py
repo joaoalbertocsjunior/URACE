@@ -44,6 +44,7 @@ class WebhookAdapter(NullSourceAdapter):
                 'events': kwargs.get('events', []),
                 'last_received_at': None,
                 'delivery_count': 0,
+                'enabled_actions': [],
             },
         }
 
@@ -53,6 +54,32 @@ class WebhookAdapter(NullSourceAdapter):
         if not record:
             return {'synced': False, 'reason': 'source not found'}
         return {'synced': True, 'mode': 'push', 'delivery_count': record.get('adapter_state', {}).get('delivery_count', 0)}
+
+
+    def _act(self, config: dict, state: dict, source_id: str,
+             action: str, payload: dict) -> dict:
+        if action != 'send':
+            return {'acted': False, 'reason': f'unknown action: {action}'}
+        record = _get_source(state, source_id)
+        if not record:
+            return {'acted': False, 'reason': 'source not found'}
+        url = record.get('adapter_state', {}).get('url', '')
+        if not url:
+            return {'acted': False, 'reason': 'no url configured'}
+        try:
+            import httpx
+        except ImportError:
+            from ._base import SourceUnavailableError
+            raise SourceUnavailableError('pip install "urace[p2p]"')
+        try:
+            resp = httpx.post(url, json=payload, timeout=10)
+            status = resp.status_code
+        except Exception as exc:
+            return {'acted': False, 'reason': str(exc)}
+        astate = record.get('adapter_state', {})
+        astate['delivery_count'] = astate.get('delivery_count', 0) + 1
+        _set_source(state, source_id, record)
+        return {'acted': True, 'http_status': status}
 
 
 SOURCE_REGISTRY.register(WebhookAdapter())

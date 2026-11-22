@@ -35,6 +35,7 @@ class GithubAdapter(NullSourceAdapter):
             'adapter_state': {
                 'repo': kwargs.get('repo', ''),
                 'token_env': kwargs.get('token_env', 'URACE_GITHUB_TOKEN'),
+                'enabled_actions': [],
             },
         }
 

@@ -40,6 +40,7 @@ class VitalAdapter(NullSourceAdapter):
                 'numerator': kwargs.get('numerator', ''),
                 'denominator': kwargs.get('denominator'),
                 'window': kwargs.get('window'),
+                'enabled_actions': [],
             },
         }
 

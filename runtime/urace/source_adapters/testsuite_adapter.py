@@ -62,6 +62,7 @@ class TestSuiteAdapter(NullSourceAdapter):
                 'passed': None,
                 'failed': None,
                 'exit_code': None,
+                'enabled_actions': [],
             },
         }
 
@@ -120,6 +121,13 @@ def _parse_pytest_summary(output: str) -> tuple[int | None, int | None]:
     if m:
         failed = int(m.group(1))
     return passed, failed
+
+
+    def _act(self, config: dict, state: dict, source_id: str,
+             action: str, payload: dict) -> dict:
+        if action != 'run':
+            return {'acted': False, 'reason': f'unknown action: {action}'}
+        return self._sync(config, state, source_id) | {'acted': True}
 
 
 SOURCE_REGISTRY.register(TestSuiteAdapter())

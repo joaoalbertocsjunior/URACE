@@ -187,9 +187,27 @@ def _wire_bus_to_logger(config: dict | None) -> None:
         for suffix in ('started', 'completed', 'failed', 'added', 'removed',
                        'earned', 'spent', 'borrowed', 'minted', 'changed',
                        'written', 'read', 'synced', 'probed', 'rejected',
-                       'committed', 'requested', 'responded', 'detected'):
+                       'committed', 'requested', 'responded', 'detected',
+                       # Protocol v2 source act path
+                       'acted', 'act_failed', 'act_denied'):
             topic = prefix.rstrip('.') + '.' + suffix
             _BUS.subscribe(topic, h)
+
+    # source.acted and source.act_failed always log at INFO/WARNING regardless of component config
+    try:
+        _act_logger = logging.getLogger(_COMPONENT_LOGGERS['source'])
+
+        def _act_audit_handler(*, _topic: str = '', **payload: Any) -> None:
+            if 'act_failed' in _topic or 'act_denied' in _topic:
+                _act_logger.warning("bus:%s %s", _topic, json.dumps(payload, default=str))
+            else:
+                _act_logger.info("bus:%s %s", _topic, json.dumps(payload, default=str))
+
+        _BUS._logging_handlers.append(_act_audit_handler)  # type: ignore[attr-defined]
+        for _t in ('source.acted', 'source.act_failed'):
+            _BUS.subscribe(_t, _act_audit_handler)
+    except Exception:
+        pass
 
 
 def reconfigure_component(component: str, enabled: bool) -> None:

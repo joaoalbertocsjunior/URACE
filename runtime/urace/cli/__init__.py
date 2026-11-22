@@ -575,6 +575,116 @@ def _handle_source_add_unified(args: Any, config: dict, parser: Any) -> int:
     return 0
 
 
+def _handle_source_act(args: Any, config: dict) -> int:
+    """Dispatch source act / actions / enable-action / disable-action commands."""
+    from ..source_adapters import SOURCE_REGISTRY
+    from ..source_adapters._base import SourceActDeniedError, SourceUnavailableError
+
+    source_id = getattr(args, "id", None) or getattr(args, "name", None) or ""
+    sub_action = getattr(args, "action", "")
+    is_json = getattr(args, "format", None) == "json"
+
+    with state_lock(config):
+        state = load_state(config)
+        record = state.get("sources", {}).get(source_id)
+        if record is None:
+            msg = f"source {source_id!r} not found"
+            if is_json:
+                print(json.dumps({"error": msg}))
+            else:
+                print(f"Error: {msg}", file=sys.stderr)
+            return 1
+
+        kind = record.get("kind", "")
+        adapter = SOURCE_REGISTRY.get(kind)
+        if adapter is None:
+            msg = f"no registered adapter for kind {kind!r}"
+            if is_json:
+                print(json.dumps({"error": msg}))
+            else:
+                print(f"Error: {msg}", file=sys.stderr)
+            return 1
+
+        if sub_action == "actions":
+            actions = adapter.supported_actions(state, source_id)
+            if is_json:
+                print(json.dumps({"source_id": source_id, "actions": actions}))
+            else:
+                if actions:
+                    print(f"Enabled actions for {source_id!r}: {', '.join(actions)}")
+                else:
+                    print(f"No actions enabled for {source_id!r}. Use: urace source enable-action <id> --source-action <action>")
+            return 0
+
+        if sub_action == "enable-action":
+            action_name = getattr(args, "source_action", None) or ""
+            if not action_name:
+                print("Error: --source-action required", file=sys.stderr)
+                return 1
+            astate = record.setdefault("adapter_state", {})
+            enabled = list(astate.get("enabled_actions", []))
+            if action_name not in enabled:
+                enabled.append(action_name)
+                astate["enabled_actions"] = enabled
+                save_state(config, state)
+            if is_json:
+                print(json.dumps({"source_id": source_id, "enabled_actions": enabled}))
+            else:
+                print(f"Action {action_name!r} enabled on {source_id!r}")
+            return 0
+
+        if sub_action == "disable-action":
+            action_name = getattr(args, "source_action", None) or ""
+            if not action_name:
+                print("Error: --source-action required", file=sys.stderr)
+                return 1
+            astate = record.setdefault("adapter_state", {})
+            enabled = [a for a in astate.get("enabled_actions", []) if a != action_name]
+            astate["enabled_actions"] = enabled
+            save_state(config, state)
+            if is_json:
+                print(json.dumps({"source_id": source_id, "enabled_actions": enabled}))
+            else:
+                print(f"Action {action_name!r} disabled on {source_id!r}")
+            return 0
+
+        if sub_action == "act":
+            action_name = getattr(args, "source_action", None) or ""
+            payload_raw = getattr(args, "payload", None) or "{}"
+            if not action_name:
+                print("Error: --source-action required", file=sys.stderr)
+                return 1
+            try:
+                payload = json.loads(payload_raw)
+            except json.JSONDecodeError as exc:
+                print(f"Error: invalid --payload JSON: {exc}", file=sys.stderr)
+                return 1
+            try:
+                result = adapter.act(config, state, source_id, action_name, payload)
+                save_state(config, state)
+            except SourceActDeniedError as exc:
+                msg = str(exc)
+                if is_json:
+                    print(json.dumps({"error": "denied", "detail": msg}))
+                else:
+                    print(f"Act denied: {msg}", file=sys.stderr)
+                return 1
+            except SourceUnavailableError as exc:
+                msg = str(exc)
+                if is_json:
+                    print(json.dumps({"error": "unavailable", "detail": msg}))
+                else:
+                    print(f"Source unavailable: {msg}", file=sys.stderr)
+                return 1
+            if is_json:
+                print(json.dumps({"source_id": source_id, "action": action_name, "result": result}))
+            else:
+                print(f"Act {action_name!r} on {source_id!r}: {result}")
+            return 0
+
+    return 0
+
+
 def _build_route_graph(prompt: str, state: dict) -> dict:
     """Decompose a multi-intent prompt into a RouteGraphRecord (r117 §62w)."""
     # Split on semantic connectives
@@ -1283,6 +1393,8 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
     if _r is not None: return _r
     _r = _cmd_milestone(args, parser, config, state, _fmt, _unknown, raw_args)
     if _r is not None: return _r
+    if args.command == "source" and getattr(args, "action", None) in {"act", "actions", "enable-action", "disable-action"}:
+        return _handle_source_act(args, config)
     if args.command == "source" and getattr(args, "action", None) == "add":
         return _handle_source_add_unified(args, config, parser)
     if args.command == "source" and getattr(args, "action", None) == "status":

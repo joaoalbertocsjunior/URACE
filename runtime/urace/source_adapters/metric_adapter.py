@@ -43,6 +43,7 @@ class MetricAdapter(NullSourceAdapter):
                 'metric_source': kwargs.get('metric_source', ''),
                 'metric_path': kwargs.get('metric_path', ''),
                 'direction': kwargs.get('direction', 'nondecreasing'),
+                'enabled_actions': [],
             },
         }
 

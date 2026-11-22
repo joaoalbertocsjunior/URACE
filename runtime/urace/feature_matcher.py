@@ -20,6 +20,7 @@ Config section feature_matching:
 from __future__ import annotations
 
 import re
+from difflib import SequenceMatcher
 from typing import Any
 
 
@@ -61,17 +62,22 @@ def _layer2_score(profile: dict, descriptor: dict, cfg: dict) -> tuple[float, li
     reasons: list[str] = []
     score = 0.0
 
-    # Capability keyword overlap
+    # Capability similarity — Jaccard on keyword sets + SequenceMatcher on full strings
     prod_cap = profile.get('capability', '')
     feat_cap = descriptor.get('capability', '')
     if prod_cap and feat_cap:
         pk = _keywords(prod_cap)
         fk = _keywords(feat_cap)
         if pk and fk:
-            overlap = len(pk & fk) / max(len(pk), len(fk))
+            jaccard = len(pk & fk) / max(len(pk), len(fk))
+        else:
+            jaccard = 0.0
+        seq_ratio = SequenceMatcher(None, prod_cap.lower(), feat_cap.lower()).ratio()
+        # Weight Jaccard more heavily (precise); seq_ratio catches paraphrases
+        overlap = 0.7 * jaccard + 0.3 * seq_ratio
+        if overlap > 0:
             score += overlap * cap_w
-            if overlap > 0:
-                reasons.append(f'capability overlap={overlap:.2f}')
+            reasons.append(f'capability overlap={overlap:.2f}')
 
     # Language hint in feature capability
     prod_langs = _lang_set(profile)

@@ -25,7 +25,7 @@ class ProductAdapter(NullSourceAdapter):
             'added_at': now(),
             'status': 'CONFIGURED',
             'status_history': [{'status': 'CONFIGURED', 'at': now()}],
-            'adapter_state': {'product_id': kwargs.get('product_id', source_id)},
+            'adapter_state': {'product_id': kwargs.get('product_id', source_id), 'enabled_actions': []},
         }
 
 

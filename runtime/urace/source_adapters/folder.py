@@ -49,6 +49,7 @@ class FolderAdapter(NullSourceAdapter):
                 'pattern': kwargs.get('pattern', '**/*'),
                 'last_scan_at': None,
                 'file_count': None,
+                'enabled_actions': [],
             },
         }
 
@@ -66,6 +67,13 @@ class FolderAdapter(NullSourceAdapter):
         record['adapter_state']['file_count'] = len(files)
         _set_source(state, source_id, record)
         return {'synced': True, 'file_count': len(files), 'path': path}
+
+
+    def _act(self, config: dict, state: dict, source_id: str,
+             action: str, payload: dict) -> dict:
+        if action != 'scan':
+            return {'acted': False, 'reason': f'unknown action: {action}'}
+        return self._sync(config, state, source_id) | {'acted': True}
 
 
 SOURCE_REGISTRY.register(FolderAdapter())

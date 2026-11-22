@@ -44,6 +44,7 @@ class ExecutorAdapter(NullSourceAdapter):
                 'executor_binary': kwargs.get('executor_binary'),
                 'adapter': kwargs.get('adapter'),
                 'priority': kwargs.get('priority', 100),
+                'enabled_actions': [],
             },
         }
 

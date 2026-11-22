@@ -48,6 +48,7 @@ class CodebaseAdapter(NullSourceAdapter):
                 'file_count': None,
                 'loc': None,
                 'languages': [],
+                'enabled_actions': [],
             },
         }
 
