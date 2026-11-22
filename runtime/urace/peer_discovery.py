@@ -121,6 +121,88 @@ class AdmissionGate:
 _ADMISSION_GATE = AdmissionGate()
 
 
+# ── Relay Peer Health ──────────────────────────────────────────────────────────
+
+class SelectedPathKind(_enum.Enum):
+    DIRECT  = 'direct'
+    RELAY   = 'relay'
+    UNKNOWN = 'unknown'
+
+
+@_dataclasses.dataclass
+class RelayPathObservation:
+    peer_id: str
+    kind: SelectedPathKind
+    rtt_ms: int | None
+    at: float
+
+
+def heartbeat_failure_threshold(path_kind: SelectedPathKind) -> int:
+    """Return the max consecutive heartbeat failures before removing a peer.
+
+    # Threshold values adapted from:
+    #   mesh-llm (https://github.com/mesh-llm/mesh-llm), Apache License 2.0
+    #   Source: mesh/crates/mesh-llm-membership/src/peer_health.rs
+    # Relay paths have higher tolerance to account for relay instability
+    # during path renegotiation.
+    """
+    if path_kind == SelectedPathKind.RELAY:
+        return 5
+    return 2  # DIRECT or UNKNOWN
+
+
+class RelayHealthMonitor:
+    """Tracks per-peer path kind and consecutive failure counts.
+
+    Thread-safe. Observations record whether traffic routes via relay or directly.
+    should_remove_peer() returns True when consecutive failures exceed the threshold
+    for the peer's observed path kind.
+    """
+    def __init__(self) -> None:
+        self._observations: dict[str, RelayPathObservation] = {}
+        self._failures: dict[str, int] = {}
+        self._lock = threading.Lock()
+
+    def observe(self, peer_id: str, observation: RelayPathObservation) -> None:
+        with self._lock:
+            self._observations[peer_id] = observation
+
+    def record_failure(self, peer_id: str) -> int:
+        """Increment failure count. Returns new count."""
+        with self._lock:
+            self._failures[peer_id] = self._failures.get(peer_id, 0) + 1
+            return self._failures[peer_id]
+
+    def record_success(self, peer_id: str) -> None:
+        """Reset failure count on success."""
+        with self._lock:
+            self._failures.pop(peer_id, None)
+
+    def consecutive_failures(self, peer_id: str) -> int:
+        with self._lock:
+            return self._failures.get(peer_id, 0)
+
+    def path_kind(self, peer_id: str) -> SelectedPathKind:
+        with self._lock:
+            obs = self._observations.get(peer_id)
+            return obs.kind if obs else SelectedPathKind.UNKNOWN
+
+    def should_remove_peer(self, peer_id: str, path_kind: SelectedPathKind | None = None) -> bool:
+        """Return True when consecutive failures exceed threshold for the peer's path kind."""
+        if path_kind is None:
+            path_kind = self.path_kind(peer_id)
+        threshold = heartbeat_failure_threshold(path_kind)
+        return self.consecutive_failures(peer_id) >= threshold
+
+    def remove(self, peer_id: str) -> None:
+        with self._lock:
+            self._observations.pop(peer_id, None)
+            self._failures.pop(peer_id, None)
+
+
+_RELAY_HEALTH = RelayHealthMonitor()
+
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 _LAN_SERVICE = "_urace-exchange._tcp.local."
@@ -985,6 +1067,7 @@ def broadcast_peer_down(exchange: NetworkAdapter, peer_id: str, reason: str = 't
     import time
     at = time.time()
     _ADMISSION_GATE.remove(peer_id)
+    _RELAY_HEALTH.remove(peer_id)
     _logger.info('peer_down peer_id=%s reason=%s', peer_id, reason)
     try:
         from .audit_kinds import TERMINAL_KINDS
