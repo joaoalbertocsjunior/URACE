@@ -1,12 +1,60 @@
 """Intent-aware P2P asset retrieval. Scores rank candidates; they are not quality probabilities."""
 from __future__ import annotations
 
+import collections as _collections
 import functools as _functools
 import hashlib as _hashlib
 import json as _json
 import math
+import threading as _threading_dm
+import time as _time_dm
 
 from . import freeform_routing as _legacy
+
+
+class DemandCounter:
+    """Tracks per-executor rolling request rate (requests/minute).
+
+    Thread-safe. Bounded deque per executor — older than window_seconds entries
+    are ignored in get_demand(). Max 1000 entries per executor.
+    """
+    _MAX_ENTRIES = 1000
+
+    def __init__(self) -> None:
+        self._counts: dict[str, _collections.deque] = {}
+        self._lock = _threading_dm.Lock()
+
+    def record_request(self, executor_id: str, model: str = '', at: float | None = None) -> None:
+        at = at if at is not None else _time_dm.time()
+        key = executor_id
+        with self._lock:
+            if key not in self._counts:
+                self._counts[key] = _collections.deque(maxlen=self._MAX_ENTRIES)
+            self._counts[key].append(at)
+
+    def get_demand(self, executor_id: str, window_seconds: int = 60) -> float:
+        """Return requests per minute within the rolling window."""
+        cutoff = _time_dm.time() - window_seconds
+        with self._lock:
+            entries = list(self._counts.get(executor_id, []))
+        recent = [t for t in entries if t >= cutoff]
+        if not recent:
+            return 0.0
+        return len(recent) / (window_seconds / 60.0)
+
+    def demand_gossip_payload(self, executor_ids: list[str], window_seconds: int = 60) -> list[dict]:
+        """Return demand summary suitable for inclusion in gossip."""
+        return [
+            {
+                'executor_id': eid,
+                'req_per_min': self.get_demand(eid, window_seconds),
+                'window_seconds': window_seconds,
+            }
+            for eid in executor_ids
+        ]
+
+
+_DEMAND = DemandCounter()
 
 
 @_functools.lru_cache(maxsize=4)

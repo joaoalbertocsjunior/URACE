@@ -891,6 +891,13 @@ def _route(cli,args,config,state,parser):
                 _p2p_suggestions = rank_candidates(batch, text, _p2p_catalog, top_n=_p2p_top_n, scorer=_semantic_scorer)
         except (ValueError, TypeError, KeyError):
             _p2p_suggestions = []
+    try:
+        _top = ((_p2p_suggestions or [{}])[0]).get('seller_peer_id', '')
+        if _top:
+            from .p2p_matching import _DEMAND as _demand_tracker
+            _demand_tracker.record_request(_top)
+    except Exception:
+        pass
     items=batch['items'];choice=getattr(args,'selection',None)
     unresolved=batch.get('relationship') or (batch.get('logic')=='or' and len(items)>1)
     if unresolved:

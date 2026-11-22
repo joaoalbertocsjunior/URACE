@@ -122,5 +122,36 @@ class P2PIntentMatchingTests(unittest.TestCase):
         self.assertFalse(result['qualified_real_task_value_or_cost_claim'])
 
 
+class DemandCounterTests(unittest.TestCase):
+
+    def setUp(self):
+        from urace.p2p_matching import DemandCounter
+        self.counter = DemandCounter()
+
+    def test_demand_zero_for_unknown_executor(self):
+        self.assertEqual(self.counter.get_demand('never-seen'), 0.0)
+
+    def test_demand_rolling_window_excludes_old_entries(self):
+        import time
+        old_time = time.time() - 200  # 200s ago, outside 60s window
+        self.counter.record_request('exec-1', at=old_time)
+        self.assertEqual(self.counter.get_demand('exec-1', window_seconds=60), 0.0)
+
+    def test_demand_counts_recent_requests(self):
+        for _ in range(6):
+            self.counter.record_request('exec-2')
+        # 6 requests in 60s window = 6 req/min
+        demand = self.counter.get_demand('exec-2', window_seconds=60)
+        self.assertAlmostEqual(demand, 6.0, delta=0.1)
+
+    def test_demand_gossip_payload_shape(self):
+        self.counter.record_request('exec-3')
+        payload = self.counter.demand_gossip_payload(['exec-3', 'exec-unknown'])
+        self.assertEqual(len(payload), 2)
+        self.assertIn('executor_id', payload[0])
+        self.assertIn('req_per_min', payload[0])
+        self.assertIn('window_seconds', payload[0])
+
+
 if __name__ == '__main__':
     unittest.main()
