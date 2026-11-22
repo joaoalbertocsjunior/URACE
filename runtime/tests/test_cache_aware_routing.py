@@ -9,6 +9,7 @@ from urace.freeform_routing import (
     _CACHE_EVIDENCE,
     _CACHE_LOCK,
 )
+from urace.freeform_routing import LocalRouteReputation, _LOCAL_REP
 
 
 class CacheAwareRoutingTests(unittest.TestCase):
@@ -97,4 +98,43 @@ class CacheAwareRoutingTests(unittest.TestCase):
     def test_no_cache_evidence_returns_first_candidate(self):
         target, applied = select_target(['peer-A', 'peer-B'], None, None)
         self.assertEqual(target, 'peer-A')
+        self.assertFalse(applied)
+
+
+class LocalRouteReputationTests(unittest.TestCase):
+
+    def setUp(self):
+        _LOCAL_REP.clear.__func__  # ensure method exists
+        # fresh instance per test
+        self.rep = LocalRouteReputation()
+
+    def test_unknown_peer_scores_one(self):
+        self.assertEqual(self.rep.get_score('unknown-peer'), 1.0)
+
+    def test_failure_reduces_score(self):
+        self.rep.record_failure('peer-1', penalty=0.5)
+        self.assertLess(self.rep.get_score('peer-1'), 1.0)
+
+    def test_decay_restores_score_over_time(self):
+        # record failure with very short half-life
+        self.rep.record_failure('peer-1', penalty=0.1, half_life_seconds=0.001)
+        import time; time.sleep(0.05)
+        score = self.rep.get_score('peer-1', half_life_seconds=0.001)
+        self.assertGreater(score, 0.9)
+
+    def test_clear_resets_to_one(self):
+        self.rep.record_failure('peer-1', penalty=0.1)
+        self.rep.clear('peer-1')
+        self.assertEqual(self.rep.get_score('peer-1'), 1.0)
+
+    def test_select_target_prefers_reputable_peer(self):
+        # peer-2 has a failure; peer-1 is clean
+        from urace.freeform_routing import select_target, _CACHE_EVIDENCE, _CACHE_LOCK
+        with _CACHE_LOCK:
+            _CACHE_EVIDENCE.clear()
+        self.rep.record_failure('peer-2', penalty=0.1)
+        target, applied = select_target(
+            ['peer-2', 'peer-1'], None, None, reputation=self.rep,
+        )
+        self.assertEqual(target, 'peer-1')
         self.assertFalse(applied)

@@ -41,6 +41,7 @@ def extract_session_hint(text: str, body: dict | None = None) -> str | None:
 import dataclasses as _dataclasses
 import threading as _threading
 import time as _time
+import math as _math
 
 @_dataclasses.dataclass
 class CacheEvidence:
@@ -62,6 +63,59 @@ class CacheEvidence:
 
 _CACHE_EVIDENCE: dict[str, list['CacheEvidence']] = {}
 _CACHE_LOCK = _threading.Lock()
+
+
+@_dataclasses.dataclass
+class _PenaltyEntry:
+    penalty: float  # 0.0–1.0 multiplier applied to candidate score
+    recorded_at: float
+
+class LocalRouteReputation:
+    """Process-local reputation store. Never gossiped. Scores decay exponentially."""
+
+    def __init__(self) -> None:
+        self._entries: dict[str, _PenaltyEntry] = {}
+        self._lock = _threading.Lock()
+
+    def record_failure(self, target_id: str, penalty: float = 0.5,
+                       half_life_seconds: float = 300.0) -> None:
+        """Multiply current penalty by *penalty* (0 < penalty ≤ 1.0)."""
+        now = _time.time()
+        with self._lock:
+            existing = self._entries.get(target_id)
+            if existing is None:
+                decayed = 1.0
+            else:
+                elapsed = now - existing.recorded_at
+                decayed = existing.penalty * _math.exp(
+                    -_math.log(2) * elapsed / half_life_seconds
+                )
+            self._entries[target_id] = _PenaltyEntry(
+                penalty=max(0.01, decayed * penalty),
+                recorded_at=now,
+            )
+
+    def get_score(self, target_id: str, half_life_seconds: float = 300.0) -> float:
+        """Return decayed score in (0, 1]. 1.0 for unknown peers.
+
+        The penalty coefficient decays exponentially toward zero over time,
+        so the score recovers toward 1.0 as the failure ages out.
+        Score = 1.0 - (1.0 - penalty) * exp(-log(2) * elapsed / half_life)
+        """
+        now = _time.time()
+        with self._lock:
+            entry = self._entries.get(target_id)
+            if entry is None:
+                return 1.0
+            elapsed = now - entry.recorded_at
+            decay = _math.exp(-_math.log(2) * elapsed / half_life_seconds)
+            return min(1.0, 1.0 - (1.0 - entry.penalty) * decay)
+
+    def clear(self, target_id: str) -> None:
+        with self._lock:
+            self._entries.pop(target_id, None)
+
+_LOCAL_REP = LocalRouteReputation()
 
 
 def record_cache_evidence(evidence: 'CacheEvidence') -> None:
@@ -146,18 +200,26 @@ def select_target(
     affinity_router=None,
     ttl_seconds: int = 900,
     min_saved_tokens: int = 256,
+    reputation: 'LocalRouteReputation | None' = None,
+    rep_half_life_seconds: float = 300.0,
 ) -> tuple[str, bool]:
     """Select routing target. Returns (target_id, affinity_applied).
 
     Priority: cache evidence > session hint > first candidate.
+    Candidates are pre-sorted by reputation score when reputation is provided.
     """
     if not candidates:
         raise ValueError("select_target called with empty candidates list")
+    if reputation is not None and candidates:
+        candidates = sorted(
+            candidates,
+            key=lambda c: reputation.get_score(c, rep_half_life_seconds),
+            reverse=True,
+        )
     # Try cache evidence first
     best = select_cache_target(candidates, cache_key, ttl_seconds=ttl_seconds, min_saved_tokens=min_saved_tokens)
     if best is not None:
         return best.target_id, True
-    # TODO R5: session hint routing (local reputation)
     return candidates[0], False
 
 def normalize(batch):
