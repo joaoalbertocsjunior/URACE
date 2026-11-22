@@ -31,6 +31,8 @@ Privacy / unlinkability properties
 """
 from __future__ import annotations
 
+import dataclasses as _dataclasses
+import enum as _enum
 import hashlib
 import json
 import logging
@@ -45,6 +47,79 @@ from ._common import PROTOCOL_GENERATION, PROTOCOL_GENERATION_MIN_SUPPORTED
 from .network_adapter import NetworkAdapter
 
 _logger = logging.getLogger(__name__)
+
+
+# ── Peer Admission Gate ────────────────────────────────────────────────────────
+
+class PeerAdmissionState(_enum.Enum):
+    QUARANTINED = 'quarantined'
+    ADMITTED    = 'admitted'
+    REJECTED    = 'rejected'
+
+
+@_dataclasses.dataclass
+class PeerAdmissionRecord:
+    peer_id: str
+    state: PeerAdmissionState
+    protocol_gen: int | None
+    entered_at: float
+    reason: str = ''
+
+
+class AdmissionGate:
+    """Gates peer access until they prove a compatible protocol generation.
+
+    New peers start QUARANTINED. Once their protocol_gen is known,
+    they are ADMITTED (gen >= MIN_SUPPORTED) or REJECTED.
+    """
+    def __init__(self) -> None:
+        self._peers: dict[str, PeerAdmissionRecord] = {}
+        self._lock = threading.Lock()
+
+    def quarantine(self, peer_id: str) -> PeerAdmissionRecord:
+        with self._lock:
+            if peer_id not in self._peers:
+                self._peers[peer_id] = PeerAdmissionRecord(
+                    peer_id=peer_id,
+                    state=PeerAdmissionState.QUARANTINED,
+                    protocol_gen=None,
+                    entered_at=time.time(),
+                )
+            return self._peers[peer_id]
+
+    def admit(self, peer_id: str, protocol_gen: int) -> PeerAdmissionRecord:
+        with self._lock:
+            rec = self._peers.get(peer_id) or PeerAdmissionRecord(
+                peer_id=peer_id,
+                state=PeerAdmissionState.QUARANTINED,
+                protocol_gen=None,
+                entered_at=time.time(),
+            )
+            rec.protocol_gen = protocol_gen
+            if protocol_gen >= PROTOCOL_GENERATION_MIN_SUPPORTED:
+                rec.state = PeerAdmissionState.ADMITTED
+                rec.reason = ''
+            else:
+                rec.state = PeerAdmissionState.REJECTED
+                rec.reason = f'protocol_gen={protocol_gen} < min={PROTOCOL_GENERATION_MIN_SUPPORTED}'
+            self._peers[peer_id] = rec
+            return rec
+
+    def get_state(self, peer_id: str) -> PeerAdmissionState:
+        with self._lock:
+            rec = self._peers.get(peer_id)
+            return rec.state if rec else PeerAdmissionState.QUARANTINED
+
+    def is_admitted(self, peer_id: str) -> bool:
+        return self.get_state(peer_id) == PeerAdmissionState.ADMITTED
+
+    def remove(self, peer_id: str) -> None:
+        with self._lock:
+            self._peers.pop(peer_id, None)
+
+
+_ADMISSION_GATE = AdmissionGate()
+
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -412,6 +487,10 @@ def dht_cert_lookup(dht_key_hex: str, timeout: float = 10.0) -> "dict | None":
             "peer_id":     value[b"peer_id"].decode(),
         }
         result['protocol_generation'] = value.get(b'protocol_generation', 0)
+        # Wire admission gate: quarantine then admit based on protocol_gen
+        _pid = result['peer_id']
+        _ADMISSION_GATE.quarantine(_pid)
+        _ADMISSION_GATE.admit(_pid, int(result['protocol_generation']))
         return result
     except Exception:
         return None

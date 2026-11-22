@@ -358,3 +358,33 @@ class LiveDHTTests(unittest.TestCase):
         self.assertIsInstance(result, list)
         for c in result:
             self.assertFalse(c["auto_trusted"])
+
+
+class AdmissionGateTests(unittest.TestCase):
+
+    def setUp(self):
+        from urace.peer_discovery import AdmissionGate
+        self.gate = AdmissionGate()
+
+    def test_peer_starts_quarantined(self):
+        from urace.peer_discovery import PeerAdmissionState
+        self.gate.quarantine('peer-abc')
+        self.assertEqual(self.gate.get_state('peer-abc'), PeerAdmissionState.QUARANTINED)
+
+    def test_unknown_peer_returns_quarantined(self):
+        from urace.peer_discovery import PeerAdmissionState
+        self.assertEqual(self.gate.get_state('never-seen'), PeerAdmissionState.QUARANTINED)
+
+    def test_peer_admitted_when_gen_matches(self):
+        from urace.peer_discovery import PeerAdmissionState
+        self.gate.quarantine('peer-xyz')
+        rec = self.gate.admit('peer-xyz', protocol_gen=1)
+        self.assertEqual(rec.state, PeerAdmissionState.ADMITTED)
+        self.assertTrue(self.gate.is_admitted('peer-xyz'))
+
+    def test_peer_rejected_when_gen_too_low(self):
+        from urace.peer_discovery import PeerAdmissionState
+        self.gate.quarantine('peer-old')
+        rec = self.gate.admit('peer-old', protocol_gen=0)
+        self.assertEqual(rec.state, PeerAdmissionState.REJECTED)
+        self.assertFalse(self.gate.is_admitted('peer-old'))

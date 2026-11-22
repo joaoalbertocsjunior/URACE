@@ -62,6 +62,9 @@ SCHEMA: dict[str, Any] = {
         'bootstrap_peers': _l('Bootstrap peer HTTPS endpoints'),
         'advertise':       _b(False,    'Advertise this peer to bootstrap nodes'),
         'relay_only':      _b(False,    'Route all traffic through relays (hides local IP)'),
+        'admission_quarantine_enabled': _b(True, 'Gate new peers through quarantine until protocol_gen is verified'),
+        'relay_failure_threshold':  _i(5, 'Consecutive heartbeat failures before removing a relay-path peer'),
+        'direct_failure_threshold': _i(2, 'Consecutive heartbeat failures before removing a direct-path peer'),
     },
     'executor': {
         '_description': 'AI executor provider settings.',
@@ -449,6 +452,9 @@ try:
         bootstrap_peers: list[str] = Field(default_factory=list)
         advertise: bool = False
         relay_only: bool = False
+        admission_quarantine_enabled: bool = True
+        relay_failure_threshold: int = Field(default=5, ge=1)
+        direct_failure_threshold: int = Field(default=2, ge=1)
 
     class _McpConfig(BaseModel):
         model_config = {"extra": "allow"}
