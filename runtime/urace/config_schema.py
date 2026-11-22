@@ -26,6 +26,9 @@ def _s(default: str, description: str = '') -> dict:
 def _e(options: list, default: str, description: str = '') -> dict:
     return {'type': 'enum', 'options': options, 'default': default, 'description': description}
 
+def _f(default: float, description: str = '') -> dict:
+    return {'type': 'float', 'default': default, 'description': description}
+
 def _l(description: str = '') -> dict:
     return {'type': 'list', 'default': [], 'description': description}
 
@@ -62,6 +65,11 @@ SCHEMA: dict[str, Any] = {
         'enabled':                      _b(False, 'Enable AI executor calls'),
         'freeform_max_tokens_per_24h':  _i(200000, 'Daily freeform routing token budget (0=unlimited)'),
         'freeform_max_tokens_per_call': _i(0,      'Per-call freeform token ceiling (0=unlimited)'),
+        'freeform_confidence_threshold': _f(0.8,   'Min classification confidence to auto-queue (0–1); items below are deferred'),
+        'freeform_max_clarification_turns': _i(2,  'Max interactive clarification rounds per freeform call (0 = disable)'),
+        'freeform_p2p_top_n':           _i(10,     'Max P2P candidates surfaced per freeform route (1–100)'),
+        'freeform_cache_ttl_seconds':   _i(3600,   'Freeform routing cache TTL in seconds (0 = disable cache)'),
+        'freeform_semantic_scorer':     _s('tfidf','P2P candidate scorer: lexical or tfidf'),
     },
     'api': {
         '_description': 'MCP and A2A server settings.',
@@ -432,6 +440,11 @@ try:
         enabled: bool = False
         freeform_max_tokens_per_24h: int = Field(default=200000, ge=0)
         freeform_max_tokens_per_call: int = Field(default=0, ge=0)
+        freeform_confidence_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+        freeform_max_clarification_turns: int = Field(default=2, ge=0)
+        freeform_p2p_top_n: int = Field(default=10, ge=1, le=100)
+        freeform_cache_ttl_seconds: int = Field(default=3600, ge=0)
+        freeform_semantic_scorer: str = 'tfidf'
 
     class _ResourcesConfig(BaseModel):
         model_config = {"extra": "allow"}

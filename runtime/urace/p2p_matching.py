@@ -27,16 +27,22 @@ def intent_queries(batch: dict, raw_text: str = '') -> list[dict]:
     return queries
 
 
-def rank_candidates(batch: dict, raw_text: str, features: list[dict], *, top_n: int = 10) -> list[dict]:
+def rank_candidates(batch: dict, raw_text: str, features: list[dict], *,
+                    top_n: int = 10, scorer: str = 'tfidf') -> list[dict]:
     """Rank catalog candidates against each extracted intent, retaining match provenance."""
     if type(top_n) is not int or not 1 <= top_n <= 100:
         raise ValueError('top_n must be between 1 and 100')
     queries = intent_queries(batch, raw_text)
+    # Build IDF once over the full corpus for TF-IDF scoring
+    idf = _legacy._build_idf(features) if scorer == 'tfidf' and features else {}
     scored = []
     for feature in features:
         matches = []
         for query in queries:
-            score = _legacy._semantic_score(query['query'], feature)
+            if scorer == 'tfidf' and idf:
+                score = _legacy._semantic_score_tfidf(query['query'], feature, idf)
+            else:
+                score = _legacy._semantic_score(query['query'], feature)
             if score > 0:
                 matches.append({'intent_id': query['intent_id'], 'kind': query['kind'],
                                 'score': round(score, 4)})
@@ -44,7 +50,7 @@ def rank_candidates(batch: dict, raw_text: str, features: list[dict], *, top_n: 
             continue
         item = dict(feature)
         item['match_score'] = max(match['score'] for match in matches)
-        item['match_method'] = MATCHER_VERSION
+        item['match_method'] = MATCHER_VERSION + f'+{scorer}'
         item['match_score_interpretation'] = 'heuristic lexical relevance; not calibrated quality or equivalence'
         item['local_implementation_available'] = (
             item.get('local_implementation_status') == 'VERIFIED_LOCAL_IMPLEMENTATION')
@@ -96,9 +102,10 @@ def benchmark(rows: list[dict], *, ks: tuple[int, ...] = (1, 3, 5)) -> dict:
         if (any(not value for value in candidate_ids) or len(set(candidate_ids)) != len(candidate_ids)
                 or not set(relevant).issubset(candidate_ids)):
             raise ValueError('Candidate IDs must be unique and contain every labeled-relevant candidate')
-        raw_ranked = _legacy._rank_p2p_features(row['raw_text'], row['features'], top_n=len(row['features']))
+        raw_ranked = _legacy._rank_p2p_features(row['raw_text'], row['features'],
+                                                 top_n=len(row['features']), scorer='lexical')
         intent_ranked = rank_candidates(row['batch'], row['raw_text'], row['features'],
-                                         top_n=len(row['features']))
+                                        top_n=len(row['features']), scorer='lexical')
         rankings = {'raw_request': [_candidate_id(item) for item in raw_ranked],
                     'classified_intent': [_candidate_id(item) for item in intent_ranked]}
         for method, ranked in rankings.items():
