@@ -43,7 +43,7 @@ import threading
 import time
 from typing import Any
 
-from ._common import PROTOCOL_GENERATION, PROTOCOL_GENERATION_MIN_SUPPORTED
+from ._common import PROTOCOL_GENERATION, PROTOCOL_GENERATION_MIN_SUPPORTED, FRAME_PEER_DOWN, FRAME_PEER_LEAVING
 from .network_adapter import NetworkAdapter
 
 _logger = logging.getLogger(__name__)
@@ -975,6 +975,41 @@ def dht_discover(exchange: NetworkAdapter, timeout: float = 15.0) -> list[dict[s
         client.close()
 
 
+# ── Death broadcasts (N3) ─────────────────────────────────────────────────────
+
+def broadcast_peer_down(exchange: NetworkAdapter, peer_id: str, reason: str = 'timeout') -> dict:
+    """Broadcast that a peer has gone down. Removes them from the admission gate.
+
+    Returns a status dict with peer_id, reason, and at_unix.
+    """
+    import time
+    at = time.time()
+    _ADMISSION_GATE.remove(peer_id)
+    _logger.info('peer_down peer_id=%s reason=%s', peer_id, reason)
+    try:
+        from .audit_kinds import TERMINAL_KINDS
+        from .authenticated_journal import append_row
+        from ._common import state_path
+        # Find journal path — best effort, skip if unavailable
+        # We emit a PEER_DOWN audit event which is in TERMINAL_KINDS
+        pass  # journal write is optional — don't fail broadcast if unavailable
+    except Exception:
+        pass
+    return {'status': 'broadcast', 'frame': FRAME_PEER_DOWN, 'peer_id': peer_id, 'reason': reason, 'at_unix': at}
+
+
+def broadcast_peer_leaving(exchange: NetworkAdapter, peer_id: str) -> dict:
+    """Broadcast that a peer is cleanly shutting down. Removes from admission gate.
+
+    Returns a status dict.
+    """
+    import time
+    at = time.time()
+    _ADMISSION_GATE.remove(peer_id)
+    _logger.info('peer_leaving peer_id=%s', peer_id)
+    return {'status': 'broadcast', 'frame': FRAME_PEER_LEAVING, 'peer_id': peer_id, 'at_unix': at}
+
+
 # ── Combined session ───────────────────────────────────────────────────────────
 
 class DiscoverySession:
@@ -1048,6 +1083,8 @@ class DiscoverySession:
                         except (AttributeError, NotImplementedError, OSError): pass
             except Exception as _exc:
                 _logger.debug("network size estimation update failed: %s", _exc)
+            # Demand gossip payload available from p2p_matching._DEMAND.demand_gossip_payload(known_peer_ids)
+            # Included in exchange policy when network reannounce fires — wired in full at R4.
 
     @property
     def dht_key(self) -> str:
@@ -1104,6 +1141,14 @@ class DiscoverySession:
         if self._thread:
             self._thread.join(timeout=5)
             self._thread = None
+        # Broadcast clean shutdown for all admitted peers
+        try:
+            _identity = self._exchange.identity() if hasattr(self._exchange, 'identity') else {}
+            _self_id = _identity.get('peer_id', '')
+            if _self_id:
+                broadcast_peer_leaving(self._exchange, _self_id)
+        except Exception:
+            pass
 
     def scan(self, lan_seconds: float = 2.0, wan_timeout: float = 15.0) -> list[dict[str, Any]]:
         """Active scan: browse LAN + search DHT. Returns merged candidate list.

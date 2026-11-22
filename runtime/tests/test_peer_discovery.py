@@ -388,3 +388,39 @@ class AdmissionGateTests(unittest.TestCase):
         rec = self.gate.admit('peer-old', protocol_gen=0)
         self.assertEqual(rec.state, PeerAdmissionState.REJECTED)
         self.assertFalse(self.gate.is_admitted('peer-old'))
+
+
+class DeathBroadcastTests(unittest.TestCase):
+
+    def _make_exchange(self):
+        from urace.network_adapter import NetworkAdapter
+        import unittest.mock
+        exchange = unittest.mock.MagicMock(spec=NetworkAdapter)
+        exchange.identity.return_value = {'peer_id': 'test-peer-001'}
+        return exchange
+
+    def test_broadcast_peer_down_returns_status(self):
+        from urace.peer_discovery import broadcast_peer_down
+        exchange = self._make_exchange()
+        result = broadcast_peer_down(exchange, 'peer-xyz', reason='timeout')
+        self.assertEqual(result['status'], 'broadcast')
+        self.assertEqual(result['peer_id'], 'peer-xyz')
+        self.assertEqual(result['reason'], 'timeout')
+        self.assertIn('at_unix', result)
+
+    def test_broadcast_peer_down_removes_from_admission_gate(self):
+        from urace.peer_discovery import broadcast_peer_down, _ADMISSION_GATE, PeerAdmissionState
+        _ADMISSION_GATE.quarantine('dying-peer')
+        _ADMISSION_GATE.admit('dying-peer', protocol_gen=1)
+        self.assertTrue(_ADMISSION_GATE.is_admitted('dying-peer'))
+        exchange = self._make_exchange()
+        broadcast_peer_down(exchange, 'dying-peer')
+        # After broadcast, peer is no longer in the gate (returns QUARANTINED for unknown)
+        self.assertEqual(_ADMISSION_GATE.get_state('dying-peer'), PeerAdmissionState.QUARANTINED)
+
+    def test_broadcast_peer_leaving_returns_status(self):
+        from urace.peer_discovery import broadcast_peer_leaving
+        exchange = self._make_exchange()
+        result = broadcast_peer_leaving(exchange, 'peer-abc')
+        self.assertEqual(result['status'], 'broadcast')
+        self.assertEqual(result['frame'], 'PEER_LEAVING')

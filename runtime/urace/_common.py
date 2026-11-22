@@ -494,6 +494,10 @@ from .inputs import queue_input as queue_input  # noqa: E402
 PROTOCOL_GENERATION: int = 1
 PROTOCOL_GENERATION_MIN_SUPPORTED: int = 1
 
+# Frame type constants for peer lifecycle broadcasts
+FRAME_PEER_DOWN:    str = 'PEER_DOWN'
+FRAME_PEER_LEAVING: str = 'PEER_LEAVING'
+
 
 # ---------------------------------------------------------------------------
 # Named fee constants (P2.2 — single source of truth for economic rates)
