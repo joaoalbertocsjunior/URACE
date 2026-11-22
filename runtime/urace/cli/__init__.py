@@ -1583,6 +1583,25 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                     _dr_check("cost_tracking", "OK", f"{_dr_records} record(s) in process ledger")
                 except Exception as _e:
                     _dr_check("cost_tracking", "WARN", str(_e))
+                # Phase 9C — 10. Source registry loaded
+                try:
+                    from ..source_adapters import SOURCE_REGISTRY
+                    _dr_kinds = SOURCE_REGISTRY.kinds()
+                    _dr_check("source_registry", "OK", f"{len(_dr_kinds)} adapter kinds registered")
+                except Exception as _e:
+                    _dr_check("source_registry", "WARN", str(_e))
+                # Phase 9C — 11. Feature matcher importable
+                try:
+                    from .. import feature_matcher as _dr_fm
+                    _dr_check("feature_matcher", "OK")
+                except Exception as _e:
+                    _dr_check("feature_matcher", "WARN", str(_e))
+                # Phase 9C — 12. API schema currency
+                try:
+                    from ..version import API_SCHEMA_VERSIONS
+                    _dr_check("api_schema_versions", "OK", f"{len(API_SCHEMA_VERSIONS)} schema versions declared")
+                except Exception as _e:
+                    _dr_check("api_schema_versions", "WARN", str(_e))
                 _dr_overall = "ERROR" if any(c["status"] == "ERROR" for c in _dr_checks) else ("WARN" if any(c["status"] == "WARN" for c in _dr_checks) else "OK")
                 _dr_result = {"overall": _dr_overall, "checks": _dr_checks}
                 if getattr(args, "doctor_json", False):
