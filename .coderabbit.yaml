@@ -3,38 +3,189 @@
 version: "2"
 
 reviews:
-  # Auto-review every PR
   auto_review:
     enabled: true
     drafts: false
 
-  # Focus areas for inline comments
-  profile: "chill"  # less noise for a small team; use "assertive" for more feedback
+  profile: "chill"
 
-  # Path-level instructions
+  # ── Global review instructions ──────────────────────────────────────────────
+  instructions: |
+    URACE is a decentralised AI execution mesh. When reviewing any file:
+    - Flag silent exception swallowing (`except Exception: pass`) in financial or
+      signing code paths — failures must surface, not vanish.
+    - Flag any use of eval(), exec(), or subprocess with unsanitised user input.
+    - Flag hardcoded secrets, keys, or tokens.
+    - Flag non-atomic read-modify-write sequences on shared state without a lock.
+    - Do not suggest adding comments that explain WHAT the code does — only flag
+      missing WHY comments for non-obvious invariants or workarounds.
+    - Do not suggest multi-line docstrings; project convention is one short line max.
+
+  # ── Path-level instructions ──────────────────────────────────────────────────
   path_instructions:
+
+    # Ledger / financial integrity
     - path: "runtime/urace/authenticated_journal.py"
       instructions: |
-        Review for append-only invariants: no row may be deleted or mutated
-        after write. Flag any code path that could allow overwriting existing entries.
+        Append-only invariant: no row may be deleted or mutated after write.
+        Flag any code path that could allow overwriting or truncating existing entries.
+        Verify atomic_write_json is used for all mutations.
+
     - path: "runtime/urace/credit_ledger*.py"
       instructions: |
-        Review for double-spend risks. All token debits must check balance before
-        deducting. Flag any non-atomic read-modify-write sequences.
+        Double-spend prevention: all token debits must check balance before deducting.
+        Flag non-atomic read-modify-write sequences. Flag any path where a debit
+        can succeed without a corresponding balance check.
+
+    - path: "runtime/urace/signed_ledger.py"
+      instructions: |
+        Every ledger entry must carry a valid signature before being persisted.
+        Flag any path that writes an entry without calling sign/verify first.
+        Flag signature verification being skipped on read.
+
+    - path: "runtime/urace/ledger_crypto.py"
+      instructions: |
+        Cryptographic correctness: flag use of MD5/SHA1 for integrity (not identity).
+        Flag constant-time comparison being replaced with ==. Flag key material
+        being logged or included in exception messages.
+
+    - path: "runtime/urace/ledger_audit.py"
+      instructions: |
+        Audit trail completeness: every state transition must produce an audit row.
+        Flag any branch that mutates state without emitting an audit event.
+
+    - path: "runtime/urace/escrow_timeout.py"
+      instructions: |
+        Escrow release timing is financial. Flag any clock source that is not
+        monotonic or that can be manipulated by user input. Flag release paths
+        that do not verify the escrow lock was held by the releasing party.
+
+    - path: "runtime/urace/p2p_cost_qualification.py"
+      instructions: |
+        Cost qualification gates financial settlement. Flag any path that allows
+        an executor to self-report costs without independent verification.
+        Flag integer overflow risks in token arithmetic.
+
+    # Cryptography / signing
+    - path: "runtime/urace/crypto_wallet.py"
+      instructions: |
+        Private key material must never appear in logs, exceptions, or return values
+        other than the designated sign/export calls. Flag any path that serialises
+        a private key to a non-encrypted store. Flag use of non-constant-time
+        comparison for signatures or keys.
+
+    - path: "runtime/urace/signed_records.py"
+      instructions: |
+        HMAC-SHA256 correctness: verify hmac.compare_digest (not ==) is used for
+        all signature comparisons. Flag any path where seq is not included in the
+        signed message (replay attack vector). Flag key material in exceptions.
+
+    - path: "runtime/urace/key_lifecycle.py"
+      instructions: |
+        Key rotation and revocation paths: flag any rotation that does not
+        invalidate old signatures. Flag key derivation using non-cryptographic
+        hash functions. Flag insecure key storage (plaintext, world-readable files).
+
+    - path: "runtime/urace/eth_settlement_adapter.py"
+      instructions: |
+        EVM transaction safety: flag ABI encoding that does not validate address
+        checksums. Flag gas limit values that are user-controlled without bounds.
+        Flag any path where a transaction is submitted without first simulating
+        or estimating gas. The TopologyLock/ArchitectureCertificate stubs are
+        intentional — do not suggest removing them.
+
+    # Peer / network trust
     - path: "runtime/urace/peer_discovery.py"
       instructions: |
-        Review for peer admission safety: untrusted peers must pass the
-        AdmissionGate before receiving routing traffic.
+        Peer admission safety: untrusted peers must pass AdmissionGate before
+        receiving routing traffic. Flag any shortcut that bypasses quarantine.
+        Flag DHT lookups that accept peer-supplied data without signature verification.
+        Flag relay paths that expose the node's real IP when relay_only=True.
+
+    - path: "runtime/urace/kademlia.py"
+      instructions: |
+        DHT Sybil resistance: flag bucket-filling attacks where a single IP can
+        occupy multiple slots. Flag node ID generation that is not cryptographically
+        random. Flag any path that trusts peer-supplied routing tables without
+        verification.
+
+    - path: "runtime/urace/freeform_routing.py"
+      instructions: |
+        Routing decisions must not leak internal state to untrusted peers.
+        Flag cache evidence that is gossipped (it must stay process-local).
+        Flag LocalRouteReputation entries being serialised or sent over the wire.
+        Flag select_target returning a peer that failed AdmissionGate.
+
+    - path: "runtime/urace/p2p_matching.py"
+      instructions: |
+        Score manipulation resistance: flag any path where an executor can inflate
+        its own match_score or TPS weight by self-reporting. Flag DemandCounter
+        entries being accepted from remote peers (must be local-only).
+
+    - path: "runtime/urace/cartel_guard.py"
+      instructions: |
+        Anti-collusion: flag quorum checks that can be satisfied by a single
+        coordinated actor controlling multiple peer IDs. Flag evidence thresholds
+        that are configurable at runtime without authority verification.
+
+    - path: "runtime/urace/consensus.py"
+      instructions: |
+        Byzantine fault tolerance: flag vote counting that does not require a
+        strict 2/3 supermajority. Flag any path where a single peer can determine
+        consensus outcome. Flag message authentication being skipped for speed.
+
+    - path: "runtime/urace/federation.py"
+      instructions: |
+        Federation trust: cross-federation requests must carry valid authority
+        proofs. Flag any path that accepts a federation peer's claims without
+        verifying the originating federation's signing key.
+
+    # Authority boundary (§62z invariant)
+    - path: "runtime/urace/authority.py"
+      instructions: |
+        §62z invariant: the authority boundary must never be crossed without
+        explicit user confirmation. Flag any automated path that takes a
+        qualifying action (spend, transfer, goal creation) without a confirmation
+        gate. Flag capability escalation that is not logged to the audit journal.
+
+    # Execution safety
+    - path: "runtime/urace/execution_backend.py"
+      instructions: |
+        Code execution safety: flag any path that executes LLM-generated code
+        without a sandbox boundary. Flag resource limits (CPU, memory, time) that
+        are absent or user-controllable without authority verification.
+
+    - path: "runtime/urace/executor.py"
+      instructions: |
+        Executor lifecycle: flag credential passing that goes outside the
+        executor's declared scope. Flag any path where an executor can persist
+        state beyond its declared session.
+
+    # CI / workflow integrity
+    - path: ".github/workflows/*.yml"
+      instructions: |
+        Supply chain safety: flag third-party actions not pinned to a full SHA
+        (e.g. `uses: foo/bar@v1` should be `uses: foo/bar@<sha>`). Flag
+        secrets being echoed to logs. Flag pull_request_target triggers
+        combined with checkout of the PR head — classic script injection vector.
+
+    # Tests
     - path: "runtime/tests/test_security.py"
       instructions: |
-        Security tests are intentionally adversarial. Do not suggest weakening
-        assertions or catching exceptions that the test is designed to surface.
+        Security tests are intentionally adversarial. Never suggest weakening
+        assertions, catching exceptions the test is designed to surface, or
+        reducing coverage. Suggest additions, never removals.
 
-  # Custom review instructions for all files
+    - path: "runtime/tests/*.py"
+      instructions: |
+        Test completeness: flag tests that mock the system under test rather than
+        exercising real behaviour (especially for ledger and signing paths).
+        Flag missing negative/adversarial test cases for any security-sensitive
+        function being added or modified in the same PR.
+
   finishing_touches:
     docstrings:
-      enabled: false  # project convention: no multi-line docstrings in hot paths
+      enabled: false
 
 chat:
-  # Allow @coderabbitai commands in PR comments
   auto_reply: true
