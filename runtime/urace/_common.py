@@ -194,6 +194,14 @@ def load_config() -> dict[str, Any]:
             _log.warning("config warning: %s: %s", _err['path'], _err['error'])
     except Exception:
         pass
+    try:
+        from .mesh_identity import get_or_create_mesh_id
+        _state_path = cfg.get('state_path', '.')
+        import pathlib as _pl
+        _state_dir = str(_pl.Path(_state_path).parent)
+        cfg.setdefault('mesh_id', get_or_create_mesh_id(_state_dir))
+    except Exception:
+        pass
     return cfg
 
 
