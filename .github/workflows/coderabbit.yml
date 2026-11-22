@@ -1,0 +1,64 @@
+name: CodeRabbit AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: >-
+    ${{ github.repository }}-${{ github.event.number || github.head_ref || github.sha }}
+    -${{ github.workflow }}
+    -${{ (github.event_name == 'pull_request_review_comment' || github.event_name == 'issue_comment') && 'comment' || 'pr' }}
+  cancel-in-progress: >-
+    ${{ github.event_name != 'pull_request_review_comment' && github.event_name != 'issue_comment' }}
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: |
+      github.event.pull_request.draft == false &&
+      (
+        github.event_name == 'pull_request' ||
+        github.event_name == 'pull_request_review_comment' ||
+        (github.event_name == 'issue_comment' && github.event.issue.pull_request != null)
+      )
+    steps:
+      - uses: coderabbitai/ai-pr-reviewer@latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          debug: false
+          review_simple_changes: false
+          review_comment_lgtm: false
+          openai_light_model: gpt-4o-mini
+          openai_heavy_model: gpt-4o
+          language: en-US
+          bot_icon: "<img src='https://avatars.githubusercontent.com/in/347564' alt='CodeRabbit' width='20'>"
+          system_message: |
+            You are an expert Python code reviewer for the URACE project — a decentralised
+            AI execution mesh. Focus on:
+            - Correctness of token/credit accounting (no double-spend, correct ledger flow)
+            - Thread safety in p2p_matching.py, freeform_routing.py, peer_discovery.py
+            - Append-only invariants in authenticated_journal.py
+            - Peer admission safety (untrusted peers must pass AdmissionGate)
+            - Security test coverage — never suggest weakening adversarial assertions
+            Be concise. Skip stylistic nitpicks already enforced by ruff.
+          summarize: |
+            Provide a walkthrough of the changes with:
+            1. A one-line summary
+            2. File-level change table
+            3. Any security or correctness concerns flagged
+          summarize_release_notes: |
+            Craft release notes for the URACE changelog.
+            Focus on new capabilities, breaking changes, and security fixes.
+            Format: `- <type>: <description>` per change.
