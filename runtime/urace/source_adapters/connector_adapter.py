@@ -41,5 +41,26 @@ class ConnectorAdapter(NullSourceAdapter):
             },
         }
 
+    def _sync(self, config: dict, state: dict, source_id: str) -> dict:
+        from ._base import _get_source
+        record = _get_source(state, source_id) or {}
+        location = record.get('adapter_state', {}).get('location', '')
+        if not location:
+            return {'synced': False, 'reason': 'no location configured'}
+        if not location.startswith(('http://', 'https://')):
+            return {'synced': True, 'location': location, 'reachable': None,
+                    'note': 'non-HTTP connector — reachability not checked'}
+        try:
+            import httpx
+        except ImportError:
+            from ._base import SourceUnavailableError
+            raise SourceUnavailableError('pip install "urace[p2p]"')
+        try:
+            resp = httpx.head(location, timeout=5, follow_redirects=True)
+            return {'synced': True, 'location': location,
+                    'reachable': True, 'http_status': resp.status_code}
+        except Exception as exc:
+            return {'synced': True, 'location': location, 'reachable': False, 'reason': str(exc)}
+
 
 SOURCE_REGISTRY.register(ConnectorAdapter())

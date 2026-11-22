@@ -404,6 +404,8 @@ def _route(cli,args,config,state,parser):
         'context_hints':[{'text':c.get('text','')} for c in (state.get('context_inputs') or [])[-5:] if isinstance(c,dict) and c.get('text','').strip()],
         # Last 5 recently queued items (last 10 min) — enables natural cancel detection
         'recent_queued':[{'kind':q.get('kind',''),'label':q.get('label','')} for q in (state.get('recently_queued') or []) if isinstance(q,dict) and time.time()-float(q.get('at',0))<600][-5:],
+        # Protocol v2 source adapters — tells executor which sources are observed/act-capable
+        'observed_sources':[{'id':sid,'kind':r.get('kind'),'status':r.get('status'),'enabled_actions':r.get('adapter_state',{}).get('enabled_actions',[])} for sid,r in (state.get('sources') or {}).items() if isinstance(r,dict) and r.get('status') in ('OBSERVED','ACTED') and r.get('enabled',True)][:10],
     } if cached is None else {}
     instruction=prompt(text,parser,state_context=_state_context or None) if cached is None else None;batch=cached;failures=[];usage=[]
     # One corrective retry is justified by a specific rejected response, not blind repetition.

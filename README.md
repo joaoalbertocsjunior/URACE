@@ -19,18 +19,6 @@ Last Changes - [LATEST](docs/LATEST.md)
 ```sh
 # one-liner (Linux / macOS / WSL):
 curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
-
-# pip:
-pip install urace
-
-# npm:
-npm install -g urace-cli
-
-# Homebrew:
-brew install urace
-
-# conda:
-conda install -c conda-forge urace
 ```
 
 ```sh
@@ -95,27 +83,6 @@ No URACE↔USD exchange rate exists. Polygon is planned as mainnet.
 
 ---
 
-## Update
-
-```sh
-# one-liner (re-run installer):
-curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
-
-# pip:
-pip install --upgrade urace
-
-# npm:
-npm install -g urace-cli@latest
-
-# Homebrew:
-brew upgrade urace
-
-# conda:
-conda update -c conda-forge urace
-```
-
----
-
 ## Docs
 
 **Users:** [Quick start](docs/users/quick-start.md) · [Daily use](docs/users/ux-guide.md) · [CLI reference](docs/users/cli.md) · [Config](docs/users/config.md)
@@ -130,4 +97,4 @@ conda update -c conda-forge urace
 
 ---
 
-v0.9.3 · Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior
+Code: [Apache 2.0](LICENSES/Apache-2.0.txt) · Spec: [CSL 1.0](LICENSES/CSL-1.0.txt) · Copyright 2006–2026 Joao Alberto Cambauva dos Santos Junior

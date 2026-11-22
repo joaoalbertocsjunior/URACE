@@ -3,15 +3,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._base import NullSourceAdapter
+from ._base import NullSourceAdapter, _get_source
 from . import SOURCE_REGISTRY
 
 
 class FileAdapter(NullSourceAdapter):
     """Handles kinds: file, csv, json, sqlite, api.
 
-    Delegates to `urace data add` via main() for full implementation.
-    Phase 3A will replace this with the folder/codebase adapters.
+    _sync() delegates to data_transport for local JSON/CSV/SQLite I/O.
+    Remote/API sources return connectivity-verified status only.
     """
 
     kind = 'file'
@@ -50,6 +50,36 @@ class FileAdapter(NullSourceAdapter):
                 'enabled_actions': [],
             },
         }
+
+    def _sync(self, config: dict, state: dict, source_id: str) -> dict:
+        from .. import data_transport
+        record = _get_source(state, source_id) or {}
+        astate = record.get('adapter_state', {})
+        # Build a lightweight record dict that data_transport understands
+        dt_record = {
+            'adapter_kind': astate.get('adapter_kind', self.kind),
+            'connection_metadata': {'dsn': astate.get('dsn', '')},
+            'schema_hint': astate.get('schema_hint'),
+        }
+        try:
+            info = data_transport.verify(dt_record)
+            # For read-direction sources, also count rows (bounded by data_limits)
+            row_count = None
+            if astate.get('direction', 'read') in ('read', 'readwrite'):
+                try:
+                    rows, _ = data_transport.read(dt_record, config)
+                    row_count = len(rows)
+                except Exception:
+                    pass
+            return {'synced': True, 'dsn': astate.get('dsn', ''),
+                    'row_count': row_count, **info}
+        except data_transport.TransportError as exc:
+            msg = str(exc)
+            if msg == 'ADAPTER_REQUIRED':
+                return {'synced': False, 'reason': 'remote/API source — not locally verifiable'}
+            return {'synced': False, 'reason': msg}
+        except Exception as exc:
+            return {'synced': False, 'reason': str(exc)}
 
 
 class CsvAdapter(FileAdapter):

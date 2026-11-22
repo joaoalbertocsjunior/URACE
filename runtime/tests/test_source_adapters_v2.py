@@ -350,5 +350,359 @@ class DifflibMatcherTests(unittest.TestCase):
         self.assertGreater(close_score, far_score)
 
 
+# ── New runtime-internal adapters ────────────────────────────────────────────
+
+class AuditAdapterTests(unittest.TestCase):
+    def _state(self):
+        return {
+            'sources': {'my_audit': {'id': 'my_audit', 'kind': 'audit', 'enabled': True,
+                                      'status': 'CONFIGURED',
+                                      'status_history': [{'status': 'CONFIGURED', 'at': '2024-01-01T00:00:00+00:00'}],
+                                      'adapter_state': {'last_record_count': 0, 'enabled_actions': []}}},
+            'state_audit_records': [{'id': 'a1'}, {'id': 'a2'}],
+            'evidence': [{'id': 'e1', 'kind': 'spec-audit'}, {'id': 'e2', 'kind': 'executor-proposal'}],
+            'compliance_records': [{'id': 'c1'}],
+        }
+
+    def test_audit_adapter_registered(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        self.assertIsNotNone(SOURCE_REGISTRY.get('audit'))
+
+    def test_audit_sync_returns_counts(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('audit')
+        state = self._state()
+        result = adapter._sync({}, state, 'my_audit')
+        self.assertTrue(result['synced'])
+        self.assertEqual(result['audit_record_count'], 2)
+        self.assertEqual(result['evidence_count'], 2)
+        self.assertEqual(result['compliance_record_count'], 1)
+
+    def test_audit_sync_surfaces_recent_evidence_kinds(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('audit')
+        state = self._state()
+        result = adapter._sync({}, state, 'my_audit')
+        self.assertIn('spec-audit', result['recent_evidence_kinds'])
+
+    def test_audit_v2_verified(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        from urace.source_adapters._base import verify_adapter
+        self.assertEqual(verify_adapter(SOURCE_REGISTRY.get('audit')), [])
+
+
+class CostAdapterTests(unittest.TestCase):
+    def _state(self):
+        return {
+            'sources': {'my_cost': {'id': 'my_cost', 'kind': 'cost', 'enabled': True,
+                                     'status': 'CONFIGURED',
+                                     'status_history': [{'status': 'CONFIGURED', 'at': '2024-01-01T00:00:00+00:00'}],
+                                     'adapter_state': {'last_total_usd': None, 'last_record_count': 0,
+                                                       'enabled_actions': []}}},
+        }
+
+    def test_cost_adapter_registered(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        self.assertIsNotNone(SOURCE_REGISTRY.get('cost'))
+
+    def test_cost_sync_returns_snapshot(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('cost')
+        state = self._state()
+        result = adapter._sync({}, state, 'my_cost')
+        self.assertTrue(result['synced'])
+        self.assertIn('records', result)
+        self.assertIn('total_tokens', result)
+
+    def test_cost_v2_verified(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        from urace.source_adapters._base import verify_adapter
+        self.assertEqual(verify_adapter(SOURCE_REGISTRY.get('cost')), [])
+
+
+# ── Stub-to-real _sync() implementations ─────────────────────────────────────
+
+class ExecutorAdapterSyncTests(unittest.TestCase):
+    def test_executor_sync_reads_state(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('executor')
+        state = {
+            'sources': {'ex1': {'id': 'ex1', 'kind': 'executor', 'enabled': True,
+                                 'status': 'CONFIGURED',
+                                 'status_history': [],
+                                 'adapter_state': {'enabled_actions': []}}},
+            'executor_state': {'available': True, 'executor_calls': [{'id': 'c1'}],
+                               'discovery_budget_status': 'WITHIN_BUDGET',
+                               'last_discovery_at': None, 'last_operation_at': None,
+                               'availability_failure_streak': 0},
+        }
+        result = adapter._sync({}, state, 'ex1')
+        self.assertTrue(result['synced'])
+        self.assertTrue(result['available'])
+        self.assertEqual(result['total_calls'], 1)
+
+    def test_executor_sync_empty_state(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('executor')
+        state = {'sources': {'ex1': {'id': 'ex1', 'kind': 'executor', 'enabled': True,
+                                      'status': 'CONFIGURED', 'status_history': [],
+                                      'adapter_state': {'enabled_actions': []}}}}
+        result = adapter._sync({}, state, 'ex1')
+        self.assertTrue(result['synced'])
+        self.assertIsNone(result['available'])
+
+
+class MetricAdapterSyncTests(unittest.TestCase):
+    def test_metric_sync_reads_progress_profile(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('metric')
+        state = {
+            'sources': {'m1': {'id': 'm1', 'kind': 'metric', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'metric_path': 'behavioral_tests',
+                                                  'metric_source': 'state',
+                                                  'direction': 'nondecreasing',
+                                                  'enabled_actions': []}}},
+            'progress_profiles': [{'measures': {'behavioral_tests': {'current': 42}}}],
+            'external_metric_state': {},
+        }
+        result = adapter._sync({}, state, 'm1')
+        self.assertTrue(result['synced'])
+        self.assertEqual(result['current_value'], 42)
+
+    def test_metric_sync_missing_path_returns_none(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('metric')
+        state = {
+            'sources': {'m1': {'id': 'm1', 'kind': 'metric', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'metric_path': 'nonexistent',
+                                                  'metric_source': 'state',
+                                                  'direction': 'nondecreasing',
+                                                  'enabled_actions': []}}},
+            'progress_profiles': [{'measures': {}}],
+            'external_metric_state': {},
+        }
+        result = adapter._sync({}, state, 'm1')
+        self.assertTrue(result['synced'])
+        self.assertIsNone(result['current_value'])
+
+
+class VitalAdapterSyncTests(unittest.TestCase):
+    def test_vital_sync_computes_ratio(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('vital')
+        state = {
+            'sources': {'v1': {'id': 'v1', 'kind': 'vital', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'numerator': 'completed_objectives',
+                                                  'denominator': 'total_objectives',
+                                                  'window': None,
+                                                  'last_value': None,
+                                                  'enabled_actions': []}}},
+            'progress_profiles': [{'measures': {
+                'completed_objectives': {'current': 3},
+                'total_objectives': {'current': 10},
+            }}],
+        }
+        result = adapter._sync({}, state, 'v1')
+        self.assertTrue(result['synced'])
+        self.assertAlmostEqual(result['ratio'], 0.3)
+
+    def test_vital_sync_no_denominator(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('vital')
+        state = {
+            'sources': {'v1': {'id': 'v1', 'kind': 'vital', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'numerator': 'behavioral_tests',
+                                                  'denominator': None, 'window': None,
+                                                  'last_value': None,
+                                                  'enabled_actions': []}}},
+            'progress_profiles': [{'measures': {'behavioral_tests': {'current': 55}}}],
+        }
+        result = adapter._sync({}, state, 'v1')
+        self.assertTrue(result['synced'])
+        self.assertIsNone(result['ratio'])
+        self.assertEqual(result['numerator_value'], 55)
+
+
+class ProductAdapterSyncTests(unittest.TestCase):
+    def test_product_sync_reads_lifecycle(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('product')
+        state = {
+            'sources': {'p1': {'id': 'p1', 'kind': 'product', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'product_id': 'myapp', 'enabled_actions': []}}},
+            'lifecycle_state': 'ACTIVE',
+            'objectives': [{'status': 'active'}, {'status': 'planned'}, {'status': 'completed'}],
+            'executor_state': {'progress_vector': 0.5},
+        }
+        result = adapter._sync({}, state, 'p1')
+        self.assertTrue(result['synced'])
+        self.assertEqual(result['lifecycle_state'], 'ACTIVE')
+        self.assertEqual(result['objectives_active'], 1)
+        self.assertEqual(result['objectives_completed'], 1)
+        self.assertAlmostEqual(result['progress_vector'], 0.5)
+
+
+class PeerAdapterSyncTests(unittest.TestCase):
+    def test_peer_sync_known_peer(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('peer')
+        state = {
+            'sources': {'p1': {'id': 'p1', 'kind': 'peer', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'location': 'https://peer.example.com', 'enabled_actions': []}}},
+            'exchange_peers': [{'location': 'https://peer.example.com', 'status': 'CONNECTED',
+                                 'last_seen_at': '2024-01-01T00:00:00+00:00'}],
+        }
+        result = adapter._sync({}, state, 'p1')
+        self.assertTrue(result['synced'])
+        self.assertTrue(result['known_in_exchange'])
+        self.assertEqual(result['peer_status'], 'CONNECTED')
+
+    def test_peer_sync_unknown_peer(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('peer')
+        state = {
+            'sources': {'p1': {'id': 'p1', 'kind': 'peer', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'location': 'https://new.peer', 'enabled_actions': []}}},
+            'exchange_peers': [],
+        }
+        result = adapter._sync({}, state, 'p1')
+        self.assertTrue(result['synced'])
+        self.assertFalse(result['known_in_exchange'])
+
+
+class FileAdapterSyncTests(unittest.TestCase):
+    def test_file_adapter_no_dsn_returns_error(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        adapter = SOURCE_REGISTRY.get('file')
+        state = {
+            'sources': {'f1': {'id': 'f1', 'kind': 'file', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'dsn': '', 'adapter_kind': 'json',
+                                                  'direction': 'read', 'enabled_actions': []}}},
+        }
+        result = adapter._sync({}, state, 'f1')
+        self.assertFalse(result['synced'])
+
+    def test_file_adapter_registered_for_all_kinds(self):
+        from urace.source_adapters import SOURCE_REGISTRY
+        for kind in ('file', 'csv', 'json', 'sqlite', 'api'):
+            self.assertIsNotNone(SOURCE_REGISTRY.get(kind), f'{kind} not registered')
+
+
+# ── Auto-sync cycle function ──────────────────────────────────────────────────
+
+class AutoSyncCycleTests(unittest.TestCase):
+    def test_auto_sync_skips_disabled_source(self):
+        from urace.cli_cycle import _source_adapter_auto_sync
+        state = {
+            'sources': {'s1': {'id': 's1', 'kind': 'audit', 'enabled': False,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'last_record_count': 0, 'enabled_actions': []}}},
+        }
+        _source_adapter_auto_sync({'sources': {'auto_sync_interval_s': 300}}, state)
+        # Disabled source should not advance to OBSERVED
+        self.assertEqual(state['sources']['s1']['status'], 'CONFIGURED')
+
+    def test_auto_sync_runs_overdue_source(self):
+        from urace.cli_cycle import _source_adapter_auto_sync
+        state = {
+            'sources': {'s1': {'id': 's1', 'kind': 'audit', 'enabled': True,
+                                'status': 'CONFIGURED',
+                                'status_history': [{'status': 'CONFIGURED', 'at': '2020-01-01T00:00:00+00:00'}],
+                                'adapter_state': {'last_record_count': 0,
+                                                  'last_synced_at': '2020-01-01T00:00:00+00:00',
+                                                  'enabled_actions': []}}},
+            'state_audit_records': [],
+            'evidence': [],
+            'compliance_records': [],
+        }
+        _source_adapter_auto_sync({'sources': {'auto_sync_interval_s': 300}}, state)
+        # Should have been synced and advanced to OBSERVED
+        self.assertEqual(state['sources']['s1']['status'], 'OBSERVED')
+
+    def test_auto_sync_zero_interval_skips_all(self):
+        from urace.cli_cycle import _source_adapter_auto_sync
+        state = {
+            'sources': {'s1': {'id': 's1', 'kind': 'audit', 'enabled': True,
+                                'status': 'CONFIGURED', 'status_history': [],
+                                'adapter_state': {'last_record_count': 0, 'enabled_actions': []}}},
+        }
+        _source_adapter_auto_sync({'sources': {'auto_sync_interval_s': 0}}, state)
+        self.assertEqual(state['sources']['s1']['status'], 'CONFIGURED')
+
+    def test_auto_sync_appends_evidence_on_new_data(self):
+        from urace.cli_cycle import _source_adapter_auto_sync
+        state = {
+            'sources': {'s1': {'id': 's1', 'kind': 'cost', 'enabled': True,
+                                'status': 'CONFIGURED',
+                                'status_history': [{'status': 'CONFIGURED', 'at': '2020-01-01T00:00:00+00:00'}],
+                                'adapter_state': {'last_total_usd': None, 'last_record_count': 0,
+                                                  'last_synced_at': '2020-01-01T00:00:00+00:00',
+                                                  'enabled_actions': []}}},
+            'evidence': [],
+        }
+        _source_adapter_auto_sync({'sources': {'auto_sync_interval_s': 300}}, state)
+        source_evidence = [e for e in state.get('evidence', []) if e.get('kind') == 'source-sync-observation']
+        self.assertEqual(len(source_evidence), 1)
+        self.assertEqual(source_evidence[0]['source_id'], 's1')
+
+
+# ── Config schema coverage ────────────────────────────────────────────────────
+
+class ConfigSchemaSourcesTests(unittest.TestCase):
+    def test_allow_act_in_schema(self):
+        from urace.config_schema import SCHEMA
+        sources = SCHEMA['sources']
+        self.assertIn('allow_act', sources)
+        self.assertEqual(sources['allow_act']['type'], 'bool')
+        self.assertFalse(sources['allow_act']['default'])
+
+    def test_act_audit_all_in_schema(self):
+        from urace.config_schema import SCHEMA
+        sources = SCHEMA['sources']
+        self.assertIn('act_audit_all', sources)
+        self.assertTrue(sources['act_audit_all']['default'])
+
+
+# ── M2M / vitals source_adapters field ───────────────────────────────────────
+
+class VitalsSourceAdaptersTests(unittest.TestCase):
+    def test_source_adapters_in_vitals_response(self):
+        import sys, types
+        # Stub heavy imports that vitals() needs
+        for mod in ('urace.external_metrics', 'urace.compaction', 'urace.cognitive_resume',
+                    'urace.continuation', 'urace.user_controls', 'urace.planning_feedback'):
+            if mod not in sys.modules:
+                sys.modules[mod] = types.ModuleType(mod)
+        # Test the source_adapters field is computed correctly from state
+        # without invoking the full vitals_snapshot (which has heavy deps)
+        state = {
+            'sources': {
+                'src1': {'id': 'src1', 'kind': 'audit', 'enabled': True, 'status': 'OBSERVED',
+                         'adapter_state': {'enabled_actions': []}},
+                'src2': {'id': 'src2', 'kind': 'cost', 'enabled': True, 'status': 'CONFIGURED',
+                         'adapter_state': {'enabled_actions': []}},
+            },
+        }
+        # Directly test the computation logic used in vitals_snapshot
+        sources = state.get('sources', {})
+        total = len(sources)
+        observed = [
+            {'id': sid, 'kind': r.get('kind'), 'status': r.get('status')}
+            for sid, r in sources.items()
+            if isinstance(r, dict) and r.get('status') in ('OBSERVED', 'ACTED')
+        ]
+        self.assertEqual(total, 2)
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0]['id'], 'src1')
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -598,6 +598,18 @@ def vitals_snapshot(config: dict[str, Any], state: dict[str, Any]) -> dict[str, 
             "connectors": list(({item["id"]: {**item, "status": "ACTIVE"} for item in config.get("external_metrics", {}).get("sources", [])} | {item["id"]: item for item in state.get("connector_sources", [])}).values()),
             "errors": external.get("errors", []),
         },
+        "source_adapters": {
+            "total": len(state.get("sources", {})),
+            "by_status": {s: sum(1 for r in state.get("sources", {}).values()
+                                  if isinstance(r, dict) and r.get("status") == s)
+                          for s in ("CONFIGURED", "OBSERVED", "ACTED")},
+            "observed": [
+                {"id": sid, "kind": r.get("kind"), "status": r.get("status"),
+                 "enabled": r.get("enabled", True)}
+                for sid, r in state.get("sources", {}).items()
+                if isinstance(r, dict) and r.get("status") in ("OBSERVED", "ACTED")
+            ],
+        },
         "health": {
             "recorded_blockers": len(state.get("blockers", [])), "lifecycle_blocked": state["lifecycle_state"] == "BLOCKED",
             "unresolved_effects": len(state.get("unresolved_effects", [])),

@@ -28,5 +28,26 @@ class ProductAdapter(NullSourceAdapter):
             'adapter_state': {'product_id': kwargs.get('product_id', source_id), 'enabled_actions': []},
         }
 
+    def _sync(self, config: dict, state: dict, source_id: str) -> dict:
+        from ._base import _get_source
+        record = _get_source(state, source_id) or {}
+        product_id = record.get('adapter_state', {}).get('product_id', source_id)
+        # Surfaces the lifecycle and objective health of the product
+        lifecycle = state.get('lifecycle_state', 'UNKNOWN')
+        objectives = state.get('objectives', [])
+        active = sum(1 for o in objectives if o.get('status') == 'active')
+        planned = sum(1 for o in objectives if o.get('status') == 'planned')
+        completed = sum(1 for o in objectives if o.get('status') == 'completed')
+        progress = state.get('executor_state', {}).get('progress_vector')
+        return {
+            'synced': True,
+            'product_id': product_id,
+            'lifecycle_state': lifecycle,
+            'objectives_active': active,
+            'objectives_planned': planned,
+            'objectives_completed': completed,
+            'progress_vector': progress,
+        }
+
 
 SOURCE_REGISTRY.register(ProductAdapter())

@@ -47,5 +47,29 @@ class MetricAdapter(NullSourceAdapter):
             },
         }
 
+    def _sync(self, config: dict, state: dict, source_id: str) -> dict:
+        from ._base import _get_source
+        record = _get_source(state, source_id) or {}
+        astate = record.get('adapter_state', {})
+        metric_path = astate.get('metric_path', '')
+        # Read from progress_profiles measures or external_metric_state
+        profiles = state.get('progress_profiles', [])
+        current_value = None
+        if profiles and metric_path:
+            measures = profiles[0].get('measures', {})
+            if metric_path in measures:
+                current_value = measures[metric_path].get('current')
+        ext = state.get('external_metric_state', {})
+        latest = ext.get('latest', [])
+        external_value = next(
+            (e.get('value') for e in latest if e.get('name') == metric_path), None
+        )
+        return {
+            'synced': True,
+            'metric_path': metric_path,
+            'current_value': current_value if current_value is not None else external_value,
+            'external_error_streak': ext.get('failure_streak', 0),
+        }
+
 
 SOURCE_REGISTRY.register(MetricAdapter())

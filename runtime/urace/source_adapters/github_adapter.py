@@ -39,5 +39,41 @@ class GithubAdapter(NullSourceAdapter):
             },
         }
 
+    def _sync(self, config: dict, state: dict, source_id: str) -> dict:
+        from ._base import _get_source
+        import os
+        record = _get_source(state, source_id) or {}
+        astate = record.get('adapter_state', {})
+        repo = astate.get('repo', '')
+        token_env = astate.get('token_env', 'URACE_GITHUB_TOKEN')
+        token = os.environ.get(token_env, '')
+        if not repo:
+            return {'synced': False, 'reason': 'no repo configured'}
+        try:
+            import httpx
+        except ImportError:
+            from ._base import SourceUnavailableError
+            raise SourceUnavailableError('pip install "urace[p2p]"')
+        headers = {'Accept': 'application/vnd.github+json'}
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
+        try:
+            resp = httpx.get(f'https://api.github.com/repos/{repo}', headers=headers, timeout=10)
+            if resp.status_code == 200:
+                data = resp.json()
+                return {
+                    'synced': True,
+                    'repo': repo,
+                    'default_branch': data.get('default_branch'),
+                    'open_issues': data.get('open_issues_count'),
+                    'stars': data.get('stargazers_count'),
+                    'forks': data.get('forks_count'),
+                    'visibility': data.get('visibility'),
+                    'pushed_at': data.get('pushed_at'),
+                }
+            return {'synced': False, 'reason': f'HTTP {resp.status_code}', 'repo': repo}
+        except Exception as exc:
+            return {'synced': False, 'reason': str(exc)}
+
 
 SOURCE_REGISTRY.register(GithubAdapter())

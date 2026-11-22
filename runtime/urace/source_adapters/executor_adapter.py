@@ -48,5 +48,20 @@ class ExecutorAdapter(NullSourceAdapter):
             },
         }
 
+    def _sync(self, config: dict, state: dict, source_id: str) -> dict:
+        es = state.get('executor_state', {})
+        available = es.get('available')
+        calls = es.get('executor_calls', [])
+        budget_status = es.get('discovery_budget_status', 'UNKNOWN')
+        return {
+            'synced': True,
+            'available': available,
+            'budget_status': budget_status,
+            'total_calls': len(calls),
+            'last_discovery_at': es.get('last_discovery_at'),
+            'last_operation_at': es.get('last_operation_at'),
+            'availability_failure_streak': es.get('availability_failure_streak', 0),
+        }
+
 
 SOURCE_REGISTRY.register(ExecutorAdapter())
