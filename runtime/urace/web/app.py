@@ -181,4 +181,8 @@ def create_app(config: dict, token: str) -> FastAPI:
     async def page_portfolio(request: Request):
         return templates.TemplateResponse(request, "portfolio.html", context=_ctx("portfolio"))
 
+    @app.get("/sources", response_class=HTMLResponse, include_in_schema=False)
+    async def page_sources(request: Request):
+        return templates.TemplateResponse(request, "sources.html", context=_ctx("sources"))
+
     return app

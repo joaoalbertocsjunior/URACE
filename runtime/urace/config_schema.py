@@ -161,6 +161,8 @@ SCHEMA: dict[str, Any] = {
     'sources': {
         '_description': 'Source adapter settings.',
         'auto_sync_interval_s': _i(300, 'Seconds between automatic source sync cycles (0=disabled)'),
+        'allow_act': _b(False, 'Enable act() path globally — sources can be acted upon only when True'),
+        'act_audit_all': _b(True, 'Log every act() call regardless of outcome'),
     },
 }
 

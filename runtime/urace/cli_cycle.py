@@ -25,6 +25,55 @@ from . import cognitive_resume as cognitive_resume_module
 from . import continuation as continuation_module
 from ._common import nullable_limit
 from . import auto_goals, data_transport
+
+
+def _source_adapter_auto_sync(config: dict, state: dict) -> None:
+    """Sync all enabled Protocol v2 source adapters whose last sync is overdue.
+
+    Runs at every autonomous cycle alongside data_transport.auto_sync().
+    Appends a 'source-sync-observation' Evidence record when a sync returns
+    new data, bridging source observations into the main lifecycle.
+    """
+    interval = config.get('sources', {}).get('auto_sync_interval_s', 300)
+    if interval == 0:
+        return
+    sources = state.get('sources', {})
+    if not sources:
+        return
+    try:
+        from .source_adapters import SOURCE_REGISTRY
+    except Exception:
+        return
+    current_ts = datetime.now(timezone.utc).timestamp()
+    for source_id, record in list(sources.items()):
+        if not isinstance(record, dict) or not record.get('enabled', True):
+            continue
+        kind = record.get('kind', '')
+        adapter = SOURCE_REGISTRY.get(kind)
+        if adapter is None:
+            continue
+        last_synced = record.get('adapter_state', {}).get('last_synced_at') or record.get('added_at')
+        if last_synced:
+            try:
+                elapsed = current_ts - datetime.fromisoformat(last_synced).timestamp()
+                if elapsed < interval:
+                    continue
+            except (ValueError, TypeError):
+                pass
+        try:
+            result = adapter.sync(config, state, source_id)
+            record.setdefault('adapter_state', {})['last_synced_at'] = now()
+            if result.get('synced', False):
+                state.setdefault('evidence', []).append({
+                    'id': identifier('evidence'),
+                    'at': now(),
+                    'kind': 'source-sync-observation',
+                    'source_id': source_id,
+                    'source_kind': kind,
+                    'summary': {k: v for k, v in result.items() if k != 'synced'},
+                })
+        except Exception as exc:
+            _logger.debug('source adapter auto-sync %s/%s failed: %s', kind, source_id, exc)
 # Keep build_parser and parse_cycles available from urace.cli for existing API callers.
 
 from ._common import (
@@ -588,6 +637,7 @@ def cycle(config: dict[str, Any], state: dict[str, Any], allow_execution: bool =
         save_state(config, state)
         return _onboard_result
     data_transport.auto_sync(state,config,state_path(config).parent)
+    _source_adapter_auto_sync(config, state)
     # --- r54: capture immutable-field snapshot for pre-save mutation detection ---
     import copy as _copy
     _loaded_state_snapshot = _copy.deepcopy({

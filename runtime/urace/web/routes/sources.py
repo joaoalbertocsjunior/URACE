@@ -48,7 +48,8 @@ def build_router(get_config, verify_token) -> APIRouter:
                     for s in instances
                 ],
             })
-        return {'adapters': result, 'total_kinds': len(result)}
+        allow_act = get_config().get('sources', {}).get('allow_act', False)
+        return {'adapters': result, 'total_kinds': len(result), 'allow_act_global': allow_act}
 
     @router.get('/kinds')
     async def list_kinds(_=Depends(verify_token)):

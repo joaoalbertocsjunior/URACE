@@ -71,6 +71,9 @@ from . import (  # noqa: E402, F401
     mcp_server_adapter,
     log_file_adapter,
     package_registry_adapter,
+    # Runtime-internal observation sources
+    audit_adapter,
+    cost_adapter,
 )
 
 __all__ = ['SOURCE_REGISTRY', 'SourceAdapter', 'NullSourceAdapter']

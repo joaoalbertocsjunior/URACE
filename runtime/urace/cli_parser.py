@@ -427,7 +427,7 @@ def _build_parser_template() -> argparse.ArgumentParser:
                                          "folder", "shell", "environment", "codebase", "test_suite",
                                          "webhook", "database", "p2p_catalog", "git", "s3",
                                          "ci_pipeline", "event_stream", "inbox", "mcp_server",
-                                         "log_file", "package_registry"],
+                                         "log_file", "package_registry", "audit", "cost"],
                                 help="source kind (required for add)")
     source_command.add_argument("--connect", default=None, dest="dsn", help="DSN or connection string (data sources)")
     source_command.add_argument("--type", dest="adapter_kind", default=None, help="adapter type (data sources)")
