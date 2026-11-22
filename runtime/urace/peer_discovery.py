@@ -44,6 +44,7 @@ import time
 from typing import Any
 
 from ._common import PROTOCOL_GENERATION, PROTOCOL_GENERATION_MIN_SUPPORTED, FRAME_PEER_DOWN, FRAME_PEER_LEAVING
+from .hardware_info import hardware_gossip_payload
 from .network_adapter import NetworkAdapter
 
 _logger = logging.getLogger(__name__)
@@ -526,6 +527,7 @@ def dht_cert_publish(exchange: NetworkAdapter, https_port: int, *, ephemeral: bo
             b"port":               https_port,
             b"peer_id":            identity["peer_id"].encode(),
             b"protocol_generation": PROTOCOL_GENERATION,
+            b"hardware":           hardware_gossip_payload(),
         }
         nid    = os.urandom(20)
         client = _DHTClient(nid)
