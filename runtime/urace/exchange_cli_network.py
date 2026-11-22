@@ -147,11 +147,32 @@ def _run_network_audit(exchange, args, config, verb):
  if getattr(args,'kind',None):rows=[r for r in rows if r.get('kind')==args.kind]
  if getattr(args,'peer',None):rows=[r for r in rows if r.get('peer')==args.peer]
  result=rows[-args.limit:]
+ # Annotate report with relay recommendation when symmetric NAT is detected
+ try:
+  from . import nat_check as _nc
+  _nat=_nc.detect_nat_type()
+  if _nat and _nat.get('nat_type')=='symmetric':
+   if isinstance(result,list):
+    result={'rows':result,'relay_recommended':True,'relay_note':'Symmetric NAT detected; use --as-relay peer or configure relay_host'}
+ except Exception:
+  pass
  return result
 
 
 def _run_bootstrap(exchange, args, config, verb, pe):
  result = None
+ # --as-relay: announce this node as a relay and return immediately
+ if getattr(args,'as_relay',False):
+  import logging as _rlog
+  _rlog.getLogger('urace.exchange').info('Node configured as relay peer (--as-relay)')
+  _rcfg=exchange.load()
+  _roles=list(_rcfg.get('node_roles',[]))
+  if 'relay' not in _roles:
+   _roles.append('relay')
+   _rcfg['node_roles']=_roles
+   from ._common import atomic_write_json
+   atomic_write_json(exchange.root/'policy.json',_rcfg)
+  return {'status':'relay_mode','note':'This node will accept relay connections','node_roles':_roles}
  cfg=exchange.load()
  peers_list=cfg.get('bootstrap_peers',[])
  if verb=='list':result={'bootstrap_peers':peers_list,'count':len(peers_list)}

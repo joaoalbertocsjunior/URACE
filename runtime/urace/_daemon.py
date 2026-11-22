@@ -198,6 +198,17 @@ def dispatch(args, config: dict) -> int:
         finally:
             _p2p_ready.set()
         try:
+            from .nat_check import detect_nat_type
+            _nat = detect_nat_type()
+            if _nat and _nat.get('nat_type') == 'symmetric':
+                import logging as _logging
+                _logging.getLogger('urace.daemon').warning(
+                    "Symmetric NAT detected — relay routing recommended. "
+                    "Run: urace exchange bootstrap --as-relay or configure a relay peer."
+                )
+        except Exception:
+            pass
+        try:
             proc.wait()
         except Exception:
             pass

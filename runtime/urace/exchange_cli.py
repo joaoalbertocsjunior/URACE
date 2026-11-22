@@ -79,6 +79,7 @@ def grammar(children):
   elif name=='announce':
    p.add_argument('--endpoint',default=None,dest='endpoint',help='your HTTPS bootstrap endpoint to announce (auto-detect from STUN if omitted)')
    p.add_argument('--timeout',type=float,default=5.0)
+   p.add_argument('--as-relay',action='store_true',default=False,dest='as_relay',help='register this node as a relay peer (accepts relay connections from symmetric-NAT nodes)')
  node=groups.add_parser('node',help='node role and capability management');node_v=node.add_subparsers(dest='exchange_verb',required=True)
  p=node_v.add_parser('check',help='check which node roles are locally feasible (STUN + UPnP)');output_options(p);p.add_argument('--timeout',type=float,default=5.0)
  p=node_v.add_parser('roles',help='show or set node roles');output_options(p);p.add_argument('--set',default=None,dest='roles_value',help='comma-separated roles: bootstrap,relay,consumer,creator')
