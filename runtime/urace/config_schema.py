@@ -179,6 +179,18 @@ SCHEMA: dict[str, Any] = {
         'allow_act': _b(False, 'Enable act() path globally — sources can be acted upon only when True'),
         'act_audit_all': _b(True, 'Log every act() call regardless of outcome'),
     },
+    'routing': {
+        '_description': 'Routing affinity and cache-aware selection settings.',
+        'affinity_enabled':              _b(True,  'Enable cache-key and session-hint affinity routing'),
+        'cache_evidence_ttl_seconds':    _i(900,   'TTL for in-process cache-affinity evidence (seconds)'),
+        'cache_min_saved_tokens':        _i(256,   'Minimum matched tokens before cache evidence changes routing'),
+        'demand_window_seconds':         _i(60,    'Rolling window for request-rate demand tracking (seconds)'),
+        'tps_weight_min':                _f(0.3,   'Minimum routing weight for slow/cold executors'),
+        'tps_weight_max':                _f(2.0,   'Maximum routing weight for fast executors'),
+        'throughput_window_seconds':     _i(900,   'Rolling window for TPS measurement (seconds)'),
+        'reference_tps':                 _f(10.0,  'Reference tok/s used to normalize routing weights'),
+        'local_rep_penalty_window_seconds': _i(300,'How long a failed target remains penalized (seconds)'),
+    },
 }
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -493,6 +505,18 @@ try:
         token_env: str = "URACE_GITHUB_TOKEN"
         repo: str = ""
 
+    class _RoutingConfig(BaseModel):
+        model_config = {"extra": "allow"}
+        affinity_enabled: bool = True
+        cache_evidence_ttl_seconds: int = Field(default=900, ge=0)
+        cache_min_saved_tokens: int = Field(default=256, ge=0)
+        demand_window_seconds: int = Field(default=60, ge=10)
+        tps_weight_min: float = Field(default=0.3, ge=0.0, le=1.0)
+        tps_weight_max: float = Field(default=2.0, ge=1.0)
+        throughput_window_seconds: int = Field(default=900, ge=60)
+        reference_tps: float = Field(default=10.0, ge=0.1)
+        local_rep_penalty_window_seconds: int = Field(default=300, ge=30)
+
     class URACEConfig(BaseModel):
         """Typed model for config.json. Extra keys are passed through (product overlays)."""
         model_config = {"extra": "allow"}
@@ -508,6 +532,7 @@ try:
         self_evolution_policy: _SelfEvolutionPolicy = Field(default_factory=_SelfEvolutionPolicy)
         analytics_export: _AnalyticsExport = Field(default_factory=_AnalyticsExport)
         github: _GithubConfig = Field(default_factory=_GithubConfig)
+        routing: _RoutingConfig = Field(default_factory=_RoutingConfig)
 
     def model_validate_config(config: dict) -> list[dict]:
         """Validate config using pydantic. Returns [{path, error}] like validate()."""

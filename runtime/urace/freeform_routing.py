@@ -6,6 +6,54 @@ from . import api_interface,primitives,command_surface
 _DEPTH=ContextVar('urace_freeform_depth',default=0)
 _CANCEL_RE=re.compile(r'^\s*(cancel|ignore|never\s*mind|forget(?:\s*it|\s*that)?|abort|scratch\s*that|no\s*thanks|undo)\s*\.?\s*$',re.IGNORECASE)
 
+
+def extract_cache_key(text: str, body: dict | None = None) -> str | None:
+    """Stable hash of system-prompt scaffold fields (tools, response_format, system messages).
+    Returns None when no structured fields are present — plain text has no cache key."""
+    if not body:
+        return None
+    parts = []
+    if body.get('tools'):
+        parts.append(str(sorted(str(t) for t in body['tools'])))
+    if body.get('response_format'):
+        parts.append(str(body['response_format']))
+    sys_msgs = [m for m in body.get('messages', []) if isinstance(m, dict) and m.get('role') == 'system']
+    if sys_msgs:
+        parts.append(sys_msgs[0].get('content', '')[:256])
+    if not parts:
+        return None
+    import hashlib
+    return hashlib.sha256('\0'.join(parts).encode()).hexdigest()[:16]
+
+
+def extract_session_hint(text: str, body: dict | None = None) -> str | None:
+    """Extract explicit session_id or user hint from body.
+    Never invents a hint from content — only returns if explicitly provided."""
+    if not body:
+        return None
+    sid = body.get('session_id') or body.get('user')
+    if not sid or not isinstance(sid, str):
+        return None
+    import hashlib
+    return hashlib.sha256(sid.encode()).hexdigest()[:16]
+
+
+def select_target(
+    candidates: list[str],
+    cache_key: str | None,
+    session_hint: str | None,
+    *,
+    affinity_router=None,
+) -> tuple[str, bool]:
+    """Select routing target from candidates. Returns (target_id, affinity_applied).
+
+    Stub: always returns first candidate with affinity_applied=False.
+    Real affinity behaviour is added in R2 (cache evidence) and R5 (local reputation).
+    """
+    if not candidates:
+        raise ValueError("select_target called with empty candidates list")
+    return candidates[0], False
+
 def normalize(batch):
     if isinstance(batch,dict) and batch.get('logic') is None and isinstance(batch.get('items'),list) and len(batch['items'])==1:
         return {**batch,'logic':'and','normalization':'single-item relationship defaults to and'}
@@ -469,7 +517,13 @@ def _cancel_latest_queued(cli,config,state):
     return None
 
 def _route(cli,args,config,state,parser):
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
     text=args.text
+    _cache_key = extract_cache_key(text)
+    _session_hint = extract_session_hint(text)
+    # both are captured for downstream phases; not yet used for routing decisions
+    _log.debug('freeform_routing: cache_key=%s session_hint=%s', _cache_key, _session_hint)
     if not text.strip():return _error(args,'Empty input; use urace help for commands',2)
     if len(text.encode())>65536:return _error(args,'Input exceeds the bounded routing packet; retain it as source context and use scoped requirements/chunks, without truncation',2)
     # Cancel detection — rule-based, zero LLM cost
@@ -780,6 +834,7 @@ def _route(cli,args,config,state,parser):
                     if _p2p_candidates else 'No intent-matched asset surfaced; continue the normal authorized route and retain this as a retrieval miss, not proof that no reusable asset exists.')
     _clarifying_q=batch.get('clarifying_question') if isinstance(batch,dict) else None
     result={'status':'interpretation_required' if deferred else ('error' if rc else 'classified'),'text':text,'batch':batch,'queued':queued,'commands':commands,'responses':responses,'deferred':deferred,'clarifying_question':_clarifying_q if deferred else None,'routing_attempts':len(usage),'routing_source':'VALIDATED_CACHE' if cached is not None else 'BOUNDED_EXECUTOR_CLASSIFICATION','source_coverage':source_coverage(text,batch['items']),'executor_usage':usage,'p2p_suggestions':_p2p_candidates,'remote_p2p_discovery':{k:_remote_discovery.get(k) for k in ('status','peer_failures')},'value_route':{'strategy':'p2p_first','candidate_count':len(_p2p_candidates),'matching_stage':'post-classification goal/intent fields','match_score_scope':'heuristic lexical retrieval relevance; not calibrated quality or equivalence','automatic_borrow':False,'open_asset_fetch':'Use --p2p-asset ASSET_ID to fetch a seller-signed open asset into quarantine; it is never applied or executed.','paid_listing_status':'Discovery only; cross-peer settlement is not implemented.','cost_comparison':'unqualified_until_task_matched_cost_receipts_and_independent_acceptance','next_step':_next_p2p_step} if _ledger_ctx!='never' else {'strategy':'executor_or_local_route','p2p_candidates_disabled':True}}
+    result['affinity_applied'] = False
     if args.json:print(json.dumps(result,ensure_ascii=False))
     else:
         for response in responses:print(response)

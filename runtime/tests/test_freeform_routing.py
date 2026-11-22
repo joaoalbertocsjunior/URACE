@@ -293,3 +293,30 @@ class LowConfidenceDeferralTests(unittest.TestCase):
   text='Improve latency';item=self.item('goal',{'title':'Improve latency','success_measure':'p95 under 200ms'},text,confidence=0.95)
   rc,result,queued=self.runtext(text,self.batch(text,[item]),['--confirm'])
   self.assertEqual(rc,0);self.assertEqual(result['status'],'classified');queued.assert_called_once()
+
+
+class TestAffinityRouting(unittest.TestCase):
+ def test_extract_cache_key_returns_none_for_plain_text(self):
+  from urace.freeform_routing import extract_cache_key
+  self.assertIsNone(extract_cache_key("improve latency"))
+  self.assertIsNone(extract_cache_key("improve latency", {}))
+  self.assertIsNone(extract_cache_key("improve latency", {"messages": [{"role": "user", "content": "hello"}]}))
+
+ def test_extract_cache_key_stable_across_calls(self):
+  from urace.freeform_routing import extract_cache_key
+  body = {"tools": [{"name": "search"}], "response_format": {"type": "json"}}
+  k1 = extract_cache_key("some text", body)
+  k2 = extract_cache_key("different text", body)
+  self.assertIsNotNone(k1)
+  self.assertEqual(k1, k2)  # key depends on body fields, not text
+
+ def test_extract_session_hint_returns_none_without_explicit_hint(self):
+  from urace.freeform_routing import extract_session_hint
+  self.assertIsNone(extract_session_hint("some text"))
+  self.assertIsNone(extract_session_hint("some text", {"messages": []}))
+
+ def test_select_target_returns_affinity_applied_false_before_cache_evidence(self):
+  from urace.freeform_routing import select_target
+  target, applied = select_target(["peer-1", "peer-2"], None, None)
+  self.assertEqual(target, "peer-1")
+  self.assertFalse(applied)
