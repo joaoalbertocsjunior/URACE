@@ -71,7 +71,7 @@ class PackageRegistryAdapter(NullSourceAdapter):
 
     def _sync(self, config: dict, state: dict, source_id: str) -> dict:
         if not _AVAILABLE:
-            raise SourceUnavailableError('pip install "urace[p2p]"')
+            raise SourceUnavailableError('pip install "urace[sources-http]"')
         record = _get_source(state, source_id)
         if not record:
             return {'synced': False, 'reason': 'source not found'}

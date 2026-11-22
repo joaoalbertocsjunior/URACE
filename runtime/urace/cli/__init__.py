@@ -1733,7 +1733,32 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                               f"allow_act={'true (actions enabled)' if _dr_allow_act else 'false (actions blocked globally)'}, act_audit_all={_dr_act_audit}")
                 except Exception as _e:
                     _dr_check("sources_allow_act", "WARN", str(_e))
-                # Protocol v2 — 15. Adapters with real _act() implementations
+                # Protocol v2 — 15. Optional source dep availability
+                try:
+                    _dr_dep_status = {}
+                    for _dep_pkg, _dep_extra in [
+                        ('httpx',      'sources-http'),
+                        ('git',        'sources-git'),
+                        ('boto3',      'sources-s3'),
+                        ('kafka',      'sources-kafka'),
+                        ('redis',      'sources-redis'),
+                        ('mcp',        'sources-mcp'),
+                        ('watchdog',   'sources-watch'),
+                    ]:
+                        try:
+                            __import__(_dep_pkg)
+                            _dr_dep_status[_dep_extra] = 'installed'
+                        except ImportError:
+                            _dr_dep_status[_dep_extra] = 'missing'
+                    _installed = [k for k, v in _dr_dep_status.items() if v == 'installed']
+                    _missing   = [k for k, v in _dr_dep_status.items() if v == 'missing']
+                    _dep_detail = f"{len(_installed)}/7 installed"
+                    if _missing:
+                        _dep_detail += f"; missing: {', '.join(_missing)} — pip install \"urace[sources-full]\""
+                    _dr_check("source_optional_deps", "OK" if not _missing else "INFO", _dep_detail)
+                except Exception as _e:
+                    _dr_check("source_optional_deps", "WARN", str(_e))
+                # Protocol v2 — 16. Adapters with real _act() implementations
                 try:
                     from ..source_adapters import SOURCE_REGISTRY as _dr_sr2
                     from ..source_adapters._base import NullSourceAdapter as _NullBase

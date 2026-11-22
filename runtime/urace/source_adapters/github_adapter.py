@@ -53,7 +53,7 @@ class GithubAdapter(NullSourceAdapter):
             import httpx
         except ImportError:
             from ._base import SourceUnavailableError
-            raise SourceUnavailableError('pip install "urace[p2p]"')
+            raise SourceUnavailableError('pip install "urace[sources-http]"')
         headers = {'Accept': 'application/vnd.github+json'}
         if token:
             headers['Authorization'] = f'Bearer {token}'

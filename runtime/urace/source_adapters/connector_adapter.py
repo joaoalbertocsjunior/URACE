@@ -54,7 +54,7 @@ class ConnectorAdapter(NullSourceAdapter):
             import httpx
         except ImportError:
             from ._base import SourceUnavailableError
-            raise SourceUnavailableError('pip install "urace[p2p]"')
+            raise SourceUnavailableError('pip install "urace[sources-http]"')
         try:
             resp = httpx.head(location, timeout=5, follow_redirects=True)
             return {'synced': True, 'location': location,

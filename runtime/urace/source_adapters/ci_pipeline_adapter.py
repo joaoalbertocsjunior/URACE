@@ -22,7 +22,7 @@ except ImportError:
 
 def _require_httpx() -> None:
     if not _AVAILABLE:
-        raise SourceUnavailableError('pip install "urace[p2p]"')
+        raise SourceUnavailableError('pip install "urace[sources-http]"')
 
 
 class CIPipelineAdapter(NullSourceAdapter):
