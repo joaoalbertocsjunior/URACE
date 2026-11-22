@@ -1,3 +1,7 @@
+# Portions of this file are concept-adapted from mesh-llm
+# (https://github.com/Mesh-LLM/mesh-llm), Apache License 2.0.
+# Adapted concepts: protocol generation negotiation, peer admission quarantine,
+# death broadcasts (PEER_DOWN/LEAVING), relay peer health thresholds.
 """Zero-config peer discovery: LAN (mDNS) + WAN (BitTorrent DHT BEP 5).
 
 Discovery surfaces UNVERIFIED candidates only. A candidate becomes a trusted

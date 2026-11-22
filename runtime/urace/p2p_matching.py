@@ -1,3 +1,7 @@
+# Portions of this file are concept-adapted from mesh-llm
+# (https://github.com/Mesh-LLM/mesh-llm), Apache License 2.0.
+# Adapted concepts: demand-aware rebalancing (DemandCounter),
+# token throughput tracking (ThroughputTracker, TPS routing weights).
 """Intent-aware P2P asset retrieval. Scores rank candidates; they are not quality probabilities."""
 from __future__ import annotations
 
