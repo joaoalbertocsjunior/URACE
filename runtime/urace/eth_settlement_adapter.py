@@ -16,7 +16,44 @@ import json as _json
 import urllib.request as _ur
 from pathlib import Path
 
+import dataclasses as _dc
+from typing import Any
+
 from ._chain_adapter_base import ChainAdapter
+
+
+# ---------------------------------------------------------------------------
+# SKIPPY_SPLITS protocol stubs — full implementation in Phase X3
+# ---------------------------------------------------------------------------
+
+@_dc.dataclass
+class TopologyLock:
+    """Immutable record of a committed model-split topology.
+
+    version: monotonically increasing integer
+    model_ref: hf://namespace/repo@revision (immutable)
+    manifest_sha256: hex digest of the full topology manifest
+    stages: list of {node: str, layer_start: int, layer_end: int}
+    """
+    version: int
+    model_ref: str
+    manifest_sha256: str
+    stages: list[dict[str, Any]] = _dc.field(default_factory=list)
+
+
+@_dc.dataclass
+class ArchitectureCertificate:
+    """Proof that a model's GGUF general.architecture was approved before splitting.
+
+    model_ref: same hf:// ref as the TopologyLock it certifies
+    architecture: e.g. "llama", "mistral"
+    certified_at: unix timestamp
+    certifier_peer_id: peer that ran the GGUF inspection
+    """
+    model_ref: str
+    architecture: str
+    certified_at: float
+    certifier_peer_id: str
 
 
 # ---------------------------------------------------------------------------
