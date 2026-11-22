@@ -1742,6 +1742,8 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                         ('boto3',      'sources-s3'),
                         ('kafka',      'sources-kafka'),
                         ('redis',      'sources-redis'),
+                        ('sqlalchemy', 'sources-db'),
+                        ('ghapi',      'github'),
                     ]:
                         try:
                             __import__(_dep_pkg)
@@ -1750,7 +1752,7 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                             _dr_dep_status[_dep_extra] = 'missing'
                     _installed = [k for k, v in _dr_dep_status.items() if v == 'installed']
                     _missing   = [k for k, v in _dr_dep_status.items() if v == 'missing']
-                    _dep_detail = f"{len(_installed)}/5 installed"
+                    _dep_detail = f"{len(_installed)}/7 installed"
                     if _missing:
                         _dep_detail += f"; missing: {', '.join(_missing)} — pip install \"urace[sources-full]\""
                     _dr_check("source_optional_deps", "OK" if not _missing else "INFO", _dep_detail)
