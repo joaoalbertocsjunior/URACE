@@ -153,6 +153,7 @@ def grammar(children):
  p=verbs.add_parser('find-node',help='Kademlia find_node RPC stub (v3)');output_options(p);p.add_argument('target_peer_id')
  p=verbs.add_parser('shamir-deliver',help='deliver Shamir DEK share to replica holder (internet mode: RPC; intranet: local audit row)');output_options(p);p.add_argument('feature_id');p.add_argument('--holder',required=True,dest='holder_peer_id');p.add_argument('--share-index',type=int,required=True,dest='share_index')
  p=verbs.add_parser('tail-sync',help='pull ledger seal+tail from full peer (internet mode: fetches via bootstrap peers; intranet: no-op)');output_options(p);p.add_argument('--from-peer',required=True,dest='from_peer_id')
+ p_reqlog=verbs.add_parser('request-log',help='show recent routing request log');p_reqlog.add_argument('--limit',type=int,default=50,help='max entries to show');p_reqlog.add_argument('--json',action='store_true')
  # ── Work market ──────────────────────────────────────────────────────────────
  wm=groups.add_parser('work',help='P2P work request market and escrow');wm_v=wm.add_subparsers(dest='exchange_verb',required=True)
  p=wm_v.add_parser('list',help='list work requests');output_options(p);p.add_argument('--state',default=None)
@@ -1054,6 +1055,15 @@ def run(args,config):
    if _direct_url:result['direct_url']=_direct_url
    if _ddns_url:result['ddns_url']=_ddns_url
    if _ddns_note:result['ddns_status']=_ddns_note
+  elif verb=='request-log':
+   from .freeform_routing import get_request_log
+   entries=get_request_log(limit=args.limit)
+   if getattr(args,'json',False):
+    import dataclasses as _dc
+    print(json.dumps([_dc.asdict(e) for e in entries]));return 0
+   for e in entries:
+    print(f"{e.phase:8s} {e.request_id[:8]} {e.target_id or '-':20s} lat={e.latency_ms:.1f}ms err={e.error or '-'}")
+   return 0
   else:
    if getattr(args,'install_service',False):
     import os as _os,sys as _sys,shutil as _sh

@@ -118,6 +118,67 @@ class LocalRouteReputation:
 _LOCAL_REP = LocalRouteReputation()
 
 
+import uuid as _uuid
+
+@_dataclasses.dataclass
+class RequestLogEntry:
+    request_id: str
+    phase: str          # 'ingress' | 'start' | 'end'
+    target_id: str
+    affinity_applied: bool
+    cache_hit: bool
+    tokens_in: int
+    tokens_out: int
+    latency_ms: float
+    error: str          # '' if none
+    recorded_at: float
+
+_REQUEST_LOG: list[RequestLogEntry] = []
+_REQUEST_LOG_LOCK = _threading.Lock()
+_REQUEST_LOG_MAX = 1000  # ring buffer cap
+
+def log_request_ingress(target_id: str = '', affinity_applied: bool = False,
+                        cache_hit: bool = False) -> str:
+    """Record ingress phase; returns request_id for correlating start/end."""
+    rid = _uuid.uuid4().hex
+    _append_log(RequestLogEntry(
+        request_id=rid, phase='ingress', target_id=target_id,
+        affinity_applied=affinity_applied, cache_hit=cache_hit,
+        tokens_in=0, tokens_out=0, latency_ms=0.0, error='',
+        recorded_at=_time.time(),
+    ))
+    return rid
+
+def log_request_start(request_id: str, target_id: str = '',
+                      tokens_in: int = 0) -> None:
+    _append_log(RequestLogEntry(
+        request_id=request_id, phase='start', target_id=target_id,
+        affinity_applied=False, cache_hit=False,
+        tokens_in=tokens_in, tokens_out=0, latency_ms=0.0, error='',
+        recorded_at=_time.time(),
+    ))
+
+def log_request_end(request_id: str, tokens_out: int = 0,
+                    latency_ms: float = 0.0, error: str = '') -> None:
+    _append_log(RequestLogEntry(
+        request_id=request_id, phase='end', target_id='',
+        affinity_applied=False, cache_hit=False,
+        tokens_in=0, tokens_out=tokens_out, latency_ms=latency_ms, error=error,
+        recorded_at=_time.time(),
+    ))
+
+def get_request_log(limit: int = 100) -> list[RequestLogEntry]:
+    """Return up to *limit* most recent log entries."""
+    with _REQUEST_LOG_LOCK:
+        return list(_REQUEST_LOG[-limit:])
+
+def _append_log(entry: RequestLogEntry) -> None:
+    with _REQUEST_LOG_LOCK:
+        _REQUEST_LOG.append(entry)
+        if len(_REQUEST_LOG) > _REQUEST_LOG_MAX:
+            del _REQUEST_LOG[:-_REQUEST_LOG_MAX]
+
+
 def record_cache_evidence(evidence: 'CacheEvidence') -> None:
     """Record that target_id holds a matching context prefix."""
     with _CACHE_LOCK:
