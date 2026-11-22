@@ -14,6 +14,7 @@ except ImportError:
     _HAS_FCNTL = False
 from .ledger_crypto import canonical
 from .signed_ledger import Ledger
+from .audit_kinds import EventLifecycle, TERMINAL_KINDS
 
 CHUNK=1048576
 
@@ -40,9 +41,13 @@ def _last(ledger):
 def _commit(ledger,start,data,claim):
  return ledger.append('JOURNAL_BYTES',{'start':start,'end':start+len(data),'bytes':len(data),'sha384':hashlib.sha384(data).hexdigest(),'origin_claim':claim})
 
-def append_row(path,row):
+def append_row(path,row,lifecycle=None):
  path=Path(path)
  if path.suffix!='.jsonl' or not isinstance(row,dict):raise ValueError('Typed JSONL journal required')
+ if lifecycle is not None:
+  row['lifecycle']=lifecycle.value
+ elif row.get('kind') in TERMINAL_KINDS:
+  row['lifecycle']=EventLifecycle.TERMINAL.value
  data=canonical(row)+b'\n'
  if len(data)>CHUNK:raise ValueError('Journal row exceeds bounded record size')
  path.parent.mkdir(parents=True,exist_ok=True)
@@ -81,3 +86,34 @@ def coverage(path,checkpoint=None):
    offset+=len(page['rows'])
   tail=max(0,path.stat().st_size-end)
  return {'status':'AUTHENTICATED_OBSERVED_BYTES' if not tail else 'UNCOVERED_TAIL','covered_bytes':end,'instrumented_writer_bytes':attributed,'historically_observed_bytes':historical,'uncovered_tail_bytes':tail,'historical_authorship_proven':False,'global_consensus':False,'native_inference_calls':0,'head':verified['head'],'signature_storage_bytes':verified['stored_bytes']}
+
+def mark_terminal(journal_path,row_id:str)->bool:
+ """Transition an active row to terminal state. Returns False if already terminal/archived or not found.
+
+ Terminal rows are immutable — this function is idempotent but will not demote terminal→active.
+ """
+ from pathlib import Path
+ p=Path(journal_path)
+ if not p.exists():return False
+ rows=[]
+ found=False
+ for line in p.read_text(encoding='utf-8').splitlines():
+  line=line.strip()
+  if not line:continue
+  try:
+   import json
+   row=json.loads(line)
+  except (ValueError,json.JSONDecodeError):
+   rows.append(line);continue
+  if row.get('id')==row_id or row.get('row_id')==row_id:
+   current=row.get('lifecycle',EventLifecycle.ACTIVE.value)
+   if current==EventLifecycle.ACTIVE.value:
+    row['lifecycle']=EventLifecycle.TERMINAL.value
+    found=True
+  rows.append(json.dumps(row))
+ if found:
+  import os
+  tmp=str(p)+'.tmp'
+  with open(tmp,'w',encoding='utf-8') as f:f.write('\n'.join(rows)+'\n')
+  os.replace(tmp,str(p))
+ return found

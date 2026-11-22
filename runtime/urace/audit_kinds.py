@@ -104,3 +104,32 @@ ALL_KINDS: frozenset[str] = frozenset({
     v for k, v in globals().items()
     if not k.startswith('_') and isinstance(v, str) and v == v.upper()
 })
+
+import enum as _enum
+
+class EventLifecycle(_enum.Enum):
+    """Lifecycle state of an audit event record.
+
+    Active records are in-flight and mutable.
+    Terminal records are completed and immutable — cannot be changed after sealing.
+    Archived records have been cleaned up and are retained for audit only.
+    """
+    ACTIVE   = 'active'
+    TERMINAL = 'terminal'
+    ARCHIVED = 'archived'
+
+
+# Audit event kinds that are inherently terminal when emitted.
+# These represent completed, irreversible outcomes.
+TERMINAL_KINDS: frozenset[str] = frozenset({
+    'P2P_UPDATE_APPLIED',
+    'QUALIFICATION_RECEIPT',
+    'PEER_DOWN',
+    'PEER_LEAVING',
+    'EARN',
+    'SPEND',
+    'TRANSFER',
+    'UNLOCK_GRANT',
+    'ESCROW_LOCK',
+    'ESCROW_RELEASE',
+})
