@@ -60,8 +60,12 @@ def _emit_trace(
     detail: "str | None" = None,
     recorded_by: str = "runtime",
 ) -> None:
-    """Emit a TraceRecord into State.trace_records (§62r ObservabilityContract)."""
-    state.setdefault("trace_records", []).append({
+    """Emit a TraceRecord into State.traces (§62r ObservabilityContract).
+
+    Phase 8C: writes to canonical key 'traces'; also mirrors to 'trace_records'
+    for backward compatibility with pre-migration state readers.
+    """
+    record = {
         "id": identifier("trace-"),
         "at": now(),
         "kind": kind,
@@ -71,7 +75,9 @@ def _emit_trace(
         "summary": summary,
         "detail": detail,
         "recorded_by": recorded_by,
-    })
+    }
+    state.setdefault("traces", []).append(record)
+    state.setdefault("trace_records", []).append(record)
 
 def _emit_compaction_event(state: dict[str, Any], record_type: str, dropped_count: int) -> None:
     """Emit a CompactionEvent before governed truncation of a record list."""
