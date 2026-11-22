@@ -38,20 +38,126 @@ def extract_session_hint(text: str, body: dict | None = None) -> str | None:
     return hashlib.sha256(sid.encode()).hexdigest()[:16]
 
 
+import dataclasses as _dataclasses
+import threading as _threading
+import time as _time
+
+@_dataclasses.dataclass
+class CacheEvidence:
+    """Short-lived evidence that a peer holds a matching context prefix.
+
+    # Portions of the cost formula adapted from:
+    #   mesh-llm (https://github.com/mesh-llm/mesh-llm), Apache License 2.0
+    #   Source: mesh/crates/mesh-llm-routing/src/cache_aware.rs
+    # Modifications: translated to Python, threading model changed, field names adapted.
+    """
+    target_id: str
+    prefix_hash: str
+    matched_tokens: int
+    queue_delay_ms: int
+    restore_ms: int
+    observed_at: float
+    prefill_micros_per_token: int = 50  # default cold prefill cost estimate
+
+
+_CACHE_EVIDENCE: dict[str, list['CacheEvidence']] = {}
+_CACHE_LOCK = _threading.Lock()
+
+
+def record_cache_evidence(evidence: 'CacheEvidence') -> None:
+    """Record that target_id holds a matching context prefix."""
+    with _CACHE_LOCK:
+        bucket = _CACHE_EVIDENCE.setdefault(evidence.prefix_hash, [])
+        # Remove existing entry for same target to avoid duplicates
+        bucket[:] = [e for e in bucket if e.target_id != evidence.target_id]
+        bucket.append(evidence)
+
+
+def evict_stale_cache_evidence(ttl_seconds: int = 900) -> int:
+    """Remove cache evidence older than ttl_seconds. Returns eviction count."""
+    cutoff = _time.time() - ttl_seconds
+    evicted = 0
+    with _CACHE_LOCK:
+        for key in list(_CACHE_EVIDENCE):
+            before = len(_CACHE_EVIDENCE[key])
+            _CACHE_EVIDENCE[key] = [e for e in _CACHE_EVIDENCE[key] if e.observed_at >= cutoff]
+            evicted += before - len(_CACHE_EVIDENCE[key])
+            if not _CACHE_EVIDENCE[key]:
+                del _CACHE_EVIDENCE[key]
+    return evicted
+
+
+def _cache_evidence_cost(e: 'CacheEvidence') -> int:
+    """Estimated cost in microseconds of routing to this cached target.
+
+    Returns the cost to use the cache hit. If this is less than cold prefill,
+    routing to the cached target saves work.
+    """
+    # Time to restore context + queue wait + remaining tokens to prefill
+    unsaved = max(0, e.restore_ms * 1000)  # restore cost in micros
+    queue = e.queue_delay_ms * 1000
+    return unsaved + queue
+
+
+def _cold_prefill_cost(e: 'CacheEvidence') -> int:
+    """Estimated cost of cold prefill in microseconds."""
+    return e.matched_tokens * e.prefill_micros_per_token
+
+
+def select_cache_target(
+    candidates: list[str],
+    prefix_hash: str | None,
+    ttl_seconds: int = 900,
+    min_saved_tokens: int = 256,
+) -> 'CacheEvidence | None':
+    """Return the best cache evidence entry if it saves work vs cold prefill.
+
+    Returns None if:
+    - prefix_hash is None
+    - no valid evidence exists
+    - matched_tokens < min_saved_tokens
+    - estimated cost >= cold prefill (cache hit is not economical)
+    - evidenced target is not in candidates
+    """
+    if not prefix_hash:
+        return None
+    evict_stale_cache_evidence(ttl_seconds)
+    with _CACHE_LOCK:
+        entries = list(_CACHE_EVIDENCE.get(prefix_hash, []))
+    if not entries:
+        return None
+    # Only consider entries whose target is still in the candidate set
+    valid = [e for e in entries if e.target_id in candidates and e.matched_tokens >= min_saved_tokens]
+    if not valid:
+        return None
+    # Filter to economical entries (cache hit saves work vs cold prefill)
+    economical = [e for e in valid if _cache_evidence_cost(e) < _cold_prefill_cost(e)]
+    if not economical:
+        return None
+    # Pick lowest cost among economical entries
+    return min(economical, key=_cache_evidence_cost)
+
+
 def select_target(
     candidates: list[str],
     cache_key: str | None,
     session_hint: str | None,
     *,
     affinity_router=None,
+    ttl_seconds: int = 900,
+    min_saved_tokens: int = 256,
 ) -> tuple[str, bool]:
-    """Select routing target from candidates. Returns (target_id, affinity_applied).
+    """Select routing target. Returns (target_id, affinity_applied).
 
-    Stub: always returns first candidate with affinity_applied=False.
-    Real affinity behaviour is added in R2 (cache evidence) and R5 (local reputation).
+    Priority: cache evidence > session hint > first candidate.
     """
     if not candidates:
         raise ValueError("select_target called with empty candidates list")
+    # Try cache evidence first
+    best = select_cache_target(candidates, cache_key, ttl_seconds=ttl_seconds, min_saved_tokens=min_saved_tokens)
+    if best is not None:
+        return best.target_id, True
+    # TODO R5: session hint routing (local reputation)
     return candidates[0], False
 
 def normalize(batch):
@@ -520,10 +626,20 @@ def _route(cli,args,config,state,parser):
     import logging as _logging
     _log = _logging.getLogger(__name__)
     text=args.text
+    _routing_cfg = config.get('routing', {})
+    _cache_evidence_ttl = int(_routing_cfg.get('cache_evidence_ttl_seconds', 900))
+    _cache_min_tokens = int(_routing_cfg.get('cache_min_saved_tokens', 256))
     _cache_key = extract_cache_key(text)
     _session_hint = extract_session_hint(text)
-    # both are captured for downstream phases; not yet used for routing decisions
-    _log.debug('freeform_routing: cache_key=%s session_hint=%s', _cache_key, _session_hint)
+    # Attempt cache-aware target selection if candidates are available
+    _candidates = [p.get('id') for p in config.get('executor', {}).get('providers', []) if isinstance(p, dict) and p.get('id')]
+    _affinity_applied = False
+    if _candidates:
+        _, _affinity_applied = select_target(
+            _candidates, _cache_key, _session_hint,
+            ttl_seconds=_cache_evidence_ttl, min_saved_tokens=_cache_min_tokens,
+        )
+    _log.debug('freeform_routing: cache_key=%s session_hint=%s affinity_applied=%s', _cache_key, _session_hint, _affinity_applied)
     if not text.strip():return _error(args,'Empty input; use urace help for commands',2)
     if len(text.encode())>65536:return _error(args,'Input exceeds the bounded routing packet; retain it as source context and use scoped requirements/chunks, without truncation',2)
     # Cancel detection — rule-based, zero LLM cost
