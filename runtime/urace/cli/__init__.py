@@ -1714,6 +1714,36 @@ def main(argv: list[str] | None = None, _config: dict | None = None) -> int:
                     _dr_check("api_schema_versions", "OK", f"{len(API_SCHEMA_VERSIONS)} schema versions declared")
                 except Exception as _e:
                     _dr_check("api_schema_versions", "WARN", str(_e))
+                # Protocol v2 — 13. Source adapter protocol version
+                try:
+                    from ..version import SOURCE_ADAPTER_PROTOCOL_VERSION
+                    if SOURCE_ADAPTER_PROTOCOL_VERSION >= 2:
+                        _dr_check("source_adapter_protocol", "OK", f"protocol v{SOURCE_ADAPTER_PROTOCOL_VERSION} (act() path enabled)")
+                    else:
+                        _dr_check("source_adapter_protocol", "WARN", f"protocol v{SOURCE_ADAPTER_PROTOCOL_VERSION} — upgrade to v2 for act() support")
+                except Exception as _e:
+                    _dr_check("source_adapter_protocol", "WARN", str(_e))
+                # Protocol v2 — 14. allow_act config status
+                try:
+                    from ..source_adapters import SOURCE_REGISTRY as _dr_sr
+                    _dr_src_cfg = (_dr_cfg or {}).get("sources", {})
+                    _dr_allow_act = _dr_src_cfg.get("allow_act", False)
+                    _dr_act_audit = _dr_src_cfg.get("act_audit_all", True)
+                    _dr_check("sources_allow_act", "OK" if not _dr_allow_act else "INFO",
+                              f"allow_act={'true (actions enabled)' if _dr_allow_act else 'false (actions blocked globally)'}, act_audit_all={_dr_act_audit}")
+                except Exception as _e:
+                    _dr_check("sources_allow_act", "WARN", str(_e))
+                # Protocol v2 — 15. Adapters with real _act() implementations
+                try:
+                    from ..source_adapters import SOURCE_REGISTRY as _dr_sr2
+                    from ..source_adapters._base import NullSourceAdapter as _NullBase
+                    _dr_act_capable = [k for k, a in _dr_sr2.all().items()
+                                       if type(a)._act is not _NullBase._act]
+                    _dr_all_kinds = _dr_sr2.kinds()
+                    _dr_check("source_act_capable", "OK",
+                              f"{len(_dr_act_capable)}/{len(_dr_all_kinds)} adapters have real _act(): {', '.join(sorted(_dr_act_capable)) or 'none'}")
+                except Exception as _e:
+                    _dr_check("source_act_capable", "WARN", str(_e))
                 _dr_overall = "ERROR" if any(c["status"] == "ERROR" for c in _dr_checks) else ("WARN" if any(c["status"] == "WARN" for c in _dr_checks) else "OK")
                 _dr_result = {"overall": _dr_overall, "checks": _dr_checks}
                 if getattr(args, "doctor_json", False):
