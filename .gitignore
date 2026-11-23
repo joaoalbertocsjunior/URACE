@@ -3,6 +3,7 @@
 !/.gitignore
 !/.envrc
 !/LICENSE
+!/CLAUDE.md
 !/LICENSES/
 !/NOTICE
 !/README.md
@@ -32,6 +33,7 @@
 !/runtime/tests/
 /runtime/urace/*
 !/runtime/urace/*.py
+!/runtime/urace/CLAUDE.md
 !/runtime/urace/config.json
 !/runtime/urace/cli/
 !/runtime/urace/web/
