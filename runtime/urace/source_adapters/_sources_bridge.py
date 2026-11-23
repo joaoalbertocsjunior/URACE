@@ -83,6 +83,22 @@ def build_sources_registry(
     """
     registry = SourceRegistry()
     registry.register_kind("local_data", DataTransportAdapter())
+
+    # Register sources-lib native adapters — A2A is stdlib, AI/MCP are conditional
+    from sources.adapters.a2a import A2ASourceAdapter
+    registry.register_kind("a2a_agent", A2ASourceAdapter())
+
+    try:
+        from sources.adapters.ai import AIExecutorAdapter
+        registry.register_kind("ai_executor", AIExecutorAdapter())
+    except ImportError:
+        pass
+
+    try:
+        from sources.adapters.mcp import MCPSourceAdapter
+        registry.register_kind("mcp_server", MCPSourceAdapter())
+    except ImportError:
+        pass
     for kind, adapter in urace_registry.all().items():
         bridge = URACEAdapterBridge(adapter, urace_state)
         try:
