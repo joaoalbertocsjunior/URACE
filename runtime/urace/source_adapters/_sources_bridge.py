@@ -88,6 +88,9 @@ def build_sources_registry(
     from sources.adapters.a2a import A2ASourceAdapter
     registry.register_kind("a2a_agent", A2ASourceAdapter())
 
+    from sources.adapters.directory import DirectoryAdapter
+    registry.register_kind("directory", DirectoryAdapter())
+
     try:
         from sources.adapters.ai import AIExecutorAdapter
         registry.register_kind("ai_executor", AIExecutorAdapter())

@@ -54,3 +54,8 @@ def test_a2a_adapter_verify_no_url():
 def test_a2a_adapter_supported_actions():
     adapter = A2ASourceAdapter()
     assert adapter.supported_actions(None, {}) == ["send_message"]
+
+
+def test_directory_kind_registered():
+    registry = build_sources_registry(_empty_registry(), {}, {})
+    assert 'directory' in registry.kinds()
