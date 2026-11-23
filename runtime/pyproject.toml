@@ -8,6 +8,7 @@ requires-python = ">=3.11"
 dependencies = [
     "cryptography>=50,<51",  # version policy: pin major+minor, allow patch
     "pydantic>=2.0,<3",      # version policy: pin major+minor, allow patch
+    "sources-lib @ git+https://github.com/joaoalbertocsjunior/sources-lib.git",
 ]
 classifiers = [
     "License :: OSI Approved :: Apache Software License",
