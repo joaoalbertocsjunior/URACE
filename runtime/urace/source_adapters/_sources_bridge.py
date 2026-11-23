@@ -14,6 +14,8 @@ from typing import Any
 from sources import BaseSourceAdapter, SourceRecord, SourceRegistry
 from sources.adapter import SourceActDeniedError
 
+from urace.source_adapters._data_transport_adapter import DataTransportAdapter
+
 
 class URACEAdapterBridge(BaseSourceAdapter):
     """Wraps a URACE NullSourceAdapter and exposes the sources-lib protocol.
@@ -80,6 +82,7 @@ def build_sources_registry(
     Existing URACE source records (from urace_state) are added as SourceRecords.
     """
     registry = SourceRegistry()
+    registry.register_kind("local_data", DataTransportAdapter())
     for kind, adapter in urace_registry.all().items():
         bridge = URACEAdapterBridge(adapter, urace_state)
         try:
