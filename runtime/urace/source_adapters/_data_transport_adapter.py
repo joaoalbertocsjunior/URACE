@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sources import BaseSourceAdapter, SourceRecord
-from sources.adapter import SourceActDeniedError, SourceError, SourceUnavailableError
+from sources_lib import BaseSourceAdapter, SourceRecord
+from sources_lib.adapter import SourceActDeniedError, SourceError, SourceUnavailableError
 
 from urace import data_transport
 from urace.data_transport import TransportError

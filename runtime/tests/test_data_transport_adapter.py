@@ -2,8 +2,8 @@
 import unittest
 from unittest.mock import patch
 
-from sources import SourceRecord
-from sources.adapter import SourceActDeniedError, SourceError, SourceUnavailableError
+from sources_lib import SourceRecord
+from sources_lib.adapter import SourceActDeniedError, SourceError, SourceUnavailableError
 
 from urace.source_adapters._data_transport_adapter import DataTransportAdapter
 from urace.source_adapters._sources_bridge import build_sources_registry

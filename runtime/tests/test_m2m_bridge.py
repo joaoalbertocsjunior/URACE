@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sources.m2m.interface import RpcError
+from sources_lib.m2m.interface import RpcError
 
 from urace.integration_bridge import BridgeError
 from urace.m2m_bridge import make_dispatch_fn

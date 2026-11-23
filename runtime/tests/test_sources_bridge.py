@@ -1,7 +1,7 @@
 """Tests for the URACE→sources-lib bridge layer."""
 import unittest
 from urace.source_adapters._sources_bridge import URACEAdapterBridge, build_sources_registry
-from sources import SourceRecord, SourceRegistry
+from sources_lib import SourceRecord, SourceRegistry
 
 
 class _FakeURACEAdapter:
@@ -54,7 +54,7 @@ class URACEBridgeTests(unittest.TestCase):
         self.assertEqual(result, {"pong": True})
 
     def test_act_denied_raises(self):
-        from sources.adapter import SourceActDeniedError
+        from sources_lib.adapter import SourceActDeniedError
         bridge = URACEAdapterBridge(_FakeURACEAdapter())
         record = self._make_record()
         with self.assertRaises(SourceActDeniedError):

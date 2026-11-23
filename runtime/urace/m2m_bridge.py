@@ -6,7 +6,7 @@ import os
 import sys
 import uuid
 
-from sources.m2m.interface import M2MServer, RpcError
+from sources_lib.m2m.interface import M2MServer, RpcError
 
 from .integration_bridge import BridgeError, Jobs, load_policy, owner_lifetime
 

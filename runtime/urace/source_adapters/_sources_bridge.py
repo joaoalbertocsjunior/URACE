@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from sources import BaseSourceAdapter, SourceRecord, SourceRegistry
-from sources.adapter import SourceActDeniedError
+from sources_lib import BaseSourceAdapter, SourceRecord, SourceRegistry
+from sources_lib.adapter import SourceActDeniedError
 
 from urace.source_adapters._data_transport_adapter import DataTransportAdapter
 
@@ -85,20 +85,20 @@ def build_sources_registry(
     registry.register_kind("local_data", DataTransportAdapter())
 
     # Register sources-lib native adapters — A2A is stdlib, AI/MCP are conditional
-    from sources.adapters.a2a import A2ASourceAdapter
+    from sources_lib.adapters.a2a import A2ASourceAdapter
     registry.register_kind("a2a_agent", A2ASourceAdapter())
 
-    from sources.adapters.directory import DirectoryAdapter
+    from sources_lib.adapters.directory import DirectoryAdapter
     registry.register_kind("directory", DirectoryAdapter())
 
     try:
-        from sources.adapters.ai import AIExecutorAdapter
+        from sources_lib.adapters.ai import AIExecutorAdapter
         registry.register_kind("ai_executor", AIExecutorAdapter())
     except ImportError:
         pass
 
     try:
-        from sources.adapters.mcp import MCPSourceAdapter
+        from sources_lib.adapters.mcp import MCPSourceAdapter
         registry.register_kind("mcp_server", MCPSourceAdapter())
     except ImportError:
         pass

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from urace.control_server import build_control_server
-from sources import HTTPControlServer
+from sources_lib.http import HTTPControlServer
 
 
 def test_build_control_server_no_token():

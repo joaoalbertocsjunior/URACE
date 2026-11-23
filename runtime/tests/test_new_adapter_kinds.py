@@ -2,8 +2,8 @@
 import pytest
 
 from urace.source_adapters._sources_bridge import build_sources_registry
-from sources.adapters.a2a import A2ASourceAdapter
-from sources.adapter import SourceRecord, SourceUnavailableError
+from sources_lib.adapters.a2a import A2ASourceAdapter
+from sources_lib.adapter import SourceRecord, SourceUnavailableError
 
 
 def _empty_registry():
@@ -29,7 +29,7 @@ def test_local_data_kind_registered():
 def test_ai_executor_kind_conditional():
     registry = build_sources_registry(_empty_registry(), {}, {})
     try:
-        from sources.adapters.ai import AIExecutorAdapter  # noqa: F401
+        from sources_lib.adapters.ai import AIExecutorAdapter  # noqa: F401
         assert "ai_executor" in registry.kinds()
     except ImportError:
         assert "ai_executor" not in registry.kinds()
@@ -38,7 +38,7 @@ def test_ai_executor_kind_conditional():
 def test_mcp_server_kind_conditional():
     registry = build_sources_registry(_empty_registry(), {}, {})
     try:
-        from sources.adapters.mcp import MCPSourceAdapter  # noqa: F401
+        from sources_lib.adapters.mcp import MCPSourceAdapter  # noqa: F401
         assert "mcp_server" in registry.kinds()
     except ImportError:
         assert "mcp_server" not in registry.kinds()

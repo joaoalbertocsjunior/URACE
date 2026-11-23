@@ -11,7 +11,8 @@ import os
 import sys
 from typing import Any
 
-from sources import HTTPControlServer, M2MServer
+from sources_lib.http import HTTPControlServer
+from sources_lib.m2m import M2MServer
 
 from .source_adapters import SOURCE_REGISTRY
 from .source_adapters._sources_bridge import build_sources_registry
