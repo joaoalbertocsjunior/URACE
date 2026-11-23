@@ -102,6 +102,13 @@ def build_sources_registry(
         registry.register_kind("mcp_server", MCPSourceAdapter())
     except ImportError:
         pass
+
+    try:
+        from sources_lib.adapters.github import GitHubAdapter
+        registry.register_kind("github", GitHubAdapter())
+    except ImportError:
+        pass
+
     for kind, adapter in urace_registry.all().items():
         bridge = URACEAdapterBridge(adapter, urace_state)
         try:

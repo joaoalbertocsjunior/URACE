@@ -52,7 +52,7 @@ def build_control_server(
 
     m2m_server: M2MServer | None = None
     if jobs is not None:
-        m2m_server = M2MServer(dispatch_fn=make_dispatch_fn(jobs), auth_fn=None)
+        m2m_server = M2MServer(dispatch_fn=make_dispatch_fn(jobs), auth_fn=None, registry=registry)
 
     if token:
         def auth_fn(t: str) -> bool:
