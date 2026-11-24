@@ -18,13 +18,12 @@
 !/SECURITY.md
 !/.coderabbit.yaml
 !/.github/
-!/packaging/
 !/runtime/
-!/rust/
+!/core/
 !/trial/
 !/docs/
-!/products/
 !/exchange/
+
 /runtime/*
 !/runtime/README.md
 !/runtime/portfolio-workflow.template.json
@@ -42,31 +41,36 @@
 /runtime/tests/*
 !/runtime/tests/*.py
 
-# Rust workspace — whitelist source, block build artifacts
-/rust/*
-!/rust/Cargo.toml
-!/rust/Cargo.lock
-!/rust/PLAN.md
-!/rust/crates/
-/rust/crates/*
-!/rust/crates/urace-crypto/
-!/rust/crates/urace-types/
-!/rust/crates/urace-ledger/
-!/rust/crates/urace-identity/
-!/rust/crates/urace-cost/
-!/rust/crates/sources-lib/
-!/rust/crates/urace-authority/
-!/rust/crates/urace-p2p/
-!/rust/crates/urace-executor/
-!/rust/crates/urace-settlement/
-!/rust/crates/urace-artifacts/
-!/rust/crates/urace-products/
-!/rust/crates/urace-work/
-!/rust/crates/urace-goals/
-!/rust/crates/urace-net/
-!/rust/crates/urace-upgrade/
-!/rust/crates/urace-audit/
-!/rust/crates/urace/
+# core (Rust workspace) — whitelist source, block build artifacts
+/core/*
+!/core/Cargo.toml
+!/core/Cargo.lock
+!/core/PLAN.md
+!/core/crates/
+/core/crates/*
+!/core/crates/urace-crypto/
+!/core/crates/urace-types/
+!/core/crates/urace-ledger/
+!/core/crates/urace-identity/
+!/core/crates/urace-cost/
+!/core/crates/sources-lib/
+!/core/crates/urace-authority/
+!/core/crates/urace-p2p/
+!/core/crates/urace-executor/
+!/core/crates/urace-settlement/
+!/core/crates/urace-artifacts/
+!/core/crates/urace-products/
+!/core/crates/urace-qualify/
+!/core/crates/urace-work/
+!/core/crates/urace-goals/
+!/core/crates/urace-net/
+!/core/crates/urace-upgrade/
+!/core/crates/urace-audit/
+!/core/crates/urace-tui/
+!/core/crates/urace-schema/
+!/core/crates/urace-mcp/
+!/core/crates/urace-state/
+!/core/crates/urace/
 
 # Runtime/operational data — gitignored
 generated/
@@ -74,9 +78,8 @@ state/
 reports/
 dev/
 
-# Exchange: network ledger is runtime data; initial_ledger is committed reference
+# Exchange: token contract stub only; initial_ledger published on stable release
 exchange/*
-!exchange/initial_ledger/
 !exchange/token_contract.json
 
 # Secrets and env
@@ -90,17 +93,10 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Products are user data — only README committed (see products/.gitignore)
-/products/*
-!/products/README.md
-!/products/versions/
-/products/versions/*
-!/products/versions/README.md
 !/URACE.md
 !/NOTICE
 !/LICENSES/
 /.ai-switch
-
 
 # Trial runtime state (large, generated)
 /trial/*.json
@@ -128,8 +124,3 @@ __pycache__/
 /trial/work/
 /trial/workflow-studies/
 /trial/urace/
-
-# Products runtime state
-/products/*/state.json
-/products/*/ledger.jsonl
-/products/*/ledger.jsonl.pq

@@ -1,0 +1,24 @@
+[package]
+name        = "urace-state"
+description = "State management: scope priority, asset registry, reputation, workflow, decision records, inbox, metrics"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace       = true
+serde_json.workspace  = true
+thiserror.workspace   = true
+tracing.workspace     = true
+parking_lot.workspace = true
+dashmap.workspace     = true
+uuid.workspace        = true
+time.workspace        = true
+urace-ledger          = { path = "../urace-ledger" }
+urace-authority       = { path = "../urace-authority" }
+urace-types           = { path = "../urace-types" }
+
+[dev-dependencies]
+tempfile = "3"

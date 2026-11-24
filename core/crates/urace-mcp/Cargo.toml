@@ -1,0 +1,21 @@
+[package]
+name        = "urace-mcp"
+description = "MCP/JSON-RPC server exposing URACE capabilities with §62z authority gate"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+tracing.workspace    = true
+tokio          = { workspace = true }
+axum           = "0.7"
+urace-types    = { path = "../urace-types" }
+urace-authority = { path = "../urace-authority" }
+
+[dev-dependencies]
+tower = "0.5"

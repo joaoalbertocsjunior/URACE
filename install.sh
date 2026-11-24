@@ -1,167 +1,128 @@
 #!/usr/bin/env sh
-# URACE installer — Linux, macOS, Windows (WSL)
-# Usage: curl -fsSL https://raw.githubusercontent.com/joaoalbertocsjunior/URACE/main/install.sh | sh
+# URACE installer — downloads the pre-built binary or builds from source.
+#
+# Usage:
+#   curl -fsSL https://raw.githubusercontent.com/urace/urace/main/install.sh | sh
+#   sh install.sh [--prefix /usr/local] [--version 0.9.3]
+#
+# Installs to PREFIX/bin (default: ~/.local/bin).
+# Falls back to `cargo install urace` if no pre-built binary is available.
 
 set -e
 
-URACE_VERSION="0.8.5"
-VENV_DIR="${HOME}/.urace"
-MIN_PYTHON_MAJOR=3
-MIN_PYTHON_MINOR=11
+REPO="urace/urace"
+PREFIX="${INSTALL_PREFIX:-$HOME/.local}"
+BIN_DIR="$PREFIX/bin"
+REQUESTED_VERSION="${URACE_VERSION:-latest}"
 
-# ── colour helpers ────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
-  GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; RESET='\033[0m'
+  GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 else
-  GREEN=''; YELLOW=''; RED=''; RESET=''
+  GREEN=''; YELLOW=''; RED=''; NC=''
 fi
-info() { printf "${GREEN}[urace]${RESET} %s\n" "$*"; }
-warn() { printf "${YELLOW}[urace]${RESET} %s\n" "$*"; }
-die()  { printf "${RED}[urace] error:${RESET} %s\n" "$*" >&2; exit 1; }
+info()  { printf "${GREEN}[urace]${NC} %s\n" "$*"; }
+warn()  { printf "${YELLOW}[urace]${NC} %s\n" "$*"; }
+error() { printf "${RED}[urace]${NC} %s\n" "$*" >&2; exit 1; }
 
-# ── OS detection ──────────────────────────────────────────────────────────────
-detect_os() {
-  case "$(uname -s)" in
-    Linux*)           OS=linux ;;
-    Darwin*)          OS=macos ;;
-    MINGW*|MSYS*|CYGWIN*) OS=windows_shell ;;
-    *)                OS=unknown ;;
+# Parse flags
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --prefix)  PREFIX="$2"; BIN_DIR="$PREFIX/bin"; shift 2 ;;
+    --version) REQUESTED_VERSION="$2"; shift 2 ;;
+    *) error "Unknown flag: $1" ;;
+  esac
+done
+
+detect_target() {
+  _os="$(uname -s)"
+  _arch="$(uname -m)"
+  case "$_os" in
+    Linux)
+      case "$_arch" in
+        x86_64)  echo "x86_64-unknown-linux-musl" ;;
+        aarch64) echo "aarch64-unknown-linux-musl" ;;
+        armv7l)  echo "armv7-unknown-linux-musleabihf" ;;
+        *)       echo "" ;;
+      esac ;;
+    Darwin)
+      case "$_arch" in
+        x86_64)  echo "x86_64-apple-darwin" ;;
+        arm64)   echo "aarch64-apple-darwin" ;;
+        *)       echo "" ;;
+      esac ;;
+    MINGW*|CYGWIN*|MSYS*)
+      echo "x86_64-pc-windows-msvc" ;;
+    *)
+      echo "" ;;
   esac
 }
 
-# ── Python version check ──────────────────────────────────────────────────────
-find_python() {
-  for cmd in python3 python python3.13 python3.12 python3.11; do
-    if command -v "$cmd" >/dev/null 2>&1; then
-      _ver=$("$cmd" -c "import sys; print(sys.version_info.major, sys.version_info.minor)" 2>/dev/null) || continue
-      _major=$(echo "$_ver" | cut -d' ' -f1)
-      _minor=$(echo "$_ver" | cut -d' ' -f2)
-      if [ "$_major" -gt "$MIN_PYTHON_MAJOR" ] || \
-         { [ "$_major" -eq "$MIN_PYTHON_MAJOR" ] && [ "$_minor" -ge "$MIN_PYTHON_MINOR" ]; }; then
-        PYTHON_CMD="$cmd"
-        return 0
-      fi
-    fi
-  done
-  return 1
-}
+install_from_release() {
+  _target="$(detect_target)"
+  [ -z "$_target" ] && return 1
 
-# ── install via pipx (cleanest — handles PEP 668 automatically) ───────────────
-try_pipx() {
-  # curl|sh runs non-interactive — .bashrc/.zshrc not sourced, ~/.local/bin may be missing
-  PIPX_CMD=""
-  for _p in pipx "${HOME}/.local/bin/pipx" /usr/bin/pipx /usr/local/bin/pipx; do
-    if command -v "$_p" >/dev/null 2>&1; then
-      PIPX_CMD="$_p"; break
-    fi
-  done
-  if [ -n "$PIPX_CMD" ]; then
-    info "Installing via pipx (${PIPX_CMD})..."
-    "$PIPX_CMD" install "urace==${URACE_VERSION}" 2>/dev/null || "$PIPX_CMD" upgrade urace
-    return 0
-  fi
-  return 1
-}
-
-# ── install into a dedicated venv at ~/.urace ─────────────────────────────────
-install_venv() {
-  # If venv already exists and urace is at the target version, only upgrade pip package.
-  # Avoid recreating the venv on upgrade — venv recreation never touches user data
-  # directories inside ~/.urace/, but it does update pyvenv.cfg and symlinks.
-  if [ -f "${VENV_DIR}/bin/pip" ]; then
-    _installed=$("${VENV_DIR}/bin/pip" show urace 2>/dev/null | grep "^Version:" | awk '{print $2}')
-    if [ "${_installed}" = "${URACE_VERSION}" ]; then
-      info "urace ${URACE_VERSION} already installed in ${VENV_DIR} — nothing to do."
-      URACE_BIN="${VENV_DIR}/bin/urace"
-      return 0
-    fi
-    info "Upgrading urace ${_installed} → ${URACE_VERSION} in existing venv..."
-    "${VENV_DIR}/bin/pip" install --quiet --upgrade "urace==${URACE_VERSION}"
-    URACE_BIN="${VENV_DIR}/bin/urace"
-    return 0
-  fi
-  info "Creating dedicated venv at ${VENV_DIR}..."
-  if ! "$PYTHON_CMD" -m venv "${VENV_DIR}" 2>/dev/null; then
-    die "python3-venv not available. Install it first:
-  sudo apt install python3-venv python3-full   (Debian/Ubuntu)
-  sudo dnf install python3                     (Fedora)
-  brew install python                          (macOS)"
-  fi
-  "${VENV_DIR}/bin/pip" install --quiet "urace==${URACE_VERSION}"
-
-  # Wire up the launcher
-  URACE_BIN="${VENV_DIR}/bin/urace"
-
-  # Add to shell rc if not already present
-  _export_line="export PATH=\"${VENV_DIR}/bin:\$PATH\""
-  for rc in "${HOME}/.bashrc" "${HOME}/.zshrc" "${HOME}/.profile"; do
-    if [ -f "$rc" ] && ! grep -qF "${VENV_DIR}/bin" "$rc" 2>/dev/null; then
-      printf '\n# URACE\n%s\n' "${_export_line}" >> "$rc"
-      info "Added PATH entry to ${rc}"
-    fi
-  done
-
-  warn "Run this once in your current shell, or open a new terminal:"
-  warn "  ${_export_line}"
-}
-
-# ── install inside an already-active venv ─────────────────────────────────────
-install_active_venv() {
-  info "Active venv detected — installing directly..."
-  "$PYTHON_CMD" -m pip install --quiet "urace==${URACE_VERSION}"
-}
-
-# ── verify ────────────────────────────────────────────────────────────────────
-verify() {
-  _bin="${1:-urace}"
-  if "$_bin" --version >/dev/null 2>&1 || command -v urace >/dev/null 2>&1; then
-    info "urace ${URACE_VERSION} installed."
+  if [ "$REQUESTED_VERSION" = "latest" ]; then
+    _version="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+      | grep '"tag_name"' | sed 's/.*"tag_name": "\(.*\)".*/\1/')"
   else
-    info "urace ${URACE_VERSION} installed (restart shell or source rc to use)."
+    _version="$REQUESTED_VERSION"
   fi
+  [ -z "$_version" ] && return 1
+
+  _archive="urace-${_version}-${_target}.tar.gz"
+  _url="https://github.com/$REPO/releases/download/${_version}/${_archive}"
+  _tmp="$(mktemp -d)"
+
+  info "Downloading urace $_version for $_target..."
+  if ! curl -fsSL "$_url" | tar -xz -C "$_tmp" 2>/dev/null; then
+    warn "Pre-built binary not found for $_target — falling back to cargo install"
+    rm -rf "$_tmp"
+    return 1
+  fi
+
+  mkdir -p "$BIN_DIR"
+  install -m 755 "$_tmp/urace" "$BIN_DIR/urace"
+  rm -rf "$_tmp"
+  info "Installed urace $_version to $BIN_DIR/urace"
+  return 0
 }
 
-# ── main ──────────────────────────────────────────────────────────────────────
+install_from_cargo() {
+  if ! command -v cargo >/dev/null 2>&1; then
+    error "cargo not found. Install Rust first: https://rustup.rs — then re-run this script."
+  fi
+  info "Building from source via cargo (this takes a few minutes)..."
+  if [ "$REQUESTED_VERSION" = "latest" ]; then
+    cargo install urace --root "$PREFIX" --quiet
+  else
+    cargo install urace --version "$REQUESTED_VERSION" --root "$PREFIX" --quiet
+  fi
+  info "Installed urace to $BIN_DIR/urace"
+}
+
 main() {
-  detect_os
+  info "Installing URACE..."
 
-  if [ "$OS" = "windows_shell" ]; then
-    warn "Windows detected (non-WSL shell). Use WSL, or install directly:"
-    warn "  pip install urace==${URACE_VERSION}"
-    warn "  npm install -g urace-cli@${URACE_VERSION}"
-    exit 0
-  fi
+  install_from_release || install_from_cargo
 
-  info "Installing URACE ${URACE_VERSION} on ${OS}..."
-
-  if ! find_python; then
-    die "Python ${MIN_PYTHON_MAJOR}.${MIN_PYTHON_MINOR}+ not found.
-  Linux:  sudo apt install python3-full  (or dnf/pacman/zypper)
-  macOS:  brew install python  (or https://python.org)"
-  fi
-
-  info "Using ${PYTHON_CMD} ($("$PYTHON_CMD" --version 2>&1))"
-
-  # Already inside a venv — install directly, no workarounds needed
-  if "$PYTHON_CMD" -c "import sys; sys.exit(0 if hasattr(sys, 'real_prefix') or sys.base_prefix != sys.prefix else 1)" 2>/dev/null; then
-    install_active_venv
-    verify
-  # pipx available — use it (handles PEP 668, Debian/Ubuntu, externally-managed)
-  elif try_pipx; then
-    verify
-  # Fall back: create ~/.urace venv
-  else
-    install_venv
-    verify "${VENV_DIR}/bin/urace"
-  fi
+  # PATH hint if needed
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *)
+      warn "Add $BIN_DIR to your PATH:"
+      warn "  export PATH=\"\$PATH:$BIN_DIR\""
+      for _rc in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+        if [ -f "$_rc" ] && ! grep -qF "$BIN_DIR" "$_rc" 2>/dev/null; then
+          printf '\n# URACE\nexport PATH="$PATH:%s"\n' "$BIN_DIR" >> "$_rc"
+          info "Added PATH entry to $_rc"
+          break
+        fi
+      done ;;
+  esac
 
   info ""
-  info "Next steps:"
-  info "  export ANTHROPIC_API_KEY=...   # or OPENAI_API_KEY"
-  info "  urace start"
-  info "  urace"
-  info ""
-  info "Full docs: https://github.com/joaoalbertocsjunior/URACE"
+  info "Run: urace --help"
+  info "Docs: https://github.com/urace/urace"
 }
 
 main "$@"

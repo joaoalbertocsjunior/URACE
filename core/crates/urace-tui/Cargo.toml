@@ -1,0 +1,18 @@
+[package]
+name        = "urace-tui"
+description = "k9s-style TUI dashboard for URACE — sources, work queue, settlement and log panels"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+ratatui        = "0.29"
+crossterm      = "0.28"
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+tracing.workspace    = true
+tokio          = { workspace = true }
+urace-types    = { path = "../urace-types" }

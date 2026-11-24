@@ -13,7 +13,7 @@ members = [
     "crates/urace-settlement",
     "crates/urace-artifacts",
     "crates/urace-products",
-    "crates/urace-trial",
+    "crates/urace-qualify",
     "crates/urace-work",
     "crates/urace-goals",
     "crates/urace-net",
