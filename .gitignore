@@ -46,6 +46,7 @@
 /rust/*
 !/rust/Cargo.toml
 !/rust/Cargo.lock
+!/rust/PLAN.md
 !/rust/crates/
 /rust/crates/*
 !/rust/crates/urace-crypto/

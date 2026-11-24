@@ -67,6 +67,6 @@ pub struct ArchitectureCertificate {
 }
 
 pub mod evm;
-
-#[cfg(feature = "lightning")]
 pub mod lightning;
+pub mod mesh_llm_passthrough;
+pub mod settlement_manager;

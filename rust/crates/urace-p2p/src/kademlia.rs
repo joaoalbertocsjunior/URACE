@@ -8,6 +8,7 @@
 //! Transport uses the existing peer_exchange RPC path (Python) or the
 //! `mainline` crate DHT socket (Rust) during R-7.
 
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -43,12 +44,30 @@ pub fn bucket_index(own_id: &[u8; 32], other_id: &[u8; 32]) -> usize {
     0
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeInfo {
     pub peer_id: String,
+    /// node_id serialised as hex string for JSON compatibility.
+    #[serde(
+        serialize_with = "serialize_node_id",
+        deserialize_with = "deserialize_node_id"
+    )]
     pub node_id: [u8; 32],
     pub endpoint: String,
     pub last_seen_secs: f64,
+}
+
+fn serialize_node_id<S>(node_id: &[u8; 32], s: S) -> Result<S::Ok, S::Error>
+where S: serde::Serializer {
+    s.serialize_str(&hex::encode(node_id))
+}
+
+fn deserialize_node_id<'de, D>(d: D) -> Result<[u8; 32], D::Error>
+where D: serde::Deserializer<'de> {
+    use serde::de::Error;
+    let s = String::deserialize(d)?;
+    let bytes = hex::decode(&s).map_err(D::Error::custom)?;
+    bytes.try_into().map_err(|_| D::Error::custom("expected 32 bytes"))
 }
 
 impl NodeInfo {
