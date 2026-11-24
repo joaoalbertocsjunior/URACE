@@ -1,7 +1,6 @@
-# Canonical local runtime repository: code only, no deployment state or secrets.
+# URACE repository — code only, no build artifacts, secrets, or runtime state.
 /*
 !/.gitignore
-
 !/LICENSE
 !/CLAUDE.md
 !/LICENSES/
@@ -30,35 +29,29 @@
 !/core/PLAN.md
 !/core/crates/
 /core/crates/*
-!/core/crates/urace-crypto/
-!/core/crates/urace-types/
-!/core/crates/urace-ledger/
-!/core/crates/urace-identity/
-!/core/crates/urace-cost/
 !/core/crates/sources-lib/
-!/core/crates/urace-authority/
-!/core/crates/urace-p2p/
-!/core/crates/urace-executor/
-!/core/crates/urace-settlement/
 !/core/crates/urace-artifacts/
+!/core/crates/urace-audit/
+!/core/crates/urace-authority/
+!/core/crates/urace-cost/
+!/core/crates/urace-crypto/
+!/core/crates/urace-executor/
+!/core/crates/urace-goals/
+!/core/crates/urace-identity/
+!/core/crates/urace-ledger/
+!/core/crates/urace-mcp/
+!/core/crates/urace-net/
+!/core/crates/urace-p2p/
 !/core/crates/urace-products/
 !/core/crates/urace-qualify/
-!/core/crates/urace-work/
-!/core/crates/urace-goals/
-!/core/crates/urace-net/
-!/core/crates/urace-upgrade/
-!/core/crates/urace-audit/
-!/core/crates/urace-tui/
 !/core/crates/urace-schema/
-!/core/crates/urace-mcp/
+!/core/crates/urace-settlement/
 !/core/crates/urace-state/
+!/core/crates/urace-tui/
+!/core/crates/urace-types/
+!/core/crates/urace-upgrade/
+!/core/crates/urace-work/
 !/core/crates/urace/
-
-# Runtime/operational data — gitignored
-generated/
-state/
-reports/
-dev/
 
 # Exchange: token contract stub only; initial_ledger published on stable release
 exchange/*
@@ -70,12 +63,12 @@ secrets/
 .env.*
 *.lock
 
-# Python artifacts
+# Build / runtime artifacts
+generated/
+state/
+reports/
+dev/
 __pycache__/
 *.pyc
 *.pyo
-
-!/URACE.md
-!/NOTICE
-!/LICENSES/
 /.ai-switch
