@@ -13,12 +13,17 @@ members = [
     "crates/urace-settlement",
     "crates/urace-artifacts",
     "crates/urace-products",
+    "crates/urace-trial",
     "crates/urace-work",
     "crates/urace-goals",
     "crates/urace-net",
     "crates/urace-upgrade",
     "crates/urace-audit",
     "crates/urace",
+    "crates/urace-tui",
+    "crates/urace-schema",
+    "crates/urace-mcp",
+    "crates/urace-state",
 ]
 
 [workspace.package]

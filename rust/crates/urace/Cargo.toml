@@ -28,6 +28,11 @@ urace-authority       = { path = "../urace-authority" }
 urace-p2p             = { path = "../urace-p2p" }
 urace-executor        = { path = "../urace-executor" }
 urace-settlement      = { path = "../urace-settlement" }
+urace-identity        = { path = "../urace-identity" }
+urace-cost            = { path = "../urace-cost" }
+urace-work            = { path = "../urace-work" }
+urace-goals           = { path = "../urace-goals" }
+urace-audit           = { path = "../urace-audit" }
 
 [dev-dependencies]
 tempfile = "3"

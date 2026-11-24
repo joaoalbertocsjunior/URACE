@@ -21,6 +21,8 @@ pub enum SourceError {
     Registry(String),
     #[error("I/O error: {0}")]
     Io(String),
+    #[error("configuration error: {0}")]
+    Config(String),
 }
 
 /// Runtime record for a registered source instance — mirrors Python `SourceRecord`.
