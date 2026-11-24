@@ -1,0 +1,30 @@
+[package]
+name        = "urace"
+description = "URACE — governance-first P2P runtime (main binary)"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[[bin]]
+name = "urace"
+path = "src/main.rs"
+
+[dependencies]
+serde.workspace       = true
+serde_json.workspace  = true
+thiserror.workspace   = true
+tracing.workspace     = true
+tracing-subscriber.workspace = true
+tokio.workspace       = true
+clap.workspace        = true
+anyhow.workspace      = true
+urace-crypto          = { path = "../urace-crypto" }
+urace-types           = { path = "../urace-types" }
+urace-ledger          = { path = "../urace-ledger" }
+sources-lib           = { path = "../sources-lib" }
+urace-authority       = { path = "../urace-authority" }
+urace-p2p             = { path = "../urace-p2p" }
+urace-executor        = { path = "../urace-executor" }
+urace-settlement      = { path = "../urace-settlement" }

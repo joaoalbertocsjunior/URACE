@@ -1,0 +1,67 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/urace-crypto",
+    "crates/urace-types",
+    "crates/urace-ledger",
+    "crates/sources-lib",
+    "crates/urace-authority",
+    "crates/urace-p2p",
+    "crates/urace-executor",
+    "crates/urace-settlement",
+    "crates/urace",
+]
+
+[workspace.package]
+version     = "0.1.0"
+edition     = "2021"
+license     = "Apache-2.0"
+authors     = ["URACE Contributors"]
+repository  = "https://github.com/urace/urace"
+
+[workspace.dependencies]
+# Serialization
+serde          = { version = "1", features = ["derive"] }
+serde_json     = "1"
+
+# Crypto (RustCrypto family — no ring)
+hmac           = "0.12"
+sha2           = "0.10"
+aes-gcm        = "0.10"
+chacha20poly1305 = "0.10"
+ed25519-dalek  = { version = "2", features = ["rand_core"] }
+x25519-dalek   = "2"
+rand           = "0.8"
+rand_core      = "0.6"
+getrandom      = "0.2"
+zeroize        = { version = "1", features = ["derive"] }
+hex            = "0.4"
+
+# Error handling
+thiserror      = "1"
+anyhow         = "1"
+
+# Async
+tokio          = { version = "1", features = ["full"] }
+async-trait    = "0.1"
+
+# CLI
+clap           = { version = "4", features = ["derive"] }
+
+# Networking
+reqwest        = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# P2P — BEP 5 DHT (mainline, not libp2p — protocol-compatible with Python peers)
+mainline       = "2"
+
+# (Lightning deps are in urace-settlement as optional, not workspace-level)
+
+# Utilities
+tracing        = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+time           = { version = "0.3", features = ["serde", "formatting"] }
+uuid           = { version = "1", features = ["v4"] }
+parking_lot    = "0.12"
+dashmap        = "5"
+atomic-write-file = "0.1"
+regex-lite        = "0.1"

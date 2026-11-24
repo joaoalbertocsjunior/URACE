@@ -1,0 +1,23 @@
+[package]
+name        = "urace-ledger"
+description = "Append-only HMAC-SHA256-signed JSONL ledger with atomic writes — URACE financial layer"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+hmac.workspace       = true
+sha2.workspace       = true
+hex.workspace        = true
+thiserror.workspace  = true
+parking_lot.workspace = true
+uuid.workspace       = true
+urace-crypto         = { path = "../urace-crypto" }
+urace-types          = { path = "../urace-types" }

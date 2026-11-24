@@ -1,0 +1,22 @@
+[package]
+name        = "urace-settlement"
+description = "Economic settlement: EVM stub + Lightning Network rail (ldk-node)"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[features]
+lightning = ["dep:ldk-node", "dep:lightning-invoice"]
+
+[dependencies]
+serde.workspace          = true
+serde_json.workspace     = true
+thiserror.workspace      = true
+tracing.workspace        = true
+tokio.workspace          = true
+urace-ledger             = { path = "../urace-ledger" }
+urace-types              = { path = "../urace-types" }
+ldk-node                 = { version = "0.3", optional = true }
+lightning-invoice        = { version = "0.32", optional = true }

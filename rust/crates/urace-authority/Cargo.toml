@@ -1,0 +1,23 @@
+[package]
+name        = "urace-authority"
+description = "§62z authority gate + Ed25519-signed fleet policy with monotonic generation and DHT propagation"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace       = true
+serde_json.workspace  = true
+thiserror.workspace   = true
+parking_lot.workspace = true
+tracing.workspace     = true
+hex.workspace         = true
+sha2.workspace        = true
+regex-lite.workspace  = true
+urace-crypto          = { path = "../urace-crypto" }
+urace-types           = { path = "../urace-types" }
+
+[dev-dependencies]
+rand.workspace = true

@@ -20,6 +20,7 @@
 !/.github/
 !/packaging/
 !/runtime/
+!/rust/
 !/trial/
 !/docs/
 !/products/
@@ -40,6 +41,22 @@
 !/runtime/urace/source_adapters/
 /runtime/tests/*
 !/runtime/tests/*.py
+
+# Rust workspace — whitelist source, block build artifacts
+/rust/*
+!/rust/Cargo.toml
+!/rust/Cargo.lock
+!/rust/crates/
+/rust/crates/*
+!/rust/crates/urace-crypto/
+!/rust/crates/urace-types/
+!/rust/crates/urace-ledger/
+!/rust/crates/sources-lib/
+!/rust/crates/urace-authority/
+!/rust/crates/urace-p2p/
+!/rust/crates/urace-executor/
+!/rust/crates/urace-settlement/
+!/rust/crates/urace/
 
 # Runtime/operational data — gitignored
 generated/
