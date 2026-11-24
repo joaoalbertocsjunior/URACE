@@ -14,6 +14,25 @@ act() safety contract:
   - global gate: config['sources']['allow_act'] must be True (default False)
   - per-source gate: adapter_state['enabled_actions'] must list the action name
   - violations raise SourceActDeniedError (never silently no-op)
+
+Relationship to sources-lib (design boundary — do not blur):
+  NullSourceAdapter is NOT a reimplementation of sources-lib's BaseSourceAdapter.
+  They serve different layers:
+
+    NullSourceAdapter  — URACE's adapter base. Owns: CLI UX (add_args/validate),
+                         §60 lifecycle state machine, allow_act safety gate, event-bus
+                         publishing, structured logging. Calling convention:
+                         (config: dict, state: dict, source_id: str).
+
+    BaseSourceAdapter  — sources-lib's adapter contract. Owns: data-transport protocol
+                         (verify/sync/act), config_schema validation, SourceRecord
+                         management. Calling convention: (record: SourceRecord,
+                         app_config: dict).
+
+  URACEAdapterBridge in _sources_bridge.py is the reconciliation point — it wraps
+  a NullSourceAdapter and exposes it as a BaseSourceAdapter so URACE adapters
+  participate in the sources-lib SourceRegistry without either layer knowing about
+  the other. Do not collapse these two hierarchies.
 """
 from __future__ import annotations
 

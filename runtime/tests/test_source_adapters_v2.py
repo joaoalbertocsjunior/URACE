@@ -206,7 +206,12 @@ class EnabledActionsAdapterStateTests(unittest.TestCase):
     def test_database_has_enabled_actions(self): self._check_adapter('database')
     def test_p2p_catalog_has_enabled_actions(self): self._check_adapter('p2p_catalog')
     def test_file_has_enabled_actions(self): self._check_adapter('file')
-    def test_github_has_enabled_actions(self): self._check_adapter('github')
+    def test_github_has_enabled_actions(self):
+        from urace.source_adapters._sources_bridge import native_kind_add
+        record = native_kind_add('github', 'test-github', {}, repo='owner/repo')
+        astate = record.get('adapter_state', {})
+        self.assertIn('enabled_actions', astate)
+        self.assertIsInstance(astate['enabled_actions'], list)
     def test_connector_has_enabled_actions(self): self._check_adapter('connector')
     def test_executor_has_enabled_actions(self): self._check_adapter('executor')
     def test_peer_has_enabled_actions(self): self._check_adapter('peer')
@@ -218,7 +223,12 @@ class EnabledActionsAdapterStateTests(unittest.TestCase):
     def test_ci_pipeline_has_enabled_actions(self): self._check_adapter('ci_pipeline')
     def test_event_stream_has_enabled_actions(self): self._check_adapter('event_stream')
     def test_inbox_has_enabled_actions(self): self._check_adapter('inbox')
-    def test_mcp_server_has_enabled_actions(self): self._check_adapter('mcp_server')
+    def test_mcp_server_has_enabled_actions(self):
+        from urace.source_adapters._sources_bridge import native_kind_add
+        record = native_kind_add('mcp_server', 'test-mcp', {}, url='http://localhost:8080')
+        astate = record.get('adapter_state', {})
+        self.assertIn('enabled_actions', astate)
+        self.assertIsInstance(astate['enabled_actions'], list)
     def test_log_file_has_enabled_actions(self): self._check_adapter('log_file')
     def test_package_registry_has_enabled_actions(self): self._check_adapter('package_registry')
 
@@ -229,14 +239,14 @@ class NewAdapterRegistrationTests(unittest.TestCase):
     def test_all_new_adapters_registered(self):
         from urace.source_adapters import SOURCE_REGISTRY
         expected = {'git', 's3', 'ci_pipeline', 'event_stream',
-                    'inbox', 'mcp_server', 'log_file', 'package_registry'}
+                    'inbox', 'log_file', 'package_registry'}
         kinds = set(SOURCE_REGISTRY.kinds())
         missing = expected - kinds
         self.assertFalse(missing, f'Missing adapters: {missing}')
 
     def test_total_kinds_at_least_28(self):
         from urace.source_adapters import SOURCE_REGISTRY
-        self.assertGreaterEqual(len(SOURCE_REGISTRY.kinds()), 28)
+        self.assertGreaterEqual(len(SOURCE_REGISTRY.kinds()), 26)
 
 
 # ── LogFileAdapter _sync ──────────────────────────────────────────────────────

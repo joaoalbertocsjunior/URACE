@@ -544,8 +544,13 @@ def _handle_data_command(args: Any, state: dict, config: dict) -> int:
 
 
 def _handle_source_add_unified(args: Any, config: dict, parser: Any) -> int:
-    """Dispatch `urace source add --kind <kind>` via SOURCE_REGISTRY."""
+    """Dispatch `urace source add --kind <kind>`.
+
+    Native kinds (github, mcp_server, …) are handled via sources-lib helpers.
+    All other kinds are dispatched through SOURCE_REGISTRY as before.
+    """
     from ..source_adapters import SOURCE_REGISTRY
+    from ..source_adapters._sources_bridge import _SOURCES_LIB_NATIVE_KINDS, native_kind_validate, native_kind_add
     from .._common import identifier as _identifier
 
     kind = getattr(args, "kind", None)
@@ -553,20 +558,29 @@ def _handle_source_add_unified(args: Any, config: dict, parser: Any) -> int:
         known = "|".join(SOURCE_REGISTRY.kinds())
         parser.error(f"source add requires --kind ({known})")
 
-    adapter = SOURCE_REGISTRY.get(kind)
-    if adapter is None:
-        parser.error(f"unknown source kind {kind!r}. Known: {', '.join(SOURCE_REGISTRY.kinds())}")
-
-    try:
-        kwargs = adapter.validate(args)
-    except ValueError as exc:
-        parser.error(str(exc))
-
     source_id = getattr(args, "id", None) or getattr(args, "name", None) or _identifier("source")
-    with state_lock(config):
-        state = load_state(config)
-        record = adapter.add(config, state, source_id, **{k: v for k, v in kwargs.items() if k != 'kind'})
-        save_state(config, state)
+
+    if kind in _SOURCES_LIB_NATIVE_KINDS:
+        try:
+            kwargs = native_kind_validate(kind, args)
+        except ValueError as exc:
+            parser.error(str(exc))
+        with state_lock(config):
+            state = load_state(config)
+            record = native_kind_add(kind, source_id, state, **kwargs)
+            save_state(config, state)
+    else:
+        adapter = SOURCE_REGISTRY.get(kind)
+        if adapter is None:
+            parser.error(f"unknown source kind {kind!r}. Known: {', '.join(SOURCE_REGISTRY.kinds())}")
+        try:
+            kwargs = adapter.validate(args)
+        except ValueError as exc:
+            parser.error(str(exc))
+        with state_lock(config):
+            state = load_state(config)
+            record = adapter.add(config, state, source_id, **{k: v for k, v in kwargs.items() if k != 'kind'})
+            save_state(config, state)
 
     if getattr(args, "format", None) == "json":
         print(json.dumps({"status": "ok", "source": record}, indent=2))
@@ -576,9 +590,16 @@ def _handle_source_add_unified(args: Any, config: dict, parser: Any) -> int:
 
 
 def _handle_source_act(args: Any, config: dict) -> int:
-    """Dispatch source act / actions / enable-action / disable-action commands."""
+    """Dispatch source act / actions / enable-action / disable-action commands.
+
+    Native kinds (github, mcp_server, …) are routed through sources-lib helpers.
+    State mutations (enable-action / disable-action) never need an adapter lookup.
+    """
     from ..source_adapters import SOURCE_REGISTRY
     from ..source_adapters._base import SourceActDeniedError, SourceUnavailableError
+    from ..source_adapters._sources_bridge import (
+        _SOURCES_LIB_NATIVE_KINDS, native_kind_actions, native_kind_act,
+    )
 
     source_id = getattr(args, "id", None) or getattr(args, "name", None) or ""
     sub_action = getattr(args, "action", "")
@@ -596,25 +617,107 @@ def _handle_source_act(args: Any, config: dict) -> int:
             return 1
 
         kind = record.get("kind", "")
-        adapter = SOURCE_REGISTRY.get(kind)
-        if adapter is None:
-            msg = f"no registered adapter for kind {kind!r}"
-            if is_json:
-                print(json.dumps({"error": msg}))
-            else:
-                print(f"Error: {msg}", file=sys.stderr)
-            return 1
 
-        if sub_action == "actions":
-            actions = adapter.supported_actions(state, source_id)
-            if is_json:
-                print(json.dumps({"source_id": source_id, "actions": actions}))
-            else:
-                if actions:
-                    print(f"Enabled actions for {source_id!r}: {', '.join(actions)}")
+        # enable-action / disable-action are pure state mutations — no adapter needed
+        if sub_action not in {"actions", "act"}:
+            pass  # fall through to the mutation block below
+        elif kind in _SOURCES_LIB_NATIVE_KINDS:
+            if sub_action == "actions":
+                actions = native_kind_actions(kind)
+                if is_json:
+                    print(json.dumps({"source_id": source_id, "actions": actions}))
                 else:
-                    print(f"No actions enabled for {source_id!r}. Use: urace source enable-action <id> --source-action <action>")
-            return 0
+                    if actions:
+                        print(f"Available actions for {source_id!r}: {', '.join(actions)}")
+                    else:
+                        print(f"No actions available for {source_id!r}.")
+                return 0
+            if sub_action == "act":
+                action_name = getattr(args, "source_action", None) or ""
+                payload_raw = getattr(args, "payload", None) or "{}"
+                if not action_name:
+                    print("Error: --source-action required", file=sys.stderr)
+                    return 1
+                try:
+                    payload = json.loads(payload_raw)
+                except json.JSONDecodeError as exc:
+                    print(f"Error: invalid --payload JSON: {exc}", file=sys.stderr)
+                    return 1
+                try:
+                    result = native_kind_act(kind, record, action_name, payload, config)
+                except PermissionError as exc:
+                    msg = str(exc)
+                    if is_json:
+                        print(json.dumps({"error": "denied", "detail": msg}))
+                    else:
+                        print(f"Act denied: {msg}", file=sys.stderr)
+                    return 1
+                except Exception as exc:
+                    msg = str(exc)
+                    if is_json:
+                        print(json.dumps({"error": "unavailable", "detail": msg}))
+                    else:
+                        print(f"Source unavailable: {msg}", file=sys.stderr)
+                    return 1
+                if is_json:
+                    print(json.dumps({"source_id": source_id, "action": action_name, "result": result}))
+                else:
+                    print(f"Act {action_name!r} on {source_id!r}: {result}")
+                return 0
+        else:
+            adapter = SOURCE_REGISTRY.get(kind)
+            if adapter is None:
+                msg = f"no registered adapter for kind {kind!r}"
+                if is_json:
+                    print(json.dumps({"error": msg}))
+                else:
+                    print(f"Error: {msg}", file=sys.stderr)
+                return 1
+
+            if sub_action == "actions":
+                actions = adapter.supported_actions(state, source_id)
+                if is_json:
+                    print(json.dumps({"source_id": source_id, "actions": actions}))
+                else:
+                    if actions:
+                        print(f"Enabled actions for {source_id!r}: {', '.join(actions)}")
+                    else:
+                        print(f"No actions enabled for {source_id!r}. Use: urace source enable-action <id> --source-action <action>")
+                return 0
+
+            if sub_action == "act":
+                action_name = getattr(args, "source_action", None) or ""
+                payload_raw = getattr(args, "payload", None) or "{}"
+                if not action_name:
+                    print("Error: --source-action required", file=sys.stderr)
+                    return 1
+                try:
+                    payload = json.loads(payload_raw)
+                except json.JSONDecodeError as exc:
+                    print(f"Error: invalid --payload JSON: {exc}", file=sys.stderr)
+                    return 1
+                try:
+                    result = adapter.act(config, state, source_id, action_name, payload)
+                    save_state(config, state)
+                except SourceActDeniedError as exc:
+                    msg = str(exc)
+                    if is_json:
+                        print(json.dumps({"error": "denied", "detail": msg}))
+                    else:
+                        print(f"Act denied: {msg}", file=sys.stderr)
+                    return 1
+                except SourceUnavailableError as exc:
+                    msg = str(exc)
+                    if is_json:
+                        print(json.dumps({"error": "unavailable", "detail": msg}))
+                    else:
+                        print(f"Source unavailable: {msg}", file=sys.stderr)
+                    return 1
+                if is_json:
+                    print(json.dumps({"source_id": source_id, "action": action_name, "result": result}))
+                else:
+                    print(f"Act {action_name!r} on {source_id!r}: {result}")
+                return 0
 
         if sub_action == "enable-action":
             action_name = getattr(args, "source_action", None) or ""

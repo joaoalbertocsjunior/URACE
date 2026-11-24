@@ -43,7 +43,6 @@ SOURCE_REGISTRY = _Registry()
 
 from . import (  # noqa: E402, F401
     file_adapter,
-    github_adapter,
     connector_adapter,
     executor_adapter,
     peer_adapter,
@@ -63,7 +62,6 @@ from . import (  # noqa: E402, F401
     ci_pipeline_adapter,
     event_stream_adapter,
     inbox_adapter,
-    mcp_server_adapter,
     log_file_adapter,
     package_registry_adapter,
     audit_adapter,

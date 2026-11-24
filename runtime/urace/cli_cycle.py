@@ -43,6 +43,7 @@ def _source_adapter_auto_sync(config: dict, state: dict) -> None:
         return
     try:
         from .source_adapters import SOURCE_REGISTRY
+        from .source_adapters._sources_bridge import _SOURCES_LIB_NATIVE_KINDS, native_kind_sync
     except Exception:
         return
     current_ts = datetime.now(timezone.utc).timestamp()
@@ -50,8 +51,9 @@ def _source_adapter_auto_sync(config: dict, state: dict) -> None:
         if not isinstance(record, dict) or not record.get('enabled', True):
             continue
         kind = record.get('kind', '')
-        adapter = SOURCE_REGISTRY.get(kind)
-        if adapter is None:
+        is_native = kind in _SOURCES_LIB_NATIVE_KINDS
+        adapter = None if is_native else SOURCE_REGISTRY.get(kind)
+        if not is_native and adapter is None:
             continue
         last_synced = record.get('adapter_state', {}).get('last_synced_at') or record.get('added_at')
         if last_synced:
@@ -62,7 +64,10 @@ def _source_adapter_auto_sync(config: dict, state: dict) -> None:
             except (ValueError, TypeError):
                 pass
         try:
-            result = adapter.sync(config, state, source_id)
+            if is_native:
+                result = native_kind_sync(kind, record, config)
+            else:
+                result = adapter.sync(config, state, source_id)
             record.setdefault('adapter_state', {})['last_synced_at'] = now()
             if result.get('synced', False):
                 state.setdefault('evidence', []).append({

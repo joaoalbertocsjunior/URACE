@@ -103,6 +103,23 @@ Files: `source_adapters/`, `control_server.py`, `data_transport.py`, `data_cli.p
   Do not add direct litellm, mcp, or github imports outside of sources-lib adapters.
 - `control_server.py`: imports `HTTPControlServer` from `sources_lib.http` and
   `M2MServer` from `sources_lib.m2m` — do not move these back to a top-level import.
+- `_sources_bridge._SOURCES_LIB_NATIVE_KINDS` lists kinds whose data-transport path
+  is owned by sources-lib native adapters (`github`, `mcp_server`, `a2a_agent`,
+  `directory`, `ai_executor`, `local_data`). URACE adapters for these kinds handle
+  the CLI UX path (`add_args`/`validate`/`add`) but must not be wrapped via
+  `URACEAdapterBridge` — they are excluded from the bridge loop explicitly.
+  When adding a new kind that sources-lib natively supports, add it to that set.
+- Adapter migration decisions (Phase 4 — do not re-evaluate without new evidence):
+  - `folder` vs sources-lib `directory`: not duplicates. `FolderAdapter` does recursive
+    glob; `DirectoryAdapter` lists direct children. Keep both.
+  - `git`, `s3`: no sources-lib equivalents. Keep URACE's.
+  - `database`: sources-lib has `DatabaseAdapter` but it lacks SQLAlchemy support and
+    the read-only SELECT guard. URACE's is intentionally kept — the write-protection
+    is a safety invariant, not an optional feature.
+- `NullSourceAdapter` vs `BaseSourceAdapter` (Phase 5 — closed, do not reopen):
+  These are two distinct layers serving different concerns. See `source_adapters/_base.py`
+  module docstring for the full boundary definition. `URACEAdapterBridge` is the only
+  reconciliation point. Never merge or flatten these hierarchies.
 
 ## Tests
 
