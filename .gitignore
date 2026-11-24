@@ -1,7 +1,7 @@
 # Canonical local runtime repository: code only, no deployment state or secrets.
 /*
 !/.gitignore
-!/.envrc
+
 !/LICENSE
 !/CLAUDE.md
 !/LICENSES/
