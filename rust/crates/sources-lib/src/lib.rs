@@ -1,8 +1,17 @@
 pub mod adapter;
 pub mod adapters;
+pub mod bridge;
+pub mod events;
+pub mod http_server;
+pub mod m2m;
 pub mod registry;
 
 pub use adapter::{BaseSourceAdapter, SourceAdapter, SourceError, SourceRecord};
+pub use bridge::{Bridge, SyncResult};
+pub use events::{Event, EventBus, EventEmitter, EventKind};
+pub use http_server::HttpControlServer;
+pub use m2m::M2MServer;
 pub use registry::SourceRegistry;
 pub use adapters::a2a::A2ASourceAdapter;
 pub use adapters::local_data::LocalDataAdapter;
+pub use adapters::shell::ShellAdapter;

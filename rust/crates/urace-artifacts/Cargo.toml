@@ -1,0 +1,20 @@
+[package]
+name    = "urace-artifacts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+tracing    = { workspace = true }
+hex        = { workspace = true }
+sha2       = { workspace = true }
+rand       = { workspace = true }
+urace-crypto = { path = "../urace-crypto" }
+urace-ledger = { path = "../urace-ledger" }
+
+[dev-dependencies]
+tempfile = { workspace = true }

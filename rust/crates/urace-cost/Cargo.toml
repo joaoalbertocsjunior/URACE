@@ -1,0 +1,21 @@
+[package]
+name        = "urace-cost"
+description = "Executor-agnostic LLM cost tracking and pricing table — URACE cost layer"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+tracing.workspace    = true
+tokio.workspace      = true
+uuid.workspace       = true
+parking_lot.workspace = true
+urace-ledger         = { path = "../urace-ledger" }

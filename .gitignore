@@ -52,11 +52,20 @@
 !/rust/crates/urace-crypto/
 !/rust/crates/urace-types/
 !/rust/crates/urace-ledger/
+!/rust/crates/urace-identity/
+!/rust/crates/urace-cost/
 !/rust/crates/sources-lib/
 !/rust/crates/urace-authority/
 !/rust/crates/urace-p2p/
 !/rust/crates/urace-executor/
 !/rust/crates/urace-settlement/
+!/rust/crates/urace-artifacts/
+!/rust/crates/urace-products/
+!/rust/crates/urace-work/
+!/rust/crates/urace-goals/
+!/rust/crates/urace-net/
+!/rust/crates/urace-upgrade/
+!/rust/crates/urace-audit/
 !/rust/crates/urace/
 
 # Runtime/operational data — gitignored

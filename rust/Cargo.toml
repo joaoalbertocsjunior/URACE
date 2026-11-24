@@ -4,11 +4,20 @@ members = [
     "crates/urace-crypto",
     "crates/urace-types",
     "crates/urace-ledger",
+    "crates/urace-cost",
+    "crates/urace-identity",
     "crates/sources-lib",
     "crates/urace-authority",
     "crates/urace-p2p",
     "crates/urace-executor",
     "crates/urace-settlement",
+    "crates/urace-artifacts",
+    "crates/urace-products",
+    "crates/urace-work",
+    "crates/urace-goals",
+    "crates/urace-net",
+    "crates/urace-upgrade",
+    "crates/urace-audit",
     "crates/urace",
 ]
 
@@ -36,6 +45,7 @@ rand_core      = "0.6"
 getrandom      = "0.2"
 zeroize        = { version = "1", features = ["derive"] }
 hex            = "0.4"
+hkdf           = "0.12"
 
 # Error handling
 thiserror      = "1"
@@ -65,3 +75,4 @@ parking_lot    = "0.12"
 dashmap        = "5"
 atomic-write-file = "0.1"
 regex-lite        = "0.1"
+tempfile          = "3"

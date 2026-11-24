@@ -1,0 +1,24 @@
+[package]
+name        = "urace-work"
+description = "Work market, P2P matching, work policy, receipts, and purchase settlement"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[dependencies]
+serde.workspace       = true
+serde_json.workspace  = true
+thiserror.workspace   = true
+tracing.workspace     = true
+tokio.workspace       = true
+parking_lot.workspace = true
+dashmap.workspace     = true
+uuid.workspace        = true
+urace-authority       = { path = "../urace-authority" }
+urace-ledger          = { path = "../urace-ledger" }
+urace-types           = { path = "../urace-types" }

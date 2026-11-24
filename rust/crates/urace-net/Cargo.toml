@@ -1,0 +1,17 @@
+[package]
+name        = "urace-net"
+description = "NAT traversal, STUN (RFC 5389), DDNS, and tunnel management"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+tracing.workspace    = true
+tokio.workspace      = true
+reqwest.workspace    = true
+urace-types          = { path = "../urace-types" }

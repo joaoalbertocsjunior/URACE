@@ -1,0 +1,29 @@
+[package]
+name        = "urace-identity"
+description = "Identity and key management for URACE: key lifecycle, mesh identity, session DEK, Shamir delivery, crypto wallet"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace       = true
+serde_json.workspace  = true
+thiserror.workspace   = true
+tracing.workspace     = true
+zeroize.workspace     = true
+rand.workspace        = true
+rand_core.workspace   = true
+hex.workspace         = true
+sha2.workspace        = true
+hkdf.workspace        = true
+parking_lot.workspace = true
+uuid.workspace        = true
+time.workspace        = true
+urace-crypto          = { path = "../urace-crypto" }
+urace-ledger          = { path = "../urace-ledger" }
+
+[dev-dependencies]
+rand         = { version = "0.8", features = ["std"] }
+tempfile     = "3"
