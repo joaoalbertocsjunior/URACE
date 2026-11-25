@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Dashboard</h1>
+  <p class="page-subtitle">System overview</p>
+</div>
+
+<div id="dash-daemon-card" class="dash-daemon-card">
+  <div class="vitals-loading">Loading…</div>
+</div>
+
+<div id="dash-stats" class="dash-stats-grid">
+  <div class="dash-stat-card">
+    <div class="vitals-title">Goals</div>
+    <div class="vitals-value" id="stat-goals">—</div>
+  </div>
+  <div class="dash-stat-card">
+    <div class="vitals-title">Inbox</div>
+    <div class="vitals-value" id="stat-inbox">—</div>
+  </div>
+  <div class="dash-stat-card">
+    <div class="vitals-title">Sources</div>
+    <div class="vitals-value" id="stat-sources">—</div>
+  </div>
+  <div class="dash-stat-card">
+    <div class="vitals-title">Cycle Count</div>
+    <div class="vitals-value" id="stat-cycles">—</div>
+  </div>
+  <div class="dash-stat-card">
+    <div class="vitals-title">APS Score</div>
+    <div class="vitals-value" id="stat-aps">—</div>
+  </div>
+  <div class="dash-stat-card">
+    <div class="vitals-title">Lifecycle</div>
+    <div class="vitals-value" id="stat-lifecycle">—</div>
+  </div>
+</div>
+
+<div class="dash-quick-links">
+  <span class="nav-section-label" style="padding:0 0 0.5rem;">Quick access</span>
+  <div class="dash-quick-grid">
+    <a href="/shell"      class="dash-quick-item"><svg viewBox="0 0 16 16" fill="none"><polyline points="3,5 7,8 3,11" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><line x1="8" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="1.3"/></svg>Shell</a>
+    <a href="/goals"      class="dash-quick-item"><svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.3"/></svg>Goals</a>
+    <a href="/inbox"      class="dash-quick-item"><svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><polyline points="2,6 8,9.5 14,6" stroke="currentColor" stroke-width="1.3"/></svg>Inbox</a>
+    <a href="/audit"      class="dash-quick-item"><svg viewBox="0 0 16 16" fill="none"><path d="M8 1L2 4v5c0 3.3 2.5 5.7 6 7 3.5-1.3 6-3.7 6-7V4L8 1z" stroke="currentColor" stroke-width="1.3"/></svg>Audit</a>
+    <a href="/wallet"     class="dash-quick-item"><svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.3"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.3"/><circle cx="11.5" cy="10.5" r="1" fill="currentColor"/></svg>Wallet</a>
+    <a href="/cycle"      class="dash-quick-item"><svg viewBox="0 0 16 16" fill="none"><path d="M13 8A5 5 0 112 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><polyline points="2,3 2,6 5,6" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>Cycle</a>
+  </div>
+</div>
+
+<script>
+const TOKEN = window.__URACE_TOKEN__;
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function loadDaemon() {
+  const card = document.getElementById('dash-daemon-card');
+  try {
+    const r = await fetch('/api/daemon/status', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const running = data.status === 'running';
+    const dotCls = running ? 'running' : 'stopped';
+    const badgeHtml = running
+      ? `<span class="status-badge badge-active">Running</span>`
+      : `<span class="status-badge badge-default">Stopped</span>`;
+    const uptime = data.uptime_secs != null
+      ? fmtUptime(data.uptime_secs)
+      : null;
+    card.innerHTML = `
+      <div class="dash-daemon-row">
+        <div class="dash-daemon-info">
+          <span class="status-dot ${dotCls}"></span>
+          <span class="dash-daemon-label">Daemon</span>
+          ${badgeHtml}
+          ${uptime ? `<span class="dash-daemon-uptime">up ${uptime}</span>` : ''}
+          ${data.cycle_active ? '<span class="cycle-badge">cycle active</span>' : ''}
+        </div>
+        <div class="dash-daemon-actions">
+          ${running
+            ? `<button class="daemon-btn daemon-btn-stop" onclick="daemonAction('stop')" title="Stop daemon"><svg viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="2" width="3" height="8" rx="0.5"/><rect x="7" y="2" width="3" height="8" rx="0.5"/></svg></button>`
+            : `<button class="daemon-btn daemon-btn-start" onclick="daemonAction('start')" title="Start daemon"><svg viewBox="0 0 12 12" fill="currentColor"><polygon points="2,1 11,6 2,11"/></svg></button>`
+          }
+        </div>
+      </div>`;
+  } catch(_) {
+    card.innerHTML = `<div class="dash-daemon-row"><span class="status-dot unknown"></span><span class="dash-daemon-label">Daemon</span><span class="status-badge badge-default">Unknown</span></div>`;
+  }
+}
+
+async function daemonAction(action) {
+  await fetch('/api/daemon/' + action, {method:'POST', headers:{'Authorization':'Bearer '+TOKEN}});
+  setTimeout(loadDaemon, 800);
+}
+
+function fmtUptime(secs) {
+  if (secs < 60) return secs + 's';
+  if (secs < 3600) return Math.floor(secs/60) + 'm';
+  return Math.floor(secs/3600) + 'h ' + Math.floor((secs%3600)/60) + 'm';
+}
+
+async function loadStats() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+
+  // vitals
+  try {
+    const r = await fetch('/api/vitals/', {headers:{'Authorization':'Bearer '+TOKEN}});
+    if (r.ok) {
+      const d = await r.json();
+      set('stat-cycles', d.cycle_count ?? 0);
+      set('stat-aps', d.aps_score != null ? Number(d.aps_score).toFixed(1) : '—');
+      set('stat-lifecycle', d.lifecycle_state || '—');
+    }
+  } catch(_) {}
+
+  // goals
+  try {
+    const r = await fetch('/api/goals/', {headers:{'Authorization':'Bearer '+TOKEN}});
+    if (r.ok) {
+      const d = await r.json();
+      const goals = d.goals || d;
+      set('stat-goals', Array.isArray(goals) ? goals.length : '—');
+    }
+  } catch(_) {}
+
+  // inbox
+  try {
+    const r = await fetch('/api/inbox/count', {headers:{'Authorization':'Bearer '+TOKEN}});
+    if (r.ok) {
+      const d = await r.json();
+      set('stat-inbox', d.count ?? '—');
+    }
+  } catch(_) {}
+
+  // sources
+  try {
+    const r = await fetch('/api/sources/', {headers:{'Authorization':'Bearer '+TOKEN}});
+    if (r.ok) {
+      const d = await r.json();
+      const srcs = d.sources || d;
+      set('stat-sources', Array.isArray(srcs) ? srcs.length : '—');
+    }
+  } catch(_) {}
+}
+
+loadDaemon();
+loadStats();
+setInterval(loadDaemon, 5000);
+setInterval(loadStats, 15000);
+</script>
+{% endblock %}

@@ -4,7 +4,7 @@
 use crate::AppState;
 use axum::{
     extract::State,
-    response::{Html, Redirect},
+    response::Html,
 };
 use minijinja::context;
 
@@ -19,8 +19,8 @@ fn render(state: &AppState, template: &str, active: &str) -> Html<String> {
     Html(html)
 }
 
-pub async fn index() -> Redirect {
-    Redirect::to("/shell")
+pub async fn index(State(s): State<AppState>) -> Html<String> {
+    render(&s, "index.html", "index")
 }
 
 pub async fn shell(State(s): State<AppState>) -> Html<String> {

@@ -2,25 +2,30 @@
 {% block title_suffix %} — Shell{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">Shell</h1>
-  <p class="page-subtitle">Run URACE commands or natural language instructions</p>
-</div>
+<div class="shell-page">
+  <div class="shell-page-header">
+    <div>
+      <h1 class="page-title" style="margin-bottom:0.1rem;">Shell</h1>
+      <p class="page-subtitle">URACE commands or natural language</p>
+    </div>
+    <div id="cycle-warning" class="banner banner-warn" style="display:none">
+      Cycle active — commands may touch live state
+    </div>
+  </div>
 
-<div id="cycle-warning" class="banner banner-warn" style="display:none">
-  A cycle is currently active — commands may interact with live state.
-</div>
-
-<div class="shell-container">
-  <div id="output" class="shell-output"></div>
-  <div class="shell-input-wrap">
-    <div id="autocomplete" class="autocomplete-dropdown" style="display:none"></div>
-    <div class="shell-input-row">
-      <span class="shell-prompt-glyph">›</span>
-      <input type="text" id="shell-input" class="shell-input"
-             placeholder="daemon start  ·  goals list  ·  or describe a task…"
-             autocomplete="off" autofocus>
-      <button id="shell-submit" class="btn" onclick="submitCommand()">Run</button>
+  <div class="shell-container">
+    <div id="output" class="shell-output">
+      <div class="shell-welcome">Type a command or describe a task. Try <code>help</code> or <code>daemon status</code>.</div>
+    </div>
+    <div class="shell-input-wrap">
+      <div id="autocomplete" class="autocomplete-dropdown" style="display:none"></div>
+      <div class="shell-input-row">
+        <span class="shell-prompt-glyph">›</span>
+        <input type="text" id="shell-input" class="shell-input"
+               placeholder="daemon start  ·  goals list  ·  or describe a task…"
+               autocomplete="off" autofocus>
+        <button id="shell-submit" onclick="submitCommand()">Run</button>
+      </div>
     </div>
   </div>
 </div>

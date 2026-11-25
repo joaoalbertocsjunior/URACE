@@ -218,8 +218,10 @@ main {
   flex: 1;
   margin-left: var(--sidebar-w);
   padding: 1.75rem 2rem;
-  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
   max-width: calc(100vw - var(--sidebar-w));
+  box-sizing: border-box;
 }
 
 /* ── Typography ──────────────────────────────────────────────────────────── */
@@ -319,64 +321,91 @@ input[type="checkbox"] {
 }
 
 /* ── Shell ───────────────────────────────────────────────────────────────── */
-.shell-container {
+.shell-page {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 3.5rem);
 }
 
+.shell-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+
+.shell-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .shell-output {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1rem;
-  margin-bottom: 0.75rem;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 1rem 1.1rem;
   font-size: 0.84rem;
   line-height: 1.65;
   font-family: var(--mono);
 }
 
-.shell-line   { color: #bcc4d8; }
-.shell-prompt { color: #818cf8; margin-top: 0.5rem; font-weight: 500; }
-.shell-error  { color: #f87171; }
+.shell-welcome {
+  color: var(--text-3);
+  font-size: 0.8rem;
+  padding: 0.25rem 0;
+}
+.shell-welcome code { color: var(--accent); }
+
+.shell-line        { color: #bcc4d8; padding: 0.08rem 0; }
+.shell-prompt-line { color: #818cf8; margin-top: 0.6rem; font-weight: 500; }
+.shell-error       { color: #f87171; }
+
+.shell-input-wrap {
+  position: relative;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 0.6rem 0.75rem;
+}
 
 .shell-input-row {
   display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
+  gap: 0.6rem;
+  align-items: center;
 }
-
-#ac-wrap { position: relative; flex: 1; }
 
 .shell-input {
-  width: 100%;
-  background: var(--bg-elevated);
+  flex: 1;
+  background: transparent;
   color: var(--text);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 0.5rem 0.8rem;
+  border: none;
+  outline: none;
   font-family: var(--mono);
   font-size: 0.875rem;
-  outline: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
+  padding: 0;
+  line-height: 1.5;
 }
 
-.shell-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.14);
-}
+.shell-input::placeholder { color: var(--text-3); }
 
 #shell-submit {
   background: var(--accent);
   color: #fff;
   border: none;
   border-radius: var(--radius-sm);
-  padding: 0.5rem 1.1rem;
+  padding: 0.38rem 1rem;
   cursor: pointer;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.82rem;
   font-weight: 500;
   transition: all 0.12s;
   white-space: nowrap;
@@ -1096,7 +1125,10 @@ code { font-family: var(--mono); }
   gap: 0.45rem;
   font-size: 0.75rem;
   color: var(--text-2);
+  width: 100%;
 }
+#daemon-bar .daemon-label { flex: 1; }
+#daemon-bar .daemon-btn { margin-left: auto; }
 
 /* ── Banner (replaces .cycle-warning) ───────────────────────────────────── */
 .banner {
@@ -1236,3 +1268,126 @@ code { font-family: var(--mono); }
   font-size: 0.84rem;
 }
 .empty-state svg { width: 40px; height: 40px; opacity: 0.3; }
+
+/* ── Offline / daemon-down state ─────────────────────────────────────────── */
+.offline-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1rem;
+  color: var(--text-3);
+  font-size: 0.84rem;
+  text-align: center;
+}
+.offline-state svg { width: 36px; height: 36px; opacity: 0.25; margin-bottom: 0.25rem; }
+.offline-hint { font-size: 0.75rem; color: var(--text-3); opacity: 0.7; }
+
+/* ── Daemon control buttons ──────────────────────────────────────────────── */
+.daemon-btn {
+  width: 26px; height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.12s;
+  margin-left: auto;
+}
+.daemon-btn svg { width: 10px; height: 10px; }
+
+.daemon-btn-start {
+  background: rgba(34,197,94,0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34,197,94,0.3);
+}
+.daemon-btn-start:hover {
+  background: rgba(34,197,94,0.25);
+  box-shadow: 0 0 8px rgba(34,197,94,0.2);
+}
+
+.daemon-btn-stop {
+  background: rgba(239,68,68,0.12);
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.28);
+}
+.daemon-btn-stop:hover {
+  background: rgba(239,68,68,0.22);
+  box-shadow: 0 0 8px rgba(239,68,68,0.2);
+}
+
+/* ── Dashboard ───────────────────────────────────────────────────────────── */
+.dash-daemon-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  transition: border-color 0.15s;
+}
+
+.dash-daemon-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.dash-daemon-info {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.dash-daemon-label { font-weight: 600; color: var(--text); font-size: 0.88rem; }
+.dash-daemon-uptime { color: var(--text-3); font-size: 0.75rem; font-family: var(--mono); }
+.dash-daemon-actions { display: flex; align-items: center; flex-shrink: 0; }
+
+.dash-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1.5rem;
+}
+
+.dash-stat-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1.1rem;
+  transition: border-color 0.15s;
+}
+.dash-stat-card:hover { border-color: var(--border-strong); }
+
+.dash-quick-links { margin-top: 0.25rem; }
+
+.dash-quick-grid {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.dash-quick-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.9rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-2);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: all 0.12s;
+}
+.dash-quick-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+.dash-quick-item svg { width: 13px; height: 13px; opacity: 0.7; }

@@ -131,5 +131,7 @@ fn build_env() -> Environment<'static> {
     .unwrap();
     env.add_template("sources.html", include_str!("../templates/sources.html"))
         .unwrap();
+    env.add_template("index.html", include_str!("../templates/index.html"))
+        .unwrap();
     env
 }

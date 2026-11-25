@@ -1,12 +1,21 @@
 <span class="status-dot {{ 'running' if status == 'running' else 'stopped' }}"></span>
-{{ status }}
+<span class="daemon-label">{{ status }}</span>
 {% if status == 'running' %}
-  {% if cycle_active %}
-    <span class="cycle-badge">cycle active</span>
-    <button hx-post="/api/daemon/stop" hx-confirm="A cycle is in progress — stopping now will interrupt it. Continue?" hx-target="#daemon-bar" hx-swap="innerHTML">Stop</button>
-  {% else %}
-    <button hx-post="/api/daemon/stop" hx-target="#daemon-bar" hx-swap="innerHTML">Stop</button>
-  {% endif %}
+  {% if cycle_active %}<span class="cycle-badge">cycle</span>{% endif %}
+  <button class="daemon-btn daemon-btn-stop"
+          hx-post="/api/daemon/stop"
+          {% if cycle_active %}hx-confirm="A cycle is in progress — stopping now will interrupt it. Continue?"{% endif %}
+          hx-target="#daemon-bar"
+          hx-swap="innerHTML"
+          title="Stop daemon">
+    <svg viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="2" width="3" height="8" rx="0.5"/><rect x="7" y="2" width="3" height="8" rx="0.5"/></svg>
+  </button>
 {% else %}
-  <button hx-post="/api/daemon/start" hx-target="#daemon-bar" hx-swap="innerHTML">Start</button>
+  <button class="daemon-btn daemon-btn-start"
+          hx-post="/api/daemon/start"
+          hx-target="#daemon-bar"
+          hx-swap="innerHTML"
+          title="Start daemon">
+    <svg viewBox="0 0 12 12" fill="currentColor"><polygon points="2,1 11,6 2,11"/></svg>
+  </button>
 {% endif %}

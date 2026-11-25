@@ -44,10 +44,13 @@ async function loadVitals() {
         </div>
       </div>
     `;
-  } catch (err) {
-    document.getElementById('vitals-content').innerHTML =
-      `<div class="shell-error">Failed to load vitals: ${err.message}</div>`;
+  } catch (_) {
+    document.getElementById('vitals-content').innerHTML = offlineState('vitals');
   }
+}
+
+function offlineState(ctx) {
+  return `<div class="offline-state"><svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2"/><line x1="24" y1="14" x2="24" y2="26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="24" cy="33" r="1.5" fill="currentColor"/></svg><p>Daemon offline</p><p class="offline-hint">Start the daemon to see ${ctx} data</p></div>`;
 }
 
 loadVitals();

@@ -59,8 +59,8 @@ async function loadActiveProduct() {
       <div class="active-product-meta" style="margin-top:0.5rem;color:#94a3b8;font-size:0.85rem;">
         Registered: ${escHtml(regAt)}
       </div>`;
-  } catch(err) {
-    el.innerHTML = `<div class="shell-error">Could not load active product: ${escHtml(err.message)}</div>`;
+  } catch(_) {
+    el.innerHTML = offlineState('product');
   }
 }
 
@@ -96,8 +96,8 @@ async function loadProducts() {
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
-  } catch(err) {
-    el.innerHTML = `<div class="shell-error">Failed to load products: ${escHtml(err.message)}</div>`;
+  } catch(_) {
+    el.innerHTML = offlineState('product registry');
   }
 }
 
@@ -142,9 +142,13 @@ async function loadImprovements() {
       <thead><tr><th>Product</th><th>Enabled</th><th>Supported</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
-  } catch(err) {
-    el.innerHTML = `<div class="shell-error">Failed to load improvements: ${escHtml(err.message)}</div>`;
+  } catch(_) {
+    el.innerHTML = offlineState('improvements');
   }
+}
+
+function offlineState(ctx) {
+  return `<div class="offline-state"><svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2"/><line x1="24" y1="14" x2="24" y2="26" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="24" cy="33" r="1.5" fill="currentColor"/></svg><p>Daemon offline</p><p class="offline-hint">Start the daemon to see ${ctx} data</p></div>`;
 }
 
 loadActiveProduct();
