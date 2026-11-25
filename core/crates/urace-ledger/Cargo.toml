@@ -19,5 +19,8 @@ hex.workspace        = true
 thiserror.workspace  = true
 parking_lot.workspace = true
 uuid.workspace       = true
+rand.workspace       = true
+flate2.workspace     = true
+libc.workspace       = true
 urace-crypto         = { path = "../urace-crypto" }
 urace-types          = { path = "../urace-types" }

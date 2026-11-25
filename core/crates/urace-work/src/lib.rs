@@ -16,12 +16,18 @@
 //! - `WorkPolicy::default()` has `max_budget_ucr=0` and `require_authority_check=true`;
 //!   any leniency must be explicitly configured.
 
+pub mod exchange_endpoint;
+pub mod implementation_sequence;
 pub mod matching;
 pub mod purchase_settlement;
 pub mod receipt;
 pub mod work_market;
 pub mod work_policy;
 
+pub use exchange_endpoint::{
+    build_settlement_router, handle_credit_settlement, SettlementEndpointError,
+    SettlementPayload, SettlementResponse, SettlementRouterConfig, SCHEMA as CREDIT_SETTLEMENT_SCHEMA,
+};
 pub use matching::{match_score, select_best_bid, DemandCounter, WorkBid, WorkTask};
 pub use purchase_settlement::{PurchaseSettlement, SettlementError, SettlementStore};
 pub use receipt::{ReceiptError, ReceiptStore, WorkReceipt};

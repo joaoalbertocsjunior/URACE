@@ -8,12 +8,24 @@
 //! - Executors must not persist state beyond their declared session.
 //! - Parent process environment variables are NEVER forwarded to child processes.
 
+pub mod capabilities;
+pub mod multi_executor;
+pub mod routing;
+
+pub use capabilities::{builtins, select_skill, SkillContract, SKILL_VOCABULARY};
+pub use multi_executor::{
+    allocate_budget, generate_and_select, score_proposal, select_best, settings as multi_settings,
+    BudgetSlot, DimensionScores, DiscoverFn, MultiExecutorError, MultiPlanSettings, ScoreWeights,
+    ScoredCandidate, SCHEMA as MULTI_PLAN_SCHEMA,
+};
+pub use routing::{select_provider, ProviderDef, UnavailabilityClass};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use urace_authority::authority::{resolve, Objective};
 use std::collections::HashMap;
 use serde_json::Value;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[derive(Debug, Error)]
 pub enum ExecutorError {
@@ -74,11 +86,83 @@ pub struct ExecutionResult {
     pub duration_ms: u64,
 }
 
+// ── Sandbox backend ───────────────────────────────────────────────────────────
+
+/// Platform-specific sandbox execution backend.
+///
+/// Each platform implements isolation differently:
+/// - Linux:  seccomp-bpf syscall filter + cgroups v2 for resource limits
+/// - macOS:  Seatbelt (sandbox_init) or App Sandbox profiles
+/// - Windows: Job Objects + restricted tokens
+///
+/// The `StubBackend` is used until a platform backend is wired.
+pub trait SandboxBackend: Send + Sync {
+    /// Execute `code` with `limits` applied.
+    ///
+    /// Must:
+    /// - Clear the parent environment before spawning
+    /// - Enforce CPU, memory, and wall-clock limits
+    /// - Return stdout/stderr as `output` on success
+    fn execute(&self, code: &str, limits: &ResourceLimits) -> Result<ExecutionResult, ExecutorError>;
+
+    /// Return a human-readable name for this backend.
+    fn name(&self) -> &'static str;
+}
+
+/// Stub backend — runs code via `echo` with no real isolation.
+///
+/// TODO(sandbox): Replace with platform backends:
+/// - Linux:   `SeccompBackend` using `libseccomp` + `nix` cgroups
+/// - macOS:   `SeatbeltBackend` using `sandbox_init(3)` profiles
+/// - Windows: `JobObjectBackend` using `CreateJobObject` + restricted tokens
+pub struct StubBackend;
+
+impl SandboxBackend for StubBackend {
+    fn execute(&self, code: &str, limits: &ResourceLimits) -> Result<ExecutionResult, ExecutorError> {
+        use std::process::Command;
+        use std::time::Instant;
+
+        let start = Instant::now();
+        let timeout = std::time::Duration::from_secs(limits.timeout_secs);
+
+        // Stub: echo the first 200 chars of code back as output.
+        // Real implementations replace this with seccomp-jailed execution.
+        let preview: String = code.chars().take(200).collect();
+        let _ = timeout; // real backend would enforce this
+
+        // Env-clear is the only real isolation in this stub.
+        let output = Command::new("echo")
+            .arg(&preview)
+            .env_clear()
+            .output()
+            .map_err(|e| ExecutorError::Execution(e.to_string()))?;
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        Ok(ExecutionResult {
+            executor_id: "stub".into(),
+            success: output.status.success(),
+            output: Some(String::from_utf8_lossy(&output.stdout).trim().to_string()),
+            error: if output.status.success() {
+                None
+            } else {
+                Some(String::from_utf8_lossy(&output.stderr).to_string())
+            },
+            duration_ms,
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "stub"
+    }
+}
+
 /// Pool of sandboxed executor slots.
 pub struct ExecutorPool {
     authority_config: HashMap<String, Value>,
     constraints: Vec<String>,
     sandbox: SandboxConfig,
+    backend: Box<dyn SandboxBackend>,
 }
 
 impl ExecutorPool {
@@ -87,6 +171,21 @@ impl ExecutorPool {
             authority_config,
             constraints,
             sandbox: SandboxConfig::default(),
+            backend: Box::new(StubBackend),
+        }
+    }
+
+    /// Create with a custom sandbox backend (for platform-specific implementations).
+    pub fn with_backend(
+        authority_config: HashMap<String, Value>,
+        constraints: Vec<String>,
+        backend: Box<dyn SandboxBackend>,
+    ) -> Self {
+        ExecutorPool {
+            authority_config,
+            constraints,
+            sandbox: SandboxConfig::default(),
+            backend,
         }
     }
 
@@ -95,7 +194,7 @@ impl ExecutorPool {
     /// Step 1: authority gate check (§62z).
     /// Step 2: resource limit validation against SandboxConfig.
     /// Step 3: credential leak detection.
-    /// Step 4: execute via std::process::Command with strict env isolation.
+    /// Step 4: execute via the configured sandbox backend.
     pub fn submit(&self, request: ExecutionRequest) -> Result<ExecutionResult, ExecutorError> {
         // Step 1: authority gate.
         authority_check(&request, &self.authority_config, &self.constraints)?;
@@ -108,8 +207,12 @@ impl ExecutorPool {
             return Err(ExecutorError::CredentialLeak(leak));
         }
 
-        // Step 4: execute with sandbox.
-        self.execute_sandboxed(&request)
+        // Step 4: Execute via the configured sandbox backend.
+        let exec_start = Instant::now();
+        let mut result = self.backend.execute(&request.code, &request.resource_limits)?;
+        result.executor_id = request.executor_id.clone();
+        result.duration_ms = exec_start.elapsed().as_millis() as u64;
+        Ok(result)
     }
 
     fn validate_limits(&self, limits: &ResourceLimits) -> Result<(), ExecutorError> {
@@ -132,49 +235,6 @@ impl ExecutorPool {
             )));
         }
         Ok(())
-    }
-
-    fn execute_sandboxed(&self, request: &ExecutionRequest) -> Result<ExecutionResult, ExecutorError> {
-        use std::process::Command;
-
-        let timeout = Duration::from_secs(request.resource_limits.timeout_secs);
-        let start = Instant::now();
-
-        // Execute `echo <code>` as a safe stub — the real execution backend would
-        // spawn a seccomp-confined interpreter here. We use `true` (no-op) as the
-        // sandbox placeholder, since full seccomp wiring is OS-specific.
-        //
-        // Security: env_clear() ensures NO parent process variables are forwarded.
-        let result = Command::new("echo")
-            .arg("sandbox-exec")
-            .env_clear() // MUST NOT forward parent env — credential isolation.
-            .output();
-
-        let duration_ms = start.elapsed().as_millis() as u64;
-
-        // Enforce timeout (checked after, since we don't have async here).
-        if start.elapsed() > timeout {
-            return Ok(ExecutionResult {
-                executor_id: request.executor_id.clone(),
-                success: false,
-                output: None,
-                error: Some("execution timed out".into()),
-                duration_ms,
-            });
-        }
-
-        match result {
-            Ok(output) => Ok(ExecutionResult {
-                executor_id: request.executor_id.clone(),
-                success: output.status.success(),
-                output: Some(String::from_utf8_lossy(&output.stdout).trim().to_string()),
-                error: if output.status.success() { None } else {
-                    Some(String::from_utf8_lossy(&output.stderr).to_string())
-                },
-                duration_ms,
-            }),
-            Err(e) => Err(ExecutorError::Execution(e.to_string())),
-        }
     }
 }
 
@@ -308,5 +368,19 @@ mod tests {
         // credential leak path would trigger if authority passed.
         let result = detect_credential_leak(&req.code);
         assert!(result.is_some());
+    }
+
+    #[test]
+    fn stub_backend_executes() {
+        let backend = StubBackend;
+        let result = backend.execute("hello world", &ResourceLimits::default()).unwrap();
+        assert!(result.success);
+        assert!(result.output.is_some());
+    }
+
+    #[test]
+    fn executor_pool_uses_backend() {
+        let pool = ExecutorPool::new(HashMap::new(), vec!["allow_all".into()]);
+        assert_eq!(pool.backend.name(), "stub");
     }
 }

@@ -6,92 +6,131 @@ on:
       - 'v*'
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  publish-pypi:
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
-      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact: urace-linux-x86_64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            artifact: urace-linux-aarch64
+            cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: urace-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: urace-macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: urace-windows-x86_64.exe
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.11'
-      - run: pip install build
-      - run: python -m build runtime/
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.14.3
-        with:
-          packages-dir: runtime/dist/
-          password: ${{ secrets.PYPI_TOKEN }}
-          skip-existing: true
 
-  publish-npm:
-    runs-on: ubuntu-latest
-    needs: publish-pypi
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-      - name: Extract version
-        id: version
-        run: echo "VERSION=$(grep '^version' runtime/pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
-      - name: Sync npm version and publish
-        run: |
-          cd packaging/npm
-          npm version ${{ steps.version.outputs.VERSION }} --allow-same-version --no-git-tag-version
-          PUBLISHED=$(npm view urace-cli@${{ steps.version.outputs.VERSION }} version 2>/dev/null || true)
-          if [ "$PUBLISHED" = "${{ steps.version.outputs.VERSION }}" ]; then
-            echo "urace-cli@${{ steps.version.outputs.VERSION }} already published, skipping."
-          else
-            npm publish --provenance --access public
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          targets: ${{ matrix.target }}
 
-  update-packaging:
-    runs-on: ubuntu-latest
-    needs: publish-pypi
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - name: Extract version
-        id: version
-        run: echo "VERSION=$(grep '^version' runtime/pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
-      - name: Get PyPI tarball SHA-256
-        id: sha
-        run: |
-          sleep 30
-          VER="${{ steps.version.outputs.VERSION }}"
-          SHA=$(curl -s "https://pypi.org/pypi/urace/${VER}/json" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); [print('SHA256='+f['digests']['sha256']) for f in d['urls'] if f['packagetype']=='sdist']" \
-            | head -1)
-          echo "$SHA" >> $GITHUB_OUTPUT
-      - name: Report packaging info
-        run: |
-          echo "Homebrew url: https://files.pythonhosted.org/packages/source/u/urace/urace-${{ steps.version.outputs.VERSION }}.tar.gz"
-          echo "Homebrew sha256: ${{ steps.sha.outputs.SHA256 }}"
-          echo "conda version: ${{ steps.version.outputs.VERSION }}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+          key: ${{ matrix.target }}
 
-  create-github-release:
+      - name: Install musl tools (Linux native)
+        if: matrix.os == 'ubuntu-latest' && !matrix.cross
+        run: sudo apt-get install -y musl-tools
+
+      - name: Install cross (Linux aarch64)
+        if: matrix.cross
+        run: cargo install cross --locked
+
+      - name: Build (native)
+        if: "!matrix.cross"
+        run: cargo build --manifest-path core/Cargo.toml --release --target ${{ matrix.target }} -p urace
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --manifest-path core/Cargo.toml --release --target ${{ matrix.target }} -p urace
+
+      - name: Stage artifact (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          mkdir -p dist
+          cp core/target/${{ matrix.target }}/release/urace dist/${{ matrix.artifact }}
+          chmod +x dist/${{ matrix.artifact }}
+
+      - name: Stage artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp core/target/${{ matrix.target }}/release/urace.exe dist/${{ matrix.artifact }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/
+
+  release:
+    name: Create GitHub Release
+    needs: build
     runs-on: ubuntu-latest
-    needs: publish-pypi
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Extract version
-        id: version
-        run: echo "VERSION=$(grep '^version' runtime/pyproject.toml | cut -d'"' -f2)" >> $GITHUB_OUTPUT
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3.0.4
+
+      - uses: actions/download-artifact@v4
         with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/urace-*
+            artifacts/checksums.txt
           generate_release_notes: true
-          name: "URACE v${{ steps.version.outputs.VERSION }}"
-          tag_name: ${{ github.ref_name }}
+          name: "URACE ${{ github.ref_name }}"
+
+  publish-crate:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish crates in dependency order
+        run: |
+          cd core
+          cargo publish -p urace-types       --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+          cargo publish -p urace-crypto      --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+          cargo publish -p urace-ledger      --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+          cargo publish -p urace-identity    --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+          cargo publish -p urace-authority   --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true
+          sleep 30
+          cargo publish -p urace             --token ${{ secrets.CARGO_REGISTRY_TOKEN }} || true

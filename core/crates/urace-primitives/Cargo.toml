@@ -1,0 +1,14 @@
+[package]
+name        = "urace-primitives"
+description = "§62d canonical type validators and schema registry — URACE runtime primitives"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+regex-lite.workspace = true

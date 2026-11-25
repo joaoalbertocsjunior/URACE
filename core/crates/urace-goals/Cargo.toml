@@ -18,5 +18,10 @@ tracing.workspace     = true
 parking_lot.workspace = true
 dashmap.workspace     = true
 uuid.workspace        = true
+regex-lite.workspace  = true
+sha2.workspace        = true
+hex.workspace         = true
+reqwest.workspace     = true
+tokio.workspace       = true
 urace-authority       = { path = "../urace-authority" }
 urace-ledger          = { path = "../urace-ledger" }

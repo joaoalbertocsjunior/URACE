@@ -4,8 +4,10 @@
 //! State is passed in; the TUI only renders what it receives.
 
 pub mod app;
+pub mod command_dispatch;
 pub mod event_handler;
 pub mod ui;
+pub mod vitals_collector;
 
 pub use app::{App, Panel, SourceEntry, WorkTask, SettlementEntry};
 pub use event_handler::{handle_key_event, AppEvent};

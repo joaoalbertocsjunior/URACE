@@ -9,7 +9,10 @@ pub mod schema_export;
 pub mod validation;
 
 pub use mime_policy::MimePolicy;
-pub use rules::{Rule, RuleEngine, RuleKind, RuleViolation};
+pub use rules::{
+    changes_for_rule, derivation_chain, detect_conflicts, record_relationship, rules_for_change,
+    Rule, RuleConflict, RuleEngine, RuleKind, RuleStore, RuleViolation,
+};
 pub use schema_export::SchemaExporter;
 pub use validation::{
     MaxLength, MinLength, OneOf, Range, RegexValidator, Required, ValidationError, Validator,

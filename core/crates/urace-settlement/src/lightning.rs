@@ -42,6 +42,23 @@ impl LightningRail {
         }
     }
 
+    /// TODO(settlement-lightning): Wire ldk-node for live Lightning payments.
+    ///
+    /// Steps:
+    ///   1. Enable the `lightning` feature flag in Cargo.toml
+    ///   2. Initialize `ldk_node::Builder` with the peer's seed from urace-identity
+    ///   3. Connect to configured LSP (Lightning Service Provider)
+    ///   4. Call `node.bolt11_payment().send(invoice)` for outbound
+    ///   5. For inbound: `node.bolt11_payment().receive(amount_msat, description, expiry_secs)`
+    ///
+    /// Config needed: `network.lsp_address`, `network.lightning_port`.
+    /// Feature flag: `--features lightning` activates ldk-node dep.
+    pub fn pay_live(&self, _invoice: &str) -> Result<serde_json::Value, SettlementError> {
+        Err(SettlementError::NotConfigured(
+            "live Lightning payment not yet implemented; activate feature = lightning".into(),
+        ))
+    }
+
     /// Generate a BOLT-11 invoice for receiving `amount_msat` millisatoshis.
     ///
     /// Stub — returns `Err(NotConfigured)` until ldk-node is wired.

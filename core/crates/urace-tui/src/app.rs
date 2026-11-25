@@ -3,7 +3,11 @@
 //! `App` is a plain data struct — no I/O, no async calls.
 //! All fields are set by the caller before each render pass.
 
+use std::path::Path;
 use serde::{Deserialize, Serialize};
+
+use crate::command_dispatch::{self, TuiCommand};
+use crate::vitals_collector::{self, LiveVitals};
 
 /// Which panel currently has keyboard focus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -102,6 +106,19 @@ pub struct App {
 
     /// URACE runtime version string.
     pub version: String,
+
+    // ── vitals ──────────────────────────────────────────────────────────────
+
+    /// Live vitals collected from state files on the last refresh.
+    pub vitals: LiveVitals,
+
+    // ── inline command bar ───────────────────────────────────────────────────
+
+    /// Text the user is currently typing in the command bar.
+    pub command_input: String,
+
+    /// One-line feedback from the last dispatched command (shown in status bar).
+    pub command_result: Option<String>,
 }
 
 impl App {
@@ -111,6 +128,85 @@ impl App {
             version: "dev".into(),
             lifecycle: "UNKNOWN".into(),
             ..Default::default()
+        }
+    }
+
+    /// Refresh [`LiveVitals`] by reading state files under `root`.
+    ///
+    /// Also syncs `self.lifecycle` from the freshly collected vitals so the
+    /// title bar always reflects the current state without a separate read.
+    pub fn refresh_vitals(&mut self, root: &Path) {
+        self.vitals = vitals_collector::collect(root);
+        // Keep the existing top-level `lifecycle` field in sync.
+        self.lifecycle = self.vitals.lifecycle_state.clone();
+    }
+
+    /// Parse and dispatch an inline command typed in the command bar.
+    ///
+    /// Updates `self.active_panel`, `self.should_quit`, and
+    /// `self.command_result` as appropriate.  Navigation commands that name an
+    /// unknown panel are silently ignored (no panic).
+    pub fn dispatch_command(&mut self, cmd: &str) {
+        let parsed = command_dispatch::parse_command(cmd);
+        match parsed {
+            TuiCommand::Quit => {
+                self.should_quit = true;
+                self.command_result = Some("quit".into());
+            }
+            TuiCommand::Refresh => {
+                // Caller is responsible for calling `refresh_vitals`; here we
+                // just set a status message so the UI knows what happened.
+                self.command_result = Some("refreshing…".into());
+            }
+            TuiCommand::ShowVitals => {
+                // No dedicated Vitals panel yet — show the status message so
+                // the user gets feedback, and future callers can wire up a
+                // panel switch here.
+                self.command_result = Some("vitals — see vitals field".into());
+            }
+            TuiCommand::ShowGoals => {
+                self.command_result = Some("goals — see work_queue panel".into());
+            }
+            TuiCommand::ShowAudit => {
+                self.active_panel = Panel::Logs;
+                self.cursor = 0;
+                self.command_result = Some("switched to Logs panel".into());
+            }
+            TuiCommand::ShowSources => {
+                self.active_panel = Panel::Sources;
+                self.cursor = 0;
+                self.command_result = Some("switched to Sources panel".into());
+            }
+            TuiCommand::SwitchTab(ref name) => {
+                let panel = match name.to_lowercase().as_str() {
+                    "sources"    => Some(Panel::Sources),
+                    "workqueue" | "work_queue" | "work queue" | "queue" => {
+                        Some(Panel::WorkQueue)
+                    }
+                    "settlement" => Some(Panel::Settlement),
+                    "logs"       => Some(Panel::Logs),
+                    _            => None,
+                };
+                if let Some(p) = panel {
+                    self.active_panel = p;
+                    self.cursor = 0;
+                    self.command_result = Some(format!("switched to {}", p.title()));
+                } else {
+                    self.command_result =
+                        Some(format!("unknown tab: {name}"));
+                }
+            }
+            TuiCommand::Help => {
+                self.command_result = Some(command_dispatch::help_text().into());
+            }
+            TuiCommand::Unknown(ref text) => {
+                if text.is_empty() {
+                    self.command_result = None;
+                } else {
+                    self.command_result =
+                        Some(format!("unknown command: {text}"));
+                }
+            }
         }
     }
 

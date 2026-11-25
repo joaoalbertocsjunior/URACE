@@ -74,6 +74,27 @@ impl EvmSettlementAdapter {
         }
     }
 
+    /// Wire in a live JSON-RPC call to an Ethereum node.
+    ///
+    /// TODO(settlement-evm): Replace stub with:
+    ///   1. Encode transfer as ERC-20 `transfer(address,uint256)` ABI call
+    ///   2. Sign transaction with peer's EVM private key (from urace-identity)
+    ///   3. Submit via `eth_sendRawTransaction` to the configured RPC endpoint
+    ///   4. Poll `eth_getTransactionReceipt` until confirmed or timeout
+    ///   5. Return tx hash and block number
+    ///
+    /// Dependencies needed: `ethabi`, `ethers-core` or `alloy` crate.
+    /// Config needed: `network.evm_rpc_url`, `network.contract_address`.
+    pub fn submit_live(
+        &self,
+        _to: &str,
+        _amount_ucr: u64,
+    ) -> Result<serde_json::Value, SettlementError> {
+        Err(SettlementError::NotConfigured(
+            "live EVM submission not yet implemented; waiting for alloy/ethers wiring".into(),
+        ))
+    }
+
     /// Simulate cartel penalty submission (stub).
     pub fn submit_cartel_penalty(&self, peer_id: &str, evidence: &str) -> SettlementResult {
         SettlementResult {

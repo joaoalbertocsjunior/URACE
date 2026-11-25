@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Vitals{% endblock %}
+
+{% block content %}
+<h1>Vitals</h1>
+<div id="vitals-content">
+  <div class="vitals-loading">Loading...</div>
+</div>
+
+<script>
+async function loadVitals() {
+  try {
+    const resp = await fetch('/api/vitals/', {
+      headers: {'Authorization': 'Bearer ' + window.__URACE_TOKEN__},
+    });
+    const data = await resp.json();
+    const state = data.lifecycle_state || 'UNKNOWN';
+    const stateClass = {ACTIVE: 'active', DORMANT: 'dormant', BLOCKED: 'blocked'}[state] || 'unknown';
+    document.getElementById('vitals-content').innerHTML = `
+      <div class="vitals-grid">
+        <div class="vitals-card">
+          <div class="vitals-title">Lifecycle State</div>
+          <div class="lifecycle-badge ${stateClass}">${state}</div>
+        </div>
+        <div class="vitals-card">
+          <div class="vitals-title">Cycle Count</div>
+          <div class="vitals-value">${data.cycle_count ?? 0}</div>
+        </div>
+        <div class="vitals-card">
+          <div class="vitals-title">Last Cycle</div>
+          <div class="vitals-value">${data.last_cycle_at ? new Date(data.last_cycle_at).toLocaleString() : '—'}</div>
+        </div>
+        <div class="vitals-card">
+          <div class="vitals-title">APS Score</div>
+          <div class="vitals-value">${data.aps_score != null ? Number(data.aps_score).toFixed(2) : '—'}</div>
+        </div>
+        <div class="vitals-card">
+          <div class="vitals-title">Objectives</div>
+          <div class="vitals-value">${data.objectives_count ?? 0}</div>
+        </div>
+        <div class="vitals-card">
+          <div class="vitals-title">Evidence</div>
+          <div class="vitals-value">${data.evidence_count ?? 0}</div>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    document.getElementById('vitals-content').innerHTML =
+      `<div class="shell-error">Failed to load vitals: ${err.message}</div>`;
+  }
+}
+
+loadVitals();
+setInterval(loadVitals, 10000);
+</script>
+{% endblock %}

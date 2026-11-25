@@ -6,9 +6,18 @@ Open-source, community-governed.
 
 ---
 
-Status - **DEV**, non-prod
+## Important
 
-Deferred - UX, non-p2p scope
+**Status: Not Ready for General Use**
+Do not download or use this project yet. We will announce when a usable release is ready.
+
+Contributors are welcome to clone the repository and get involved early. 
+
+Documentation is out-of-date. Full documentation will follow once the project reaches a stable state.
+
+---
+
+Deferred - UX, non-p2p scopes
 
 Last Changes - [LATEST](docs/LATEST.md)
 

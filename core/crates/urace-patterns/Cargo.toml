@@ -1,0 +1,15 @@
+[package]
+name        = "urace-patterns"
+description = "§62j AP0-AP24 Derivation Framework — pattern catalog and manifest builder"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+sha2.workspace       = true
+hex.workspace        = true

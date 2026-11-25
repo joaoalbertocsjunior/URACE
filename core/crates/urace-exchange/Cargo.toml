@@ -1,0 +1,23 @@
+[package]
+name        = "urace-exchange"
+description = "P2P feature market — catalog, equity, matching, and runtime feature registry"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+tracing.workspace    = true
+sha2.workspace       = true
+hex.workspace        = true
+regex-lite.workspace = true
+time.workspace       = true
+uuid.workspace       = true
+parking_lot.workspace = true
+dashmap.workspace    = true
+urace-types          = { path = "../urace-types" }
+urace-authority      = { path = "../urace-authority" }

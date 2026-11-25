@@ -19,6 +19,7 @@ dashmap.workspace = true
 hex.workspace         = true
 tokio.workspace       = true
 mainline.workspace    = true
+ed25519-dalek.workspace = true
 urace-crypto          = { path = "../urace-crypto" }
 urace-types           = { path = "../urace-types" }
 urace-authority       = { path = "../urace-authority" }

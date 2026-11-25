@@ -1,19 +1,19 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/urace-primitives",
     "crates/urace-crypto",
     "crates/urace-types",
     "crates/urace-ledger",
     "crates/urace-cost",
     "crates/urace-identity",
-    "crates/sources-lib",
     "crates/urace-authority",
     "crates/urace-p2p",
     "crates/urace-executor",
     "crates/urace-settlement",
     "crates/urace-artifacts",
-    "crates/urace-products",
-    "crates/urace-qualify",
+    "crates/urace-product",
+    "crates/urace-qualification",
     "crates/urace-work",
     "crates/urace-goals",
     "crates/urace-net",
@@ -24,6 +24,10 @@ members = [
     "crates/urace-schema",
     "crates/urace-mcp",
     "crates/urace-state",
+    "crates/urace-web",
+    "crates/urace-exchange",
+    "crates/urace-patterns",
+    "crates/urace-util",
 ]
 
 [workspace.package]
@@ -34,9 +38,13 @@ authors     = ["URACE Contributors"]
 repository  = "https://github.com/urace/urace"
 
 [workspace.dependencies]
+# External — sources-lib lives in its own repo
+sources-lib    = { git = "https://github.com/joaoalbertocsjunior/sources-lib" }
+
 # Serialization
 serde          = { version = "1", features = ["derive"] }
 serde_json     = "1"
+serde_yaml     = "0.9"
 
 # Crypto (RustCrypto family — no ring)
 hmac           = "0.12"
@@ -81,3 +89,11 @@ dashmap        = "5"
 atomic-write-file = "0.1"
 regex-lite        = "0.1"
 tempfile          = "3"
+flate2            = "1"
+libc              = "0.2"
+
+# Web UI (urace-web)
+axum           = { version = "0.7", features = ["json", "macros"] }
+tower-http     = { version = "0.5", features = ["fs", "cors", "trace"] }
+minijinja      = { version = "2", features = ["loader"] }
+futures        = "0.3"

@@ -1,4 +1,4 @@
-# CodeRabbit AI reviewer configuration
+# CodeRabbit AI reviewer configuration — URACE Rust workspace
 # https://docs.coderabbit.ai/getting-started/configure-coderabbit
 version: "2"
 
@@ -9,179 +9,183 @@ reviews:
 
   profile: "chill"
 
-  # ── Global review instructions ──────────────────────────────────────────────
   instructions: |
-    URACE is a decentralised AI execution mesh. When reviewing any file:
-    - Flag silent exception swallowing (`except Exception: pass`) in financial or
-      signing code paths — failures must surface, not vanish.
-    - Flag any use of eval(), exec(), or subprocess with unsanitised user input.
-    - Flag hardcoded secrets, keys, or tokens.
-    - Flag non-atomic read-modify-write sequences on shared state without a lock.
-    - Do not suggest adding comments that explain WHAT the code does — only flag
-      missing WHY comments for non-obvious invariants or workarounds.
-    - Do not suggest multi-line docstrings; project convention is one short line max.
+    URACE is a governance-first P2P runtime written in Rust (workspace under `core/`).
+    External source adapter library: sources-lib (git dep, joaoalbertocsjunior/sources-lib).
 
-  # ── Path-level instructions ──────────────────────────────────────────────────
+    Hard invariants — flag any violation:
+    - §62z: no automated path takes a qualifying action (spend, transfer, goal creation)
+      without routing through `urace-authority` and receiving AUTONOMOUSLY_AUTHORIZED.
+      Outcomes: AUTONOMOUSLY_AUTHORIZED / DENIED / REQUIRES_AUTHORITATIVE_DECISION / UNRESOLVED.
+      UNRESOLVED must be treated as DENIED.
+    - Append-only ledger: rows in `*_journal*` / `*_ledger*` JSONL files are never deleted
+      or mutated after write. All mutations via `atomic_append_jsonl` or `atomic_write_json`.
+    - UNIT = 100_000_000u64 (10^8 UCR). Flag any change to this constant.
+    - Mint only on `score_delta > 0`. Flag any mint path that does not check this.
+    - Launcher exit codes: EXIT_REVALIDATE=75, EXIT_ONE_RETRY=76. Flag any change.
+    - `except`-equivalent: `unwrap()` / `expect()` in production paths (not tests) for
+      financial, signing, or authority flows must be replaced with surfaced errors.
+    - No hardcoded secrets, tokens, or private key material.
+    - No `.unwrap()` on lock acquisition in financial/signing paths — use `try_lock`.
+    - Non-atomic read-modify-write sequences on shared state without a lock are bugs.
+
+    Style:
+    - Do not suggest adding comments that explain WHAT the code does.
+    - Do not suggest multi-line doc comments; one short line max on `///`.
+    - Do not suggest adding `#[allow(dead_code)]` to suppress unused warnings — fix the root cause.
+
   path_instructions:
 
     # Ledger / financial integrity
-    - path: "runtime/urace/authenticated_journal.py"
+    - path: "core/crates/urace-ledger/**"
       instructions: |
         Append-only invariant: no row may be deleted or mutated after write.
-        Flag any code path that could allow overwriting or truncating existing entries.
-        Verify atomic_write_json is used for all mutations.
+        Every write must use `atomic_append_jsonl` or `atomic_write_json`.
+        Flag any path that calls `std::fs::write` / `File::create` directly on a journal file.
+        HMAC chain: every row must carry a valid HMAC-SHA256 computed over the canonical JSON.
+        `seq` must be monotonically increasing. Flag any branch where seq can go backwards.
+        Constant-time comparison: HMAC verification must use `mac.verify_slice()` (from
+        the hmac crate), never `==`. Flag manual byte-by-byte or string comparisons of MACs.
+        Double-spend: all debit paths must check balance before deducting.
+        UNIT = 100_000_000u64 — flag any arithmetic that could overflow this without
+        using `checked_add` / `checked_mul` / `saturating_*`.
 
-    - path: "runtime/urace/credit_ledger*.py"
+    - path: "core/crates/urace-ledger/src/journal.rs"
       instructions: |
-        Double-spend prevention: all token debits must check balance before deducting.
-        Flag non-atomic read-modify-write sequences. Flag any path where a debit
-        can succeed without a corresponding balance check.
+        Symlink rejection: `path.is_symlink()` must be checked before opening.
+        No silent failure: errors from `atomic_append_jsonl` must surface to the caller.
+        Seq derivation: count of non-empty lines must match the logical sequence counter.
 
-    - path: "runtime/urace/signed_ledger.py"
+    # Authority boundary
+    - path: "core/crates/urace-authority/**"
       instructions: |
-        Every ledger entry must carry a valid signature before being persisted.
-        Flag any path that writes an entry without calling sign/verify first.
-        Flag signature verification being skipped on read.
-
-    - path: "runtime/urace/ledger_crypto.py"
-      instructions: |
-        Cryptographic correctness: flag use of MD5/SHA1 for integrity (not identity).
-        Flag constant-time comparison being replaced with ==. Flag key material
-        being logged or included in exception messages.
-
-    - path: "runtime/urace/ledger_audit.py"
-      instructions: |
-        Audit trail completeness: every state transition must produce an audit row.
-        Flag any branch that mutates state without emitting an audit event.
-
-    - path: "runtime/urace/escrow_timeout.py"
-      instructions: |
-        Escrow release timing is financial. Flag any clock source that is not
-        monotonic or that can be manipulated by user input. Flag release paths
-        that do not verify the escrow lock was held by the releasing party.
-
-    - path: "runtime/urace/p2p_cost_qualification.py"
-      instructions: |
-        Cost qualification gates financial settlement. Flag any path that allows
-        an executor to self-report costs without independent verification.
-        Flag integer overflow risks in token arithmetic.
+        §62z invariant: every public function that can produce AUTONOMOUSLY_AUTHORIZED
+        must document the qualifying conditions. Flag any shortcut that returns
+        AUTONOMOUSLY_AUTHORIZED without evaluating all conditions.
+        Capability escalation: every authority decision must emit an audit event via
+        urace-audit. Flag any branch that decides without auditing.
+        Reserved phrases: `override authority`, `bypass authority`, `ignore authority`
+        appearing in string literals or comments must be reviewed — they may indicate
+        an attempt to document a bypass.
 
     # Cryptography / signing
-    - path: "runtime/urace/crypto_wallet.py"
+    - path: "core/crates/urace-crypto/**"
       instructions: |
-        Private key material must never appear in logs, exceptions, or return values
-        other than the designated sign/export calls. Flag any path that serialises
-        a private key to a non-encrypted store. Flag use of non-constant-time
-        comparison for signatures or keys.
+        Private key material must never appear in tracing spans, error messages, or
+        return values other than the designated sign/export calls.
+        Flag `zeroize` being removed from key-holding types.
+        Ed25519 signing: use `ed25519-dalek` from the workspace. Flag use of deprecated
+        or non-workspace crypto crates.
+        Key derivation: flag use of non-cryptographic hash functions (e.g. FNV, xxHash)
+        for deriving key material.
 
-    - path: "runtime/urace/signed_records.py"
+    - path: "core/crates/urace-p2p/src/peer_exchange.rs"
       instructions: |
-        HMAC-SHA256 correctness: verify hmac.compare_digest (not ==) is used for
-        all signature comparisons. Flag any path where seq is not included in the
-        signed message (replay attack vector). Flag key material in exceptions.
+        SealVoteResponse must carry a real Ed25519 signature when a signing key is
+        available. Flag any regression to `String::new()` stub without a code comment
+        explaining why the key is unavailable.
+        Signature verification at the receiver: flag any path that accepts a
+        SealVoteResponse without verifying the signature against the peer's known
+        verifying key.
 
-    - path: "runtime/urace/key_lifecycle.py"
+    # P2P / network trust
+    - path: "core/crates/urace-p2p/**"
       instructions: |
-        Key rotation and revocation paths: flag any rotation that does not
-        invalidate old signatures. Flag key derivation using non-cryptographic
-        hash functions. Flag insecure key storage (plaintext, world-readable files).
-
-    - path: "runtime/urace/eth_settlement_adapter.py"
-      instructions: |
-        EVM transaction safety: flag ABI encoding that does not validate address
-        checksums. Flag gas limit values that are user-controlled without bounds.
-        Flag any path where a transaction is submitted without first simulating
-        or estimating gas. The TopologyLock/ArchitectureCertificate stubs are
-        intentional — do not suggest removing them.
-
-    # Peer / network trust
-    - path: "runtime/urace/peer_discovery.py"
-      instructions: |
-        Peer admission safety: untrusted peers must pass AdmissionGate before
-        receiving routing traffic. Flag any shortcut that bypasses quarantine.
-        Flag DHT lookups that accept peer-supplied data without signature verification.
-        Flag relay paths that expose the node's real IP when relay_only=True.
-
-    - path: "runtime/urace/kademlia.py"
-      instructions: |
-        DHT Sybil resistance: flag bucket-filling attacks where a single IP can
-        occupy multiple slots. Flag node ID generation that is not cryptographically
-        random. Flag any path that trusts peer-supplied routing tables without
-        verification.
-
-    - path: "runtime/urace/freeform_routing.py"
-      instructions: |
-        Routing decisions must not leak internal state to untrusted peers.
-        Flag cache evidence that is gossipped (it must stay process-local).
-        Flag LocalRouteReputation entries being serialised or sent over the wire.
-        Flag select_target returning a peer that failed AdmissionGate.
-
-    - path: "runtime/urace/p2p_matching.py"
-      instructions: |
-        Score manipulation resistance: flag any path where an executor can inflate
-        its own match_score or TPS weight by self-reporting. Flag DemandCounter
-        entries being accepted from remote peers (must be local-only).
-
-    - path: "runtime/urace/cartel_guard.py"
-      instructions: |
-        Anti-collusion: flag quorum checks that can be satisfied by a single
-        coordinated actor controlling multiple peer IDs. Flag evidence thresholds
-        that are configurable at runtime without authority verification.
-
-    - path: "runtime/urace/consensus.py"
-      instructions: |
-        Byzantine fault tolerance: flag vote counting that does not require a
-        strict 2/3 supermajority. Flag any path where a single peer can determine
-        consensus outcome. Flag message authentication being skipped for speed.
-
-    - path: "runtime/urace/federation.py"
-      instructions: |
-        Federation trust: cross-federation requests must carry valid authority
-        proofs. Flag any path that accepts a federation peer's claims without
-        verifying the originating federation's signing key.
-
-    # Authority boundary (§62z invariant)
-    - path: "runtime/urace/authority.py"
-      instructions: |
-        §62z invariant: the authority boundary must never be crossed without
-        explicit user confirmation. Flag any automated path that takes a
-        qualifying action (spend, transfer, goal creation) without a confirmation
-        gate. Flag capability escalation that is not logged to the audit journal.
+        Peer admission safety: untrusted peers must pass `AdmissionGate::is_admitted`
+        before being added to the routing table. Flag any shortcut that bypasses this.
+        Kademlia Sybil resistance: flag bucket-filling where a single IP occupies
+        multiple slots. Node IDs must be derived from public keys, not self-reported.
+        Cartel guard: quorum checks must require a strict supermajority (> 2/3).
+        Flag any quorum threshold that is configurable at runtime without an authority check.
+        Relay-only mode: when `relay_only=true` the node's real IP must not appear in
+        outgoing peer exchange messages.
 
     # Execution safety
-    - path: "runtime/urace/execution_backend.py"
+    - path: "core/crates/urace-executor/**"
       instructions: |
-        Code execution safety: flag any path that executes LLM-generated code
-        without a sandbox boundary. Flag resource limits (CPU, memory, time) that
-        are absent or user-controllable without authority verification.
+        Sandbox boundary: every code execution path must route through `SandboxBackend`.
+        Flag any direct `std::process::Command` that bypasses the backend trait.
+        Resource limits (CPU, memory, time) must be present and not user-overridable
+        without an authority check.
+        Credential isolation: `env_clear()` must be called before executing user code.
+        Flag any path that inherits the parent process environment.
+        `StubBackend` is intentional for testing — do not suggest removing it, but
+        flag if it is used in a non-test code path.
 
-    - path: "runtime/urace/executor.py"
+    # Settlement stubs
+    - path: "core/crates/urace-settlement/**"
       instructions: |
-        Executor lifecycle: flag credential passing that goes outside the
-        executor's declared scope. Flag any path where an executor can persist
-        state beyond its declared session.
+        `submit_live()` and `pay_live()` are intentional stubs pending EVM/Lightning
+        integration. Do not suggest removing them. Flag any attempt to call them in
+        production paths without a feature flag guard.
+        ABI encoding for EVM: flag address parameters that are not checksummed (EIP-55).
+        Gas limits must not be user-controlled without bounds.
+
+    # MCP server
+    - path: "core/crates/urace-mcp/**"
+      instructions: |
+        §62z gate: mutating tools (post_work_task, sync_source, and any future tool
+        that initiates spend/transfer/goal-creation) must be gated through
+        urace-authority before execution. Flag any new tool that skips this.
+        Input validation: all tool parameter parsing must surface errors as
+        JSON-RPC error responses, never panic.
+
+    # Upgrade / launcher
+    - path: "core/crates/urace-upgrade/**"
+      instructions: |
+        EXIT_REVALIDATE=75 and EXIT_ONE_RETRY=76 are protocol constants. Flag any
+        change to these values. Flag any path that bypasses the validation step
+        (e.g., direct file swap without calling the validator).
+
+    # Token economics
+    - path: "core/crates/urace-goals/**"
+      instructions: |
+        Mint gating: `score_delta > 0` must be checked before minting. Flag any path
+        where a mint can be triggered with `score_delta == 0` or negative.
+        Goal creation is a qualifying action under §62z — flag any automated creation
+        path that does not go through authority.
+
+    # Sources / sources-lib integration
+    - path: "core/crates/urace/src/runtime_loop.rs"
+      instructions: |
+        Every source sync cycle must emit an `AuditEvent::SourceSynced` entry.
+        Work dispatch must check authority before bidding. Flag any work bid that
+        bypasses the authority gate.
+        Circuit breaker: 5 failures → Open. Flag any path that ignores the breaker
+        state and dispatches work while Open.
+
+    # Web UI
+    - path: "core/crates/urace-web/**"
+      instructions: |
+        Bearer token: every `/api/*` handler must include `_auth: BearerToken` as a
+        parameter. Flag any API route that skips the extractor.
+        Page routes intentionally skip auth (token is embedded in HTML via template).
+        SSE routes: flag any `futures::stream` usage that could block the async executor.
+        Template errors must not panic — `get_template()` / `render()` failures must
+        return a graceful HTML error response, not an `unwrap()` panic.
+        `ServeDir` serves the CSS from `static/` — flag any path traversal risk
+        (tower-http's ServeDir already mitigates this, but flag manual path joins on user input).
 
     # CI / workflow integrity
     - path: ".github/workflows/*.yml"
       instructions: |
-        Supply chain safety: flag third-party actions not pinned to a full SHA
-        (e.g. `uses: foo/bar@v1` should be `uses: foo/bar@<sha>`). Flag
-        secrets being echoed to logs. Flag pull_request_target triggers
-        combined with checkout of the PR head — classic script injection vector.
+        Supply chain: flag third-party actions not pinned to a full commit SHA
+        (e.g. `uses: foo/bar@v1` should be `uses: foo/bar@<sha>`).
+        Secrets: flag any step that could echo secrets to the build log.
+        `pull_request_target` combined with checkout of the PR head is a classic
+        script injection vector — flag it.
+        Invariant checks: the `invariants` job must keep all four grep assertions
+        (UNIT=100_000_000, score_delta>0, EXIT_REVALIDATE=75, EXIT_ONE_RETRY=76).
+        Flag any PR that removes or weakens one of them.
 
     # Tests
-    - path: "runtime/tests/test_security.py"
+    - path: "core/crates/*/tests/**"
       instructions: |
-        Security tests are intentionally adversarial. Never suggest weakening
-        assertions, catching exceptions the test is designed to surface, or
-        reducing coverage. Suggest additions, never removals.
-
-    - path: "runtime/tests/*.py"
-      instructions: |
-        Test completeness: flag tests that mock the system under test rather than
-        exercising real behaviour (especially for ledger and signing paths).
-        Flag missing negative/adversarial test cases for any security-sensitive
-        function being added or modified in the same PR.
+        Security-critical tests (ledger integrity, authority boundary, signing) must
+        not mock the system under test. Flag tests that stub out the HMAC or signing
+        path in a way that would let a broken implementation pass.
+        Flag missing negative / adversarial cases for any security-sensitive function
+        added or modified in the same PR.
 
   finishing_touches:
     docstrings:

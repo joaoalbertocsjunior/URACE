@@ -25,10 +25,8 @@
 /core/*
 !/core/Cargo.toml
 !/core/Cargo.lock
-!/core/PLAN.md
 !/core/crates/
 /core/crates/*
-!/core/crates/sources-lib/
 !/core/crates/urace-artifacts/
 !/core/crates/urace-audit/
 !/core/crates/urace-authority/
@@ -41,14 +39,19 @@
 !/core/crates/urace-mcp/
 !/core/crates/urace-net/
 !/core/crates/urace-p2p/
-!/core/crates/urace-products/
-!/core/crates/urace-qualify/
+!/core/crates/urace-product/
+!/core/crates/urace-qualification/
 !/core/crates/urace-schema/
 !/core/crates/urace-settlement/
 !/core/crates/urace-state/
 !/core/crates/urace-tui/
 !/core/crates/urace-types/
 !/core/crates/urace-upgrade/
+!/core/crates/urace-exchange/
+!/core/crates/urace-patterns/
+!/core/crates/urace-primitives/
+!/core/crates/urace-util/
+!/core/crates/urace-web/
 !/core/crates/urace-work/
 !/core/crates/urace/
 
@@ -62,7 +65,7 @@ secrets/
 .env.*
 *.lock
 
-# Build / runtime artifacts
+# Build / runtime artifacts — also block inside whitelisted dirs
 generated/
 state/
 reports/
@@ -71,3 +74,4 @@ __pycache__/
 *.pyc
 *.pyo
 /.ai-switch
+/PROGRESS.md

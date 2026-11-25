@@ -1,20 +1,16 @@
 version: 2
 updates:
-  - package-ecosystem: pip
-    directory: /urace/runtime
+  - package-ecosystem: cargo
+    directory: /core
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
     labels:
       - dependencies
-
-  - package-ecosystem: npm
-    directory: /packaging/npm
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
-    labels:
-      - dependencies
+    ignore:
+      # Major version bumps require manual review (breaking changes)
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

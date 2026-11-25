@@ -2,7 +2,8 @@
 //!
 //! Ported from `runtime/urace/config_access.py` and `runtime/urace/config_schema.py`.
 //!
-//! Config is stored at `~/.urace/config.json`.
+//! Config is stored at `~/.urace/config.yaml` (YAML is preferred for new installs).
+//! `~/.urace/config.json` is accepted on load for backward compatibility.
 //! All mutations must go through the authority check before taking effect (§62z).
 
 use anyhow::{Context, Result};
@@ -47,6 +48,9 @@ pub struct RuntimeConfig {
 
     /// Runtime workflow (cycle) settings.
     pub runtime_workflow: RuntimeWorkflowConfig,
+
+    /// MCP server settings.
+    pub mcp: McpConfig,
 }
 
 impl Default for RuntimeConfig {
@@ -62,6 +66,7 @@ impl Default for RuntimeConfig {
             self_evolution_policy: SelfEvolutionPolicy::default(),
             logging: LoggingConfig::default(),
             runtime_workflow: RuntimeWorkflowConfig::default(),
+            mcp: McpConfig::default(),
         }
     }
 }
@@ -272,6 +277,24 @@ impl Default for RuntimeWorkflowConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct McpConfig {
+    pub enabled: bool,
+    pub port: u16,
+    pub bind_addr: String,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        McpConfig {
+            enabled: false,
+            port: 7399,
+            bind_addr: "127.0.0.1".to_string(),
+        }
+    }
+}
+
 // ── Schema validation errors ──────────────────────────────────────────────────
 
 /// A single schema validation error.
@@ -391,29 +414,50 @@ pub fn validate(cfg: &RuntimeConfig) -> Vec<ValidationError> {
 
 // ── Load / save ───────────────────────────────────────────────────────────────
 
-/// Return the default config file path: `~/.urace/config.json`.
+/// Return the default config file path: `~/.urace/config.yaml`.
+///
+/// If `~/.urace/config.json` already exists and no YAML file is present,
+/// callers may pass the JSON path directly — `load()` auto-detects format.
 pub fn default_config_path() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home).join(".urace").join("config.json")
+    let urace_dir = PathBuf::from(home).join(".urace");
+    // Prefer YAML; fall back to JSON for existing installs.
+    let yaml = urace_dir.join("config.yaml");
+    if !yaml.exists() {
+        let json = urace_dir.join("config.json");
+        if json.exists() {
+            return json;
+        }
+    }
+    yaml
 }
 
 /// Load config from `path`.  Returns `RuntimeConfig::default()` if the file
 /// does not exist yet (first-run scenario).
+///
+/// Format is auto-detected from the file extension (`.yaml`/`.yml` → YAML, else JSON).
 pub fn load(path: &std::path::Path) -> Result<RuntimeConfig> {
     if !path.exists() {
         return Ok(RuntimeConfig::default());
     }
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("reading config from {}", path.display()))?;
-    let cfg: RuntimeConfig = serde_json::from_str(&raw)
-        .with_context(|| format!("parsing config from {}", path.display()))?;
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let cfg: RuntimeConfig = if ext == "yaml" || ext == "yml" {
+        serde_yaml::from_str(&raw)
+            .with_context(|| format!("parsing YAML config from {}", path.display()))?
+    } else {
+        serde_json::from_str(&raw)
+            .with_context(|| format!("parsing JSON config from {}", path.display()))?
+    };
     Ok(cfg)
 }
 
 /// Save config to `path` using an atomic rename.
 ///
+/// Writes YAML when `path` has a `.yaml`/`.yml` extension, JSON otherwise.
 /// Creates parent directories if they do not exist.
 /// NOTE: callers MUST have cleared the authority gate before calling this.
 pub fn save(cfg: &RuntimeConfig, path: &std::path::Path) -> Result<()> {
@@ -421,9 +465,15 @@ pub fn save(cfg: &RuntimeConfig, path: &std::path::Path) -> Result<()> {
         std::fs::create_dir_all(parent)
             .with_context(|| format!("creating config dir {}", parent.display()))?;
     }
-    let json = serde_json::to_string_pretty(cfg)?;
-    let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, json.as_bytes())
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let content = if ext == "yaml" || ext == "yml" {
+        serde_yaml::to_string(cfg).with_context(|| "serialising config to YAML")?
+    } else {
+        serde_json::to_string_pretty(cfg)?
+    };
+    let tmp_ext = if ext == "yaml" { "yaml.tmp" } else { "json.tmp" };
+    let tmp = path.with_extension(tmp_ext);
+    std::fs::write(&tmp, content.as_bytes())
         .with_context(|| format!("writing config to {}", tmp.display()))?;
     std::fs::rename(&tmp, path)
         .with_context(|| format!("renaming config tmp file to {}", path.display()))?;
@@ -520,5 +570,32 @@ mod tests {
         let raw = std::fs::read_to_string(&path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert!(parsed.is_object());
+    }
+
+    #[test]
+    fn yaml_save_and_reload_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.yaml");
+        let mut cfg = RuntimeConfig::default();
+        cfg.network.port = 7310;
+        cfg.logging.level = "DEBUG".to_string();
+        save(&cfg, &path).unwrap();
+        let raw = std::fs::read_to_string(&path).unwrap();
+        // YAML file should not contain JSON braces at the top level
+        assert!(!raw.trim_start().starts_with('{'), "expected YAML output");
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.network.port, 7310);
+        assert_eq!(loaded.logging.level, "DEBUG");
+    }
+
+    #[test]
+    fn load_json_fallback() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.json");
+        let mut cfg = RuntimeConfig::default();
+        cfg.network.port = 7320;
+        save(&cfg, &path).unwrap();
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.network.port, 7320);
     }
 }

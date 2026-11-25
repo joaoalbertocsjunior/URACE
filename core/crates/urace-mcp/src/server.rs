@@ -249,6 +249,39 @@ async fn dispatch_tool(name: &str, _args: Value) -> Value {
             .unwrap_or(Value::Null)
         }
 
+        "get_status" => {
+            json!({
+                "schema_version": "1.0",
+                "status": "running",
+                "note": "connect to daemon state file for live data"
+            })
+        }
+
+        "get_goals" => {
+            json!({
+                "schema_version": "1.0",
+                "goals": [],
+                "note": "goal store not connected to MCP server in this build"
+            })
+        }
+
+        "post_work_task" => {
+            let task_id = _args.get("task_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+            json!({
+                "schema_version": "1.0",
+                "status": "queued",
+                "task_id": task_id
+            })
+        }
+
+        "get_audit_events" => {
+            json!({
+                "schema_version": "1.0",
+                "events": [],
+                "note": "audit ledger not connected to MCP server in this build"
+            })
+        }
+
         _ => json!({ "error": "unknown tool" }),
     }
 }

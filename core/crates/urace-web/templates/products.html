@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Products{% endblock %}
+
+{% block content %}
+<h1>Products</h1>
+
+<div id="active-product-card" class="product-active-card">
+  <div class="vitals-loading">Loading active product...</div>
+</div>
+
+<div class="goals-section" style="margin-top:1.5rem;">
+  <div class="goals-list-header">
+    <h2 class="section-title">Product Registry</h2>
+    <button class="btn-secondary" onclick="loadProducts()">Refresh</button>
+  </div>
+  <div id="products-table-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<div class="goals-section" style="margin-top:1.5rem;">
+  <h2 class="section-title">Improvements</h2>
+  <div id="improvements-table-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<script>
+const TOKEN = {{ token | tojson }};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function statusBadge(status) {
+  const cls = status === 'ACTIVE' ? 'badge-active' : 'badge-default';
+  return `<span class="status-badge ${cls}">${escHtml(status)}</span>`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return iso.slice(0, 16).replace('T', ' ');
+}
+
+async function loadActiveProduct() {
+  const el = document.getElementById('active-product-card');
+  try {
+    const r = await fetch('/api/products/status', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const name = data.active_product || '(none)';
+    const state = data.lifecycle_state || '—';
+    const reg = data.registry_entry || {};
+    const regAt = fmtDate(reg.registered_at);
+    el.innerHTML = `
+      <div class="active-product-header">
+        <span class="active-product-name">${escHtml(name)}</span>
+        <span class="status-badge badge-active" style="margin-left:0.75rem;">${escHtml(state)}</span>
+      </div>
+      <div class="active-product-meta" style="margin-top:0.5rem;color:#94a3b8;font-size:0.85rem;">
+        Registered: ${escHtml(regAt)}
+      </div>`;
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Could not load active product: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function loadProducts() {
+  const el = document.getElementById('products-table-wrap');
+  el.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/products/', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const products = await r.json();
+    if (!Array.isArray(products) || !products.length) {
+      el.innerHTML = '<div class="cycle-empty">No products registered.</div>';
+      return;
+    }
+    let rows = products.map(p => {
+      const activeStar = p.active ? '<span class="active-star" title="Active">&#9733;</span>' : '';
+      const regAt = fmtDate(p.registered_at);
+      const lastAt = fmtDate(p.last_active_at);
+      return `<tr>
+        <td>${activeStar} ${escHtml(p.name || '')}</td>
+        <td>${statusBadge(p.status || '')}</td>
+        <td>${regAt}</td>
+        <td>${lastAt}</td>
+        <td class="product-actions">
+          <button class="btn-xs btn-blue" onclick="productAction(${JSON.stringify(p.name)},'switch')">Switch</button>
+          <button class="btn-xs" onclick="productAction(${JSON.stringify(p.name)},'activate')">Activate</button>
+          <button class="btn-xs btn-warn" onclick="productAction(${JSON.stringify(p.name)},'deactivate')">Deactivate</button>
+        </td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<table class="data-table">
+      <thead><tr>
+        <th>Name</th><th>Status</th><th>Registered</th><th>Last Active</th><th>Actions</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Failed to load products: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function productAction(name, action) {
+  try {
+    await fetch(`/api/products/${encodeURIComponent(name)}/${action}`, {
+      method: 'POST',
+      headers: {'Authorization':'Bearer '+TOKEN},
+    });
+    loadActiveProduct();
+    loadProducts();
+  } catch(err) {
+    alert('Action failed: ' + err.message);
+  }
+}
+
+async function loadImprovements() {
+  const el = document.getElementById('improvements-table-wrap');
+  el.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  try {
+    const r = await fetch('/api/products/improvements', {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const products = (data.products || []);
+    if (!products.length) {
+      el.innerHTML = '<div class="cycle-empty">No improvement data.</div>';
+      return;
+    }
+    const rows = products.map(p => {
+      const enabledCheck = p.improvement_enabled
+        ? '<input type="checkbox" checked disabled>'
+        : '<input type="checkbox" disabled>';
+      const suppBadge = p.improvement_supported
+        ? '<span class="status-badge badge-active">Supported</span>'
+        : '<span class="status-badge badge-default">Unsupported</span>';
+      return `<tr>
+        <td>${escHtml(p.name || '')}</td>
+        <td style="text-align:center;">${enabledCheck}</td>
+        <td>${suppBadge}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `<table class="data-table">
+      <thead><tr><th>Product</th><th>Enabled</th><th>Supported</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  } catch(err) {
+    el.innerHTML = `<div class="shell-error">Failed to load improvements: ${escHtml(err.message)}</div>`;
+  }
+}
+
+loadActiveProduct();
+loadProducts();
+loadImprovements();
+</script>
+{% endblock %}

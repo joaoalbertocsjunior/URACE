@@ -3,14 +3,43 @@
 //! Subcommands mirror the Python CLI in `runtime/urace/cli/__init__.py`.
 //!
 //! Subcommands:
-//!   run      — start the daemon runtime loop
-//!   status   — read state from ~/.urace/state.json
-//!   config   — get/set/validate config keys
-//!   version  — print version info
-//!   source   — add / list / remove sources
-//!   work     — list / bid / assign work items
+//!   run        — start the daemon runtime loop
+//!   status     — read state from ~/.urace/state.json
+//!   config     — get/set/validate config keys
+//!   version    — print version info
+//!   source     — add / list / remove sources
+//!   work       — list / bid / assign work items
+//!   tui        — launch the interactive TUI dashboard
+//!   evidence   — browse evidence records
+//!   blocker    — manage blockers
+//!   decision   — browse decision records
+//!   milestone  — browse milestones
+//!   compliance — browse compliance records
+//!   rules      — browse governance rules
+//!   inbox      — manage patch proposal inbox
+//!   vitals     — show runtime vitals
+//!   audit      — browse audit log
+//!   goals      — manage goals / objectives
+//!   data       — browse data records
+//!   trace      — show lifecycle audit trace
+//!   usage      — show executor usage patterns
+//!   report     — generate runtime reports
+//!   exchange   — feature market commands (status, list, show, rank, ask, …)
 
 use clap::{Args, Parser, Subcommand};
+
+pub use crate::cli_exchange::{AssetCommands, ExchangeArgs, ExchangeCommands, PeersCommands};
+pub use crate::cli_governance::{
+    BlockerArgs, ComplianceArgs, DecisionArgs, EvidenceArgs, InboxArgs, MilestoneArgs, RulesArgs,
+};
+pub use crate::cli_metrics::{AuditArgs, DataArgs, GoalsArgs, TraceArgs, VitalsArgs};
+pub use crate::cli_reporting::{ReportArgs, UsageArgs};
+pub use crate::cli_work::{
+    CheckArgs, ClassifyArgs, ContextArgs, DeriveArgs, GithubArgs, PlanArgs, ProposeArgs,
+    QualityArgs,
+};
+pub use crate::cli_runtime::{CrcArgs, FeaturesArgs, TrialArgs, UpdateArgs};
+pub use crate::cli_product::{ContentArgs, PeerReviewArgs, ProductArgs, RollbackArgs};
 
 // ── Top-level CLI ─────────────────────────────────────────────────────────────
 
@@ -64,6 +93,106 @@ pub enum Commands {
         #[command(subcommand)]
         cmd: WorkCommands,
     },
+
+    /// Launch the TUI dashboard (requires a running daemon)
+    Tui(TuiArgs),
+
+    /// Start the web dashboard (axum + HTMX)
+    Web(WebArgs),
+
+    // ── Governance ────────────────────────────────────────────────────────────
+
+    /// Browse evidence records
+    Evidence(EvidenceArgs),
+
+    /// Manage blockers (list / resolve)
+    Blocker(BlockerArgs),
+
+    /// Browse decision records
+    Decision(DecisionArgs),
+
+    /// Browse milestones
+    Milestone(MilestoneArgs),
+
+    /// Browse compliance records
+    Compliance(ComplianceArgs),
+
+    /// Browse governance rules
+    Rules(RulesArgs),
+
+    /// Manage patch proposal inbox (list / apply / reject / count)
+    Inbox(InboxArgs),
+
+    // ── Metrics ───────────────────────────────────────────────────────────────
+
+    /// Show runtime vitals (lifecycle, APS score, cycle count, counts)
+    Vitals(VitalsArgs),
+
+    /// Browse the audit log
+    Audit(AuditArgs),
+
+    /// Manage goals / objectives
+    Goals(GoalsArgs),
+
+    /// Browse data records
+    Data(DataArgs),
+
+    /// Show the lifecycle audit trace
+    Trace(TraceArgs),
+
+    // ── Reporting ─────────────────────────────────────────────────────────────
+
+    /// Show executor usage patterns and summary
+    Usage(UsageArgs),
+
+    /// Generate or display runtime reports (vitals / cycle / audit)
+    Report(ReportArgs),
+
+    // ── Exchange / feature market ─────────────────────────────────────────────
+
+    /// Feature market commands (status, list, show, rank, ask, fill, …)
+    Exchange(ExchangeArgs),
+
+    // ── Work / plan / quality ─────────────────────────────────────────────────
+
+    /// GitHub integration (status / connect / push-goals / trigger-workflow)
+    Github(GithubArgs),
+    /// Work planning (show / create / status)
+    Plan(PlanArgs),
+    /// Run pre-flight checks
+    Check(CheckArgs),
+    /// Show or run quality gates
+    Quality(QualityArgs),
+    /// Show cognitive context summary
+    Context(ContextArgs),
+    /// Classify a work item or string
+    Classify(ClassifyArgs),
+    /// Derive system manifest from patterns
+    Derive(DeriveArgs),
+    /// Propose a change (requires authority)
+    Propose(ProposeArgs),
+
+    // ── Runtime / trial / upgrade ─────────────────────────────────────────────
+
+    /// Run qualification trial or show trial status
+    Trial(TrialArgs),
+    /// Upgrade runtime (check / apply / rollback)
+    Update(UpdateArgs),
+    /// List or toggle runtime feature flags
+    Features(FeaturesArgs),
+    /// Compute content-addressable CRC of runtime state
+    Crc(CrcArgs),
+
+    // ── Product management ────────────────────────────────────────────────────
+
+    /// Product registry management
+    Product(ProductArgs),
+    /// Content store management
+    Content(ContentArgs),
+    /// Rollback to a previous product snapshot
+    Rollback(RollbackArgs),
+    /// Submit or list peer review requests
+    PeerReview(PeerReviewArgs),
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────
@@ -189,6 +318,34 @@ pub enum WorkCommands {
     },
 }
 
+// ── tui ───────────────────────────────────────────────────────────────────────
+
+#[derive(Args)]
+pub struct TuiArgs {
+    /// Polling interval in milliseconds (how often to refresh data from state files)
+    #[arg(long, default_value = "500")]
+    pub interval_ms: u64,
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// ── web ───────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, clap::Args)]
+pub struct WebArgs {
+    /// TCP port for the web UI (default: 7400)
+    #[arg(long, default_value = "7400")]
+    pub port: u16,
+
+    /// Bind address
+    #[arg(long, default_value = "127.0.0.1")]
+    pub bind: String,
+
+    /// Bearer token (auto-generated if not set)
+    #[arg(long)]
+    pub token: Option<String>,
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Parse a `key=value` string into a tuple.
@@ -234,9 +391,11 @@ mod tests {
 
     #[test]
     fn source_add_parses() {
-        let cli =
-            Cli::try_parse_from(["urace", "source", "add", "--kind", "directory"]).unwrap();
-        if let Commands::Source { cmd: SourceCommands::Add { kind, id, .. } } = cli.command {
+        let cli = Cli::try_parse_from(["urace", "source", "add", "--kind", "directory"]).unwrap();
+        if let Commands::Source {
+            cmd: SourceCommands::Add { kind, id, .. },
+        } = cli.command
+        {
             assert_eq!(kind, "directory");
             assert!(id.is_none());
         } else {
@@ -246,10 +405,7 @@ mod tests {
 
     #[test]
     fn config_set_parses() {
-        let cli = Cli::try_parse_from([
-            "urace", "config", "set", "network.port", "7302",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["urace", "config", "set", "network.port", "7302"]).unwrap();
         if let Commands::Config(ConfigArgs {
             cmd: ConfigCommands::Set { path, value },
         }) = cli.command
@@ -280,5 +436,39 @@ mod tests {
     fn json_flag_is_global() {
         let cli = Cli::try_parse_from(["urace", "--json", "version"]).unwrap();
         assert!(cli.json);
+    }
+
+    #[test]
+    fn tui_parses() {
+        let cli = Cli::try_parse_from(["urace", "tui"]).unwrap();
+        assert!(matches!(cli.command, Commands::Tui(_)));
+    }
+
+    #[test]
+    fn exchange_status_parses() {
+        let cli = Cli::try_parse_from(["urace", "exchange", "status"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Exchange(ExchangeArgs {
+                cmd: ExchangeCommands::Status { .. }
+            })
+        ));
+    }
+
+    #[test]
+    fn exchange_ask_parses() {
+        let cli = Cli::try_parse_from([
+            "urace", "exchange", "ask", "feat-001", "--price", "500",
+        ])
+        .unwrap();
+        if let Commands::Exchange(ExchangeArgs {
+            cmd: ExchangeCommands::Ask { atom_id, price, .. },
+        }) = cli.command
+        {
+            assert_eq!(atom_id, "feat-001");
+            assert_eq!(price, 500);
+        } else {
+            panic!("expected exchange ask");
+        }
     }
 }

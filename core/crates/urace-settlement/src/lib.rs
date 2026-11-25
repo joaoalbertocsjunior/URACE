@@ -66,7 +66,13 @@ pub struct ArchitectureCertificate {
     pub signature_hex: String,
 }
 
+pub mod chain_anchor;
 pub mod evm;
 pub mod lightning;
 pub mod mesh_llm_passthrough;
 pub mod settlement_manager;
+
+pub use chain_anchor::{
+    AnchorReceipt, AnchorStatus, AssetEarning, AssetTransfer, ChainAnchorAdapter,
+    ChainAnchorConfig, ChainAnchorError, SealRow, StakeEvent, StakeKind,
+};

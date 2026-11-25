@@ -17,6 +17,7 @@ thiserror.workspace      = true
 tracing.workspace        = true
 tokio.workspace          = true
 reqwest.workspace        = true
+sha2.workspace           = true
 urace-ledger             = { path = "../urace-ledger" }
 urace-types              = { path = "../urace-types" }
 ldk-node                 = { version = "0.3", optional = true }

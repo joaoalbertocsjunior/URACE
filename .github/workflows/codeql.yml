@@ -10,7 +10,7 @@ on:
 
 jobs:
   analyze:
-    name: Analyze (python)
+    name: Analyze (rust)
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -20,17 +20,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: dtolnay/rust-toolchain@stable
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: python
+          languages: rust
           queries: security-extended
           config-file: .github/codeql/codeql-config.yml
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Build for CodeQL
+        run: cargo build --manifest-path core/Cargo.toml --workspace
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: /language:python
+          category: /language:rust

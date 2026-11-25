@@ -12,6 +12,13 @@
 pub mod bootstrap;
 pub mod circuit_breaker;
 pub mod cli;
+pub mod cli_exchange;
+pub mod cli_governance;
+pub mod cli_metrics;
+pub mod cli_product;
+pub mod cli_reporting;
+pub mod cli_runtime;
+pub mod cli_work;
 pub mod config;
 pub mod runtime_loop;
 pub mod state;
@@ -22,8 +29,13 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use urace_mcp::{McpServer, McpServerConfig};
+use urace_web;
+#[allow(unused_imports)]
+use urace_tui::{App, Panel, SourceEntry, WorkTask as TuiWorkTask, SettlementEntry};
 use crate::cli::{
-    Cli, Commands, ConfigArgs, ConfigCommands, RunArgs, SourceCommands, StatusArgs, WorkCommands,
+    Cli, Commands, ConfigArgs, ConfigCommands, ExchangeArgs, RunArgs, SourceCommands, StatusArgs,
+    TuiArgs, WebArgs, WorkCommands,
 };
 use crate::state::RuntimeState;
 
@@ -78,6 +90,107 @@ async fn main() -> Result<()> {
         Commands::Work { cmd } => {
             handle_work(&root, cmd, cli.json).await?;
         }
+
+        Commands::Tui(args) => {
+            handle_tui(&root, args).await?;
+        }
+
+        Commands::Web(args) => {
+            handle_web(&root, args).await?;
+        }
+
+        // ── Governance ────────────────────────────────────────────────────────
+
+        Commands::Evidence(args) => {
+            cli_governance::handle_evidence(&root, &args, cli.json).await?;
+        }
+
+        Commands::Blocker(args) => {
+            cli_governance::handle_blocker(&root, &args, cli.json).await?;
+        }
+
+        Commands::Decision(args) => {
+            cli_governance::handle_decision(&root, &args, cli.json).await?;
+        }
+
+        Commands::Milestone(args) => {
+            cli_governance::handle_milestone(&root, &args, cli.json).await?;
+        }
+
+        Commands::Compliance(args) => {
+            cli_governance::handle_compliance(&root, &args, cli.json).await?;
+        }
+
+        Commands::Rules(args) => {
+            cli_governance::handle_rules(&root, &args, cli.json).await?;
+        }
+
+        Commands::Inbox(args) => {
+            cli_governance::handle_inbox(&root, &args, cli.json).await?;
+        }
+
+        // ── Metrics ───────────────────────────────────────────────────────────
+
+        Commands::Vitals(args) => {
+            cli_metrics::handle_vitals(&root, &args, cli.json).await?;
+        }
+
+        Commands::Audit(args) => {
+            cli_metrics::handle_audit(&root, &args, cli.json).await?;
+        }
+
+        Commands::Goals(args) => {
+            cli_metrics::handle_goals(&root, &args, cli.json).await?;
+        }
+
+        Commands::Data(args) => {
+            cli_metrics::handle_data(&root, &args, cli.json).await?;
+        }
+
+        Commands::Trace(args) => {
+            cli_metrics::handle_trace(&root, &args, cli.json).await?;
+        }
+
+        // ── Reporting ─────────────────────────────────────────────────────────
+
+        Commands::Usage(args) => {
+            cli_reporting::handle_usage(&root, &args, cli.json).await?;
+        }
+
+        Commands::Report(args) => {
+            cli_reporting::handle_report(&root, &args, cli.json).await?;
+        }
+
+        // ── Exchange / feature market ─────────────────────────────────────────
+
+        Commands::Exchange(args) => {
+            cli_exchange::handle_exchange(&root, args, cli.json).await?;
+        }
+
+        // ── Work / plan / quality ─────────────────────────────────────────────
+
+        Commands::Github(args) => cli_work::handle_github(&root, &args, cli.json).await?,
+        Commands::Plan(args) => cli_work::handle_plan(&root, &args, cli.json).await?,
+        Commands::Check(args) => cli_work::handle_check(&root, &args, cli.json).await?,
+        Commands::Quality(args) => cli_work::handle_quality(&root, &args, cli.json).await?,
+        Commands::Context(args) => cli_work::handle_context(&root, &args, cli.json).await?,
+        Commands::Classify(args) => cli_work::handle_classify(&root, &args, cli.json).await?,
+        Commands::Derive(args) => cli_work::handle_derive(&root, &args, cli.json).await?,
+        Commands::Propose(args) => cli_work::handle_propose(&root, &args, cli.json).await?,
+
+        // ── Runtime / trial / upgrade ─────────────────────────────────────────
+
+        Commands::Trial(args) => cli_runtime::handle_trial(&root, &args, cli.json).await?,
+        Commands::Update(args) => cli_runtime::handle_update(&root, &args, cli.json).await?,
+        Commands::Features(args) => cli_runtime::handle_features(&root, &args, cli.json).await?,
+        Commands::Crc(args) => cli_runtime::handle_crc(&root, &args, cli.json).await?,
+
+        // ── Product management ────────────────────────────────────────────────
+
+        Commands::Product(args) => cli_product::handle_product(&root, &args, cli.json).await?,
+        Commands::Content(args) => cli_product::handle_content(&root, &args, cli.json).await?,
+        Commands::Rollback(args) => cli_product::handle_rollback(&root, &args, cli.json).await?,
+        Commands::PeerReview(args) => cli_product::handle_peer_review(&root, &args, cli.json).await?,
     }
 
     Ok(())
@@ -144,11 +257,31 @@ async fn handle_run(
     let state_dir = root.join(&args.state_dir);
     let runtime_state = RuntimeState::load(&state_dir)?;
 
+    // Clone MCP config before cfg is moved into LoopContext.
+    let mcp_cfg = cfg.mcp.clone();
+
     let ctx = Arc::new(runtime_loop::LoopContext::new(
         cfg,
         root.to_path_buf(),
         runtime_state,
     ));
+
+    // Start MCP server if enabled
+    if mcp_cfg.enabled {
+        let mcp_addr: std::net::SocketAddr = format!("{}:{}", mcp_cfg.bind_addr, mcp_cfg.port)
+            .parse()
+            .unwrap_or_else(|_| "127.0.0.1:7399".parse().unwrap());
+        let mcp_server = McpServer::new(McpServerConfig {
+            bind_addr: mcp_addr,
+            ..Default::default()
+        });
+        tokio::spawn(async move {
+            if let Err(e) = mcp_server.serve().await {
+                tracing::error!("MCP server error: {e}");
+            }
+        });
+        tracing::info!(addr = %mcp_addr, "MCP server started");
+    }
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
 
@@ -427,22 +560,90 @@ async fn handle_work(
     Ok(())
 }
 
+// ── tui ───────────────────────────────────────────────────────────────────────
+
+async fn handle_tui(root: &std::path::Path, _args: TuiArgs) -> Result<()> {
+    use crossterm::{
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use ratatui::backend::CrosstermBackend;
+    use ratatui::Terminal;
+    use std::io;
+    use std::time::Duration;
+
+    enable_raw_mode()?;
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let mut app = App::new();
+
+    loop {
+        // Load fresh data from state files
+        let status = runtime_loop::load_status(root).unwrap_or_default();
+        let state_dir = root.join("state");
+        let runtime_state = crate::state::RuntimeState::load(&state_dir).unwrap_or_default();
+
+        app.sources = runtime_state
+            .sources
+            .iter()
+            .map(|(id, rec)| {
+                let kind = rec.get("kind").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+                SourceEntry { name: id.clone(), kind, status: "ok".into(), last_sync: None }
+            })
+            .collect();
+
+        app.log_lines = vec![
+            format!("running: {}", status.running),
+            format!("cycles:  {}", status.cycle_count),
+            format!(
+                "last:    {}",
+                status.last_cycle_at.as_deref().unwrap_or("never")
+            ),
+        ];
+
+        terminal.draw(|f| urace_tui::render(f, &app))?;
+
+        if event::poll(Duration::from_millis(500))? {
+            if let Event::Key(key) = event::read()? {
+                use urace_tui::event_handler::{apply_event, handle_key_event};
+                let ev = handle_key_event(key);
+                apply_event(ev, &mut app);
+                if app.should_quit {
+                    break;
+                }
+            }
+        }
+    }
+
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    terminal.show_cursor()?;
+    Ok(())
+}
+
+// ── web ───────────────────────────────────────────────────────────────────────
+
+async fn handle_web(root: &std::path::Path, args: WebArgs) -> Result<()> {
+    let token = args
+        .token
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    println!("Web UI: http://{}:{}", args.bind, args.port);
+    println!("Token:  {token}");
+    urace_web::serve(root.to_path_buf(), args.port, &args.bind, token).await
+}
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 fn uuid_v4() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .subsec_nanos();
-    format!("{nanos:08x}")
+    uuid::Uuid::new_v4().to_string()
 }
 
 fn utc_iso_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    format!("{secs}")
+    time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
 }

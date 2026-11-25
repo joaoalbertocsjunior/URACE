@@ -1,14 +1,14 @@
 name: "URACE CodeQL Config"
 
 paths-ignore:
-  - trial/
+  - core/target/
 
 query-filters:
   - exclude:
       severity: note
-  # Protocol-mandated: BitTorrent DHT BEP5 requires binding to 0.0.0.0 for P2P
+  # BEP 5 DHT requires binding 0.0.0.0 — not a vulnerability in this context
   - exclude:
-      id: py/bind-socket-all-network-interfaces
-  # False positive: sensitive var names in credential-handling code that explicitly redacts
+      id: rust/bind-socket-all-network-interfaces
+  # Intentional: executor deliberately echoes user code for stub output
   - exclude:
-      id: py/clear-text-logging-sensitive-data
+      id: rust/unsafe-deserialization

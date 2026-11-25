@@ -6,8 +6,8 @@
 
 use crate::kademlia::{KademliaTable, NodeInfo};
 use crate::peer_discovery::AdmissionGate;
+use ed25519_dalek::{Signer, SigningKey};
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 /// Wire messages for the URACE peer exchange protocol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,6 +17,8 @@ pub enum PeerExchangeMsg {
     Pong { from_peer_id: String, seq: u64 },
     PeerList { peers: Vec<NodeInfo> },
     SealVoteRequest { seal_hash: String },
+    /// `signature_hex` is an Ed25519 signature over `b"seal-vote:" + seal_hash`.
+    /// Empty string only when no signing key is available (test / stub mode).
     SealVoteResponse { seal_hash: String, signature_hex: String },
 }
 
@@ -39,7 +41,8 @@ impl PeerExchangeCodec {
 
 /// Handle an incoming `PeerExchangeMsg`.
 ///
-/// Returns an optional response message.
+/// `signing_key` — if `Some`, used to produce an Ed25519 signature on
+/// `SealVoteRequest` responses.  Pass `None` only in tests / stub mode.
 ///
 /// Security: `PeerList` entries are only added to the routing table if the
 /// originating peer_id is admitted by the `AdmissionGate`.
@@ -47,18 +50,14 @@ pub fn handle_message(
     msg: PeerExchangeMsg,
     table: &mut KademliaTable,
     gate: &AdmissionGate,
+    signing_key: Option<&SigningKey>,
 ) -> Option<PeerExchangeMsg> {
     match msg {
         PeerExchangeMsg::Ping { from_peer_id, seq } => {
-            // Reply with Pong; do not add non-admitted peer to routing table.
             Some(PeerExchangeMsg::Pong { from_peer_id, seq })
         }
-        PeerExchangeMsg::Pong { .. } => {
-            // Pong confirms liveness; handled by caller (e.g., update last_seen).
-            None
-        }
+        PeerExchangeMsg::Pong { .. } => None,
         PeerExchangeMsg::PeerList { peers } => {
-            // Only add peers that are admitted by the gate.
             for node in peers {
                 if gate.is_admitted(&node.peer_id) {
                     table.add(node);
@@ -67,16 +66,18 @@ pub fn handle_message(
             None
         }
         PeerExchangeMsg::SealVoteRequest { seal_hash } => {
-            // Respond with an unsigned stub vote — real signature wired in urace-authority.
-            Some(PeerExchangeMsg::SealVoteResponse {
-                seal_hash,
-                signature_hex: String::new(), // TODO: wire Ed25519 signing
-            })
+            let signature_hex = match signing_key {
+                Some(key) => {
+                    let mut msg_bytes = b"seal-vote:".to_vec();
+                    msg_bytes.extend_from_slice(seal_hash.as_bytes());
+                    let sig = key.sign(&msg_bytes);
+                    hex::encode(sig.to_bytes())
+                }
+                None => String::new(),
+            };
+            Some(PeerExchangeMsg::SealVoteResponse { seal_hash, signature_hex })
         }
-        PeerExchangeMsg::SealVoteResponse { .. } => {
-            // Caller should feed this into VoteCollector.
-            None
-        }
+        PeerExchangeMsg::SealVoteResponse { .. } => None,
     }
 }
 
@@ -85,6 +86,8 @@ mod tests {
     use super::*;
     use crate::kademlia::KademliaTable;
     use crate::peer_discovery::AdmissionGate;
+    use ed25519_dalek::SigningKey;
+    use rand::rngs::OsRng;
 
     fn make_node(id: &str) -> NodeInfo {
         NodeInfo::new(id, "127.0.0.1:0")
@@ -109,7 +112,7 @@ mod tests {
         let gate = AdmissionGate::new();
         let mut table = KademliaTable::new("self");
         let msg = PeerExchangeMsg::Ping { from_peer_id: "peer-b".into(), seq: 1 };
-        let resp = handle_message(msg, &mut table, &gate);
+        let resp = handle_message(msg, &mut table, &gate, None);
         assert!(matches!(resp, Some(PeerExchangeMsg::Pong { seq: 1, .. })));
     }
 
@@ -117,29 +120,54 @@ mod tests {
     fn test_peer_list_only_admits_admitted_peers() {
         let gate = AdmissionGate::new();
         gate.admit("peer-admitted", 1);
-        // peer-unknown is not admitted.
         let mut table = KademliaTable::new("self");
-        let peers = vec![
-            make_node("peer-admitted"),
-            make_node("peer-unknown"),
-        ];
+        let peers = vec![make_node("peer-admitted"), make_node("peer-unknown")];
         let msg = PeerExchangeMsg::PeerList { peers };
-        handle_message(msg, &mut table, &gate);
-        // Only peer-admitted should be in the table.
+        handle_message(msg, &mut table, &gate, None);
         let target_id = crate::kademlia::peer_id_to_node_id("peer-admitted");
         let closest = table.closest(&target_id, 10);
-        assert!(closest.iter().any(|n| n.peer_id == "peer-admitted"),
-            "admitted peer should be in routing table");
-        // peer-unknown may or may not appear, but we assert the admission invariant is enforced
-        // (the test verifies the code path runs without panic).
+        assert!(
+            closest.iter().any(|n| n.peer_id == "peer-admitted"),
+            "admitted peer should be in routing table"
+        );
     }
 
     #[test]
-    fn test_seal_vote_request_returns_response() {
+    fn test_seal_vote_unsigned_stub() {
         let gate = AdmissionGate::new();
         let mut table = KademliaTable::new("self");
         let msg = PeerExchangeMsg::SealVoteRequest { seal_hash: "abc123".into() };
-        let resp = handle_message(msg, &mut table, &gate);
-        assert!(matches!(resp, Some(PeerExchangeMsg::SealVoteResponse { .. })));
+        let resp = handle_message(msg, &mut table, &gate, None);
+        match resp {
+            Some(PeerExchangeMsg::SealVoteResponse { seal_hash, signature_hex }) => {
+                assert_eq!(seal_hash, "abc123");
+                assert!(signature_hex.is_empty(), "no key → empty signature");
+            }
+            _ => panic!("expected SealVoteResponse"),
+        }
+    }
+
+    #[test]
+    fn test_seal_vote_signed() {
+        let key = SigningKey::generate(&mut OsRng);
+        let gate = AdmissionGate::new();
+        let mut table = KademliaTable::new("self");
+        let msg = PeerExchangeMsg::SealVoteRequest { seal_hash: "deadbeef".into() };
+        let resp = handle_message(msg, &mut table, &gate, Some(&key));
+        match resp {
+            Some(PeerExchangeMsg::SealVoteResponse { seal_hash, signature_hex }) => {
+                assert_eq!(seal_hash, "deadbeef");
+                assert_eq!(signature_hex.len(), 128, "Ed25519 sig = 64 bytes = 128 hex chars");
+                // Verify signature is valid.
+                use ed25519_dalek::Verifier;
+                let vk = key.verifying_key();
+                let sig_bytes = hex::decode(&signature_hex).unwrap();
+                let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+                let mut msg_bytes = b"seal-vote:".to_vec();
+                msg_bytes.extend_from_slice(seal_hash.as_bytes());
+                vk.verify(&msg_bytes, &sig).expect("signature must verify");
+            }
+            _ => panic!("expected SealVoteResponse"),
+        }
     }
 }

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title_suffix %} — Audit{% endblock %}
+
+{% block content %}
+<div class="audit-header">
+  <h1>Audit</h1>
+  <button class="btn-secondary" onclick="loadActive()">Refresh</button>
+</div>
+
+<div class="tab-bar">
+  <button id="tab-decisions" class="tab-btn tab-active" onclick="switchTab('decisions')">Decisions</button>
+  <button id="tab-evidence" class="tab-btn" onclick="switchTab('evidence')">Evidence</button>
+</div>
+
+<div id="panel-decisions" class="tab-panel">
+  <div class="filter-bar">
+    <select id="dec-outcome" class="field-input filter-select">
+      <option value="">All outcomes</option>
+      <option value="ACCEPT">ACCEPT</option>
+      <option value="REJECT">REJECT</option>
+      <option value="DEFER">DEFER</option>
+      <option value="ESCALATE">ESCALATE</option>
+    </select>
+    <input id="dec-since" type="date" class="field-input filter-date" placeholder="Since date">
+    <button class="btn-secondary" onclick="loadDecisions()">Filter</button>
+  </div>
+  <div id="decisions-table-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<div id="panel-evidence" class="tab-panel" style="display:none">
+  <div class="filter-bar">
+    <input id="ev-kind" type="text" class="field-input filter-text" placeholder="Kind filter">
+    <input id="ev-since" type="date" class="field-input filter-date" placeholder="Since date">
+    <button class="btn-secondary" onclick="loadEvidence()">Filter</button>
+  </div>
+  <div id="evidence-table-wrap">
+    <div class="vitals-loading">Loading...</div>
+  </div>
+</div>
+
+<script>
+const TOKEN = {{ token | tojson }};
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function outcomeClass(oc) {
+  const m = {ACCEPT:'badge-active', REJECT:'badge-danger', DEFER:'badge-warn', ESCALATE:'badge-escalate'};
+  return m[oc] || 'badge-default';
+}
+
+let activeTab = 'decisions';
+
+function switchTab(tab) {
+  activeTab = tab;
+  ['decisions','evidence'].forEach(t => {
+    document.getElementById('panel-'+t).style.display = t === tab ? '' : 'none';
+    document.getElementById('tab-'+t).className = 'tab-btn' + (t === tab ? ' tab-active' : '');
+  });
+  loadActive();
+}
+
+function loadActive() {
+  if (activeTab === 'decisions') loadDecisions();
+  else loadEvidence();
+}
+
+async function loadDecisions() {
+  const outcome = document.getElementById('dec-outcome').value;
+  const since = document.getElementById('dec-since').value;
+  const wrap = document.getElementById('decisions-table-wrap');
+  wrap.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  let url = '/api/audit/decisions?limit=50';
+  if (outcome) url += '&outcome=' + encodeURIComponent(outcome);
+  if (since) url += '&since=' + encodeURIComponent(since);
+  try {
+    const r = await fetch(url, {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const rows = (data.decisions || []);
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="cycle-empty">No decisions found.</div>';
+      return;
+    }
+    const thead = `<tr>
+      <th>ID</th><th>Outcome</th><th>At</th><th>Reasoning</th><th>Scope</th>
+    </tr>`;
+    const tbody = rows.map(d => `<tr>
+      <td class="mono-sm" title="${escHtml(d.id||'')}">${escHtml((d.id||'').slice(0,8))}</td>
+      <td><span class="status-badge ${outcomeClass(d.outcome)}">${escHtml(d.outcome||'—')}</span></td>
+      <td class="mono-sm">${escHtml((d.at||'').slice(0,16).replace('T',' '))}</td>
+      <td class="reasoning-cell" title="${escHtml(d.reasoning||'')}">${escHtml((d.reasoning||'').slice(0,80))}${(d.reasoning||'').length>80?'…':''}</td>
+      <td class="mono-sm">${escHtml(d.scope||'—')}</td>
+    </tr>`).join('');
+    wrap.innerHTML = `<table class="audit-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+  } catch(err) {
+    wrap.innerHTML = `<div class="shell-error">Failed to load decisions: ${escHtml(err.message)}</div>`;
+  }
+}
+
+async function loadEvidence() {
+  const kind = document.getElementById('ev-kind').value.trim();
+  const since = document.getElementById('ev-since').value;
+  const wrap = document.getElementById('evidence-table-wrap');
+  wrap.innerHTML = '<div class="vitals-loading">Loading...</div>';
+  let url = '/api/audit/evidence?limit=50';
+  if (kind) url += '&kind=' + encodeURIComponent(kind);
+  if (since) url += '&since=' + encodeURIComponent(since);
+  try {
+    const r = await fetch(url, {headers:{'Authorization':'Bearer '+TOKEN}});
+    const data = await r.json();
+    const rows = (data.evidence || []);
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="cycle-empty">No evidence found.</div>';
+      return;
+    }
+    const thead = `<tr><th>ID</th><th>Kind</th><th>At</th><th>Summary</th></tr>`;
+    const tbody = rows.map(e => `<tr>
+      <td class="mono-sm" title="${escHtml(e.id||'')}">${escHtml((e.id||'').slice(0,8))}</td>
+      <td class="mono-sm">${escHtml(e.kind||'—')}</td>
+      <td class="mono-sm">${escHtml((e.at||'').slice(0,16).replace('T',' '))}</td>
+      <td class="reasoning-cell" title="${escHtml(e.summary||'')}">${escHtml((e.summary||'').slice(0,100))}${(e.summary||'').length>100?'…':''}</td>
+    </tr>`).join('');
+    wrap.innerHTML = `<table class="audit-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>`;
+  } catch(err) {
+    wrap.innerHTML = `<div class="shell-error">Failed to load evidence: ${escHtml(err.message)}</div>`;
+  }
+}
+
+loadDecisions();
+</script>
+{% endblock %}

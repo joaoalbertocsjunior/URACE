@@ -102,6 +102,56 @@ impl ToolRegistry {
                         "additionalProperties": false,
                     }),
                 ),
+                McpTool::read_only(
+                    "get_status",
+                    "Return the runtime loop status (running, cycle count, last outcome).",
+                    json!({
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::read_only(
+                    "get_goals",
+                    "Return the list of tracked goals and their current status.",
+                    json!({
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::mutating(
+                    "post_work_task",
+                    "Post a work task to the market. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "task_id": {"type": "string", "description": "Unique task identifier"},
+                            "capabilities": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Required executor capabilities"
+                            },
+                            "budget_ucr": {"type": "integer", "description": "Budget in UCR base units"}
+                        },
+                        "required": ["task_id"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::read_only(
+                    "get_audit_events",
+                    "Return recent audit events from the signed audit ledger.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "limit": {"type": "integer", "description": "Maximum number of events to return (default 50)"}
+                        },
+                        "required": [],
+                        "additionalProperties": false,
+                    }),
+                ),
             ],
         }
     }
@@ -133,9 +183,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_four_tools() {
+    fn registry_has_eight_tools() {
         let reg = ToolRegistry::new();
-        assert_eq!(reg.all().len(), 4);
+        assert_eq!(reg.all().len(), 8);
     }
 
     #[test]

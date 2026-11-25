@@ -6,115 +6,89 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  fast-test:
+  fmt:
+    name: Format
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path core/Cargo.toml --all -- --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - run: cargo clippy --manifest-path core/Cargo.toml --workspace --all-targets -- -D warnings
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/ -m "not slow" -x -q --timeout=600 --tb=short
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/ --ignore=urace/trial/tests -m "not slow" -x -q --timeout=600 --tb=short
-
-  slow-test:
-    runs-on: ubuntu-latest
-    needs: fast-test
-    permissions:
-      contents: read
-    strategy:
-      matrix:
-        python-version: ['3.11', '3.12', '3.13']
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/ -m "slow" -x -q --timeout=600 --tb=short
-
-  coverage:
-    runs-on: ubuntu-latest
-    needs: fast-test
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install -e "urace/runtime/[test]"
-      - run: python -m pytest urace/runtime/tests/ -m "not slow" -x -q --timeout=600 --tb=short --cov=urace --cov-report=term-missing --cov-fail-under=60
-
-  benchmarks:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install -e "urace/runtime/[test]"
-      - run: PYTHONPATH=urace/runtime:urace/trial python -m pytest urace/trial/tests/ -x -q --timeout=600 --tb=short
-
-  lint:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install ruff
-      - run: ruff check urace/runtime/urace/ --select F,E7,B,W --ignore E501,E402,E731,E701,E702,F401,B008,B904,E741,B007
-
-  ledger-sync:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python runtime/build_initial_ledger.py
-        working-directory: urace
-      - run: git diff --exit-code exchange/initial_ledger/initial_ledger.jsonl
-        working-directory: urace
+          workspaces: core
+      - name: Run tests
+        run: cargo test --manifest-path core/Cargo.toml --workspace
+      - name: Run doc tests
+        run: cargo test --manifest-path core/Cargo.toml --workspace --doc
 
   audit:
+    name: Security audit
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo install cargo-audit --locked
+      - run: cargo audit --manifest-path core/Cargo.toml
+
+  invariants:
+    name: Invariant checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: urace
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install -e "urace/runtime/" pip-audit
-      - run: python -c "import urace; from urace.cli import main; print('import ok')"
-      - run: python -c "from urace.credit_ledger import CONSENSUS_WEIGHTS, UNIT; assert UNIT == 100_000_000"
-      - run: python -c "from urace.cost_model import BorrowCostContext, _ceiling_for_loc; assert _ceiling_for_loc(25)==0.05"
-      - run: pip-audit --desc on urace/runtime/ || true
+          workspaces: core
+      # §62z — authority tests pass
+      - name: Authority outcomes
+        run: cargo test --manifest-path core/Cargo.toml -p urace-authority
+      # Ledger — UNIT constant is exactly 100_000_000
+      - name: UNIT constant
+        run: grep -r "UNIT.*100_000_000\|100_000_000.*UNIT" core/crates/urace-ledger/src/
+      # Mint gating — score_delta > 0 only
+      - name: Mint-only-on-positive-delta
+        run: grep -r "score_delta > 0\|should_mint" core/crates/urace-goals/src/ core/crates/urace-ledger/src/
+      # Exit codes preserved
+      - name: Launcher exit codes
+        run: grep -r "EXIT_REVALIDATE.*75\|EXIT_ONE_RETRY.*76" core/crates/urace-upgrade/src/

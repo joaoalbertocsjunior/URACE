@@ -12,6 +12,7 @@ use crate::circuit_breaker::CircuitBreaker;
 use crate::config::RuntimeConfig;
 use crate::state::RuntimeState;
 use anyhow::Result;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -19,13 +20,9 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
-
-/// Telemetry event emitted by the loop.
-#[derive(Debug, Clone)]
-pub struct TelemetryEvent {
-    pub kind: String,
-    pub payload: serde_json::Value,
-}
+use urace_audit::{AuditEvent, AuditKind, AuditLedger};
+use urace_goals::{GoalStore, TelemetryEmitter, TelemetryEvent};
+use urace_work::{WorkMarket, WorkPolicy, WorkTask};
 
 /// A snapshot of the runtime loop status (read by `urace status`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -76,20 +73,59 @@ pub struct LoopContext {
     pub state: Arc<Mutex<RuntimeState>>,
     pub breakers: Arc<Mutex<HashMap<String, CircuitBreaker>>>,
     pub status: Arc<Mutex<LoopStatus>>,
+    pub work_market: Arc<WorkMarket>,
+    pub goal_store: Arc<GoalStore>,
+    pub telemetry: Arc<TelemetryEmitter>,
+    pub audit: Arc<AuditLedger>,
 }
 
 impl LoopContext {
     pub fn new(config: RuntimeConfig, root: PathBuf, state: RuntimeState) -> Self {
-        let mut status = LoopStatus::default();
-        status.running = true;
+        let state_dir = root.join("state");
+        std::fs::create_dir_all(&state_dir).ok();
+
+        let hmac_key = derive_journal_key(&root);
+
+        let work_market = Arc::new(WorkMarket::new(WorkPolicy {
+            max_budget_ucr: 0,              // sync tasks carry no monetary budget
+            allowed_scopes: vec![],         // all scopes permitted
+            require_authority_check: false, // authority checked externally (§62z)
+            max_concurrent_jobs: 16,
+        }));
+
+        let goal_store =
+            GoalStore::open(state_dir.join("goals.jsonl"), hmac_key).expect("goal store open");
+        let telemetry = TelemetryEmitter::open(state_dir.join("telemetry.jsonl"), hmac_key)
+            .expect("telemetry emitter open");
+        let audit =
+            AuditLedger::open(state_dir.join("audit.jsonl"), hmac_key).expect("audit ledger open");
+
+        let mut initial_status = LoopStatus::default();
+        initial_status.running = true;
+
         LoopContext {
             config,
             root,
             state: Arc::new(Mutex::new(state)),
             breakers: Arc::new(Mutex::new(HashMap::new())),
-            status: Arc::new(Mutex::new(status)),
+            status: Arc::new(Mutex::new(initial_status)),
+            work_market,
+            goal_store: Arc::new(goal_store),
+            telemetry: Arc::new(telemetry),
+            audit: Arc::new(audit),
         }
     }
+}
+
+/// Derive a deterministic HMAC key from the runtime root path.
+/// In production this will be superseded by identity-based key material.
+fn derive_journal_key(root: &Path) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(b"urace-journal-hmac-v1\x00");
+    h.update(root.to_string_lossy().as_bytes());
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&h.finalize());
+    key
 }
 
 /// Run the main daemon loop.
@@ -107,10 +143,7 @@ pub async fn run_loop(
     let interval_secs = ctx.config.sources.auto_sync_interval_s.max(1);
     let mut tick = interval(Duration::from_secs(interval_secs));
 
-    info!(
-        interval_secs,
-        "runtime loop starting"
-    );
+    info!(interval_secs, "runtime loop starting");
 
     loop {
         tokio::select! {
@@ -168,10 +201,9 @@ async fn run_one_cycle(ctx: &Arc<LoopContext>) -> Result<String> {
         // Snapshot circuit breaker states
         let breakers = ctx.breakers.lock().await;
         for (id, cb) in breakers.iter() {
-            status.circuit_breakers.insert(
-                id.clone(),
-                format!("{:?}", cb.status().state),
-            );
+            status
+                .circuit_breakers
+                .insert(id.clone(), format!("{:?}", cb.status().state));
         }
 
         if let Err(e) = save_status(&status, &ctx.root) {
@@ -191,14 +223,19 @@ async fn poll_sources(ctx: &Arc<LoopContext>) -> String {
         return "dormant".to_string();
     }
 
-    // In a full implementation this would call each source adapter's sync().
-    // For the Rust port stub, we iterate source records and log.
-    debug!(source_count, "polling sources");
     for (id, record) in state.sources.iter() {
         let kind = record
             .get("kind")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
+        let evt = AuditEvent::new(
+            AuditKind::SourceSynced,
+            "daemon",
+            serde_json::json!({ "source_id": id, "kind": kind }),
+        );
+        if let Err(e) = ctx.audit.record(evt) {
+            warn!(error = %e, "audit record error in poll_sources");
+        }
         debug!(id = %id, kind = %kind, "source sync");
     }
 
@@ -207,7 +244,6 @@ async fn poll_sources(ctx: &Arc<LoopContext>) -> String {
 
 /// Dispatch work items — runs in a separate tokio task (non-blocking).
 async fn dispatch_work(ctx: &Arc<LoopContext>) -> Result<()> {
-    // Authority check gate (§62z): work dispatch requires autonomously authorized.
     use crate::bootstrap::check_authority_policy;
     let outcome = check_authority_policy("work_dispatch", "implementation", &ctx.config);
     if !matches!(
@@ -218,24 +254,60 @@ async fn dispatch_work(ctx: &Arc<LoopContext>) -> Result<()> {
         return Ok(());
     }
 
-    // Simulate a brief async work unit without blocking the main loop.
-    sleep(Duration::from_millis(1)).await;
-    debug!("work dispatch complete");
+    let sources = {
+        let state = ctx.state.lock().await;
+        state.sources.clone()
+    };
+
+    if sources.is_empty() {
+        return Ok(());
+    }
+
+    let mut posted = 0usize;
+    for (source_id, record) in &sources {
+        let kind = record
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let task = WorkTask {
+            task_id: format!("sync-{source_id}"),
+            required_capabilities: vec![kind.to_string()],
+            budget_ucr: 0,
+            posted_at: utc_now(),
+            poster_peer_id: "daemon".into(),
+        };
+        // Ignore errors — task may already be posted from a prior cycle
+        if ctx.work_market.post_task(task, true).is_ok() {
+            posted += 1;
+        }
+    }
+
+    if posted > 0 {
+        let evt = AuditEvent::new(
+            AuditKind::WorkBid,
+            "daemon",
+            serde_json::json!({ "tasks_posted": posted }),
+        );
+        if let Err(e) = ctx.audit.record(evt) {
+            warn!(error = %e, "audit record error in dispatch_work");
+        }
+    }
+
+    debug!(posted, "work dispatch complete");
     Ok(())
 }
 
 /// Emit a telemetry event for this cycle.
 async fn emit_telemetry(ctx: &Arc<LoopContext>, outcome: &str) {
     let event = TelemetryEvent {
-        kind: "cycle.completed".to_string(),
-        payload: serde_json::json!({
-            "outcome": outcome,
-            "at": utc_now(),
-        }),
+        event_type: "cycle.completed".to_string(),
+        peer_id: "daemon".to_string(),
+        payload: serde_json::json!({ "outcome": outcome }),
+        at: utc_now(),
     };
-    debug!(kind = %event.kind, outcome = %outcome, "telemetry emitted");
-    // In a full implementation this would publish to the event bus / M2M stream.
-    let _ = event; // suppress unused warning
+    if let Err(e) = ctx.telemetry.emit(event) {
+        warn!(error = %e, "telemetry emit error");
+    }
 }
 
 fn utc_now() -> String {

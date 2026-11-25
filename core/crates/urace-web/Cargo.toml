@@ -1,0 +1,23 @@
+[package]
+name        = "urace-web"
+description = "URACE web UI — axum + MiniJinja + HTMX dashboard"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+tracing.workspace    = true
+tokio.workspace      = true
+anyhow.workspace     = true
+axum.workspace       = true
+tower-http.workspace = true
+minijinja.workspace  = true
+futures.workspace    = true
+
+[dev-dependencies]
+tempfile = "3"
