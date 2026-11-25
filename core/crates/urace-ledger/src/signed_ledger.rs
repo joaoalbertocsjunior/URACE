@@ -83,7 +83,9 @@ pub fn unpack(data: &[u8]) -> Result<Vec<u8>, SignedLedgerError> {
             use std::io::Read as _;
             let mut decoder = flate2::read::ZlibDecoder::new(&data[1..]);
             let mut out = Vec::new();
-            decoder.read_to_end(&mut out).map_err(SignedLedgerError::Io)?;
+            decoder
+                .read_to_end(&mut out)
+                .map_err(SignedLedgerError::Io)?;
             if out.len() > MAX_BYTES {
                 return Err(SignedLedgerError::SizeBound);
             }
@@ -211,7 +213,9 @@ impl LedgerIdentity {
             let seed_bytes = hex::decode(seed_hex)
                 .map_err(|e| SignedLedgerError::IntegrityViolation(e.to_string()))?;
             if seed_bytes.len() != 32 {
-                return Err(SignedLedgerError::IntegrityViolation("seed must be 32 bytes".into()));
+                return Err(SignedLedgerError::IntegrityViolation(
+                    "seed must be 32 bytes".into(),
+                ));
             }
             let seed: [u8; 32] = seed_bytes.try_into().unwrap();
             let keypair = Keypair::from_seed(&seed);
@@ -263,16 +267,18 @@ impl LedgerIdentity {
         signature_hex: &str,
     ) -> Result<(), SignedLedgerError> {
         let canonical_bytes = canonical(&serde_json::to_value(payload)?);
-        let sig_bytes = hex::decode(signature_hex)
-            .map_err(|e| SignedLedgerError::Crypto(e.to_string()))?;
+        let sig_bytes =
+            hex::decode(signature_hex).map_err(|e| SignedLedgerError::Crypto(e.to_string()))?;
         if sig_bytes.len() != 64 {
             return Err(SignedLedgerError::Crypto("invalid signature length".into()));
         }
         let sig: [u8; 64] = sig_bytes.try_into().unwrap();
-        let pub_key_bytes = hex::decode(&self.public_id)
-            .map_err(|e| SignedLedgerError::Crypto(e.to_string()))?;
+        let pub_key_bytes =
+            hex::decode(&self.public_id).map_err(|e| SignedLedgerError::Crypto(e.to_string()))?;
         if pub_key_bytes.len() != 32 {
-            return Err(SignedLedgerError::Crypto("invalid public key length".into()));
+            return Err(SignedLedgerError::Crypto(
+                "invalid public key length".into(),
+            ));
         }
         let pub_key: [u8; 32] = pub_key_bytes.try_into().unwrap();
         urace_crypto::ed25519::verify(&pub_key, &canonical_bytes, &sig)
@@ -292,7 +298,9 @@ pub struct Ledger {
 impl Ledger {
     /// Open (or create) a ledger at `root`.
     pub fn new(root: impl AsRef<Path>) -> Self {
-        Self { root: root.as_ref().to_path_buf() }
+        Self {
+            root: root.as_ref().to_path_buf(),
+        }
     }
 
     fn block_path(&self, n: u64) -> PathBuf {
@@ -364,24 +372,26 @@ impl Ledger {
 
         let bp = &block.payload;
         if !KNOWN_SCHEMA_VERSIONS.contains(&bp.schema.as_str()) {
-            return Err(SignedLedgerError::IntegrityViolation(
-                format!("block {n}: unknown schema '{}'", bp.schema)
-            ));
+            return Err(SignedLedgerError::IntegrityViolation(format!(
+                "block {n}: unknown schema '{}'",
+                bp.schema
+            )));
         }
         if bp.sequence != n {
-            return Err(SignedLedgerError::IntegrityViolation(
-                format!("block {n}: sequence mismatch (got {})", bp.sequence)
-            ));
+            return Err(SignedLedgerError::IntegrityViolation(format!(
+                "block {n}: sequence mismatch (got {})",
+                bp.sequence
+            )));
         }
         if bp.previous != previous_hash {
-            return Err(SignedLedgerError::IntegrityViolation(
-                format!("block {n}: previous hash mismatch")
-            ));
+            return Err(SignedLedgerError::IntegrityViolation(format!(
+                "block {n}: previous hash mismatch"
+            )));
         }
         if bp.author != author {
-            return Err(SignedLedgerError::IntegrityViolation(
-                format!("block {n}: author mismatch")
-            ));
+            return Err(SignedLedgerError::IntegrityViolation(format!(
+                "block {n}: author mismatch"
+            )));
         }
 
         identity.verify_payload(bp, &block.signature)?;
@@ -417,7 +427,7 @@ impl Ledger {
 
         if head.author != identity.public_id() {
             return Err(SignedLedgerError::IntegrityViolation(
-                "ledger author changed".into()
+                "ledger author changed".into(),
             ));
         }
 
@@ -427,7 +437,7 @@ impl Ledger {
             let (_, digest, _) = self.read_block(head.sequence, &prev, &head.author, identity)?;
             if digest != head.hash {
                 return Err(SignedLedgerError::IntegrityViolation(
-                    "ledger head hash mismatch".into()
+                    "ledger head hash mismatch".into(),
                 ));
             }
         }
@@ -458,22 +468,20 @@ impl Ledger {
     }
 
     /// Append a typed event to the ledger. Returns `AppendResult`.
-    pub fn append(
-        &self,
-        kind: &str,
-        details: Value,
-    ) -> Result<AppendResult, SignedLedgerError> {
+    pub fn append(&self, kind: &str, details: Value) -> Result<AppendResult, SignedLedgerError> {
         // Validate kind (matches Python regex: [A-Z][A-Z0-9_]{0,63})
         {
             let bytes = kind.as_bytes();
             if bytes.is_empty()
                 || bytes.len() > 64
                 || !bytes[0].is_ascii_uppercase()
-                || !bytes[1..].iter().all(|&b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+                || !bytes[1..]
+                    .iter()
+                    .all(|&b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
             {
-                return Err(SignedLedgerError::IntegrityViolation(
-                    format!("invalid event kind: {kind}")
-                ));
+                return Err(SignedLedgerError::IntegrityViolation(format!(
+                    "invalid event kind: {kind}"
+                )));
             }
         }
 
@@ -483,14 +491,10 @@ impl Ledger {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(
-                &self.root,
-                std::fs::Permissions::from_mode(0o700),
-            );
+            let _ = std::fs::set_permissions(&self.root, std::fs::Permissions::from_mode(0o700));
         }
 
         let lock_file = std::fs::OpenOptions::new()
-            .write(true)
             .create(true)
             .append(true)
             .open(self.lock_path())?;
@@ -541,7 +545,9 @@ impl Ledger {
         // Write via pending file — a killed writer leaves a pending file, never a
         // partly published block.
         let pending = {
-            let pending_path = self.root.join(format!("pending-{}", block.payload.sequence));
+            let pending_path = self
+                .root
+                .join(format!("pending-{}", block.payload.sequence));
             {
                 let mut f = std::fs::OpenOptions::new()
                     .write(true)
@@ -590,7 +596,10 @@ impl Ledger {
     }
 
     /// Verify the full chain. Returns a `VerifyReport`.
-    pub fn verify(&self, checkpoint: Option<&HeadRecord>) -> Result<VerifyReport, SignedLedgerError> {
+    pub fn verify(
+        &self,
+        checkpoint: Option<&HeadRecord>,
+    ) -> Result<VerifyReport, SignedLedgerError> {
         if !self.root.exists() {
             return Ok(VerifyReport {
                 status: "NOT_INITIALIZED".to_owned(),
@@ -624,15 +633,14 @@ impl Ledger {
         let mut logical_bytes = 0u64;
 
         for n in 1..=head.sequence {
-            let (_block, digest, raw) =
-                self.read_block(n, &previous, &head.author, &identity)?;
+            let (_block, digest, raw) = self.read_block(n, &previous, &head.author, &identity)?;
             stored_bytes += self.block_path(n).metadata()?.len();
             logical_bytes += raw.len() as u64;
 
             if let Some(cp) = checkpoint {
                 if n == cp.sequence && (digest != cp.hash || head.author != cp.author) {
                     return Err(SignedLedgerError::IntegrityViolation(
-                        "external checkpoint conflict".into()
+                        "external checkpoint conflict".into(),
                     ));
                 }
             }
@@ -641,14 +649,14 @@ impl Ledger {
 
         if previous != head.hash {
             return Err(SignedLedgerError::IntegrityViolation(
-                "ledger terminal hash mismatch".into()
+                "ledger terminal hash mismatch".into(),
             ));
         }
 
         if let Some(cp) = checkpoint {
             if cp.author != head.author || cp.sequence > head.sequence {
                 return Err(SignedLedgerError::IntegrityViolation(
-                    "checkpoint indicates missing history".into()
+                    "checkpoint indicates missing history".into(),
                 ));
             }
         }
@@ -664,14 +672,10 @@ impl Ledger {
     }
 
     /// Read a page of blocks (bounded pagination).
-    pub fn page(
-        &self,
-        offset: usize,
-        limit: usize,
-    ) -> Result<Vec<SignedBlock>, SignedLedgerError> {
+    pub fn page(&self, offset: usize, limit: usize) -> Result<Vec<SignedBlock>, SignedLedgerError> {
         if limit == 0 || limit > 100 {
             return Err(SignedLedgerError::IntegrityViolation(
-                "limit must be 1..=100".into()
+                "limit must be 1..=100".into(),
             ));
         }
 
@@ -741,8 +745,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let ledger = Ledger::new(dir.path());
 
-        ledger.append("CREDIT_DELTA", json!({"peer": "p1", "amount": 10})).unwrap();
-        ledger.append("CREDIT_DELTA", json!({"peer": "p2", "amount": 20})).unwrap();
+        ledger
+            .append("CREDIT_DELTA", json!({"peer": "p1", "amount": 10}))
+            .unwrap();
+        ledger
+            .append("CREDIT_DELTA", json!({"peer": "p2", "amount": 20}))
+            .unwrap();
 
         let report = ledger.verify(None).unwrap();
         assert_eq!(report.blocks, 2);

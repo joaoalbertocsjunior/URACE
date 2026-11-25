@@ -89,10 +89,7 @@ impl AssetRegistry {
                             fid.clone(),
                             Asset {
                                 feature_id: fid,
-                                owner_peer_id: p["owner_peer_id"]
-                                    .as_str()
-                                    .unwrap_or("")
-                                    .to_owned(),
+                                owner_peer_id: p["owner_peer_id"].as_str().unwrap_or("").to_owned(),
                                 canonical_fingerprint: p["canonical_fingerprint"]
                                     .as_str()
                                     .filter(|s| !s.is_empty())
@@ -112,8 +109,7 @@ impl AssetRegistry {
                 "ASSET_TRANSFERRED" => {
                     let fid = p["feature_id"].as_str().unwrap_or("").to_owned();
                     if let Some(mut asset) = self.assets.get_mut(&fid) {
-                        asset.owner_peer_id =
-                            p["to_peer_id"].as_str().unwrap_or("").to_owned();
+                        asset.owner_peer_id = p["to_peer_id"].as_str().unwrap_or("").to_owned();
                         asset.transfer_count += 1;
                     }
                 }
@@ -270,7 +266,7 @@ impl AssetRegistry {
             .filter(|e| e.owner_peer_id == peer_id)
             .map(|e| e.clone())
             .collect();
-        v.sort_by(|a, b| b.cumulative_earn_units.cmp(&a.cumulative_earn_units));
+        v.sort_by_key(|b| std::cmp::Reverse(b.cumulative_earn_units));
         v
     }
 }

@@ -63,7 +63,10 @@ impl SettlementStore {
     }
 
     /// Return all settlements for a given buyer.
-    pub fn settlements_by_buyer(&self, buyer_peer_id: &str) -> Result<Vec<PurchaseSettlement>, SettlementError> {
+    pub fn settlements_by_buyer(
+        &self,
+        buyer_peer_id: &str,
+    ) -> Result<Vec<PurchaseSettlement>, SettlementError> {
         let entries = self.journal.verify_integrity()?;
         let settlements = entries
             .into_iter()
@@ -105,7 +108,9 @@ mod tests {
         let store = SettlementStore::open(dir.path().join("settlements.jsonl"), KEY).unwrap();
 
         store.record(settlement("s1", "alice", "bob", 100)).unwrap();
-        store.record(settlement("s2", "alice", "carol", 200)).unwrap();
+        store
+            .record(settlement("s2", "alice", "carol", 200))
+            .unwrap();
         store.record(settlement("s3", "dave", "bob", 50)).unwrap();
 
         assert_eq!(store.total_settled_ucr().unwrap(), 350);
@@ -117,7 +122,9 @@ mod tests {
         let store = SettlementStore::open(dir.path().join("settlements.jsonl"), KEY).unwrap();
 
         store.record(settlement("s1", "alice", "bob", 100)).unwrap();
-        store.record(settlement("s2", "dave", "carol", 200)).unwrap();
+        store
+            .record(settlement("s2", "dave", "carol", 200))
+            .unwrap();
 
         let alice = store.settlements_by_buyer("alice").unwrap();
         assert_eq!(alice.len(), 1);

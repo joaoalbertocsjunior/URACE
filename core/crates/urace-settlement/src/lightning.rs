@@ -21,7 +21,9 @@ pub struct LightningRail {
 
 impl LightningRail {
     pub fn new(node_alias: impl Into<String>) -> Self {
-        LightningRail { node_alias: node_alias.into() }
+        LightningRail {
+            node_alias: node_alias.into(),
+        }
     }
 
     /// Pay a BOLT-11 invoice.

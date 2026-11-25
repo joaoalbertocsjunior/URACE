@@ -295,7 +295,9 @@ impl StakeStore {
         if !self.path.exists() {
             return vec![];
         }
-        let Ok(text) = std::fs::read_to_string(&self.path) else { return vec![]; };
+        let Ok(text) = std::fs::read_to_string(&self.path) else {
+            return vec![];
+        };
         text.lines()
             .filter_map(|line| serde_json::from_str::<ProvenanceStake>(line).ok())
             .filter(|s| s.target_id == target_id)
@@ -307,7 +309,9 @@ impl StakeStore {
         if !self.path.exists() {
             return vec![];
         }
-        let Ok(text) = std::fs::read_to_string(&self.path) else { return vec![]; };
+        let Ok(text) = std::fs::read_to_string(&self.path) else {
+            return vec![];
+        };
         text.lines()
             .filter_map(|line| serde_json::from_str::<ProvenanceStake>(line).ok())
             .collect()
@@ -380,18 +384,22 @@ mod tests {
     fn stake_store_append_and_query() {
         let dir = tempfile::tempdir().unwrap();
         let store = StakeStore::new(dir.path());
-        store.add_stake(ProvenanceStake {
-            staker_peer_id: "peer-1".into(),
-            target_id: "feat-A".into(),
-            amount_ucr: 300_000_000,
-            staked_at: "2024-01-01T00:00:00Z".into(),
-        }).unwrap();
-        store.add_stake(ProvenanceStake {
-            staker_peer_id: "peer-2".into(),
-            target_id: "feat-B".into(),
-            amount_ucr: 100_000_000,
-            staked_at: "2024-01-01T00:00:00Z".into(),
-        }).unwrap();
+        store
+            .add_stake(ProvenanceStake {
+                staker_peer_id: "peer-1".into(),
+                target_id: "feat-A".into(),
+                amount_ucr: 300_000_000,
+                staked_at: "2024-01-01T00:00:00Z".into(),
+            })
+            .unwrap();
+        store
+            .add_stake(ProvenanceStake {
+                staker_peer_id: "peer-2".into(),
+                target_id: "feat-B".into(),
+                amount_ucr: 100_000_000,
+                staked_at: "2024-01-01T00:00:00Z".into(),
+            })
+            .unwrap();
         let stakes = store.stakes_for("feat-A");
         assert_eq!(stakes.len(), 1);
         assert_eq!(stakes[0].staker_peer_id, "peer-1");
@@ -453,6 +461,9 @@ mod tests {
         let weights = g.resolve_weights("feat-Y", &rows);
         assert!(weights.contains_key("alice") || weights.contains_key("bob"));
         let total: f64 = weights.values().sum();
-        assert!((total - 1.0).abs() < 1e-9, "weights don't sum to 1: {total}");
+        assert!(
+            (total - 1.0).abs() < 1e-9,
+            "weights don't sum to 1: {total}"
+        );
     }
 }

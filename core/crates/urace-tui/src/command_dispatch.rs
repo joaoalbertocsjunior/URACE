@@ -205,10 +205,7 @@ mod tests {
     #[test]
     fn empty_input_is_unknown() {
         // An empty string doesn't match any command.
-        assert_eq!(
-            parse_command(""),
-            TuiCommand::Unknown("".to_string())
-        );
+        assert_eq!(parse_command(""), TuiCommand::Unknown("".to_string()));
     }
 
     #[test]

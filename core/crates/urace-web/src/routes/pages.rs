@@ -1,9 +1,12 @@
 //! Page route handlers — one per HTML page.
 //! Each handler renders its template with `active` and `token` context variables.
 
-use axum::{extract::State, response::{Html, Redirect}};
-use minijinja::context;
 use crate::AppState;
+use axum::{
+    extract::State,
+    response::{Html, Redirect},
+};
+use minijinja::context;
 
 fn render(state: &AppState, template: &str, active: &str) -> Html<String> {
     let tmpl = match state.env.get_template(template) {

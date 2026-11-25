@@ -95,10 +95,9 @@ pub fn intent_similarity(text_a: &str, text_b: &str) -> f64 {
 // ── TF-IDF helpers ─────────────────────────────────────────────────────────────
 
 static STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
-    "being", "have", "has", "had", "do", "does", "did", "will", "would",
-    "could", "should", "may", "might", "it", "its", "this", "that", "as",
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does",
+    "did", "will", "would", "could", "should", "may", "might", "it", "its", "this", "that", "as",
     "so", "not", "no", "if", "then", "than", "more", "most", "any", "all",
 ];
 
@@ -143,7 +142,10 @@ fn tfidf_vector(tokens: &[String], idf: &HashMap<String, f64>) -> HashMap<String
 }
 
 fn cosine(a: &HashMap<String, f64>, b: &HashMap<String, f64>) -> f64 {
-    let dot: f64 = a.iter().filter_map(|(k, v)| b.get(k).map(|bv| v * bv)).sum();
+    let dot: f64 = a
+        .iter()
+        .filter_map(|(k, v)| b.get(k).map(|bv| v * bv))
+        .sum();
     let mag_a: f64 = a.values().map(|v| v * v).sum::<f64>().sqrt();
     let mag_b: f64 = b.values().map(|v| v * v).sum::<f64>().sqrt();
     if mag_a == 0.0 || mag_b == 0.0 {
@@ -185,8 +187,7 @@ impl ProfileStore {
             .into_iter()
             .filter(|e| e.kind == "PRODUCT_PROFILE_OBSERVED")
             .filter_map(|e| serde_json::from_value::<ObservedProfile>(e.payload).ok())
-            .filter(|p| p.product_id == product_id)
-            .last();
+            .rfind(|p| p.product_id == product_id);
         Ok(profile)
     }
 
@@ -251,13 +252,21 @@ mod tests {
     #[test]
     fn intent_similarity_identical_texts() {
         let sim = intent_similarity("fast key value store", "fast key value store");
-        assert!(sim > 0.99, "identical texts must have similarity ~1.0, got {}", sim);
+        assert!(
+            sim > 0.99,
+            "identical texts must have similarity ~1.0, got {}",
+            sim
+        );
     }
 
     #[test]
     fn intent_similarity_different_texts() {
         let sim = intent_similarity("key value store", "image recognition neural network");
-        assert!(sim < 0.3, "unrelated texts must have low similarity, got {}", sim);
+        assert!(
+            sim < 0.3,
+            "unrelated texts must have low similarity, got {}",
+            sim
+        );
     }
 
     #[test]

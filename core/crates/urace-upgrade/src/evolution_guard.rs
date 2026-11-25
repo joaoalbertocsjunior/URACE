@@ -10,7 +10,11 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum EvolutionGuardError {
     #[error("regression in metric '{metric}': baseline={baseline}, candidate={candidate}")]
-    Regression { metric: String, baseline: f64, candidate: f64 },
+    Regression {
+        metric: String,
+        baseline: f64,
+        candidate: f64,
+    },
 
     #[error("missing metric '{metric}' in candidate snapshot")]
     MissingMetric { metric: String },
@@ -35,7 +39,10 @@ pub struct EvolutionGuard {
 
 impl EvolutionGuard {
     pub fn new(baseline: MetricSnapshot, tolerance: f64) -> Self {
-        EvolutionGuard { baseline, tolerance }
+        EvolutionGuard {
+            baseline,
+            tolerance,
+        }
     }
 
     /// Checks whether `candidate` regresses any metric beyond `tolerance`.
@@ -43,7 +50,9 @@ impl EvolutionGuard {
         for (metric, &base_val) in &self.baseline.metrics {
             match candidate.metrics.get(metric) {
                 None => {
-                    return Err(EvolutionGuardError::MissingMetric { metric: metric.clone() });
+                    return Err(EvolutionGuardError::MissingMetric {
+                        metric: metric.clone(),
+                    });
                 }
                 Some(&cand_val) => {
                     // For metrics where higher is better (e.g. throughput), regression = cand < base.
@@ -77,19 +86,25 @@ mod tests {
     #[test]
     fn no_regression_passes() {
         let guard = EvolutionGuard::new(snapshot(&[("throughput", 100.0)], "v1"), 0.05);
-        assert!(guard.check(&snapshot(&[("throughput", 100.0)], "v2")).is_ok());
+        assert!(guard
+            .check(&snapshot(&[("throughput", 100.0)], "v2"))
+            .is_ok());
     }
 
     #[test]
     fn within_tolerance_passes() {
         let guard = EvolutionGuard::new(snapshot(&[("throughput", 100.0)], "v1"), 0.05);
-        assert!(guard.check(&snapshot(&[("throughput", 96.0)], "v2")).is_ok());
+        assert!(guard
+            .check(&snapshot(&[("throughput", 96.0)], "v2"))
+            .is_ok());
     }
 
     #[test]
     fn beyond_tolerance_fails() {
         let guard = EvolutionGuard::new(snapshot(&[("throughput", 100.0)], "v1"), 0.05);
-        let err = guard.check(&snapshot(&[("throughput", 90.0)], "v2")).unwrap_err();
+        let err = guard
+            .check(&snapshot(&[("throughput", 90.0)], "v2"))
+            .unwrap_err();
         assert!(matches!(err, EvolutionGuardError::Regression { .. }));
     }
 

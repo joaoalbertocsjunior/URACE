@@ -79,14 +79,16 @@ impl PeerSelector {
 
     /// Update observed latency for a peer.
     pub fn record_latency(&self, peer_id: &str, latency_ms: f64) {
-        self.latencies.write().insert(peer_id.to_owned(), latency_ms);
+        self.latencies
+            .write()
+            .insert(peer_id.to_owned(), latency_ms);
     }
 
     /// Update reputation score for a peer.
     pub fn update_reputation(&self, peer_id: &str, score: f64) {
         self.reputations
             .write()
-            .insert(peer_id.to_owned(), score.min(1.0).max(0.0));
+            .insert(peer_id.to_owned(), score.clamp(0.0, 1.0));
     }
 
     /// Block a peer from selection.
@@ -143,7 +145,10 @@ impl PeerSelector {
         let (status, reason) = if rep < self.params.min_reputation {
             (
                 SelectionStatus::TemporarilyUnavailable,
-                format!("reputation {:.3} below minimum {:.3}", rep, self.params.min_reputation),
+                format!(
+                    "reputation {:.3} below minimum {:.3}",
+                    rep, self.params.min_reputation
+                ),
             )
         } else {
             (
@@ -185,7 +190,10 @@ impl PeerSelector {
             match (a_cand, b_cand) {
                 (true, false) => std::cmp::Ordering::Less,
                 (false, true) => std::cmp::Ordering::Greater,
-                _ => b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal),
+                _ => b
+                    .score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal),
             }
         });
         candidates
@@ -249,8 +257,8 @@ mod tests {
         let sel = PeerSelector::new(book, ScoringParams::default());
         sel.update_reputation("peer-a", 0.5);
         sel.update_reputation("peer-b", 0.5);
-        sel.record_latency("peer-a", 100.0);    // fast
-        sel.record_latency("peer-b", 4000.0);   // slow
+        sel.record_latency("peer-a", 100.0); // fast
+        sel.record_latency("peer-b", 4000.0); // slow
         let best = sel.select_best(2);
         assert_eq!(best[0].peer_id, "peer-a");
     }

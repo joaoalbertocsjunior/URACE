@@ -13,13 +13,26 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum PeerExchangeMsg {
-    Ping { from_peer_id: String, seq: u64 },
-    Pong { from_peer_id: String, seq: u64 },
-    PeerList { peers: Vec<NodeInfo> },
-    SealVoteRequest { seal_hash: String },
+    Ping {
+        from_peer_id: String,
+        seq: u64,
+    },
+    Pong {
+        from_peer_id: String,
+        seq: u64,
+    },
+    PeerList {
+        peers: Vec<NodeInfo>,
+    },
+    SealVoteRequest {
+        seal_hash: String,
+    },
     /// `signature_hex` is an Ed25519 signature over `b"seal-vote:" + seal_hash`.
     /// Empty string only when no signing key is available (test / stub mode).
-    SealVoteResponse { seal_hash: String, signature_hex: String },
+    SealVoteResponse {
+        seal_hash: String,
+        signature_hex: String,
+    },
 }
 
 /// Codec for peer exchange messages — serialize/deserialize via serde_json.
@@ -75,7 +88,10 @@ pub fn handle_message(
                 }
                 None => String::new(),
             };
-            Some(PeerExchangeMsg::SealVoteResponse { seal_hash, signature_hex })
+            Some(PeerExchangeMsg::SealVoteResponse {
+                seal_hash,
+                signature_hex,
+            })
         }
         PeerExchangeMsg::SealVoteResponse { .. } => None,
     }
@@ -95,7 +111,10 @@ mod tests {
 
     #[test]
     fn test_codec_roundtrip() {
-        let msg = PeerExchangeMsg::Ping { from_peer_id: "peer-a".into(), seq: 42 };
+        let msg = PeerExchangeMsg::Ping {
+            from_peer_id: "peer-a".into(),
+            seq: 42,
+        };
         let line = PeerExchangeCodec::encode(&msg).unwrap();
         let decoded = PeerExchangeCodec::decode(&line).unwrap();
         match decoded {
@@ -111,7 +130,10 @@ mod tests {
     fn test_ping_returns_pong() {
         let gate = AdmissionGate::new();
         let mut table = KademliaTable::new("self");
-        let msg = PeerExchangeMsg::Ping { from_peer_id: "peer-b".into(), seq: 1 };
+        let msg = PeerExchangeMsg::Ping {
+            from_peer_id: "peer-b".into(),
+            seq: 1,
+        };
         let resp = handle_message(msg, &mut table, &gate, None);
         assert!(matches!(resp, Some(PeerExchangeMsg::Pong { seq: 1, .. })));
     }
@@ -136,10 +158,15 @@ mod tests {
     fn test_seal_vote_unsigned_stub() {
         let gate = AdmissionGate::new();
         let mut table = KademliaTable::new("self");
-        let msg = PeerExchangeMsg::SealVoteRequest { seal_hash: "abc123".into() };
+        let msg = PeerExchangeMsg::SealVoteRequest {
+            seal_hash: "abc123".into(),
+        };
         let resp = handle_message(msg, &mut table, &gate, None);
         match resp {
-            Some(PeerExchangeMsg::SealVoteResponse { seal_hash, signature_hex }) => {
+            Some(PeerExchangeMsg::SealVoteResponse {
+                seal_hash,
+                signature_hex,
+            }) => {
                 assert_eq!(seal_hash, "abc123");
                 assert!(signature_hex.is_empty(), "no key → empty signature");
             }
@@ -152,12 +179,21 @@ mod tests {
         let key = SigningKey::generate(&mut OsRng);
         let gate = AdmissionGate::new();
         let mut table = KademliaTable::new("self");
-        let msg = PeerExchangeMsg::SealVoteRequest { seal_hash: "deadbeef".into() };
+        let msg = PeerExchangeMsg::SealVoteRequest {
+            seal_hash: "deadbeef".into(),
+        };
         let resp = handle_message(msg, &mut table, &gate, Some(&key));
         match resp {
-            Some(PeerExchangeMsg::SealVoteResponse { seal_hash, signature_hex }) => {
+            Some(PeerExchangeMsg::SealVoteResponse {
+                seal_hash,
+                signature_hex,
+            }) => {
                 assert_eq!(seal_hash, "deadbeef");
-                assert_eq!(signature_hex.len(), 128, "Ed25519 sig = 64 bytes = 128 hex chars");
+                assert_eq!(
+                    signature_hex.len(),
+                    128,
+                    "Ed25519 sig = 64 bytes = 128 hex chars"
+                );
                 // Verify signature is valid.
                 use ed25519_dalek::Verifier;
                 let vk = key.verifying_key();

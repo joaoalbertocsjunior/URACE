@@ -9,24 +9,24 @@
 //!   GET  /mcp/health       — liveness probe
 
 use axum::{
-    Router,
     extract::State,
     http::StatusCode,
     response::Json,
     routing::{get, post},
+    Router,
 };
 use serde_json::{json, Value};
 use std::{collections::HashMap, sync::Arc};
 use tracing::{info, warn};
 
-use urace_authority::authority::{Objective, resolve as authority_resolve};
+use urace_authority::authority::{resolve as authority_resolve, Objective};
 use urace_types::AuthorityOutcome;
 
 use crate::{
     api_interface::{
-        GetSettlementStatusResponse, GetWorkQueueResponse, HealthResponse,
-        JsonRpcError, JsonRpcRequest, JsonRpcResponse, ListSourcesResponse,
-        SettlementInfo, SyncSourceResponse, ToolCallParams, WorkTaskInfo,
+        GetSettlementStatusResponse, GetWorkQueueResponse, HealthResponse, JsonRpcError,
+        JsonRpcRequest, JsonRpcResponse, ListSourcesResponse, SettlementInfo, SyncSourceResponse,
+        ToolCallParams, WorkTaskInfo,
     },
     tools::ToolRegistry,
 };
@@ -115,9 +115,7 @@ async fn health_handler() -> Json<HealthResponse> {
     })
 }
 
-async fn tools_list_handler(
-    State(state): State<AppState>,
-) -> (StatusCode, Json<Value>) {
+async fn tools_list_handler(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
     let tools: Vec<&_> = state.registry.all().iter().collect();
     let body = json!({ "tools": tools });
     (StatusCode::OK, Json(body))
@@ -129,12 +127,18 @@ async fn tools_call_handler(
 ) -> (StatusCode, Json<Value>) {
     if request.jsonrpc != "2.0" {
         let err = JsonRpcError::new(request.id, -32600, "Invalid JSON-RPC version");
-        return (StatusCode::BAD_REQUEST, Json(serde_json::to_value(err).unwrap()));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::to_value(err).unwrap()),
+        );
     }
 
     if request.method != "tools/call" {
         let err = JsonRpcError::new(request.id.clone(), -32601, "Method not found");
-        return (StatusCode::NOT_FOUND, Json(serde_json::to_value(err).unwrap()));
+        return (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::to_value(err).unwrap()),
+        );
     }
 
     // Parse tool call params.
@@ -142,14 +146,20 @@ async fn tools_call_handler(
         Ok(p) => p,
         Err(e) => {
             let err = JsonRpcError::new(request.id, -32602, format!("Invalid params: {e}"));
-            return (StatusCode::BAD_REQUEST, Json(serde_json::to_value(err).unwrap()));
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::to_value(err).unwrap()),
+            );
         }
     };
 
     // Verify the tool exists.
     if state.registry.get(&params.name).is_none() {
         let err = JsonRpcError::new(request.id, -32602, format!("Unknown tool: {}", params.name));
-        return (StatusCode::BAD_REQUEST, Json(serde_json::to_value(err).unwrap()));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::to_value(err).unwrap()),
+        );
     }
 
     // §62z authority gate — required for all mutating tools.
@@ -185,27 +195,31 @@ async fn tools_call_handler(
                     resolution.outcome, resolution.basis
                 ),
             );
-            return (StatusCode::FORBIDDEN, Json(serde_json::to_value(err).unwrap()));
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::to_value(err).unwrap()),
+            );
         }
     }
 
     // Dispatch to tool handler.
     let result = dispatch_tool(&params.name, params.arguments).await;
     let response = JsonRpcResponse::ok(request.id, result);
-    (StatusCode::OK, Json(serde_json::to_value(response).unwrap()))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(response).unwrap()),
+    )
 }
 
 // ── Tool dispatch ─────────────────────────────────────────────────────────────
 
 async fn dispatch_tool(name: &str, _args: Value) -> Value {
     match name {
-        "list_sources" => {
-            serde_json::to_value(ListSourcesResponse {
-                schema_version: "1.0".into(),
-                sources: vec![],
-            })
-            .unwrap_or(Value::Null)
-        }
+        "list_sources" => serde_json::to_value(ListSourcesResponse {
+            schema_version: "1.0".into(),
+            sources: vec![],
+        })
+        .unwrap_or(Value::Null),
 
         "sync_source" => {
             let source_name = _args
@@ -221,33 +235,29 @@ async fn dispatch_tool(name: &str, _args: Value) -> Value {
             .unwrap_or(Value::Null)
         }
 
-        "get_work_queue" => {
-            serde_json::to_value(GetWorkQueueResponse {
-                schema_version: "1.0".into(),
-                tasks: vec![WorkTaskInfo {
-                    id: "placeholder".into(),
-                    description: "No live tasks; connect to daemon for real data.".into(),
-                    status: "none".into(),
-                    started_at: None,
-                }],
-                total: 0,
-            })
-            .unwrap_or(Value::Null)
-        }
+        "get_work_queue" => serde_json::to_value(GetWorkQueueResponse {
+            schema_version: "1.0".into(),
+            tasks: vec![WorkTaskInfo {
+                id: "placeholder".into(),
+                description: "No live tasks; connect to daemon for real data.".into(),
+                status: "none".into(),
+                started_at: None,
+            }],
+            total: 0,
+        })
+        .unwrap_or(Value::Null),
 
-        "get_settlement_status" => {
-            serde_json::to_value(GetSettlementStatusResponse {
-                schema_version: "1.0".into(),
-                settlements: vec![SettlementInfo {
-                    id: "placeholder".into(),
-                    amount: "0".into(),
-                    status: "none".into(),
-                    settled_at: String::new(),
-                }],
-                total: 0,
-            })
-            .unwrap_or(Value::Null)
-        }
+        "get_settlement_status" => serde_json::to_value(GetSettlementStatusResponse {
+            schema_version: "1.0".into(),
+            settlements: vec![SettlementInfo {
+                id: "placeholder".into(),
+                amount: "0".into(),
+                status: "none".into(),
+                settled_at: String::new(),
+            }],
+            total: 0,
+        })
+        .unwrap_or(Value::Null),
 
         "get_status" => {
             json!({
@@ -266,7 +276,10 @@ async fn dispatch_tool(name: &str, _args: Value) -> Value {
         }
 
         "post_work_task" => {
-            let task_id = _args.get("task_id").and_then(|v| v.as_str()).unwrap_or("unknown");
+            let task_id = _args
+                .get("task_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown");
             json!({
                 "schema_version": "1.0",
                 "status": "queued",
@@ -299,10 +312,7 @@ mod tests {
         // Authority config: grant "local implementation changes" delegated scope
         // so that mutating tool calls pass the authority gate in tests.
         let mut authority_config = HashMap::new();
-        authority_config.insert(
-            "delegated".into(),
-            json!(["local implementation changes"]),
-        );
+        authority_config.insert("delegated".into(), json!(["local implementation changes"]));
         authority_config.insert("reserved".into(), json!([]));
 
         McpServer::new(McpServerConfig {
@@ -311,14 +321,21 @@ mod tests {
         })
     }
 
-    async fn send(router: Router, method: Method, uri: &str, body: Option<Value>) -> axum::response::Response {
+    async fn send(
+        router: Router,
+        method: Method,
+        uri: &str,
+        body: Option<Value>,
+    ) -> axum::response::Response {
         let req_builder = Request::builder()
             .method(method)
             .uri(uri)
             .header("content-type", "application/json");
 
         let req = if let Some(body) = body {
-            req_builder.body(Body::from(serde_json::to_string(&body).unwrap())).unwrap()
+            req_builder
+                .body(Body::from(serde_json::to_string(&body).unwrap()))
+                .unwrap()
         } else {
             req_builder.body(Body::empty()).unwrap()
         };
@@ -341,10 +358,15 @@ mod tests {
         let resp = send(router, Method::POST, "/mcp/tools/list", Some(json!({}))).await;
         assert_eq!(resp.status(), StatusCode::OK);
 
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body: Value = serde_json::from_slice(&bytes).unwrap();
         let tools = body["tools"].as_array().unwrap();
-        assert!(!tools.is_empty(), "tools/list must return at least one tool");
+        assert!(
+            !tools.is_empty(),
+            "tools/list must return at least one tool"
+        );
     }
 
     #[tokio::test]

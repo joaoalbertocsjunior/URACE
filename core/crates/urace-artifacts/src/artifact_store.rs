@@ -61,7 +61,9 @@ impl ArtifactStore {
     }
 
     fn meta_path(&self, artifact_id: &str) -> PathBuf {
-        self.root.join("artifact-meta").join(format!("{artifact_id}.json"))
+        self.root
+            .join("artifact-meta")
+            .join(format!("{artifact_id}.json"))
     }
 
     fn dek_path(&self, artifact_id: &str) -> PathBuf {
@@ -85,7 +87,8 @@ impl ArtifactStore {
         let meta_path = self.meta_path(&artifact_id);
         if meta_path.exists() {
             // Idempotent — return existing meta.
-            let existing: ArtifactMeta = serde_json::from_str(&std::fs::read_to_string(&meta_path)?)?;
+            let existing: ArtifactMeta =
+                serde_json::from_str(&std::fs::read_to_string(&meta_path)?)?;
             return Ok(existing);
         }
 
@@ -160,22 +163,42 @@ fn now_iso() -> String {
 }
 
 fn epoch_to_parts(mut secs: u64) -> (u64, u64, u64, u64, u64, u64) {
-    let s = secs % 60; secs /= 60;
-    let mi = secs % 60; secs /= 60;
-    let h = secs % 24; secs /= 24;
+    let s = secs % 60;
+    secs /= 60;
+    let mi = secs % 60;
+    secs /= 60;
+    let h = secs % 24;
+    secs /= 24;
     // Days since 1970-01-01.
     let mut days = secs;
     let mut y = 1970u64;
     loop {
         let dy = if is_leap(y) { 366 } else { 365 };
-        if days < dy { break; }
+        if days < dy {
+            break;
+        }
         days -= dy;
         y += 1;
     }
-    let months = [31u64, if is_leap(y) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let months = [
+        31u64,
+        if is_leap(y) { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     let mut mo = 1u64;
     for dm in &months {
-        if days < *dm { break; }
+        if days < *dm {
+            break;
+        }
         days -= dm;
         mo += 1;
     }
@@ -183,7 +206,7 @@ fn epoch_to_parts(mut secs: u64) -> (u64, u64, u64, u64, u64, u64) {
 }
 
 fn is_leap(y: u64) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

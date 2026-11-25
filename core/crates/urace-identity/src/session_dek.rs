@@ -88,12 +88,17 @@ impl SessionDek {
     pub fn derive(master_key: &[u8; 32], session_id: &str) -> Result<Self, DekError> {
         let hk = Hkdf::<Sha256>::new(Some(session_id.as_bytes()), master_key);
         let mut dek = Zeroizing::new([0u8; 32]);
-        hk.expand(HKDF_INFO, dek.as_mut()).map_err(|_| DekError::HkdfExpand)?;
+        hk.expand(HKDF_INFO, dek.as_mut())
+            .map_err(|_| DekError::HkdfExpand)?;
 
         // key_id = hex of first 8 bytes of the DEK (non-secret identifier).
         let key_id = hex::encode(&dek[..8]);
 
-        Ok(SessionDek { key_id, dek, created_at_secs: now_secs_f64() })
+        Ok(SessionDek {
+            key_id,
+            dek,
+            created_at_secs: now_secs_f64(),
+        })
     }
 }
 
@@ -149,9 +154,15 @@ mod tests {
     fn debug_does_not_leak_dek() {
         let dek = SessionDek::generate(&mut rng());
         let dbg = format!("{dek:?}");
-        assert!(dbg.contains("REDACTED"), "Debug must not expose key material");
+        assert!(
+            dbg.contains("REDACTED"),
+            "Debug must not expose key material"
+        );
         // Confirm the actual key bytes are not in the output.
         let key_hex = hex::encode(*dek.dek);
-        assert!(!dbg.contains(&key_hex), "hex of DEK must not appear in Debug output");
+        assert!(
+            !dbg.contains(&key_hex),
+            "hex of DEK must not appear in Debug output"
+        );
     }
 }

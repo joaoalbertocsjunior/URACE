@@ -32,7 +32,10 @@ impl McpTool {
             name: name.into(),
             description: description.into(),
             input_schema: schema,
-            annotations: ToolAnnotations { read_only: true, destructive: false },
+            annotations: ToolAnnotations {
+                read_only: true,
+                destructive: false,
+            },
         }
     }
 
@@ -41,7 +44,10 @@ impl McpTool {
             name: name.into(),
             description: description.into(),
             input_schema: schema,
-            annotations: ToolAnnotations { read_only: false, destructive: false },
+            annotations: ToolAnnotations {
+                read_only: false,
+                destructive: false,
+            },
         }
     }
 }
@@ -168,7 +174,9 @@ impl ToolRegistry {
 
     /// Whether a tool is read-only (no authority gate needed for reads).
     pub fn is_read_only(&self, name: &str) -> bool {
-        self.get(name).map(|t| t.annotations.read_only).unwrap_or(false)
+        self.get(name)
+            .map(|t| t.annotations.read_only)
+            .unwrap_or(false)
     }
 }
 

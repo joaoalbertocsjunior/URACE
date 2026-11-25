@@ -179,7 +179,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         {
             let store = ProductStore::new(dir.path()).unwrap();
-            store.create(make_profile("p1", "Persistent Product")).unwrap();
+            store
+                .create(make_profile("p1", "Persistent Product"))
+                .unwrap();
         }
         // Re-open — should replay log.
         let store2 = ProductStore::new(dir.path()).unwrap();

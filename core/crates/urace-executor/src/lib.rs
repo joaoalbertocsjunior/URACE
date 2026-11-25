@@ -23,11 +23,11 @@ pub use retry_engine::{parse_retry_after, RetryEngine, RetryOutcome, RetryPolicy
 pub use routing::{select_provider, ProviderDef, UnavailabilityClass};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::time::Instant;
 use thiserror::Error;
 use urace_authority::authority::{resolve, Objective};
-use std::collections::HashMap;
-use serde_json::Value;
-use std::time::Instant;
 
 #[derive(Debug, Error)]
 pub enum ExecutorError {
@@ -54,7 +54,11 @@ pub struct SandboxConfig {
 
 impl Default for SandboxConfig {
     fn default() -> Self {
-        SandboxConfig { cpu_ms: 5000, memory_mb: 256, timeout_secs: 30 }
+        SandboxConfig {
+            cpu_ms: 5000,
+            memory_mb: 256,
+            timeout_secs: 30,
+        }
     }
 }
 
@@ -75,7 +79,11 @@ pub struct ResourceLimits {
 
 impl Default for ResourceLimits {
     fn default() -> Self {
-        ResourceLimits { cpu_ms: 5000, memory_mb: 256, timeout_secs: 30 }
+        ResourceLimits {
+            cpu_ms: 5000,
+            memory_mb: 256,
+            timeout_secs: 30,
+        }
     }
 }
 
@@ -105,7 +113,11 @@ pub trait SandboxBackend: Send + Sync {
     /// - Clear the parent environment before spawning
     /// - Enforce CPU, memory, and wall-clock limits
     /// - Return stdout/stderr as `output` on success
-    fn execute(&self, code: &str, limits: &ResourceLimits) -> Result<ExecutionResult, ExecutorError>;
+    fn execute(
+        &self,
+        code: &str,
+        limits: &ResourceLimits,
+    ) -> Result<ExecutionResult, ExecutorError>;
 
     /// Return a human-readable name for this backend.
     fn name(&self) -> &'static str;
@@ -120,7 +132,11 @@ pub trait SandboxBackend: Send + Sync {
 pub struct StubBackend;
 
 impl SandboxBackend for StubBackend {
-    fn execute(&self, code: &str, limits: &ResourceLimits) -> Result<ExecutionResult, ExecutorError> {
+    fn execute(
+        &self,
+        code: &str,
+        limits: &ResourceLimits,
+    ) -> Result<ExecutionResult, ExecutorError> {
         use std::process::Command;
         use std::time::Instant;
 
@@ -211,7 +227,9 @@ impl ExecutorPool {
 
         // Step 4: Execute via the configured sandbox backend.
         let exec_start = Instant::now();
-        let mut result = self.backend.execute(&request.code, &request.resource_limits)?;
+        let mut result = self
+            .backend
+            .execute(&request.code, &request.resource_limits)?;
         result.executor_id = request.executor_id.clone();
         result.duration_ms = exec_start.elapsed().as_millis() as u64;
         Ok(result)
@@ -253,7 +271,10 @@ pub fn detect_credential_leak(code: &str) -> Option<String> {
     ];
     for (pattern, description) in &patterns {
         if code.contains(pattern) {
-            return Some(format!("credential pattern '{}' detected: {}", pattern, description));
+            return Some(format!(
+                "credential pattern '{}' detected: {}",
+                pattern, description
+            ));
         }
     }
     None
@@ -277,9 +298,10 @@ pub fn authority_check(
     };
     let resolution = resolve(&obj, authority_config, None, constraints);
     if !resolution.outcome.may_proceed() {
-        return Err(ExecutorError::AuthorityDenied(
-            format!("{:?}: {}", resolution.outcome, resolution.basis)
-        ));
+        return Err(ExecutorError::AuthorityDenied(format!(
+            "{:?}: {}",
+            resolution.outcome, resolution.basis
+        )));
     }
     Ok(())
 }
@@ -287,15 +309,6 @@ pub fn authority_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn default_request() -> ExecutionRequest {
-        ExecutionRequest {
-            executor_id: "test-executor".into(),
-            scope: "test".into(),
-            code: "print('hello')".into(),
-            resource_limits: ResourceLimits::default(),
-        }
-    }
 
     #[test]
     fn test_sandbox_config_defaults() {
@@ -346,20 +359,32 @@ mod tests {
     #[test]
     fn test_validate_limits_cpu_exceeded() {
         let pool = ExecutorPool::new(HashMap::new(), vec![]);
-        let limits = ResourceLimits { cpu_ms: 100_000, ..ResourceLimits::default() };
-        assert!(matches!(pool.validate_limits(&limits), Err(ExecutorError::SandboxViolation(_))));
+        let limits = ResourceLimits {
+            cpu_ms: 100_000,
+            ..ResourceLimits::default()
+        };
+        assert!(matches!(
+            pool.validate_limits(&limits),
+            Err(ExecutorError::SandboxViolation(_))
+        ));
     }
 
     #[test]
     fn test_validate_limits_memory_exceeded() {
         let pool = ExecutorPool::new(HashMap::new(), vec![]);
-        let limits = ResourceLimits { memory_mb: 1024, ..ResourceLimits::default() };
-        assert!(matches!(pool.validate_limits(&limits), Err(ExecutorError::SandboxViolation(_))));
+        let limits = ResourceLimits {
+            memory_mb: 1024,
+            ..ResourceLimits::default()
+        };
+        assert!(matches!(
+            pool.validate_limits(&limits),
+            Err(ExecutorError::SandboxViolation(_))
+        ));
     }
 
     #[test]
     fn test_credential_leak_rejected_by_pool() {
-        let pool = ExecutorPool::new(HashMap::new(), vec!["allow_all".into()]);
+        let _pool = ExecutorPool::new(HashMap::new(), vec!["allow_all".into()]);
         let req = ExecutionRequest {
             executor_id: "test".into(),
             scope: "test".into(),
@@ -375,7 +400,9 @@ mod tests {
     #[test]
     fn stub_backend_executes() {
         let backend = StubBackend;
-        let result = backend.execute("hello world", &ResourceLimits::default()).unwrap();
+        let result = backend
+            .execute("hello world", &ResourceLimits::default())
+            .unwrap();
         assert!(result.success);
         assert!(result.output.is_some());
     }

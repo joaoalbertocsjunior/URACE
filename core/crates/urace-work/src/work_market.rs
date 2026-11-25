@@ -50,12 +50,10 @@ impl WorkMarket {
     ///
     /// Checks policy before accepting. `authority_checked` must be `true`
     /// when the §62z gate has already been passed.
-    pub fn post_task(
-        &self,
-        task: WorkTask,
-        authority_checked: bool,
-    ) -> Result<(), WorkError> {
-        let active = self.active_job_count.load(std::sync::atomic::Ordering::SeqCst);
+    pub fn post_task(&self, task: WorkTask, authority_checked: bool) -> Result<(), WorkError> {
+        let active = self
+            .active_job_count
+            .load(std::sync::atomic::Ordering::SeqCst);
         self.policy.check(
             task.budget_ucr,
             &task.task_id, // scope is task_id for now; callers may supply a scope field
@@ -146,10 +144,7 @@ impl WorkMarket {
     }
 
     pub fn active_bid_count(&self, task_id: &str) -> usize {
-        self.active_bids
-            .get(task_id)
-            .map(|b| b.len())
-            .unwrap_or(0)
+        self.active_bids.get(task_id).map(|b| b.len()).unwrap_or(0)
     }
 }
 

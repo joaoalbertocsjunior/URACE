@@ -38,7 +38,11 @@ pub struct PeerAdmissionRecord {
 }
 
 impl PeerAdmissionRecord {
-    fn new(peer_id: impl Into<String>, state: PeerAdmissionState, reason: impl Into<String>) -> Self {
+    fn new(
+        peer_id: impl Into<String>,
+        state: PeerAdmissionState,
+        reason: impl Into<String>,
+    ) -> Self {
         PeerAdmissionRecord {
             peer_id: peer_id.into(),
             state,
@@ -59,7 +63,9 @@ pub struct AdmissionGate {
 
 impl AdmissionGate {
     pub fn new() -> Self {
-        AdmissionGate { records: DashMap::new() }
+        AdmissionGate {
+            records: DashMap::new(),
+        }
     }
 
     /// Attempt to admit a peer with the given protocol generation.
@@ -70,17 +76,19 @@ impl AdmissionGate {
             let mut rec = PeerAdmissionRecord::new(
                 peer_id,
                 PeerAdmissionState::Rejected,
-                format!("protocol_gen {} < MIN_SUPPORTED {}", protocol_gen, MIN_SUPPORTED_PROTOCOL_GEN),
+                format!(
+                    "protocol_gen {} < MIN_SUPPORTED {}",
+                    protocol_gen, MIN_SUPPORTED_PROTOCOL_GEN
+                ),
             );
             rec.protocol_gen = Some(protocol_gen);
             self.records.insert(peer_id.to_string(), rec);
             return PeerAdmissionState::Rejected;
         }
 
-        let mut rec = self
-            .records
-            .entry(peer_id.to_string())
-            .or_insert_with(|| PeerAdmissionRecord::new(peer_id, PeerAdmissionState::Quarantined, "initial"));
+        let mut rec = self.records.entry(peer_id.to_string()).or_insert_with(|| {
+            PeerAdmissionRecord::new(peer_id, PeerAdmissionState::Quarantined, "initial")
+        });
         rec.state = PeerAdmissionState::Admitted;
         rec.protocol_gen = Some(protocol_gen);
         rec.reason = "protocol_gen verified".into();
@@ -97,10 +105,9 @@ impl AdmissionGate {
 
     /// Quarantine a peer (e.g., after misbehaviour).
     pub fn quarantine(&self, peer_id: &str, reason: &str) {
-        let mut rec = self
-            .records
-            .entry(peer_id.to_string())
-            .or_insert_with(|| PeerAdmissionRecord::new(peer_id, PeerAdmissionState::Quarantined, reason));
+        let mut rec = self.records.entry(peer_id.to_string()).or_insert_with(|| {
+            PeerAdmissionRecord::new(peer_id, PeerAdmissionState::Quarantined, reason)
+        });
         rec.state = PeerAdmissionState::Quarantined;
         rec.reason = reason.to_string();
     }
@@ -183,7 +190,10 @@ mod tests {
     #[test]
     fn test_relay_only_no_real_ip() {
         let session = DiscoverySession::new("peer-c", true);
-        assert!(!session.may_announce_real_ip(), "relay_only session must never expose real IP");
+        assert!(
+            !session.may_announce_real_ip(),
+            "relay_only session must never expose real IP"
+        );
     }
 
     #[test]

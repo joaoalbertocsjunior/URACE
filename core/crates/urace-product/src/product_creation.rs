@@ -63,7 +63,7 @@ impl ProductFactory {
                 "description must be non-empty".to_owned(),
             ));
         }
-        if description.as_bytes().len() > MAX_DESCRIPTION_BYTES {
+        if description.len() > MAX_DESCRIPTION_BYTES {
             return Err(CreationError::InvalidDescription(format!(
                 "description exceeds maximum size of {} bytes",
                 MAX_DESCRIPTION_BYTES
@@ -202,7 +202,9 @@ mod tests {
     fn is_explicit_creation_detection() {
         assert!(ProductFactory::is_explicit_creation("create a new app"));
         assert!(ProductFactory::is_explicit_creation("Build a new service"));
-        assert!(!ProductFactory::is_explicit_creation("add a feature to the existing app"));
+        assert!(!ProductFactory::is_explicit_creation(
+            "add a feature to the existing app"
+        ));
         assert!(!ProductFactory::is_explicit_creation("how does this work?"));
     }
 }

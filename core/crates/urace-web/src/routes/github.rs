@@ -4,13 +4,13 @@
 //!
 //! Ports `routes/github_router.py`.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::State,
     routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -19,27 +19,26 @@ pub fn router() -> Router<AppState> {
         .route("/trigger-workflow", post(github_trigger_workflow))
 }
 
-async fn github_status(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn github_status(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
     // Look for github adapter status under sources or a dedicated github_status key
-    let github = state.get("github_status")
-        .cloned()
-        .unwrap_or_else(|| {
-            // Try to find from sources.github
-            state.get("sources")
-                .and_then(|s| s.as_object())
-                .and_then(|m| m.values().find(|v| {
-                    v.get("kind").and_then(|k| k.as_str()) == Some("github")
-                }))
-                .cloned()
-                .unwrap_or_else(|| serde_json::json!({
+    let github = state.get("github_status").cloned().unwrap_or_else(|| {
+        // Try to find from sources.github
+        state
+            .get("sources")
+            .and_then(|s| s.as_object())
+            .and_then(|m| {
+                m.values()
+                    .find(|v| v.get("kind").and_then(|k| k.as_str()) == Some("github"))
+            })
+            .cloned()
+            .unwrap_or_else(|| {
+                serde_json::json!({
                     "connected": false,
                     "github_token_set": false,
-                }))
-        });
+                })
+            })
+    });
     Json(github)
 }
 
@@ -48,7 +47,9 @@ pub struct PushGoalsBody {
     #[serde(default = "default_dry_run")]
     pub dry_run: bool,
 }
-fn default_dry_run() -> bool { true }
+fn default_dry_run() -> bool {
+    true
+}
 
 async fn github_push_goals(
     State(_s): State<AppState>,
@@ -69,7 +70,9 @@ pub struct TriggerWorkflowBody {
     #[serde(default = "default_ref")]
     pub r#ref: String,
 }
-fn default_ref() -> String { "main".to_string() }
+fn default_ref() -> String {
+    "main".to_string()
+}
 
 async fn github_trigger_workflow(
     State(_s): State<AppState>,

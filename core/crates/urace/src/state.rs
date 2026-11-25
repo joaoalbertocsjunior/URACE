@@ -79,7 +79,10 @@ mod tests {
     fn test_save_and_reload() {
         let dir = TempDir::new().unwrap();
         let mut state = RuntimeState::default();
-        state.set_source("test-id", serde_json::json!({"kind": "directory", "path": "/tmp"}));
+        state.set_source(
+            "test-id",
+            serde_json::json!({"kind": "directory", "path": "/tmp"}),
+        );
         state.constraints.push("test-constraint".into());
         state.save(dir.path()).unwrap();
 

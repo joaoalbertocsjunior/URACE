@@ -5,7 +5,7 @@
 //!
 //! To add a new executor type: implement `CostAdapter`, nothing else.
 
-use crate::cost_model::{PricingError, PricingTable};
+use crate::cost_model::PricingTable;
 
 /// Port for computing USD cost from token usage.
 pub trait CostAdapter: Send + Sync {
@@ -30,7 +30,9 @@ pub struct DefaultCostAdapter {
 
 impl DefaultCostAdapter {
     pub fn new() -> Self {
-        DefaultCostAdapter { table: PricingTable::default_table() }
+        DefaultCostAdapter {
+            table: PricingTable::default_table(),
+        }
     }
 
     /// Create with a custom pricing table (e.g. for tests or extended models).
@@ -54,10 +56,15 @@ impl CostAdapter for DefaultCostAdapter {
         cache_read_tokens: u64,
         cache_write_tokens: u64,
     ) -> Option<f64> {
-        match self.table.cost_usd(model, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens) {
-            Ok(cost) => Some(cost),
-            Err(PricingError::UnknownModel(_)) => None,
-        }
+        self.table
+            .cost_usd(
+                model,
+                input_tokens,
+                output_tokens,
+                cache_write_tokens,
+                cache_read_tokens,
+            )
+            .ok()
     }
 }
 
@@ -93,7 +100,9 @@ mod tests {
     #[test]
     fn default_adapter_unknown_model() {
         let adapter = DefaultCostAdapter::new();
-        assert!(adapter.cost_for_usage("no-such-model", 100, 100, 0, 0).is_none());
+        assert!(adapter
+            .cost_for_usage("no-such-model", 100, 100, 0, 0)
+            .is_none());
     }
 
     #[test]

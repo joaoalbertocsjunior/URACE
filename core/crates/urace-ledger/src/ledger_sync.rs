@@ -156,7 +156,11 @@ pub fn sync_summary(rows: &[Value]) -> SyncSummary {
         (None, None)
     };
 
-    let included = if seal.is_some() { 1 + tail.len() } else { tail.len() };
+    let included = if seal.is_some() {
+        1 + tail.len()
+    } else {
+        tail.len()
+    };
     let pruned = rows.len().saturating_sub(included);
 
     SyncSummary {
@@ -221,7 +225,11 @@ pub fn apply_tail_payload(
         }
     }
 
-    Ok(MergeResult { merged, added, skipped })
+    Ok(MergeResult {
+        merged,
+        added,
+        skipped,
+    })
 }
 
 // ── Sync packet types ─────────────────────────────────────────────────────────
@@ -237,11 +245,17 @@ pub struct SyncPayload {
 pub fn build_sync_payload(rows: &[Value]) -> SyncPayload {
     let seal = latest_seal(rows);
     if seal.is_none() {
-        return SyncPayload { seal: None, tail: vec![] };
+        return SyncPayload {
+            seal: None,
+            tail: vec![],
+        };
     }
     let seal_val = seal.unwrap().clone();
     let tail = tail_since_seal(rows, seal).to_vec();
-    SyncPayload { seal: Some(seal_val), tail }
+    SyncPayload {
+        seal: Some(seal_val),
+        tail,
+    }
 }
 
 /// Attestation record for a completed peer sync event.
@@ -310,7 +324,11 @@ pub fn fork_resolution_policy(local_rows: &[Value], payload: &SyncPayload) -> Fo
         .last()
         .and_then(|r| r.get("sha256"))
         .and_then(Value::as_str)
-        .or_else(|| incoming_seal.and_then(|s| s.get("sha256")).and_then(Value::as_str))
+        .or_else(|| {
+            incoming_seal
+                .and_then(|s| s.get("sha256"))
+                .and_then(Value::as_str)
+        })
         .unwrap_or(&"0".repeat(64))
         .to_owned();
 
@@ -439,7 +457,14 @@ pub fn exchange_checkpoint(
         rec.peer_head_sha = Some(peer_head);
         rec.peer_row_count = Some(peers.len());
         rec.matches = Some(matches);
-        rec.status = Some(if matches { "MATCH" } else { "CHECKPOINT_CONFLICT" }.to_owned());
+        rec.status = Some(
+            if matches {
+                "MATCH"
+            } else {
+                "CHECKPOINT_CONFLICT"
+            }
+            .to_owned(),
+        );
     }
 
     rec
@@ -532,7 +557,10 @@ mod tests {
         let tail: Vec<Value> = (0..10)
             .map(|i| json!({"sha256": format!("r{i}")}))
             .collect();
-        let payload = SyncPayload { seal: Some(seal), tail };
+        let payload = SyncPayload {
+            seal: Some(seal),
+            tail,
+        };
         let res = fork_resolution_policy(&local, &payload);
         assert_eq!(res.action, ForkAction::AcceptIncoming);
         assert!(res.fork_detected);

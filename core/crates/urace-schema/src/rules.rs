@@ -30,23 +30,20 @@ pub enum RuleKind {
 impl RuleKind {
     pub fn level(self) -> u8 {
         match self {
-            RuleKind::Purpose                 => 0,
-            RuleKind::Directive
-            | RuleKind::Permission
-            | RuleKind::Prohibition          => 1,
-            RuleKind::Objective
-            | RuleKind::Policy               => 2,
+            RuleKind::Purpose => 0,
+            RuleKind::Directive | RuleKind::Permission | RuleKind::Prohibition => 1,
+            RuleKind::Objective | RuleKind::Policy => 2,
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            RuleKind::Purpose     => "PURPOSE",
-            RuleKind::Directive   => "DIRECTIVE",
-            RuleKind::Permission  => "PERMISSION",
+            RuleKind::Purpose => "PURPOSE",
+            RuleKind::Directive => "DIRECTIVE",
+            RuleKind::Permission => "PERMISSION",
             RuleKind::Prohibition => "PROHIBITION",
-            RuleKind::Objective   => "OBJECTIVE",
-            RuleKind::Policy      => "POLICY",
+            RuleKind::Objective => "OBJECTIVE",
+            RuleKind::Policy => "POLICY",
         }
     }
 }
@@ -136,23 +133,17 @@ impl RuleEngine {
                 continue;
             }
 
-            match rule.kind {
-                RuleKind::Prohibition => {
-                    if self.statement_matches_context(&rule.statement, context) {
-                        violations.push(RuleViolation {
-                            rule_id: rule.id.clone(),
-                            kind: rule.kind,
-                            statement: rule.statement.clone(),
-                            detail: format!(
-                                "Prohibited action matches rule: {}",
-                                rule.id
-                            ),
-                        });
-                    }
-                }
+            if rule.kind == RuleKind::Prohibition
+                && self.statement_matches_context(&rule.statement, context)
+            {
+                violations.push(RuleViolation {
+                    rule_id: rule.id.clone(),
+                    kind: rule.kind,
+                    statement: rule.statement.clone(),
+                    detail: format!("Prohibited action matches rule: {}", rule.id),
+                });
                 // PURPOSE, DIRECTIVE, PERMISSION, OBJECTIVE, POLICY are advisory
                 // at this evaluation layer; they do not block by themselves.
-                _ => {}
             }
         }
 
@@ -180,10 +171,17 @@ impl RuleEngine {
             return false;
         }
 
-        let context_text: String = context.values().map(|v| v.to_lowercase()).collect::<Vec<_>>().join(" ");
+        let context_text: String = context
+            .values()
+            .map(|v| v.to_lowercase())
+            .collect::<Vec<_>>()
+            .join(" ");
 
         // Violation if at least 2 keywords match (reduce false positives).
-        let matches = keywords.iter().filter(|kw| context_text.contains(**kw)).count();
+        let matches = keywords
+            .iter()
+            .filter(|kw| context_text.contains(**kw))
+            .count();
         matches >= 2.min(keywords.len())
     }
 }
@@ -195,7 +193,10 @@ mod tests {
     use super::*;
 
     fn ctx(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
@@ -218,7 +219,10 @@ mod tests {
     fn prohibition_matches_context() {
         let engine = RuleEngine::new();
         let rule = Rule::new("r1", RuleKind::Prohibition, "spend money transfer funds");
-        let result = engine.evaluate(&[rule], &ctx(&[("action", "spend money transfer to wallet")]));
+        let result = engine.evaluate(
+            &[rule],
+            &ctx(&[("action", "spend money transfer to wallet")]),
+        );
         assert!(!result.is_empty());
     }
 
@@ -227,7 +231,10 @@ mod tests {
         let engine = RuleEngine::new();
         let rule = Rule::new("r2", RuleKind::Permission, "allowed to deploy runtime");
         let result = engine.evaluate(&[rule], &ctx(&[("action", "allowed to deploy runtime")]));
-        assert!(result.is_empty(), "permissions should not produce violations");
+        assert!(
+            result.is_empty(),
+            "permissions should not produce violations"
+        );
     }
 
     #[test]
@@ -236,10 +243,13 @@ mod tests {
         let mut rule = Rule::new("r3", RuleKind::Prohibition, "spend money transfer");
         rule.scope = vec!["runtime".into()];
         // Context scope is "documentation" — rule should not apply.
-        let result = engine.evaluate(&[rule], &ctx(&[
-            ("scope", "documentation"),
-            ("action", "spend money transfer"),
-        ]));
+        let result = engine.evaluate(
+            &[rule],
+            &ctx(&[
+                ("scope", "documentation"),
+                ("action", "spend money transfer"),
+            ]),
+        );
         assert!(result.is_empty());
     }
 
@@ -339,11 +349,7 @@ pub fn rules_for_change(store: &RuleStore, change_id: &str) -> Vec<String> {
 ///
 /// Corresponds to `changes_for_rule` in `rules.py`.
 pub fn changes_for_rule(store: &RuleStore, rule_id: &str) -> Vec<String> {
-    store
-        .rule_changes
-        .get(rule_id)
-        .cloned()
-        .unwrap_or_default()
+    store.rule_changes.get(rule_id).cloned().unwrap_or_default()
 }
 
 /// Find rules with contradictory effects: a `Permission` and a `Prohibition`
@@ -354,8 +360,16 @@ pub fn changes_for_rule(store: &RuleStore, rule_id: &str) -> Vec<String> {
 pub fn detect_conflicts(store: &RuleStore) -> Vec<RuleConflict> {
     let active: Vec<&Rule> = store.rules.iter().filter(|r| r.active).collect();
 
-    let permissions: Vec<&Rule> = active.iter().copied().filter(|r| r.kind == RuleKind::Permission).collect();
-    let prohibitions: Vec<&Rule> = active.iter().copied().filter(|r| r.kind == RuleKind::Prohibition).collect();
+    let permissions: Vec<&Rule> = active
+        .iter()
+        .copied()
+        .filter(|r| r.kind == RuleKind::Permission)
+        .collect();
+    let prohibitions: Vec<&Rule> = active
+        .iter()
+        .copied()
+        .filter(|r| r.kind == RuleKind::Prohibition)
+        .collect();
 
     let mut conflicts = Vec::new();
 
@@ -365,7 +379,10 @@ pub fn detect_conflicts(store: &RuleStore) -> Vec<RuleConflict> {
             let proh_words = significant_words(&proh.statement);
 
             // Count overlapping significant keywords.
-            let overlap_count = perm_words.iter().filter(|w| proh_words.contains(*w)).count();
+            let overlap_count = perm_words
+                .iter()
+                .filter(|w| proh_words.contains(*w))
+                .count();
 
             if overlap_count >= 3 {
                 // Build a reason string listing the overlapping terms.
@@ -388,8 +405,16 @@ pub fn detect_conflicts(store: &RuleStore) -> Vec<RuleConflict> {
     }
 
     // Level invariant: a DIRECTIVE that explicitly negates PURPOSE keywords.
-    let purposes: Vec<&Rule> = active.iter().copied().filter(|r| r.kind == RuleKind::Purpose).collect();
-    let directives: Vec<&Rule> = active.iter().copied().filter(|r| r.kind == RuleKind::Directive).collect();
+    let purposes: Vec<&Rule> = active
+        .iter()
+        .copied()
+        .filter(|r| r.kind == RuleKind::Purpose)
+        .collect();
+    let directives: Vec<&Rule> = active
+        .iter()
+        .copied()
+        .filter(|r| r.kind == RuleKind::Directive)
+        .collect();
 
     const NEGATION_WORDS: &[&str] = &["not", "never", "avoid", "remove", "abandon", "drop"];
 
@@ -400,7 +425,10 @@ pub fn detect_conflicts(store: &RuleStore) -> Vec<RuleConflict> {
             let has_negation = NEGATION_WORDS.iter().any(|neg| dir_lower.contains(neg));
             if has_negation {
                 let dir_words = significant_words(&directive.statement);
-                let overlap_count = purpose_words.iter().filter(|w| dir_words.contains(*w)).count();
+                let overlap_count = purpose_words
+                    .iter()
+                    .filter(|w| dir_words.contains(*w))
+                    .count();
                 if overlap_count >= 2 {
                     conflicts.push(RuleConflict {
                         rule_a: purpose.id.clone(),
@@ -562,10 +590,18 @@ mod store_tests {
     #[test]
     fn inactive_rule_not_included_in_conflict() {
         let mut store = RuleStore::new();
-        let mut perm = make_rule("perm1", RuleKind::Permission, "allowed spend transfer send funds");
+        let mut perm = make_rule(
+            "perm1",
+            RuleKind::Permission,
+            "allowed spend transfer send funds",
+        );
         perm.active = false;
         store.add_rule(perm);
-        store.add_rule(make_rule("proh1", RuleKind::Prohibition, "must not spend transfer send funds"));
+        store.add_rule(make_rule(
+            "proh1",
+            RuleKind::Prohibition,
+            "must not spend transfer send funds",
+        ));
         // perm is inactive — no conflict.
         assert!(detect_conflicts(&store).is_empty());
     }
@@ -604,7 +640,12 @@ mod store_tests {
     fn two_level_chain() {
         let mut store = RuleStore::new();
         store.add_rule(make_rule("root", RuleKind::Purpose, "root"));
-        store.add_rule(make_rule_with_parent("child", RuleKind::Directive, "child", "root"));
+        store.add_rule(make_rule_with_parent(
+            "child",
+            RuleKind::Directive,
+            "child",
+            "root",
+        ));
 
         let chain = derivation_chain(&store, "child");
         // root-first ordering

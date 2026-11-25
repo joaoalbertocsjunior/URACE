@@ -33,7 +33,7 @@ pub fn handle_key_event(key: KeyEvent) -> AppEvent {
         // Tab → switch panel.
         KeyCode::Tab => AppEvent::NextPanel,
         // Navigation.
-        KeyCode::Up   | KeyCode::Char('k') => AppEvent::CursorUp,
+        KeyCode::Up | KeyCode::Char('k') => AppEvent::CursorUp,
         KeyCode::Down | KeyCode::Char('j') => AppEvent::CursorDown,
         // r → refresh.
         KeyCode::Char('r') if key.modifiers == KeyModifiers::NONE => AppEvent::Refresh,
@@ -44,20 +44,20 @@ pub fn handle_key_event(key: KeyEvent) -> AppEvent {
 /// Apply an `AppEvent` to the mutable `App` state.
 pub fn apply_event(event: AppEvent, app: &mut crate::app::App) {
     match event {
-        AppEvent::Quit       => app.should_quit = true,
-        AppEvent::NextPanel  => app.next_panel(),
-        AppEvent::CursorUp   => app.cursor_up(),
+        AppEvent::Quit => app.should_quit = true,
+        AppEvent::NextPanel => app.next_panel(),
+        AppEvent::CursorUp => app.cursor_up(),
         AppEvent::CursorDown => app.cursor_down(),
-        AppEvent::Refresh    => app.status_message = "refreshing…".into(),
-        AppEvent::None       => {}
+        AppEvent::Refresh => app.status_message = "refreshing…".into(),
+        AppEvent::None => {}
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use crate::app::App;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn up_down_navigate() {
-        assert_eq!(handle_key_event(key(KeyCode::Up)),   AppEvent::CursorUp);
+        assert_eq!(handle_key_event(key(KeyCode::Up)), AppEvent::CursorUp);
         assert_eq!(handle_key_event(key(KeyCode::Down)), AppEvent::CursorDown);
     }
 

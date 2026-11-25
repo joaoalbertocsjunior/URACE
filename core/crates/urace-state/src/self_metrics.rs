@@ -153,7 +153,12 @@ impl MetricsCollector {
     pub fn record_values(&self, values: HashMap<String, f64>) {
         let mut m = NodeMetrics::new();
         for (name, value) in values {
-            m.insert(MetricEntry::new(name, Some(value), "ratio", MetricDirection::None));
+            m.insert(MetricEntry::new(
+                name,
+                Some(value),
+                "ratio",
+                MetricDirection::None,
+            ));
         }
         self.record(m);
     }
@@ -179,7 +184,12 @@ mod tests {
     #[test]
     fn insert_and_retrieve() {
         let mut m = NodeMetrics::new();
-        m.insert(MetricEntry::new("test_pass_rate", Some(0.95), "ratio", MetricDirection::Nondecreasing));
+        m.insert(MetricEntry::new(
+            "test_pass_rate",
+            Some(0.95),
+            "ratio",
+            MetricDirection::Nondecreasing,
+        ));
         assert_eq!(m.metrics["test_pass_rate"].value, Some(0.95));
     }
 
@@ -192,7 +202,12 @@ mod tests {
     #[test]
     fn as_external_source_with_values() {
         let mut m = NodeMetrics::new();
-        m.insert(MetricEntry::new("x", Some(1.0), "count", MetricDirection::None));
+        m.insert(MetricEntry::new(
+            "x",
+            Some(1.0),
+            "count",
+            MetricDirection::None,
+        ));
         let src = m.as_external_source().unwrap();
         assert_eq!(src["kind"], "self_metrics");
         assert_eq!(src["values"]["x"], 1.0);
@@ -203,7 +218,12 @@ mod tests {
         let c = MetricsCollector::new(3);
         for i in 0..5u64 {
             let mut m = NodeMetrics::new();
-            m.insert(MetricEntry::new("seq", Some(i as f64), "count", MetricDirection::None));
+            m.insert(MetricEntry::new(
+                "seq",
+                Some(i as f64),
+                "count",
+                MetricDirection::None,
+            ));
             c.record(m);
         }
         assert_eq!(c.history().len(), 3);

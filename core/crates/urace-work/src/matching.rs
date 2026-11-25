@@ -55,9 +55,7 @@ pub fn match_score(task: &WorkTask, bid: &WorkBid) -> f64 {
         matched as f64 / task.required_capabilities.len() as f64
     };
 
-    let budget_score = if task.budget_ucr <= 0 {
-        1.0
-    } else if bid.bid_price_ucr <= task.budget_ucr {
+    let budget_score = if task.budget_ucr <= 0 || bid.bid_price_ucr <= task.budget_ucr {
         1.0
     } else {
         // Penalise overbids linearly — a bid at 2× budget scores 0.
@@ -134,7 +132,9 @@ pub fn select_best_bid<'a>(
     bids.iter().max_by(|a, b| {
         let score_a = blended_score(task, a, demand);
         let score_b = blended_score(task, b, demand);
-        score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+        score_a
+            .partial_cmp(&score_b)
+            .unwrap_or(std::cmp::Ordering::Equal)
     })
 }
 
@@ -214,10 +214,7 @@ mod tests {
     #[test]
     fn select_best_bid_returns_highest_score() {
         let t = task(&["rust"], 1000);
-        let bids = vec![
-            bid("low", &["python"], 500),
-            bid("high", &["rust"], 800),
-        ];
+        let bids = vec![bid("low", &["python"], 500), bid("high", &["rust"], 800)];
         let dc = DemandCounter::new();
         let winner = select_best_bid(&t, &bids, &dc).unwrap();
         assert_eq!(winner.bid_id, "high");

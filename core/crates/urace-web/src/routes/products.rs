@@ -7,12 +7,12 @@
 //!
 //! Ports `routes/products.py`.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -24,25 +24,21 @@ pub fn router() -> Router<AppState> {
         .route("/:name/deactivate", post(products_deactivate))
 }
 
-async fn products_list(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn products_list(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let products = state.get("products")
+    let products = state
+        .get("products")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
     Json(serde_json::Value::Array(products))
 }
 
-async fn products_status(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn products_status(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
     let active_product = state.get("active_product").cloned();
-    let lifecycle_state = state.get("lifecycle_state")
+    let lifecycle_state = state
+        .get("lifecycle_state")
         .and_then(|v| v.as_str())
         .unwrap_or("UNKNOWN");
     Json(serde_json::json!({
@@ -57,7 +53,8 @@ async fn products_improvements(
     _auth: BearerToken,
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let products = state.get("products")
+    let products = state
+        .get("products")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();

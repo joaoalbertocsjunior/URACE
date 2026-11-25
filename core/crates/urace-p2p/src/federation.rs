@@ -42,7 +42,9 @@ pub struct FederationStore {
 
 impl FederationStore {
     pub fn new() -> Self {
-        FederationStore { announcements: DashMap::new() }
+        FederationStore {
+            announcements: DashMap::new(),
+        }
     }
 
     /// Accept an incoming `NetworkAnnounce`.
@@ -125,7 +127,10 @@ mod tests {
         store.accept_announce(ann("net-3", 5)).unwrap();
         let err = store.accept_announce(ann("net-3", 5)).unwrap_err();
         match err {
-            FederationError::ReplayAttack { current_seq, incoming_seq } => {
+            FederationError::ReplayAttack {
+                current_seq,
+                incoming_seq,
+            } => {
                 assert_eq!(current_seq, 5);
                 assert_eq!(incoming_seq, 5);
             }

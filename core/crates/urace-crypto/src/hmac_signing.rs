@@ -30,8 +30,7 @@ pub struct SignedRecord {
 
 /// Derive a per-peer subkey: HMAC-SHA256(secret, peer_id).
 pub fn derive_key(peer_id: &str, secret: &[u8]) -> Zeroizing<[u8; 32]> {
-    let mut mac = HmacSha256::new_from_slice(secret)
-        .expect("HMAC accepts any key length");
+    let mut mac = HmacSha256::new_from_slice(secret).expect("HMAC accepts any key length");
     mac.update(peer_id.as_bytes());
     let result = mac.finalize().into_bytes();
     let mut out = Zeroizing::new([0u8; 32]);
@@ -63,7 +62,13 @@ pub fn sign(peer_id: &str, payload: &[u8], seq: u64, key: &[u8]) -> SignedRecord
             .unwrap_or(0.0)
     };
 
-    SignedRecord { peer_id: peer_id.to_owned(), payload: payload.to_vec(), seq, signature, signed_at_secs }
+    SignedRecord {
+        peer_id: peer_id.to_owned(),
+        payload: payload.to_vec(),
+        seq,
+        signature,
+        signed_at_secs,
+    }
 }
 
 /// Constant-time HMAC-SHA256 verification. Returns `Err(InvalidSignature)` on mismatch.
@@ -91,21 +96,30 @@ mod tests {
     fn wrong_key_fails() {
         let record = sign("peer-1", b"hello", 1, KEY);
         let bad_key = b"wrong-key-32bytes-padding-------";
-        assert!(matches!(verify(&record, bad_key), Err(SigningError::InvalidSignature)));
+        assert!(matches!(
+            verify(&record, bad_key),
+            Err(SigningError::InvalidSignature)
+        ));
     }
 
     #[test]
     fn seq_mismatch_fails() {
         let mut record = sign("peer-1", b"hello", 1, KEY);
         record.seq = 2; // tamper seq without resigning
-        assert!(matches!(verify(&record, KEY), Err(SigningError::InvalidSignature)));
+        assert!(matches!(
+            verify(&record, KEY),
+            Err(SigningError::InvalidSignature)
+        ));
     }
 
     #[test]
     fn payload_tamper_fails() {
         let mut record = sign("peer-1", b"hello", 1, KEY);
         record.payload[0] ^= 0xFF;
-        assert!(matches!(verify(&record, KEY), Err(SigningError::InvalidSignature)));
+        assert!(matches!(
+            verify(&record, KEY),
+            Err(SigningError::InvalidSignature)
+        ));
     }
 
     #[test]

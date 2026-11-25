@@ -63,7 +63,10 @@ impl AutoGoalEngine {
         if pending_work > 10 {
             goals.push(Goal {
                 goal_id: format!("auto-work-backlog-{}", Uuid::new_v4()),
-                title: format!("Reduce pending work backlog ({} tasks queued)", pending_work),
+                title: format!(
+                    "Reduce pending work backlog ({} tasks queued)",
+                    pending_work
+                ),
                 scope: "work_market".to_owned(),
                 status: GoalStatus::Pending,
                 created_at: now,

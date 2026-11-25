@@ -72,9 +72,7 @@ impl MeshLlmPassthrough {
         // Build a minimal single-threaded tokio runtime for the sync call site.
         // In production the executor pool will call settle_work_payment_async directly.
         match tokio::runtime::Handle::try_current() {
-            Ok(handle) => {
-                handle.block_on(self.settle_work_payment_async(amount_msat, work_ref))
-            }
+            Ok(handle) => handle.block_on(self.settle_work_payment_async(amount_msat, work_ref)),
             Err(_) => {
                 // No existing runtime — create one.
                 let rt = tokio::runtime::Builder::new_current_thread()
@@ -111,7 +109,11 @@ impl MeshLlmPassthrough {
         let resp = self
             .client
             .post(&pay_url)
-            .json(&PaymentRequest { amount_msat, work_ref, rail: "lightning" })
+            .json(&PaymentRequest {
+                amount_msat,
+                work_ref,
+                rail: "lightning",
+            })
             .send()
             .await;
 
@@ -161,33 +163,31 @@ impl MeshLlmPassthrough {
             tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MILLIS)).await;
 
             match self.client.get(&status_url).send().await {
-                Ok(r) if r.status().is_success() => {
-                    match r.json::<PaymentStatus>().await {
-                        Ok(ps) if ps.status == "completed" || ps.status == "settled" => {
-                            info!(payment_id, work_ref, "mesh-llm payment confirmed");
-                            return SettlementResult {
-                                status: "settled".into(),
-                                tx_hash: ps.tx_hash,
-                                error: None,
-                                rail: SettlementRail::Lightning,
-                            };
-                        }
-                        Ok(ps) if ps.status == "failed" => {
-                            return SettlementResult {
-                                status: "failed".into(),
-                                tx_hash: None,
-                                error: ps.error,
-                                rail: SettlementRail::Lightning,
-                            };
-                        }
-                        Ok(ps) => {
-                            info!(attempt, status = %ps.status, "mesh-llm payment pending");
-                        }
-                        Err(e) => {
-                            warn!(attempt, error = %e, "status parse error");
-                        }
+                Ok(r) if r.status().is_success() => match r.json::<PaymentStatus>().await {
+                    Ok(ps) if ps.status == "completed" || ps.status == "settled" => {
+                        info!(payment_id, work_ref, "mesh-llm payment confirmed");
+                        return SettlementResult {
+                            status: "settled".into(),
+                            tx_hash: ps.tx_hash,
+                            error: None,
+                            rail: SettlementRail::Lightning,
+                        };
                     }
-                }
+                    Ok(ps) if ps.status == "failed" => {
+                        return SettlementResult {
+                            status: "failed".into(),
+                            tx_hash: None,
+                            error: ps.error,
+                            rail: SettlementRail::Lightning,
+                        };
+                    }
+                    Ok(ps) => {
+                        info!(attempt, status = %ps.status, "mesh-llm payment pending");
+                    }
+                    Err(e) => {
+                        warn!(attempt, error = %e, "status parse error");
+                    }
+                },
                 Ok(r) => {
                     warn!(attempt, status = r.status().as_u16(), "status poll non-2xx");
                 }
@@ -201,7 +201,9 @@ impl MeshLlmPassthrough {
         SettlementResult {
             status: "passthrough_pending".into(),
             tx_hash: None,
-            error: Some(format!("payment {payment_id} not confirmed after {POLL_MAX_ATTEMPTS} polls")),
+            error: Some(format!(
+                "payment {payment_id} not confirmed after {POLL_MAX_ATTEMPTS} polls"
+            )),
             rail: SettlementRail::Lightning,
         }
     }

@@ -67,7 +67,10 @@ pub struct Launcher {
 
 impl Launcher {
     pub fn new(validator: Box<dyn CandidateValidator>) -> Self {
-        Launcher { validator, retry_count: 0 }
+        Launcher {
+            validator,
+            retry_count: 0,
+        }
     }
 
     pub fn with_default_validator() -> Self {
@@ -81,7 +84,10 @@ impl Launcher {
     pub fn launch(&mut self, candidate_path: &str) -> LaunchResult {
         match self.validator.validate(candidate_path) {
             Ok(()) => {
-                info!(candidate = candidate_path, "candidate validated — requesting re-validate");
+                info!(
+                    candidate = candidate_path,
+                    "candidate validated — requesting re-validate"
+                );
                 self.retry_count = 0;
                 LaunchResult {
                     candidate_path: candidate_path.to_owned(),

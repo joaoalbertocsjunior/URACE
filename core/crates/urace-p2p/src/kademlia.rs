@@ -34,8 +34,7 @@ pub fn xor_distance(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
 pub fn bucket_index(own_id: &[u8; 32], other_id: &[u8; 32]) -> usize {
     let dist = xor_distance(own_id, other_id);
     // leading zero bits in dist = how close; bucket = (bit_length - 1) of dist, or 0.
-    for byte_idx in 0..32 {
-        let byte = dist[byte_idx];
+    for (byte_idx, &byte) in dist.iter().enumerate() {
         if byte != 0 {
             let bit_pos = 7 - byte.leading_zeros() as usize;
             return byte_idx * 8 + bit_pos;
@@ -58,16 +57,22 @@ pub struct NodeInfo {
 }
 
 fn serialize_node_id<S>(node_id: &[u8; 32], s: S) -> Result<S::Ok, S::Error>
-where S: serde::Serializer {
+where
+    S: serde::Serializer,
+{
     s.serialize_str(&hex::encode(node_id))
 }
 
 fn deserialize_node_id<'de, D>(d: D) -> Result<[u8; 32], D::Error>
-where D: serde::Deserializer<'de> {
+where
+    D: serde::Deserializer<'de>,
+{
     use serde::de::Error;
     let s = String::deserialize(d)?;
     let bytes = hex::decode(&s).map_err(D::Error::custom)?;
-    bytes.try_into().map_err(|_| D::Error::custom("expected 32 bytes"))
+    bytes
+        .try_into()
+        .map_err(|_| D::Error::custom("expected 32 bytes"))
 }
 
 impl NodeInfo {
@@ -78,7 +83,12 @@ impl NodeInfo {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs_f64())
             .unwrap_or(0.0);
-        NodeInfo { peer_id, node_id, endpoint: endpoint.into(), last_seen_secs }
+        NodeInfo {
+            peer_id,
+            node_id,
+            endpoint: endpoint.into(),
+            last_seen_secs,
+        }
     }
 
     pub fn touch(&mut self) {
@@ -97,7 +107,10 @@ pub struct KBucket {
 
 impl KBucket {
     pub fn new(k: usize) -> Self {
-        KBucket { nodes: VecDeque::with_capacity(k), k }
+        KBucket {
+            nodes: VecDeque::with_capacity(k),
+            k,
+        }
     }
 
     /// Add or refresh a node. New entries appended at tail (MRU). Full → evict head (LRU).
@@ -124,6 +137,10 @@ impl KBucket {
         self.nodes.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+
     pub fn is_full(&self) -> bool {
         self.nodes.len() >= self.k
     }
@@ -138,7 +155,9 @@ pub struct KademliaTable {
 impl KademliaTable {
     pub fn new(own_peer_id: &str) -> Self {
         let own_id = peer_id_to_node_id(own_peer_id);
-        let buckets = (0..NODE_ID_BITS).map(|_| KBucket::new(K_BUCKET_SIZE)).collect();
+        let buckets = (0..NODE_ID_BITS)
+            .map(|_| KBucket::new(K_BUCKET_SIZE))
+            .collect();
         KademliaTable { own_id, buckets }
     }
 
@@ -158,11 +177,7 @@ impl KademliaTable {
 
     /// Find the `k` closest nodes to `target_id` by XOR distance.
     pub fn closest(&self, target_id: &[u8; 32], k: usize) -> Vec<&NodeInfo> {
-        let mut all: Vec<&NodeInfo> = self
-            .buckets
-            .iter()
-            .flat_map(|b| b.nodes().iter())
-            .collect();
+        let mut all: Vec<&NodeInfo> = self.buckets.iter().flat_map(|b| b.nodes().iter()).collect();
         all.sort_by_key(|n| xor_distance(&n.node_id, target_id));
         all.into_iter().take(k).collect()
     }
@@ -180,7 +195,10 @@ mod tests {
     fn add_and_find_closest() {
         let mut table = KademliaTable::new("self-peer");
         for i in 0..10u32 {
-            table.add(NodeInfo::new(format!("peer-{i}"), format!("127.0.0.1:1000{i}")));
+            table.add(NodeInfo::new(
+                format!("peer-{i}"),
+                format!("127.0.0.1:1000{i}"),
+            ));
         }
         assert_eq!(table.total_nodes(), 10);
         let target = peer_id_to_node_id("peer-5");

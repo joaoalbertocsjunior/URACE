@@ -64,15 +64,27 @@ pub fn default_governance() -> HashMap<&'static str, RetentionPolicy> {
         archive_subpath: None,
     };
     m.insert("external_metric_state.latest", rolling(1000));
-    m.insert("executor_state.failures", archive(500, "archives/executor-failures"));
-    m.insert("decision_records", archive(2000, "archives/decision-records"));
-    m.insert("status_transitions", archive(500, "archives/status-transitions"));
+    m.insert(
+        "executor_state.failures",
+        archive(500, "archives/executor-failures"),
+    );
+    m.insert(
+        "decision_records",
+        archive(2000, "archives/decision-records"),
+    );
+    m.insert(
+        "status_transitions",
+        archive(500, "archives/status-transitions"),
+    );
     m.insert("evidence", archive(5000, "archives/evidence"));
     m.insert("operations", archive(2000, "archives/operations"));
     m.insert("trace_records", archive(1000, "archives/trace-records"));
     m.insert("community_signals", rolling(500));
     m.insert("patch_proposals", archive(500, "archives/patch-proposals"));
-    m.insert("wake_registrations", archive(200, "archives/wake-registrations"));
+    m.insert(
+        "wake_registrations",
+        archive(200, "archives/wake-registrations"),
+    );
     m.insert("compaction_manifest.events", prohibited());
     m.insert("change_history", prohibited());
     m.insert("integrity_gaps", prohibited());
@@ -80,8 +92,7 @@ pub fn default_governance() -> HashMap<&'static str, RetentionPolicy> {
     m
 }
 
-const ACTIVE_GUARD_FIELDS: &[&str] =
-    &["integrity_gaps", "community_signals", "patch_proposals"];
+const ACTIVE_GUARD_FIELDS: &[&str] = &["integrity_gaps", "community_signals", "patch_proposals"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -154,7 +165,9 @@ fn manifest_path(state_path: &Path) -> PathBuf {
 }
 
 /// Load `CompactionManifest` from disk. Returns `None` if absent.
-pub fn load_manifest(state_path: &Path) -> Result<Option<CompactionManifest>, CompactionFieldError> {
+pub fn load_manifest(
+    state_path: &Path,
+) -> Result<Option<CompactionManifest>, CompactionFieldError> {
     let p = manifest_path(state_path);
     if !p.exists() {
         return Ok(None);
@@ -164,7 +177,10 @@ pub fn load_manifest(state_path: &Path) -> Result<Option<CompactionManifest>, Co
     Ok(Some(m))
 }
 
-fn save_manifest(state_path: &Path, manifest: &CompactionManifest) -> Result<(), CompactionFieldError> {
+fn save_manifest(
+    state_path: &Path,
+    manifest: &CompactionManifest,
+) -> Result<(), CompactionFieldError> {
     let p = manifest_path(state_path);
     let tmp = p.with_extension("tmp");
     let data = serde_json::to_string_pretty(manifest)?;
@@ -235,16 +251,23 @@ fn write_index(
             if let Some(id) = rid {
                 id_to_offset.insert(id.to_owned(), i);
                 if let Some(kind) = obj.get("kind").and_then(Value::as_str) {
-                    kind_to_ids.entry(kind.to_owned()).or_default().push(id.to_owned());
+                    kind_to_ids
+                        .entry(kind.to_owned())
+                        .or_default()
+                        .push(id.to_owned());
                 }
-                let ts_str = obj.get("decided_at")
+                let ts_str = obj
+                    .get("decided_at")
                     .or_else(|| obj.get("created_at"))
                     .or_else(|| obj.get("at"))
                     .and_then(Value::as_str)
                     .unwrap_or("");
                 if ts_str.len() >= 7 {
                     let bucket = &ts_str[..7];
-                    time_buckets.entry(bucket.to_owned()).or_default().push(id.to_owned());
+                    time_buckets
+                        .entry(bucket.to_owned())
+                        .or_default()
+                        .push(id.to_owned());
                 }
             }
         }
@@ -257,7 +280,11 @@ fn write_index(
         record_count: records.len(),
         id_to_offset,
         kind_to_ids,
-        time_buckets: if time_buckets.is_empty() { None } else { Some(time_buckets) },
+        time_buckets: if time_buckets.is_empty() {
+            None
+        } else {
+            Some(time_buckets)
+        },
     };
 
     let idx_p = index_path(archive_path);
@@ -286,7 +313,10 @@ pub fn load_index(archive_path: &Path) -> Option<CompactionIndex> {
 // ── ArchiveAmendmentLog ───────────────────────────────────────────────────────
 
 fn amendments_path(archive_path: &Path) -> PathBuf {
-    let stem = archive_path.file_stem().unwrap_or_default().to_string_lossy();
+    let stem = archive_path
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
     archive_path
         .parent()
         .unwrap_or(Path::new("."))
@@ -331,7 +361,10 @@ fn append_amendment(
     let p = amendments_path(archive_path);
     let mut line = serde_json::to_string(amendment)?;
     line.push('\n');
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(&p)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)?;
     f.write_all(line.as_bytes())?;
     f.flush()?;
     Ok(())
@@ -386,7 +419,9 @@ pub fn check_retention_violations(state: &HashMap<String, Value>) -> Vec<Retenti
                 if count > ceiling {
                     gaps.push(make_gap(
                         "retention-policy-violated",
-                        &format!("Field '{field}' has {count} entries, exceeding ceiling of {ceiling}"),
+                        &format!(
+                            "Field '{field}' has {count} entries, exceeding ceiling of {ceiling}"
+                        ),
                         "WARNING",
                     ));
                 }
@@ -395,26 +430,50 @@ pub fn check_retention_violations(state: &HashMap<String, Value>) -> Vec<Retenti
     };
 
     let list_len = |key: &str| {
-        state.get(key).and_then(Value::as_array).map(Vec::len).unwrap_or(0)
+        state
+            .get(key)
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0)
     };
 
     check("decision_records", list_len("decision_records"), &mut gaps);
-    check("status_transitions", list_len("status_transitions"), &mut gaps);
+    check(
+        "status_transitions",
+        list_len("status_transitions"),
+        &mut gaps,
+    );
     check("evidence", list_len("evidence"), &mut gaps);
     check("operations", list_len("operations"), &mut gaps);
     check("trace_records", list_len("trace_records"), &mut gaps);
-    check("community_signals", list_len("community_signals"), &mut gaps);
+    check(
+        "community_signals",
+        list_len("community_signals"),
+        &mut gaps,
+    );
     check("patch_proposals", list_len("patch_proposals"), &mut gaps);
-    check("wake_registrations", list_len("wake_registrations"), &mut gaps);
+    check(
+        "wake_registrations",
+        list_len("wake_registrations"),
+        &mut gaps,
+    );
 
     // Nested field: executor_state.failures
     if let Some(Value::Object(es)) = state.get("executor_state") {
-        let count = es.get("failures").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
+        let count = es
+            .get("failures")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0);
         check("executor_state.failures", count, &mut gaps);
     }
     // Nested field: external_metric_state.latest
     if let Some(Value::Object(em)) = state.get("external_metric_state") {
-        let count = em.get("latest").and_then(Value::as_array).map(Vec::len).unwrap_or(0);
+        let count = em
+            .get("latest")
+            .and_then(Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0);
         check("external_metric_state.latest", count, &mut gaps);
     }
 
@@ -444,7 +503,9 @@ pub struct CompactionEngine {
 impl CompactionEngine {
     /// Create a new engine rooted at `state_path`.
     pub fn new(state_path: impl AsRef<Path>) -> Self {
-        Self { state_path: state_path.as_ref().to_path_buf() }
+        Self {
+            state_path: state_path.as_ref().to_path_buf(),
+        }
     }
 
     /// Determine which indices in `records` are eligible for compaction under `policy`.
@@ -499,7 +560,8 @@ impl CompactionEngine {
                     }
                 }
                 with_ts.sort_by(|a, b| a.0.cmp(&b.0));
-                let ordered: Vec<usize> = with_ts.into_iter().map(|(_, i)| i).chain(no_ts).collect();
+                let ordered: Vec<usize> =
+                    with_ts.into_iter().map(|(_, i)| i).chain(no_ts).collect();
                 for &i in ordered.iter().take(excess) {
                     eligible.insert(i);
                 }
@@ -560,13 +622,8 @@ impl CompactionEngine {
         let mut archive_path: Option<String> = None;
 
         if policy.compaction_mode == CompactionMode::Archive {
-            let subpath = policy
-                .archive_subpath
-                .as_deref()
-                .unwrap_or("archives");
-            let archive_dir = self
-                .state_path
-                .join(subpath);
+            let subpath = policy.archive_subpath.as_deref().unwrap_or("archives");
+            let archive_dir = self.state_path.join(subpath);
             std::fs::create_dir_all(&archive_dir)?;
             let archive_filename = format!("{event_id}.json");
             let full_archive = archive_dir.join(&archive_filename);
@@ -605,7 +662,11 @@ impl CompactionEngine {
             record_count: to_compact.len(),
             original_digest: original_digest.clone(),
             is_decompactable: policy.compaction_mode == CompactionMode::Archive,
-            record_ids: if record_ids.is_empty() { None } else { Some(record_ids) },
+            record_ids: if record_ids.is_empty() {
+                None
+            } else {
+                Some(record_ids)
+            },
         };
 
         let summary_val = serde_json::to_value(&summary)?;
@@ -670,7 +731,8 @@ impl CompactionEngine {
         let full_archive = self.state_path.join(archive_rel);
         if !full_archive.exists() {
             return Err(CompactionFieldError::Compaction(format!(
-                "Archive file not found: {}", full_archive.display()
+                "Archive file not found: {}",
+                full_archive.display()
             )));
         }
 
@@ -763,7 +825,8 @@ impl CompactionEngine {
         let full_archive = self.state_path.join(archive_rel);
         if !full_archive.exists() {
             return Err(CompactionFieldError::Compaction(format!(
-                "Archive file not found: {}", full_archive.display()
+                "Archive file not found: {}",
+                full_archive.display()
             )));
         }
 
@@ -793,9 +856,9 @@ impl CompactionEngine {
             })?;
 
         let before_record = originals[target_idx].clone();
-        let before_digest = canonical_digest(&[before_record.clone()]);
+        let before_digest = canonical_digest(std::slice::from_ref(&before_record));
         let after_record = apply_fn(before_record);
-        let after_digest = canonical_digest(&[after_record.clone()]);
+        let after_digest = canonical_digest(std::slice::from_ref(&after_record));
         originals[target_idx] = after_record;
 
         use std::io::Write;
@@ -843,7 +906,10 @@ impl CompactionEngine {
         let mut report = serde_json::Map::new();
         report.insert("field_path".into(), Value::String(field_path.to_owned()));
         report.insert("record_count".into(), Value::Number(records.len().into()));
-        report.insert("eligible_count".into(), Value::Number(to_compact.len().into()));
+        report.insert(
+            "eligible_count".into(),
+            Value::Number(to_compact.len().into()),
+        );
         report.insert("would_compact".into(), Value::Bool(!to_compact.is_empty()));
         report.insert(
             "mode".into(),
@@ -916,7 +982,9 @@ impl CompactionEngine {
 // ── Compaction status ─────────────────────────────────────────────────────────
 
 /// Return compaction status summary for operator visibility.
-pub fn get_compaction_status(state_path: &Path) -> Result<serde_json::Map<String, Value>, CompactionFieldError> {
+pub fn get_compaction_status(
+    state_path: &Path,
+) -> Result<serde_json::Map<String, Value>, CompactionFieldError> {
     let manifest = load_manifest(state_path)?;
     let gov = default_governance();
     let mut archive_counts = serde_json::Map::new();
@@ -934,7 +1002,8 @@ pub fn get_compaction_status(state_path: &Path) -> Result<serde_json::Map<String
                             .filter(|e| {
                                 let p = e.path();
                                 p.extension().map(|x| x == "json").unwrap_or(false)
-                                    && !p.file_stem()
+                                    && !p
+                                        .file_stem()
                                         .and_then(|s| s.to_str())
                                         .map(|s| s.ends_with(".idx"))
                                         .unwrap_or(false)
@@ -959,7 +1028,9 @@ pub fn get_compaction_status(state_path: &Path) -> Result<serde_json::Map<String
             result.insert("event_count".into(), Value::Number(m.version.into()));
             result.insert(
                 "last_compacted_at".into(),
-                m.last_compacted_at.map(Value::String).unwrap_or(Value::Null),
+                m.last_compacted_at
+                    .map(Value::String)
+                    .unwrap_or(Value::Null),
             );
         }
     }
@@ -1006,7 +1077,10 @@ pub fn verify_manifest_on_startup(state_path: &Path) -> Vec<RetentionGap> {
             None => {
                 gaps.push(make_gap(
                     "compaction-manifest-divergence",
-                    &format!("CompactionEvent {} has mode ARCHIVE but no archive_path", event.id),
+                    &format!(
+                        "CompactionEvent {} has mode ARCHIVE but no archive_path",
+                        event.id
+                    ),
                     "BLOCKING",
                 ));
             }
@@ -1015,7 +1089,10 @@ pub fn verify_manifest_on_startup(state_path: &Path) -> Vec<RetentionGap> {
                 if !full.exists() {
                     gaps.push(make_gap(
                         "compaction-manifest-divergence",
-                        &format!("Archive file missing for CompactionEvent {}: {rel}", event.id),
+                        &format!(
+                            "Archive file missing for CompactionEvent {}: {rel}",
+                            event.id
+                        ),
                         "BLOCKING",
                     ));
                 } else {
@@ -1026,7 +1103,10 @@ pub fn verify_manifest_on_startup(state_path: &Path) -> Vec<RetentionGap> {
                         None => {
                             gaps.push(make_gap(
                                 "compaction-manifest-divergence",
-                                &format!("Archive file unreadable for CompactionEvent {}", event.id),
+                                &format!(
+                                    "Archive file unreadable for CompactionEvent {}",
+                                    event.id
+                                ),
                                 "BLOCKING",
                             ));
                         }
@@ -1112,7 +1192,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let engine = CompactionEngine::new(dir.path());
         let mut state = HashMap::new();
-        state.insert("change_history".to_owned(), Value::Array(vec![json!({"id": "x"}); 10]));
+        state.insert(
+            "change_history".to_owned(),
+            Value::Array(vec![json!({"id": "x"}); 10]),
+        );
         let policy = RetentionPolicy {
             compaction_mode: CompactionMode::Prohibited,
             max_entries: Some(5),
@@ -1138,7 +1221,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let engine = CompactionEngine::new(dir.path());
         let mut state = HashMap::new();
-        let records: Vec<Value> = (0..600).map(|i| json!({"id": format!("sig-{i}")})).collect();
+        let records: Vec<Value> = (0..600)
+            .map(|i| json!({"id": format!("sig-{i}")}))
+            .collect();
         state.insert("community_signals".to_owned(), Value::Array(records));
         let policy = RetentionPolicy {
             compaction_mode: CompactionMode::RollingEviction,

@@ -103,8 +103,6 @@ impl AutoPlanner {
 mod tests {
     use super::*;
     use crate::implementation_sequence::Task;
-    use std::collections::HashMap;
-
     fn task(id: &str) -> Task {
         Task {
             id: id.to_owned(),
@@ -125,7 +123,10 @@ mod tests {
     }
 
     fn ctx() -> PlanningContext {
-        PlanningContext { scores: None, eligible: None }
+        PlanningContext {
+            scores: None,
+            eligible: None,
+        }
     }
 
     #[test]

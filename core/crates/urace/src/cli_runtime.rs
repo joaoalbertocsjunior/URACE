@@ -50,7 +50,10 @@ pub async fn handle_trial(root: &Path, args: &TrialArgs, json_mode: bool) -> Res
                 .and_then(|v| v.as_array())
                 .unwrap_or(&empty);
 
-            let scores = state.get("qualification_scores").cloned().unwrap_or_default();
+            let scores = state
+                .get("qualification_scores")
+                .cloned()
+                .unwrap_or_default();
             let lifecycle = state
                 .get("lifecycle_state")
                 .and_then(|v| v.as_str())
@@ -226,10 +229,7 @@ pub async fn handle_features(root: &Path, args: &FeaturesArgs, json_mode: bool) 
                 }
                 None => {
                     if json_mode {
-                        println!(
-                            "{}",
-                            serde_json::json!({"error": "not found", "id": fid})
-                        );
+                        println!("{}", serde_json::json!({"error": "not found", "id": fid}));
                     } else {
                         println!("feature {fid}: not found");
                     }
@@ -249,10 +249,7 @@ pub async fn handle_features(root: &Path, args: &FeaturesArgs, json_mode: bool) 
                 features.retain(|f| {
                     f.get("tags")
                         .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .any(|t| t.as_str() == Some(tag_filter.as_str()))
-                        })
+                        .map(|arr| arr.iter().any(|t| t.as_str() == Some(tag_filter.as_str())))
                         .unwrap_or(false)
                 });
             }
@@ -263,10 +260,7 @@ pub async fn handle_features(root: &Path, args: &FeaturesArgs, json_mode: bool) 
             } else if features.is_empty() {
                 println!("No runtime features found.");
             } else {
-                println!(
-                    "  {:<35} {:<12} {:<8} {}",
-                    "id", "status", "coverage", "name"
-                );
+                println!("  {:<35} {:<12} {:<8} name", "id", "status", "coverage");
                 println!("{}", "-".repeat(80));
                 for f in features {
                     let id = f.get("id").and_then(|v| v.as_str()).unwrap_or("?");
@@ -290,9 +284,7 @@ pub async fn handle_features(root: &Path, args: &FeaturesArgs, json_mode: bool) 
                             )
                         })
                         .unwrap_or_default();
-                    println!(
-                        "  {id:<35} {status:<12} {coverage:<8} {name}{blockers}"
-                    );
+                    println!("  {id:<35} {status:<12} {coverage:<8} {name}{blockers}");
                 }
             }
         }
@@ -313,12 +305,18 @@ pub struct CrcArgs {
 pub async fn handle_crc(root: &Path, args: &CrcArgs, json_mode: bool) -> Result<()> {
     let state = load_state_json(root)?;
 
-    let crc = state.get("cognitive_resume_context").cloned().unwrap_or_default();
+    let crc = state
+        .get("cognitive_resume_context")
+        .cloned()
+        .unwrap_or_default();
     let crc_version = crc
         .get("version")
         .and_then(|v| v.as_str())
         .unwrap_or("none");
-    let crc_at = crc.get("generated_at").and_then(|v| v.as_str()).unwrap_or("?");
+    let crc_at = crc
+        .get("generated_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("?");
 
     match args.action.as_str() {
         "apply" => {
@@ -381,7 +379,9 @@ mod tests {
     async fn test_trial_status_empty() {
         let dir = TempDir::new().unwrap();
         write_state(&dir, serde_json::json!({}));
-        let args = TrialArgs { action: "status".into() };
+        let args = TrialArgs {
+            action: "status".into(),
+        };
         handle_trial(dir.path(), &args, false).await.unwrap();
     }
 
@@ -389,7 +389,9 @@ mod tests {
     async fn test_trial_run_stub() {
         let dir = TempDir::new().unwrap();
         write_state(&dir, serde_json::json!({}));
-        let args = TrialArgs { action: "run".into() };
+        let args = TrialArgs {
+            action: "run".into(),
+        };
         handle_trial(dir.path(), &args, true).await.unwrap();
     }
 
@@ -397,7 +399,10 @@ mod tests {
     async fn test_update_dry_run() {
         let dir = TempDir::new().unwrap();
         write_state(&dir, serde_json::json!({"spec_version": "v1.2.3"}));
-        let args = UpdateArgs { dry_run: true, source: None };
+        let args = UpdateArgs {
+            dry_run: true,
+            source: None,
+        };
         handle_update(dir.path(), &args, true).await.unwrap();
     }
 
@@ -441,7 +446,9 @@ mod tests {
     async fn test_crc_status_empty() {
         let dir = TempDir::new().unwrap();
         write_state(&dir, serde_json::json!({}));
-        let args = CrcArgs { action: "status".into() };
+        let args = CrcArgs {
+            action: "status".into(),
+        };
         handle_crc(dir.path(), &args, false).await.unwrap();
     }
 }

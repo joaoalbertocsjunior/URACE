@@ -66,7 +66,7 @@ fn scope_required_authorities(scope: &str) -> Option<HashSet<&'static str>> {
 fn has_weakening_request(text: &str) -> bool {
     // Strip negated verb patterns: "do not/must not/don't/never <verb>"
     let prohibition_re = regex_lite::Regex::new(
-        r"(?i)\b(?:do\s+not|must\s+not|don't|never)\s+(?:remove|delete|weaken|relax|bypass|ignore|disable|override)\b"
+        r"(?i)\b(?:do\s+not|must\s+not|don't|never)\s+(?:remove|delete|weaken|relax|bypass|ignore|disable|override)\b",
     );
     let cleaned = match prohibition_re {
         Ok(re) => re.replace_all(text, " ").into_owned(),
@@ -112,13 +112,23 @@ pub fn resolve(
     let delegated: HashSet<String> = authority_config
         .get("delegated")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_lowercase()).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_lowercase())
+                .collect()
+        })
         .unwrap_or_default();
 
     let reserved: HashSet<String> = authority_config
         .get("reserved")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str()).map(|s| s.to_lowercase()).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_lowercase())
+                .collect()
+        })
         .unwrap_or_default();
 
     let scope = objective.scope.to_lowercase();
@@ -160,8 +170,16 @@ pub fn resolve(
                 format!(
                     "Scope '{scope}' requires authority not found in delegated boundary. \
                      Required one of: {:?}. Delegated: {:?}",
-                    {let mut v: Vec<_> = required.iter().collect(); v.sort(); v},
-                    {let mut v: Vec<_> = delegated.iter().collect(); v.sort(); v}
+                    {
+                        let mut v: Vec<_> = required.iter().collect();
+                        v.sort();
+                        v
+                    },
+                    {
+                        let mut v: Vec<_> = delegated.iter().collect();
+                        v.sort();
+                        v
+                    }
                 ),
                 "scope_boundary",
             );
@@ -200,7 +218,12 @@ pub fn resolve(
             );
         }
         if policy_mode == "NECESSARY_ONLY" {
-            let necessity = objective.necessity_evidence.as_deref().unwrap_or("").trim().to_owned();
+            let necessity = objective
+                .necessity_evidence
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .to_owned();
             let lower_impact = objective.lower_impact_route_sufficient.unwrap_or(true);
             if necessity.is_empty() || lower_impact {
                 return resolution(
@@ -235,8 +258,24 @@ mod tests {
 
     fn authority_config(delegated: &[&str], reserved: &[&str]) -> HashMap<String, Value> {
         let mut m = HashMap::new();
-        m.insert("delegated".into(), Value::Array(delegated.iter().map(|s| Value::String(s.to_string())).collect()));
-        m.insert("reserved".into(), Value::Array(reserved.iter().map(|s| Value::String(s.to_string())).collect()));
+        m.insert(
+            "delegated".into(),
+            Value::Array(
+                delegated
+                    .iter()
+                    .map(|s| Value::String(s.to_string()))
+                    .collect(),
+            ),
+        );
+        m.insert(
+            "reserved".into(),
+            Value::Array(
+                reserved
+                    .iter()
+                    .map(|s| Value::String(s.to_string()))
+                    .collect(),
+            ),
+        );
         m
     }
 
@@ -261,21 +300,36 @@ mod tests {
     #[test]
     fn reserved_decision_denied() {
         let cfg = authority_config(&["local implementation changes"], &["spend money"]);
-        let r = resolve(&obj("implementation", "spend money on infra"), &cfg, None, &[]);
+        let r = resolve(
+            &obj("implementation", "spend money on infra"),
+            &cfg,
+            None,
+            &[],
+        );
         assert_eq!(r.outcome, AuthorityOutcome::Denied);
     }
 
     #[test]
     fn bypass_authority_hard_block() {
         let cfg = authority_config(&["local implementation changes"], &[]);
-        let r = resolve(&obj("implementation", "bypass authority gate"), &cfg, None, &[]);
+        let r = resolve(
+            &obj("implementation", "bypass authority gate"),
+            &cfg,
+            None,
+            &[],
+        );
         assert_eq!(r.outcome, AuthorityOutcome::Denied);
     }
 
     #[test]
     fn override_authority_hard_block() {
         let cfg = authority_config(&["local implementation changes"], &[]);
-        let r = resolve(&obj("implementation", "override authority check"), &cfg, None, &[]);
+        let r = resolve(
+            &obj("implementation", "override authority check"),
+            &cfg,
+            None,
+            &[],
+        );
         assert_eq!(r.outcome, AuthorityOutcome::Denied);
     }
 

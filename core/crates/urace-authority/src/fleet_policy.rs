@@ -7,12 +7,14 @@
 //! - Propagation: policies are keyed under sha256(owner_pubkey) for Kademlia DHT storage.
 //!   The P2P layer (R-7) handles DHT propagation; this module handles sign/verify/store.
 
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use parking_lot::RwLock;
 use thiserror::Error;
-use urace_crypto::ed25519::{verify as ed25519_verify, Keypair, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
+use urace_crypto::ed25519::{
+    verify as ed25519_verify, Keypair, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH,
+};
 
 #[derive(Debug, Error)]
 pub enum FleetPolicyError {
@@ -74,13 +76,13 @@ impl FleetPolicy {
 
     /// Verify the policy signature.
     pub fn verify(&self) -> Result<(), FleetPolicyError> {
-        let pubkey_bytes = hex::decode(&self.owner_pubkey_hex)
-            .map_err(|_| FleetPolicyError::InvalidSignature)?;
+        let pubkey_bytes =
+            hex::decode(&self.owner_pubkey_hex).map_err(|_| FleetPolicyError::InvalidSignature)?;
         if pubkey_bytes.len() != PUBLIC_KEY_LENGTH {
             return Err(FleetPolicyError::InvalidSignature);
         }
-        let sig_bytes = hex::decode(&self.signature_hex)
-            .map_err(|_| FleetPolicyError::InvalidSignature)?;
+        let sig_bytes =
+            hex::decode(&self.signature_hex).map_err(|_| FleetPolicyError::InvalidSignature)?;
         if sig_bytes.len() != SIGNATURE_LENGTH {
             return Err(FleetPolicyError::InvalidSignature);
         }
@@ -93,8 +95,7 @@ impl FleetPolicy {
         let mut sig = [0u8; SIGNATURE_LENGTH];
         sig.copy_from_slice(&sig_bytes);
 
-        ed25519_verify(&pubkey, &msg, &sig)
-            .map_err(|_| FleetPolicyError::InvalidSignature)
+        ed25519_verify(&pubkey, &msg, &sig).map_err(|_| FleetPolicyError::InvalidSignature)
     }
 
     /// DHT key for this policy: sha256(owner_pubkey_bytes).
@@ -127,7 +128,9 @@ pub struct PolicyStore {
 
 impl PolicyStore {
     pub fn new() -> Self {
-        PolicyStore { inner: RwLock::new(HashMap::new()) }
+        PolicyStore {
+            inner: RwLock::new(HashMap::new()),
+        }
     }
 
     /// Accept and store a policy if it is valid and newer than any existing one.
@@ -196,7 +199,10 @@ mod tests {
         store.accept(p1).unwrap();
 
         let p0 = FleetPolicy::new(&kp, 1, vec![]).unwrap();
-        assert!(matches!(store.accept(p0), Err(FleetPolicyError::StaleGeneration { .. })));
+        assert!(matches!(
+            store.accept(p0),
+            Err(FleetPolicyError::StaleGeneration { .. })
+        ));
     }
 
     #[test]
@@ -207,16 +213,29 @@ mod tests {
         store.accept(p.clone()).unwrap();
         // second accept with same generation must fail
         let p2 = FleetPolicy::new(&kp, 1, vec![]).unwrap();
-        assert!(matches!(store.accept(p2), Err(FleetPolicyError::StaleGeneration { .. })));
+        assert!(matches!(
+            store.accept(p2),
+            Err(FleetPolicyError::StaleGeneration { .. })
+        ));
     }
 
     #[test]
     fn newer_generation_accepted() {
         let kp = keypair();
         let store = PolicyStore::new();
-        store.accept(FleetPolicy::new(&kp, 1, vec![]).unwrap()).unwrap();
-        store.accept(FleetPolicy::new(&kp, 2, vec![]).unwrap()).unwrap();
-        assert_eq!(store.get(&hex::encode(kp.public_key_bytes())).unwrap().generation, 2);
+        store
+            .accept(FleetPolicy::new(&kp, 1, vec![]).unwrap())
+            .unwrap();
+        store
+            .accept(FleetPolicy::new(&kp, 2, vec![]).unwrap())
+            .unwrap();
+        assert_eq!(
+            store
+                .get(&hex::encode(kp.public_key_bytes()))
+                .unwrap()
+                .generation,
+            2
+        );
     }
 
     #[test]
@@ -224,7 +243,10 @@ mod tests {
         let kp = keypair();
         let mut policy = FleetPolicy::new(&kp, 1, vec![]).unwrap();
         policy.generation = 99; // tamper without re-signing
-        assert!(matches!(policy.verify(), Err(FleetPolicyError::InvalidSignature)));
+        assert!(matches!(
+            policy.verify(),
+            Err(FleetPolicyError::InvalidSignature)
+        ));
     }
 
     #[test]

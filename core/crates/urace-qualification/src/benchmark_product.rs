@@ -240,7 +240,7 @@ pub enum GapKind {
 }
 
 impl GapKind {
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "bug" => Self::Bug,
             "complexity" => Self::Complexity,

@@ -157,7 +157,10 @@ pub async fn handle_github(root: &Path, args: &GithubArgs, json_mode: bool) -> R
                 );
             } else {
                 let dry_tag = if args.dry_run { " (dry-run)" } else { "" };
-                println!("push-goals{dry_tag}: {} open objectives found", objectives.len());
+                println!(
+                    "push-goals{dry_tag}: {} open objectives found",
+                    objectives.len()
+                );
                 for o in &objectives {
                     let id = o.get("id").and_then(|v| v.as_str()).unwrap_or("?");
                     let text = o
@@ -252,9 +255,7 @@ pub async fn handle_plan(root: &Path, args: &PlanArgs, json_mode: bool) -> Resul
         .collect();
 
     if let Some(scope) = &args.scope {
-        planned.retain(|o| {
-            o.get("scope").and_then(|v| v.as_str()) == Some(scope.as_str())
-        });
+        planned.retain(|o| o.get("scope").and_then(|v| v.as_str()) == Some(scope.as_str()));
     }
 
     planned.truncate(args.limit);
@@ -264,11 +265,14 @@ pub async fn handle_plan(root: &Path, args: &PlanArgs, json_mode: bool) -> Resul
     } else if planned.is_empty() {
         println!("No planned objectives.");
     } else {
-        println!("{:<36} {:<12} {}", "id", "status", "text");
+        println!("{:<36} {:<12} text", "id", "status");
         println!("{}", "-".repeat(80));
         for o in planned {
             let id = o.get("id").and_then(|v| v.as_str()).unwrap_or("?");
-            let status = o.get("status").and_then(|v| v.as_str()).unwrap_or("PENDING");
+            let status = o
+                .get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or("PENDING");
             let text = o
                 .get("text")
                 .or_else(|| o.get("title"))
@@ -444,7 +448,10 @@ pub async fn handle_context(root: &Path, args: &ContextArgs, json_mode: bool) ->
                     if let Some(arr) = state.get(*key).and_then(|v| v.as_array()) {
                         for item in arr.iter().take(args.limit) {
                             if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
-                                m.insert(id.to_string(), serde_json::json!({"kind": *key, "id": id}));
+                                m.insert(
+                                    id.to_string(),
+                                    serde_json::json!({"kind": *key, "id": id}),
+                                );
                             }
                         }
                     }
@@ -523,7 +530,8 @@ pub async fn handle_context(root: &Path, args: &ContextArgs, json_mode: bool) ->
                 let derived = &view["urace_derived"];
                 println!(
                     "URACE-derived: objectives={} hypotheses={} external-observations={}",
-                    derived["objectives"], derived["reasoning_hypotheses"],
+                    derived["objectives"],
+                    derived["reasoning_hypotheses"],
                     derived["external_observations"]
                 );
             }
@@ -660,7 +668,9 @@ pub async fn handle_derive(root: &Path, args: &DeriveArgs, json_mode: bool) -> R
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_lowercase();
-                intent.split_whitespace().any(|w| w.len() > 3 && txt.contains(w))
+                intent
+                    .split_whitespace()
+                    .any(|w| w.len() > 3 && txt.contains(w))
             }
         })
         .take(args.limit)
@@ -696,7 +706,11 @@ pub async fn handle_derive(root: &Path, args: &DeriveArgs, json_mode: bool) -> R
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
         let intent_str = args.intent.as_deref().unwrap_or("(none)");
-        println!("derive: intent=\"{intent_str}\"  kind={}  suggestions={}", args.kind, suggestions.len());
+        println!(
+            "derive: intent=\"{intent_str}\"  kind={}  suggestions={}",
+            args.kind,
+            suggestions.len()
+        );
         for s in suggestions.iter() {
             let id = s["id"].as_str().unwrap_or("?");
             let text = s["text"].as_str().unwrap_or("?");
@@ -799,7 +813,10 @@ mod tests {
     async fn test_plan_empty() {
         let dir = TempDir::new().unwrap();
         write_state(&dir, serde_json::json!({}));
-        let args = PlanArgs { scope: None, limit: 20 };
+        let args = PlanArgs {
+            scope: None,
+            limit: 20,
+        };
         handle_plan(dir.path(), &args, false).await.unwrap();
     }
 
@@ -807,7 +824,9 @@ mod tests {
     async fn test_check_empty() {
         let dir = TempDir::new().unwrap();
         write_state(&dir, serde_json::json!({}));
-        let args = CheckArgs { blockers_only: false };
+        let args = CheckArgs {
+            blockers_only: false,
+        };
         handle_check(dir.path(), &args, true).await.unwrap();
     }
 
@@ -815,7 +834,10 @@ mod tests {
     async fn test_quality_empty() {
         let dir = TempDir::new().unwrap();
         write_state(&dir, serde_json::json!({}));
-        let args = QualityArgs { history: false, limit: 20 };
+        let args = QualityArgs {
+            history: false,
+            limit: 20,
+        };
         handle_quality(dir.path(), &args, false).await.unwrap();
     }
 

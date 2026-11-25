@@ -186,9 +186,7 @@ pub fn drift_score(objective: &Value, anchor: &Value) -> f64 {
         let has_violation_verb = RETAINED_VIOLATION_VERBS
             .iter()
             .any(|verb| combined.contains(verb));
-        let matches_retained = retained_keywords
-            .iter()
-            .any(|kw| combined.contains(*kw));
+        let matches_retained = retained_keywords.iter().any(|kw| combined.contains(*kw));
         if has_violation_verb && matches_retained {
             score += 0.30;
             break;
@@ -221,7 +219,9 @@ pub fn check_retained_violation(text: &str, retained: &[String]) -> Option<Strin
             .filter(|w| w.len() > 3)
             .collect();
         for verb in RETAINED_VIOLATION_VERBS {
-            if text_lower.contains(verb) && retained_keywords.iter().any(|kw| text_lower.contains(*kw)) {
+            if text_lower.contains(verb)
+                && retained_keywords.iter().any(|kw| text_lower.contains(*kw))
+            {
                 return Some(verb.to_string());
             }
         }
@@ -284,10 +284,7 @@ pub fn check_anchor_integrity(state: &Value, config: &Value) -> Value {
                 .get("digest")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let current_digest = current
-                .get("digest")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let current_digest = current.get("digest").and_then(|v| v.as_str()).unwrap_or("");
 
             if stored_digest != current_digest {
                 serde_json::json!({
@@ -417,10 +414,17 @@ mod tests {
 
     #[test]
     fn drift_score_zero_for_aligned_objective() {
-        let config = make_config("build a P2P governance runtime", &["no credentials in source"]);
+        let config = make_config(
+            "build a P2P governance runtime",
+            &["no credentials in source"],
+        );
         let anchor = anchor_from_config(&config);
         // Objective mentions purpose words; no redefine signals; no violation verbs.
-        let obj = make_objective("improve P2P runtime performance", "governance is key", "implementation");
+        let obj = make_objective(
+            "improve P2P runtime performance",
+            "governance is key",
+            "implementation",
+        );
         assert!(drift_score(&obj, &anchor) < DRIFT_FLAG);
     }
 
@@ -429,9 +433,16 @@ mod tests {
         let config = make_config("build a P2P runtime", &["no credentials"]);
         let anchor = anchor_from_config(&config);
         // "pivot" is a redefine signal → score += 0.50 → above DRIFT_FLAG
-        let obj = make_objective("pivot to a new goal", "the old direction failed", "implementation");
+        let obj = make_objective(
+            "pivot to a new goal",
+            "the old direction failed",
+            "implementation",
+        );
         let score = drift_score(&obj, &anchor);
-        assert!(score >= DRIFT_FLAG, "pivot signal should produce score >= DRIFT_FLAG, got {score}");
+        assert!(
+            score >= DRIFT_FLAG,
+            "pivot signal should produce score >= DRIFT_FLAG, got {score}"
+        );
     }
 
     #[test]
@@ -478,7 +489,10 @@ mod tests {
         let obj = make_objective("xyz unrelated task", "completely different", "runtime");
         let score = drift_score(&obj, &anchor);
         // No redefine signal, no violation, scope=runtime skips zero-overlap penalty → 0.0
-        assert_eq!(score, 0.0, "runtime scope should not incur zero-overlap penalty");
+        assert_eq!(
+            score, 0.0,
+            "runtime scope should not incur zero-overlap penalty"
+        );
     }
 
     // ----- check_retained_violation -----

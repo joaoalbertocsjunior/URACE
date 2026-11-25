@@ -5,6 +5,7 @@
 //! Ports `routes/daemon.py`. The status handler returns an HTMX partial when
 //! the request carries the `HX-Request` header; otherwise returns JSON.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Request, State},
     response::{Html, IntoResponse, Response},
@@ -12,7 +13,6 @@ use axum::{
     Json, Router,
 };
 use minijinja::context;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -31,8 +31,7 @@ async fn daemon_status_handler(
     let (running, pid) = state_reader::daemon_status(&s.root);
     let cycle_active = if running {
         let state = state_reader::read_state(&s.root);
-        state.get("lifecycle_state")
-            .and_then(|v| v.as_str()) == Some("ACTIVE")
+        state.get("lifecycle_state").and_then(|v| v.as_str()) == Some("ACTIVE")
     } else {
         false
     };
@@ -46,19 +45,16 @@ async fn daemon_status_handler(
             "status": status_str,
             "pid": pid,
             "cycle_active": cycle_active,
-        })).into_response()
+        }))
+        .into_response()
     }
 }
 
-async fn daemon_bar_partial(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Response {
+async fn daemon_bar_partial(State(s): State<AppState>, _auth: BearerToken) -> Response {
     let (running, _pid) = state_reader::daemon_status(&s.root);
     let cycle_active = if running {
         let state = state_reader::read_state(&s.root);
-        state.get("lifecycle_state")
-            .and_then(|v| v.as_str()) == Some("ACTIVE")
+        state.get("lifecycle_state").and_then(|v| v.as_str()) == Some("ACTIVE")
     } else {
         false
     };
@@ -70,7 +66,9 @@ async fn daemon_bar_partial(
 fn sigterm_process(pid: u32) -> serde_json::Value {
     #[cfg(unix)]
     {
-        extern "C" { fn kill(__pid: i32, __sig: i32) -> i32; }
+        extern "C" {
+            fn kill(__pid: i32, __sig: i32) -> i32;
+        }
         let rc = unsafe { kill(pid as i32, 15) }; // SIGTERM = 15
         if rc == 0 {
             serde_json::json!({ "status": "stopped" })
@@ -90,48 +88,38 @@ fn render_daemon_bar(s: &AppState, status: &str, cycle_active: bool) -> Response
         Ok(t) => t,
         Err(e) => return Html(format!("<!-- template error: {e} -->")).into_response(),
     };
-    let html = tmpl.render(context! {
-        status => status,
-        cycle_active => cycle_active,
-    }).unwrap_or_else(|e| format!("<!-- render error: {e} -->"));
+    let html = tmpl
+        .render(context! {
+            status => status,
+            cycle_active => cycle_active,
+        })
+        .unwrap_or_else(|e| format!("<!-- render error: {e} -->"));
     Html(html).into_response()
 }
 
-async fn daemon_start(
-    State(_s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn daemon_start(State(_s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     // Spawn `urace run` as a detached process (mirrors Python's Popen with start_new_session=True)
-    let result = std::process::Command::new("urace")
-        .arg("run")
-        .spawn();
+    let result = std::process::Command::new("urace").arg("run").spawn();
     match result {
         Ok(_) => Json(serde_json::json!({ "status": "starting" })),
         Err(e) => Json(serde_json::json!({ "status": "error", "error": e.to_string() })),
     }
 }
 
-async fn daemon_stop(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-    req: Request,
-) -> Response {
+async fn daemon_stop(State(s): State<AppState>, _auth: BearerToken, req: Request) -> Response {
     let is_htmx = req.headers().get("hx-request").is_some();
     let (running, pid) = state_reader::daemon_status(&s.root);
 
-    let payload = if !running || pid.is_none() {
-        serde_json::json!({ "status": "not_running" })
-    } else {
-        let pid = pid.unwrap();
-        sigterm_process(pid)
+    let payload = match (running, pid) {
+        (true, Some(pid)) => sigterm_process(pid),
+        _ => serde_json::json!({ "status": "not_running" }),
     };
 
     if is_htmx {
-        let bar_status = if payload.get("status").and_then(|v| v.as_str()) == Some("stopped") {
-            "stopped"
-        } else {
-            "stopped"
-        };
+        let bar_status = payload
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("stopped");
         render_daemon_bar(&s, bar_status, false)
     } else {
         Json(payload).into_response()

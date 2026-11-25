@@ -80,9 +80,7 @@ pub fn from_display(s: &str) -> Result<u64, UnitsError> {
             .map_err(|_| UnitsError::Parse(format!("invalid fractional part: '{frac_str}'")))?;
 
         // whole * UNIT + frac — check overflow at each step.
-        let whole_units = whole
-            .checked_mul(UNIT)
-            .ok_or(UnitsError::Overflow)?;
+        let whole_units = whole.checked_mul(UNIT).ok_or(UnitsError::Overflow)?;
         whole_units.checked_add(frac).ok_or(UnitsError::Overflow)
     } else {
         // No decimal point — treat as whole UCR.
@@ -204,7 +202,10 @@ mod tests {
 
     #[test]
     fn parse_invalid_string() {
-        assert!(matches!(from_display("not_a_number"), Err(UnitsError::Parse(_))));
+        assert!(matches!(
+            from_display("not_a_number"),
+            Err(UnitsError::Parse(_))
+        ));
     }
 
     #[test]
@@ -293,7 +294,10 @@ mod tests {
     fn spend_zero_balance() {
         assert_eq!(
             spend_units(0, 1),
-            Err(UnitsError::InsufficientFunds { balance: 0, amount: 1 })
+            Err(UnitsError::InsufficientFunds {
+                balance: 0,
+                amount: 1
+            })
         );
     }
 }

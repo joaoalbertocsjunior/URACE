@@ -7,13 +7,13 @@
 //! dispatch when the daemon RPC socket is unavailable; in the Rust port we
 //! read state directly (the daemon RPC path is a future TODO).
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -26,12 +26,10 @@ pub fn router() -> Router<AppState> {
         .route("/:goal_id/cancel", post(goals_cancel))
 }
 
-async fn list_goals(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn list_goals(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let objectives = state.get("objectives")
+    let objectives = state
+        .get("objectives")
         .cloned()
         .unwrap_or(serde_json::Value::Array(vec![]));
     let goals = if objectives.is_array() {
@@ -51,7 +49,9 @@ pub struct AddGoalBody {
     pub priority: i64,
 }
 
-fn default_priority() -> i64 { 50 }
+fn default_priority() -> i64 {
+    50
+}
 
 async fn add_goal(
     State(_s): State<AppState>,
@@ -66,10 +66,7 @@ async fn add_goal(
     }))
 }
 
-async fn goals_forecast(
-    State(_s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn goals_forecast(State(_s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "unavailable",
         "output": "Forecast requires a running daemon."

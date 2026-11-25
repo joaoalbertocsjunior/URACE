@@ -3,12 +3,8 @@
 //!
 //! Ports `routes/portfolio.py`.
 
-use axum::{
-    extract::State,
-    routing::get,
-    Json, Router,
-};
-use crate::{AppState, auth::BearerToken, state_reader};
+use crate::{auth::BearerToken, state_reader, AppState};
+use axum::{extract::State, routing::get, Json, Router};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -21,13 +17,13 @@ async fn portfolio_feedback(
     _auth: BearerToken,
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let feedback = state.get("portfolio_feedback")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({
+    let feedback = state.get("portfolio_feedback").cloned().unwrap_or_else(|| {
+        serde_json::json!({
             "phase": "UNKNOWN",
             "variants": [],
             "last_error": null,
-        }));
+        })
+    });
     Json(feedback)
 }
 
@@ -36,7 +32,8 @@ async fn portfolio_status(
     _auth: BearerToken,
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let status = state.get("portfolio_status")
+    let status = state
+        .get("portfolio_status")
         .cloned()
         .unwrap_or_else(|| serde_json::json!({ "error": "unavailable" }));
     Json(status)

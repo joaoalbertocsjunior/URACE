@@ -34,7 +34,10 @@ pub struct ReceiptStore {
 }
 
 impl ReceiptStore {
-    pub fn open(path: impl AsRef<std::path::Path>, hmac_key: [u8; 32]) -> Result<Self, ReceiptError> {
+    pub fn open(
+        path: impl AsRef<std::path::Path>,
+        hmac_key: [u8; 32],
+    ) -> Result<Self, ReceiptError> {
         let journal = Journal::open(path, hmac_key)?;
         Ok(ReceiptStore { journal })
     }

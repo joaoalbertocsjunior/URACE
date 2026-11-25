@@ -55,9 +55,7 @@ pub async fn handle_product(root: &Path, args: &ProductArgs, json_mode: bool) ->
                         let name = e.get("name").and_then(|v| v.as_str()).unwrap_or("");
                         let onboarded = onboard_records.iter().any(|r| {
                             r.get("product_name").and_then(|v| v.as_str()) == Some(name)
-                                && r.get("superseded_at")
-                                    .map(|v| v.is_null())
-                                    .unwrap_or(true)
+                                && r.get("superseded_at").map(|v| v.is_null()).unwrap_or(true)
                         });
                         serde_json::json!({
                             "name": name,
@@ -70,24 +68,21 @@ pub async fn handle_product(root: &Path, args: &ProductArgs, json_mode: bool) ->
                     .collect();
                 println!("{}", serde_json::to_string_pretty(&entries)?);
             } else if registry.is_empty() {
-                println!(
-                    "No products registered. Use `urace product create <name>` to add one."
-                );
+                println!("No products registered. Use `urace product create <name>` to add one.");
             } else {
                 for e in registry {
                     let name = e.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                    let status = e
-                        .get("status")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("ACTIVE");
+                    let status = e.get("status").and_then(|v| v.as_str()).unwrap_or("ACTIVE");
                     let marker = if name == active { "* " } else { "  " };
                     let onboarded = onboard_records.iter().any(|r| {
                         r.get("product_name").and_then(|v| v.as_str()) == Some(name)
-                            && r.get("superseded_at")
-                                .map(|v| v.is_null())
-                                .unwrap_or(true)
+                            && r.get("superseded_at").map(|v| v.is_null()).unwrap_or(true)
                     });
-                    let onb_str = if onboarded { "onboarded" } else { "not onboarded" };
+                    let onb_str = if onboarded {
+                        "onboarded"
+                    } else {
+                        "not onboarded"
+                    };
                     println!("{marker}{name} [{status}] {onb_str}");
                 }
             }
@@ -348,10 +343,7 @@ pub async fn handle_rollback(root: &Path, args: &RollbackArgs, json_mode: bool) 
     if !manifest_path.exists() {
         let msg = "no stable snapshot available; run a full cycle first";
         if json_mode {
-            println!(
-                "{}",
-                serde_json::json!({"status": "ERROR", "error": msg})
-            );
+            println!("{}", serde_json::json!({"status": "ERROR", "error": msg}));
         } else {
             eprintln!("error: {msg}");
         }
@@ -446,7 +438,10 @@ pub async fn handle_peer_review(root: &Path, args: &PeerReviewArgs, json_mode: b
             if bid.is_empty() {
                 anyhow::bail!("peer-review {} requires --bundle-id <id>", args.action);
             }
-            eprintln!("not yet wired: peer-review {} requires running daemon", args.action);
+            eprintln!(
+                "not yet wired: peer-review {} requires running daemon",
+                args.action
+            );
             if json_mode {
                 println!(
                     "{}",
@@ -486,22 +481,13 @@ pub async fn handle_peer_review(root: &Path, args: &PeerReviewArgs, json_mode: b
                     "bundle_id", "feature", "bytes"
                 );
                 for b in bundles {
-                    let bid = b
-                        .get("bundle_id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
-                    let feature = b
-                        .get("feature")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
+                    let bid = b.get("bundle_id").and_then(|v| v.as_str()).unwrap_or("?");
+                    let feature = b.get("feature").and_then(|v| v.as_str()).unwrap_or("?");
                     let bytes = b
                         .get("artifact_bytes")
                         .and_then(|v| v.as_u64())
                         .unwrap_or(0);
-                    let sender = b
-                        .get("sender")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
+                    let sender = b.get("sender").and_then(|v| v.as_str()).unwrap_or("?");
                     let bid_short: String = bid.chars().take(18).collect();
                     println!("  {bid_short:<20} {feature:<20} {bytes:>8}  {sender}");
                 }
@@ -555,10 +541,7 @@ mod tests {
     #[tokio::test]
     async fn test_product_status() {
         let dir = TempDir::new().unwrap();
-        write_state(
-            &dir,
-            serde_json::json!({"lifecycle_state": "RUNNING"}),
-        );
+        write_state(&dir, serde_json::json!({"lifecycle_state": "RUNNING"}));
         write_config(
             &dir,
             serde_json::json!({

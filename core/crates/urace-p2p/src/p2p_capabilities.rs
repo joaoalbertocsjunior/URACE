@@ -73,14 +73,30 @@ impl PeerCapabilities {
     /// Convert to u16 bitmask for wire protocol.
     pub fn to_bits(&self) -> u16 {
         let mut bits: u16 = 0;
-        if self.storage { bits |= 1 << 0; }
-        if self.executor { bits |= 1 << 1; }
-        if self.relay { bits |= 1 << 2; }
-        if self.bootstrap { bits |= 1 << 3; }
-        if self.consensus { bits |= 1 << 4; }
-        if self.sealer { bits |= 1 << 5; }
-        if self.evm_settlement { bits |= 1 << 6; }
-        if self.dht { bits |= 1 << 7; }
+        if self.storage {
+            bits |= 1 << 0;
+        }
+        if self.executor {
+            bits |= 1 << 1;
+        }
+        if self.relay {
+            bits |= 1 << 2;
+        }
+        if self.bootstrap {
+            bits |= 1 << 3;
+        }
+        if self.consensus {
+            bits |= 1 << 4;
+        }
+        if self.sealer {
+            bits |= 1 << 5;
+        }
+        if self.evm_settlement {
+            bits |= 1 << 6;
+        }
+        if self.dht {
+            bits |= 1 << 7;
+        }
         bits
     }
 

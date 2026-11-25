@@ -6,12 +6,12 @@
 //! Ports `routes/inbox.py`. Proposal management actions are stubs because
 //! they require daemon RPC; reading proposals from state is fully implemented.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Path, State},
     routing::{get, post},
     Json, Router,
 };
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -21,10 +21,7 @@ pub fn router() -> Router<AppState> {
         .route("/:item_id/reject", post(inbox_reject))
 }
 
-async fn list_inbox(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn list_inbox(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
     let proposals = state
         .get("patch_proposals")
@@ -34,19 +31,14 @@ async fn list_inbox(
     Json(serde_json::json!({ "items": proposals }))
 }
 
-async fn inbox_count(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn inbox_count(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
     let count = state
         .get("patch_proposals")
         .and_then(|v| v.as_array())
         .map(|a| {
             a.iter()
-                .filter(|p| {
-                    p.get("status").and_then(|v| v.as_str()) == Some("PENDING")
-                })
+                .filter(|p| p.get("status").and_then(|v| v.as_str()) == Some("PENDING"))
                 .count()
         })
         .unwrap_or(0);

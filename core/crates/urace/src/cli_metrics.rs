@@ -27,10 +27,7 @@ pub async fn handle_vitals(root: &Path, _args: &VitalsArgs, json_mode: bool) -> 
         .get("lifecycle_state")
         .and_then(|v| v.as_str())
         .unwrap_or("UNKNOWN");
-    let aps_score = state
-        .get("aps_score")
-        .cloned()
-        .unwrap_or(Value::Null);
+    let aps_score = state.get("aps_score").cloned().unwrap_or(Value::Null);
     let cycle_count = state
         .get("cycle_count")
         .and_then(|v| v.as_u64())
@@ -50,9 +47,7 @@ pub async fn handle_vitals(root: &Path, _args: &VitalsArgs, json_mode: bool) -> 
         .and_then(|v| v.as_array())
         .map(|a| {
             a.iter()
-                .filter(|b| {
-                    b.get("resolved_at").is_none() || b["resolved_at"].is_null()
-                })
+                .filter(|b| b.get("resolved_at").is_none() || b["resolved_at"].is_null())
                 .count()
         })
         .unwrap_or(0);
@@ -144,21 +139,15 @@ pub async fn handle_audit(root: &Path, args: &AuditArgs, json_mode: bool) -> Res
 
     // Most recent last (audit log is append-ordered); take the last N.
     let total = records.len();
-    let start = if total > args.limit { total - args.limit } else { 0 };
+    let start = total.saturating_sub(args.limit);
     let page = &records[start..];
 
     if json_mode {
-        println!(
-            "{}",
-            serde_json::json!({"records": page, "total": total})
-        );
+        println!("{}", serde_json::json!({"records": page, "total": total}));
     } else {
         for r in page {
             let kind = r.get("kind").and_then(|v| v.as_str()).unwrap_or("?");
-            let op = r
-                .get("operation")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let op = r.get("operation").and_then(|v| v.as_str()).unwrap_or("?");
             let at = r.get("at").and_then(|v| v.as_str()).unwrap_or("?");
             println!("  {kind} | {op} | {at}");
         }
@@ -195,11 +184,7 @@ pub async fn handle_goals(root: &Path, args: &GoalsArgs, json_mode: bool) -> Res
     match args.action.as_str() {
         "add" | "pin" | "unpin" | "defer" | "cancel" => {
             // Mutations require live daemon authority gate.
-            let id_or_title = args
-                .id
-                .as_deref()
-                .or(args.title.as_deref())
-                .unwrap_or("?");
+            let id_or_title = args.id.as_deref().or(args.title.as_deref()).unwrap_or("?");
             if json_mode {
                 println!(
                     "{}",
@@ -228,8 +213,7 @@ pub async fn handle_goals(root: &Path, args: &GoalsArgs, json_mode: bool) -> Res
             let mut records: Vec<&Value> = all.iter().rev().collect();
             if let Some(status_filter) = &args.status {
                 records.retain(|r| {
-                    r.get("status").and_then(|v| v.as_str())
-                        == Some(status_filter.as_str())
+                    r.get("status").and_then(|v| v.as_str()) == Some(status_filter.as_str())
                 });
             }
             records.truncate(args.limit);
@@ -245,11 +229,7 @@ pub async fn handle_goals(root: &Path, args: &GoalsArgs, json_mode: bool) -> Res
                         .and_then(|v| v.as_str())
                         .unwrap_or("(untitled)");
                     let status = r.get("status").and_then(|v| v.as_str()).unwrap_or("?");
-                    let pinned = if r
-                        .get("pinned")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false)
-                    {
+                    let pinned = if r.get("pinned").and_then(|v| v.as_bool()).unwrap_or(false) {
                         " [pinned]"
                     } else {
                         ""
@@ -290,13 +270,11 @@ pub struct DataArgs {
     pub action: String,
 
     // ── shared identifier ──────────────────────────────────────────────────
-
     /// Data source name (for credential/source sub-actions)
     #[arg(long)]
     pub name: Option<String>,
 
     // ── credential fields ──────────────────────────────────────────────────
-
     /// Credential sub-action: add | remove | inspect
     #[arg(long = "credential-action")]
     pub credential_action: Option<String>,
@@ -314,7 +292,6 @@ pub struct DataArgs {
     pub expires_at: Option<String>,
 
     // ── source fields ──────────────────────────────────────────────────────
-
     /// Source sub-action: list | show | sync | add | remove
     #[arg(long = "source-action")]
     pub source_action: Option<String>,
@@ -340,7 +317,6 @@ pub struct DataArgs {
     pub label: String,
 
     // ── legacy browse fields ───────────────────────────────────────────────
-
     /// Data reference / ID (for 'show')
     #[arg(long)]
     pub reference: Option<String>,
@@ -356,11 +332,7 @@ pub struct DataArgs {
 
 // ── handle_data_credential ────────────────────────────────────────────────────
 
-fn handle_data_credential(
-    state: &serde_json::Value,
-    args: &DataArgs,
-    json_mode: bool,
-) {
+fn handle_data_credential(state: &serde_json::Value, args: &DataArgs, json_mode: bool) {
     let cred_action = args.credential_action.as_deref().unwrap_or("");
     let name = args.name.as_deref().unwrap_or("");
 
@@ -375,9 +347,9 @@ fn handle_data_credential(
         .cloned()
         .unwrap_or_default();
 
-    let rec = sources.iter().find(|r| {
-        r.get("name").and_then(|v| v.as_str()) == Some(name)
-    });
+    let rec = sources
+        .iter()
+        .find(|r| r.get("name").and_then(|v| v.as_str()) == Some(name));
 
     match cred_action {
         "add" => {
@@ -426,9 +398,9 @@ fn handle_data_credential(
             };
             let cred_id = source.get("credential_record_id").and_then(|v| v.as_str());
             let cred = cred_id.and_then(|cid| {
-                creds.iter().find(|c| {
-                    c.get("id").and_then(|v| v.as_str()) == Some(cid)
-                })
+                creds
+                    .iter()
+                    .find(|c| c.get("id").and_then(|v| v.as_str()) == Some(cid))
             });
             match cred {
                 Some(c) => {
@@ -478,11 +450,7 @@ fn handle_data_credential(
 
 // ── handle_data_source ────────────────────────────────────────────────────────
 
-fn handle_data_source(
-    state: &serde_json::Value,
-    args: &DataArgs,
-    json_mode: bool,
-) {
+fn handle_data_source(state: &serde_json::Value, args: &DataArgs, json_mode: bool) {
     let source_action = args.source_action.as_deref().unwrap_or("list");
     let name = args.name.as_deref().unwrap_or("");
 
@@ -501,9 +469,7 @@ fn handle_data_source(
                 });
             }
             if let Some(st) = &args.status {
-                records.retain(|r| {
-                    r.get("status").and_then(|v| v.as_str()) == Some(st.as_str())
-                });
+                records.retain(|r| r.get("status").and_then(|v| v.as_str()) == Some(st.as_str()));
             }
             if json_mode {
                 println!(
@@ -516,7 +482,10 @@ fn handle_data_source(
                 for r in records {
                     let id = r.get("id").and_then(|v| v.as_str()).unwrap_or("?");
                     let rname = r.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                    let kind = r.get("adapter_kind").and_then(|v| v.as_str()).unwrap_or("?");
+                    let kind = r
+                        .get("adapter_kind")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?");
                     let status = r.get("status").and_then(|v| v.as_str()).unwrap_or("?");
                     println!("{id}: name={rname} adapter={kind} status={status}");
                 }
@@ -525,7 +494,10 @@ fn handle_data_source(
         "show" => {
             if name.is_empty() {
                 if json_mode {
-                    println!("{}", serde_json::json!({"error": "source show requires --name"}));
+                    println!(
+                        "{}",
+                        serde_json::json!({"error": "source show requires --name"})
+                    );
                 } else {
                     println!("source show requires --name");
                 }
@@ -633,7 +605,10 @@ pub async fn handle_data(root: &Path, args: &DataArgs, json_mode: bool) -> Resul
             } else {
                 for s in &summary {
                     let name = s.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                    let kind = s.get("adapter_kind").and_then(|v| v.as_str()).unwrap_or("?");
+                    let kind = s
+                        .get("adapter_kind")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?");
                     let dir = s.get("direction").and_then(|v| v.as_str()).unwrap_or("?");
                     let status = s.get("status").and_then(|v| v.as_str()).unwrap_or("?");
                     println!("{name}: adapter={kind} direction={dir} status={status}");
@@ -735,10 +710,7 @@ pub async fn handle_trace(root: &Path, args: &TraceArgs, json_mode: bool) -> Res
     let mut records: Vec<&Value> = all.iter().rev().collect();
 
     if let Some(kind_filter) = &args.kind {
-        records.retain(|r| {
-            r.get("kind").and_then(|v| v.as_str())
-                == Some(kind_filter.as_str())
-        });
+        records.retain(|r| r.get("kind").and_then(|v| v.as_str()) == Some(kind_filter.as_str()));
     }
 
     records.truncate(args.limit);
@@ -802,7 +774,11 @@ mod tests {
     #[tokio::test]
     async fn test_handle_audit_no_log() {
         let dir = TempDir::new().unwrap();
-        let args = AuditArgs { action: None, since: None, limit: 20 };
+        let args = AuditArgs {
+            action: None,
+            since: None,
+            limit: 20,
+        };
         handle_audit(dir.path(), &args, false).await.unwrap();
     }
 
@@ -815,7 +791,11 @@ mod tests {
             "{\"kind\":\"CYCLE\",\"operation\":\"run\",\"at\":\"2026-01-01T00:00:00Z\"}\n",
         )
         .unwrap();
-        let args = AuditArgs { action: None, since: None, limit: 20 };
+        let args = AuditArgs {
+            action: None,
+            since: None,
+            limit: 20,
+        };
         handle_audit(dir.path(), &args, true).await.unwrap();
     }
 
@@ -835,7 +815,10 @@ mod tests {
     #[tokio::test]
     async fn test_handle_trace_empty() {
         let dir = TempDir::new().unwrap();
-        let args = TraceArgs { limit: 10, kind: None };
+        let args = TraceArgs {
+            limit: 10,
+            kind: None,
+        };
         handle_trace(dir.path(), &args, false).await.unwrap();
     }
 

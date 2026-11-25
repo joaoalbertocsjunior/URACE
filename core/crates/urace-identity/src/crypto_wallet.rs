@@ -140,8 +140,14 @@ mod tests {
         assert!(dbg.contains("wallet_id"));
         assert!(dbg.contains("peer_id"));
         // Must NOT contain "keypair", "signing", or the private key hex.
-        assert!(!dbg.contains("keypair"), "Debug must not expose keypair field");
-        assert!(!dbg.contains("signing"), "Debug must not expose signing key");
+        assert!(
+            !dbg.contains("keypair"),
+            "Debug must not expose keypair field"
+        );
+        assert!(
+            !dbg.contains("signing"),
+            "Debug must not expose signing key"
+        );
         // Verify the hex of the seed is not present.
         let seed = wallet.keypair.to_seed();
         let seed_hex = hex::encode(seed.as_ref());

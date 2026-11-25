@@ -49,7 +49,9 @@ pub enum CatalogError {
     InvalidLifecycle(String),
     #[error("invalid descriptor: {0}")]
     InvalidDescriptor(String),
-    #[error("wash trade detected: actor {actor_id:?} has a conflicting position on atom {atom_id:?}")]
+    #[error(
+        "wash trade detected: actor {actor_id:?} has a conflicting position on atom {atom_id:?}"
+    )]
     WashTrade { atom_id: String, actor_id: String },
     #[error("alias already maps to a different atom")]
     AliasConflict,
@@ -190,7 +192,11 @@ pub fn validate_descriptor(desc: AtomDescriptor) -> Result<AtomDescriptor, Catal
             "capability must be 1–2048 bytes".into(),
         ));
     }
-    for field in [&desc.interface_sha384, &desc.acceptance_sha384, &desc.content_sha384] {
+    for field in [
+        &desc.interface_sha384,
+        &desc.acceptance_sha384,
+        &desc.content_sha384,
+    ] {
         if !re.is_match(field) {
             return Err(CatalogError::InvalidDescriptor(
                 "interface_sha384, acceptance_sha384, content_sha384 must be 96-char lowercase hex"
@@ -460,9 +466,7 @@ mod tests {
     #[test]
     fn lifecycle_transition() {
         let cat = FeatureCatalog::new();
-        let atom = cat
-            .declare_atom("f1", sample_desc("cap"), None)
-            .unwrap();
+        let atom = cat.declare_atom("f1", sample_desc("cap"), None).unwrap();
         cat.set_lifecycle(&atom.id, "deprecated", None).unwrap();
         let updated = cat.get(&atom.id).unwrap();
         assert_eq!(updated.lifecycle, Lifecycle::Deprecated);
@@ -510,16 +514,20 @@ mod tests {
     #[test]
     fn alias_conflict_error() {
         let cat = FeatureCatalog::new();
-        cat.declare_atom("alias", sample_desc("cap-a"), None).unwrap();
+        cat.declare_atom("alias", sample_desc("cap-a"), None)
+            .unwrap();
         // Different descriptor under the same alias → AliasConflict
-        let err = cat.declare_atom("alias", sample_desc("cap-b"), None).unwrap_err();
+        let err = cat
+            .declare_atom("alias", sample_desc("cap-b"), None)
+            .unwrap_err();
         assert!(matches!(err, CatalogError::AliasConflict));
     }
 
     #[test]
     fn get_by_alias() {
         let cat = FeatureCatalog::new();
-        cat.declare_atom("my-alias", sample_desc("cap"), None).unwrap();
+        cat.declare_atom("my-alias", sample_desc("cap"), None)
+            .unwrap();
         let atom = cat.get("my-alias");
         assert!(atom.is_some());
         assert_eq!(atom.unwrap().title, "my-alias");

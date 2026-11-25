@@ -40,11 +40,17 @@ pub struct Updater {
 
 impl Updater {
     pub fn new(staging_dir: impl Into<std::path::PathBuf>) -> Self {
-        Updater { staging_dir: staging_dir.into() }
+        Updater {
+            staging_dir: staging_dir.into(),
+        }
     }
 
     /// Verifies `bytes` match `manifest.sha256`.
-    pub fn verify_checksum(&self, bytes: &[u8], manifest: &UpdateManifest) -> Result<(), UpdateError> {
+    pub fn verify_checksum(
+        &self,
+        bytes: &[u8],
+        manifest: &UpdateManifest,
+    ) -> Result<(), UpdateError> {
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         let got = hex::encode(hasher.finalize());
@@ -58,7 +64,11 @@ impl Updater {
     }
 
     /// Writes verified bytes atomically to `staging_dir/{version}`.
-    pub fn stage(&self, bytes: &[u8], manifest: &UpdateManifest) -> Result<std::path::PathBuf, UpdateError> {
+    pub fn stage(
+        &self,
+        bytes: &[u8],
+        manifest: &UpdateManifest,
+    ) -> Result<std::path::PathBuf, UpdateError> {
         self.verify_checksum(bytes, manifest)?;
         let dest = self.staging_dir.join(&manifest.version);
         std::fs::create_dir_all(&self.staging_dir)?;

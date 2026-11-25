@@ -66,7 +66,11 @@ impl SchemaExporter {
     /// Register an output schema (e.g. from a CLI command).
     pub fn register_output_schema(&mut self, schema: OutputSchema) {
         // Replace existing entry with the same command name.
-        if let Some(pos) = self.output_schemas.iter().position(|s| s.command == schema.command) {
+        if let Some(pos) = self
+            .output_schemas
+            .iter()
+            .position(|s| s.command == schema.command)
+        {
             self.output_schemas[pos] = schema;
         } else {
             self.output_schemas.push(schema);
@@ -75,7 +79,11 @@ impl SchemaExporter {
 
     /// Register a feature bundle.
     pub fn register_feature_bundle(&mut self, bundle: FeatureBundle) {
-        if let Some(pos) = self.feature_bundles.iter().position(|b| b.name == bundle.name) {
+        if let Some(pos) = self
+            .feature_bundles
+            .iter()
+            .position(|b| b.name == bundle.name)
+        {
             self.feature_bundles[pos] = bundle;
         } else {
             self.feature_bundles.push(bundle);

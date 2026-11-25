@@ -4,13 +4,13 @@
 //!
 //! Ports `routes/exchange.py`.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Query, State},
     routing::get,
     Json, Router,
 };
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -19,14 +19,12 @@ pub fn router() -> Router<AppState> {
         .route("/search", get(exchange_search))
 }
 
-async fn exchange_peers(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn exchange_peers(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let peers = state.get("peers").cloned().unwrap_or_else(|| {
-        serde_json::json!({ "peer_count": 0, "anonymized_peer_ids": [] })
-    });
+    let peers = state
+        .get("peers")
+        .cloned()
+        .unwrap_or_else(|| serde_json::json!({ "peer_count": 0, "anonymized_peer_ids": [] }));
     Json(peers)
 }
 
@@ -41,7 +39,8 @@ async fn exchange_assets(
     Query(q): Query<AssetsQuery>,
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let mut assets = state.get("open_assets")
+    let mut assets = state
+        .get("open_assets")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
@@ -49,8 +48,16 @@ async fn exchange_assets(
     if let Some(query) = &q.query {
         let ql = query.to_lowercase();
         assets.retain(|a| {
-            let desc = a.get("description").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
-            let feat = a.get("feature_id").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            let desc = a
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_lowercase();
+            let feat = a
+                .get("feature_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_lowercase();
             desc.contains(&ql) || feat.contains(&ql)
         });
     }
@@ -67,7 +74,9 @@ pub struct SearchQuery {
     #[serde(default = "default_kind")]
     pub kind: String,
 }
-fn default_kind() -> String { "all".to_string() }
+fn default_kind() -> String {
+    "all".to_string()
+}
 
 async fn exchange_search(
     State(s): State<AppState>,
@@ -75,7 +84,8 @@ async fn exchange_search(
     Query(q): Query<SearchQuery>,
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let mut assets = state.get("open_assets")
+    let mut assets = state
+        .get("open_assets")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
@@ -83,15 +93,17 @@ async fn exchange_search(
     if let Some(query) = &q.q {
         let ql = query.to_lowercase();
         assets.retain(|a| {
-            let desc = a.get("description").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+            let desc = a
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_lowercase();
             desc.contains(&ql)
         });
     }
 
     if q.kind != "all" {
-        assets.retain(|a| {
-            a.get("kind").and_then(|v| v.as_str()) == Some(&q.kind)
-        });
+        assets.retain(|a| a.get("kind").and_then(|v| v.as_str()) == Some(&q.kind));
     }
 
     Json(serde_json::json!({ "results": assets }))

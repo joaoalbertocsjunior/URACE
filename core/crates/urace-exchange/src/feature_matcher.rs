@@ -90,8 +90,18 @@ fn seq_ratio(a: &str, b: &str) -> f64 {
     }
 
     // Bigram sets
-    let bigrams_a: HashSet<(char, char)> = a.chars().collect::<Vec<_>>().windows(2).map(|w| (w[0], w[1])).collect();
-    let bigrams_b: HashSet<(char, char)> = b.chars().collect::<Vec<_>>().windows(2).map(|w| (w[0], w[1])).collect();
+    let bigrams_a: HashSet<(char, char)> = a
+        .chars()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .map(|w| (w[0], w[1]))
+        .collect();
+    let bigrams_b: HashSet<(char, char)> = b
+        .chars()
+        .collect::<Vec<_>>()
+        .windows(2)
+        .map(|w| (w[0], w[1]))
+        .collect();
 
     if bigrams_a.is_empty() || bigrams_b.is_empty() {
         return 0.0;
@@ -163,7 +173,11 @@ pub fn match_features(query: &str, catalog: &FeatureCatalog) -> Vec<MatchScore> 
         })
         .collect();
 
-    scored.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+    scored.sort_by(|a, b| {
+        b.score
+            .partial_cmp(&a.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     scored
 }
 
@@ -191,9 +205,15 @@ pub fn score_against_profile(
     let lifecycle_active = atom.lifecycle == Lifecycle::Active;
 
     // Layer 1 — exact hash match
-    let prod_iface = profile.get("interface_sha384").map(|s| s.as_str()).unwrap_or("");
+    let prod_iface = profile
+        .get("interface_sha384")
+        .map(|s| s.as_str())
+        .unwrap_or("");
     let feat_iface = atom.kind.interface_sha384.as_str();
-    let prod_acc = profile.get("acceptance_sha384").map(|s| s.as_str()).unwrap_or("");
+    let prod_acc = profile
+        .get("acceptance_sha384")
+        .map(|s| s.as_str())
+        .unwrap_or("");
     let feat_acc = atom.kind.acceptance_sha384.as_str();
 
     let layer1_hit = (!prod_iface.is_empty() && prod_iface == feat_iface)
@@ -294,7 +314,10 @@ mod tests {
 
     #[test]
     fn jaccard_identical() {
-        let a: HashSet<String> = ["foo", "bar", "baz"].iter().map(|s| s.to_string()).collect();
+        let a: HashSet<String> = ["foo", "bar", "baz"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let b = a.clone();
         assert!((jaccard(&a, &b) - 1.0).abs() < 1e-9);
     }

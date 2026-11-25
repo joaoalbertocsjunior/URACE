@@ -190,11 +190,7 @@ fn load_exchange_config(root: &Path) -> Value {
 
 // ── Handler entry point ───────────────────────────────────────────────────────
 
-pub async fn handle_exchange(
-    root: &Path,
-    args: ExchangeArgs,
-    global_json: bool,
-) -> Result<()> {
+pub async fn handle_exchange(root: &Path, args: ExchangeArgs, global_json: bool) -> Result<()> {
     match args.cmd {
         ExchangeCommands::Status { json } => handle_status(root, json || global_json),
         ExchangeCommands::List { json } => handle_list(root, json || global_json),
@@ -277,26 +273,24 @@ fn handle_list(root: &Path, json_mode: bool) -> Result<()> {
     let state = load_state_json(root);
 
     // Prefer feature_catalog array, fall back to features object keys
-    let features: Vec<Value> = if let Some(arr) = state
-        .get("feature_catalog")
-        .and_then(|v| v.as_array())
-    {
-        arr.clone()
-    } else if let Some(map) = state.get("features").and_then(|v| v.as_object()) {
-        map.iter()
-            .map(|(k, v)| {
-                let mut entry = serde_json::json!({"feature_id": k});
-                if let Some(obj) = v.as_object() {
-                    for (fk, fv) in obj {
-                        entry[fk] = fv.clone();
+    let features: Vec<Value> =
+        if let Some(arr) = state.get("feature_catalog").and_then(|v| v.as_array()) {
+            arr.clone()
+        } else if let Some(map) = state.get("features").and_then(|v| v.as_object()) {
+            map.iter()
+                .map(|(k, v)| {
+                    let mut entry = serde_json::json!({"feature_id": k});
+                    if let Some(obj) = v.as_object() {
+                        for (fk, fv) in obj {
+                            entry[fk] = fv.clone();
+                        }
                     }
-                }
-                entry
-            })
-            .collect()
-    } else {
-        vec![]
-    };
+                    entry
+                })
+                .collect()
+        } else {
+            vec![]
+        };
 
     if json_mode {
         println!(
@@ -306,13 +300,10 @@ fn handle_list(root: &Path, json_mode: bool) -> Result<()> {
     } else if features.is_empty() {
         println!("no features found in state");
     } else {
-        println!("{:<36} {:<20} {}", "feature_id", "kind", "tags");
+        println!("{:<36} {:<20} tags", "feature_id", "kind");
         println!("{}", "-".repeat(72));
         for f in &features {
-            let id = f
-                .get("feature_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let id = f.get("feature_id").and_then(|v| v.as_str()).unwrap_or("?");
             let kind = f
                 .get("kind")
                 .or_else(|| f.get("kind_label"))
@@ -453,13 +444,10 @@ fn handle_rank(root: &Path, limit: usize, json_mode: bool) -> Result<()> {
     } else if ranked.is_empty() {
         println!("no features to rank");
     } else {
-        println!("{:<4} {:<36} {}", "rank", "feature_id", "score");
+        println!("{:<4} {:<36} score", "rank", "feature_id");
         println!("{}", "-".repeat(60));
         for (i, f) in ranked.iter().enumerate() {
-            let id = f
-                .get("feature_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let id = f.get("feature_id").and_then(|v| v.as_str()).unwrap_or("?");
             let score = f
                 .get("kpi_score")
                 .or_else(|| f.get("quality_score"))
@@ -489,10 +477,7 @@ fn handle_reputation(root: &Path, json_mode: bool) -> Result<()> {
     let summary: Vec<Value> = if let Some(map) = peers_val.as_object() {
         map.iter()
             .map(|(peer_id, v)| {
-                let rep = v
-                    .get("reputation")
-                    .and_then(|r| r.as_f64())
-                    .unwrap_or(0.0);
+                let rep = v.get("reputation").and_then(|r| r.as_f64()).unwrap_or(0.0);
                 serde_json::json!({
                     "peer_id": peer_id,
                     "reputation": rep,
@@ -512,18 +497,12 @@ fn handle_reputation(root: &Path, json_mode: bool) -> Result<()> {
     } else if summary.is_empty() {
         println!("no peer reputation data in state");
     } else {
-        println!("{:<42} {:>10}  {}", "peer_id", "reputation", "blocked");
+        println!("{:<42} {:>10}  blocked", "peer_id", "reputation");
         println!("{}", "-".repeat(60));
         for p in &summary {
             let id = p.get("peer_id").and_then(|v| v.as_str()).unwrap_or("?");
-            let rep = p
-                .get("reputation")
-                .and_then(|v| v.as_f64())
-                .unwrap_or(0.0);
-            let blocked = p
-                .get("blocked")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            let rep = p.get("reputation").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let blocked = p.get("blocked").and_then(|v| v.as_bool()).unwrap_or(false);
             println!("{:<42} {:>10.3}  {}", id, rep, blocked);
         }
     }
@@ -628,14 +607,11 @@ fn handle_asset(root: &Path, cmd: AssetCommands, global_json: bool) -> Result<()
             } else if assets.is_empty() {
                 println!("no assets in registry");
             } else {
-                println!("{:<36} {}", "asset_id", "kind");
+                println!("{:<36} kind", "asset_id");
                 println!("{}", "-".repeat(50));
                 for a in &assets {
                     let id = a.get("asset_id").and_then(|v| v.as_str()).unwrap_or("?");
-                    let kind = a
-                        .get("kind")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let kind = a.get("kind").and_then(|v| v.as_str()).unwrap_or("");
                     println!("{:<36} {}", id, kind);
                 }
             }
@@ -703,9 +679,7 @@ fn handle_ask(atom_id: &str, price: u64, json_mode: bool) -> Result<()> {
     if json_mode {
         println!("{}", out);
     } else {
-        println!(
-            "ask {atom_id} @ {price} UCR: unavailable — market not yet wired"
-        );
+        println!("ask {atom_id} @ {price} UCR: unavailable — market not yet wired");
     }
     Ok(())
 }
@@ -829,18 +803,12 @@ fn handle_peers(root: &Path, cmd: PeersCommands, global_json: bool) -> Result<()
             } else if peers.is_empty() {
                 println!("no exchange peers known");
             } else {
-                println!("{:<42} {:<30} {}", "peer_id", "endpoint", "blocked");
+                println!("{:<42} {:<30} blocked", "peer_id", "endpoint");
                 println!("{}", "-".repeat(80));
                 for p in &peers {
                     let id = p.get("peer_id").and_then(|v| v.as_str()).unwrap_or("?");
-                    let ep = p
-                        .get("endpoint")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
-                    let blocked = p
-                        .get("blocked")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
+                    let ep = p.get("endpoint").and_then(|v| v.as_str()).unwrap_or("");
+                    let blocked = p.get("blocked").and_then(|v| v.as_bool()).unwrap_or(false);
                     println!("{:<42} {:<30} {}", id, ep, blocked);
                 }
             }
@@ -857,9 +825,7 @@ fn handle_peers(root: &Path, cmd: PeersCommands, global_json: bool) -> Result<()
             if json_mode {
                 println!("{}", out);
             } else {
-                println!(
-                    "connect {addr}: unavailable — market RPC not yet wired to daemon"
-                );
+                println!("connect {addr}: unavailable — market RPC not yet wired to daemon");
             }
         }
     }
@@ -923,10 +889,8 @@ mod tests {
 
     #[test]
     fn exchange_ask_parses() {
-        let cli = TestCli::try_parse_from([
-            "t", "exchange", "ask", "feat-001", "--price", "500",
-        ])
-        .unwrap();
+        let cli = TestCli::try_parse_from(["t", "exchange", "ask", "feat-001", "--price", "500"])
+            .unwrap();
         if let TestCommands::Exchange(ExchangeArgs {
             cmd: ExchangeCommands::Ask { atom_id, price, .. },
         }) = cli.cmd
@@ -953,8 +917,7 @@ mod tests {
 
     #[test]
     fn exchange_peers_list_parses() {
-        let cli =
-            TestCli::try_parse_from(["t", "exchange", "peers", "list"]).unwrap();
+        let cli = TestCli::try_parse_from(["t", "exchange", "peers", "list"]).unwrap();
         assert!(matches!(
             cli.cmd,
             TestCommands::Exchange(ExchangeArgs {

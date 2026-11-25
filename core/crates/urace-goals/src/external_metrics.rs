@@ -21,7 +21,10 @@ pub enum ExternalMetricsError {
     ResponseTooLarge { url: String, max_bytes: usize },
 
     #[error("JSON parse error for {url}: {source}")]
-    JsonParse { url: String, source: serde_json::Error },
+    JsonParse {
+        url: String,
+        source: serde_json::Error,
+    },
 
     #[error("source schema mismatch — metric path {path:?} not found or not scalar")]
     SourceSchemaMismatch { path: String },
@@ -30,7 +33,10 @@ pub enum ExternalMetricsError {
     UnsupportedKind { kind: String },
 
     #[error("file I/O error at {path}: {source}")]
-    Io { path: PathBuf, source: std::io::Error },
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 
     #[error("max_response_bytes must be at least 1024")]
     MaxBytesTooSmall,
@@ -127,22 +133,24 @@ async fn get_json(
             req = req.header(&k, &v);
         }
     }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| ExternalMetricsError::Http { url: url.to_owned(), source: e })?;
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| ExternalMetricsError::Http { url: url.to_owned(), source: e })?;
+    let resp = req.send().await.map_err(|e| ExternalMetricsError::Http {
+        url: url.to_owned(),
+        source: e,
+    })?;
+    let bytes = resp.bytes().await.map_err(|e| ExternalMetricsError::Http {
+        url: url.to_owned(),
+        source: e,
+    })?;
     if bytes.len() > max_bytes {
         return Err(ExternalMetricsError::ResponseTooLarge {
             url: url.to_owned(),
             max_bytes,
         });
     }
-    serde_json::from_slice(&bytes)
-        .map_err(|e| ExternalMetricsError::JsonParse { url: url.to_owned(), source: e })
+    serde_json::from_slice(&bytes).map_err(|e| ExternalMetricsError::JsonParse {
+        url: url.to_owned(),
+        source: e,
+    })
 }
 
 /// Fetch GitHub repository data and return (values, events).
@@ -151,11 +159,12 @@ async fn fetch_github_repository(
     repo_slug: &str,
     max_bytes: usize,
 ) -> Result<(HashMap<String, f64>, Vec<ExternalEvent>), ExternalMetricsError> {
-    let (owner, repo) = repo_slug
-        .split_once('/')
-        .ok_or_else(|| ExternalMetricsError::UnsupportedKind {
-            kind: format!("invalid repository slug: {repo_slug}"),
-        })?;
+    let (owner, repo) =
+        repo_slug
+            .split_once('/')
+            .ok_or_else(|| ExternalMetricsError::UnsupportedKind {
+                kind: format!("invalid repository slug: {repo_slug}"),
+            })?;
     let base = format!("https://api.github.com/repos/{owner}/{repo}");
 
     let repo_data = get_json(client, &base, max_bytes, None).await?;
@@ -272,7 +281,12 @@ async fn fetch_github_repository(
     events.truncate(50);
 
     // Build values map — fail hard on missing expected fields
-    let required = ["stargazers_count", "forks_count", "subscribers_count", "open_issues_count"];
+    let required = [
+        "stargazers_count",
+        "forks_count",
+        "subscribers_count",
+        "open_issues_count",
+    ];
     let missing: Vec<&str> = required
         .iter()
         .copied()
@@ -284,9 +298,18 @@ async fn fetch_github_repository(
         });
     }
     let mut values = HashMap::new();
-    values.insert("stars".to_owned(), repo_data["stargazers_count"].as_f64().unwrap_or(0.0));
-    values.insert("forks".to_owned(), repo_data["forks_count"].as_f64().unwrap_or(0.0));
-    values.insert("watching".to_owned(), repo_data["subscribers_count"].as_f64().unwrap_or(0.0));
+    values.insert(
+        "stars".to_owned(),
+        repo_data["stargazers_count"].as_f64().unwrap_or(0.0),
+    );
+    values.insert(
+        "forks".to_owned(),
+        repo_data["forks_count"].as_f64().unwrap_or(0.0),
+    );
+    values.insert(
+        "watching".to_owned(),
+        repo_data["subscribers_count"].as_f64().unwrap_or(0.0),
+    );
     values.insert(
         "open_issues_and_pulls".to_owned(),
         repo_data["open_issues_count"].as_f64().unwrap_or(0.0),
@@ -300,32 +323,44 @@ fn lookup_path(value: &Value, path: &str) -> Result<f64, ExternalMetricsError> {
     let mut current = value;
     for part in path.split('.') {
         current = if let Some(arr) = current.as_array() {
-            let idx: usize = part.parse().map_err(|_| {
-                ExternalMetricsError::SourceSchemaMismatch { path: path.to_owned() }
-            })?;
-            arr.get(idx).ok_or_else(|| ExternalMetricsError::SourceSchemaMismatch {
-                path: path.to_owned(),
-            })?
+            let idx: usize =
+                part.parse()
+                    .map_err(|_| ExternalMetricsError::SourceSchemaMismatch {
+                        path: path.to_owned(),
+                    })?;
+            arr.get(idx)
+                .ok_or_else(|| ExternalMetricsError::SourceSchemaMismatch {
+                    path: path.to_owned(),
+                })?
         } else if let Some(obj) = current.as_object() {
-            obj.get(part).ok_or_else(|| ExternalMetricsError::SourceSchemaMismatch {
-                path: path.to_owned(),
-            })?
+            obj.get(part)
+                .ok_or_else(|| ExternalMetricsError::SourceSchemaMismatch {
+                    path: path.to_owned(),
+                })?
         } else {
-            return Err(ExternalMetricsError::SourceSchemaMismatch { path: path.to_owned() });
+            return Err(ExternalMetricsError::SourceSchemaMismatch {
+                path: path.to_owned(),
+            });
         };
     }
     match current {
         Value::Number(n) => {
-            let v = n.as_f64().ok_or_else(|| ExternalMetricsError::SourceSchemaMismatch {
-                path: path.to_owned(),
-            })?;
+            let v = n
+                .as_f64()
+                .ok_or_else(|| ExternalMetricsError::SourceSchemaMismatch {
+                    path: path.to_owned(),
+                })?;
             if !v.is_finite() {
-                return Err(ExternalMetricsError::SourceSchemaMismatch { path: path.to_owned() });
+                return Err(ExternalMetricsError::SourceSchemaMismatch {
+                    path: path.to_owned(),
+                });
             }
             Ok(v)
         }
         Value::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
-        _ => Err(ExternalMetricsError::SourceSchemaMismatch { path: path.to_owned() }),
+        _ => Err(ExternalMetricsError::SourceSchemaMismatch {
+            path: path.to_owned(),
+        }),
     }
 }
 
@@ -369,9 +404,7 @@ pub async fn collect(
         });
     }
 
-    let max_bytes = settings["max_response_bytes"]
-        .as_u64()
-        .unwrap_or(1_048_576) as usize;
+    let max_bytes = settings["max_response_bytes"].as_u64().unwrap_or(1_048_576) as usize;
     if max_bytes < 1024 {
         return Err(ExternalMetricsError::MaxBytesTooSmall);
     }
@@ -387,15 +420,20 @@ pub async fn collect(
 
     let mut observations: Vec<Observation> = Vec::new();
     let mut errors: Vec<SourceError> = Vec::new();
-    let mut updated_lkg: HashMap<String, Value> =
-        last_known_good.cloned().unwrap_or_default();
+    let mut updated_lkg: HashMap<String, Value> = last_known_good.cloned().unwrap_or_default();
 
-    let sources = settings["sources"].as_array().map(|a| a.as_slice()).unwrap_or(&[]);
+    let sources = settings["sources"]
+        .as_array()
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
 
     for source_cfg in sources {
         let source_id = source_cfg["id"].as_str().unwrap_or("unknown").to_owned();
         let kind = source_cfg["kind"].as_str().unwrap_or("").to_owned();
-        let visibility = source_cfg["visibility"].as_str().unwrap_or("private").to_owned();
+        let visibility = source_cfg["visibility"]
+            .as_str()
+            .unwrap_or("private")
+            .to_owned();
 
         let result: Result<Observation, (String, Option<String>)> = async {
             match kind.as_str() {
@@ -420,11 +458,19 @@ pub async fn collect(
                         .ok_or_else(|| ("missing 'location' field".to_owned(), None))?;
                     let path = {
                         let p = Path::new(location);
-                        if p.is_absolute() { p.to_path_buf() } else { root.join(p) }
+                        if p.is_absolute() {
+                            p.to_path_buf()
+                        } else {
+                            root.join(p)
+                        }
                     };
                     let content = std::fs::read(&path).map_err(|e| {
                         (
-                            ExternalMetricsError::Io { path: path.clone(), source: e }.to_string(),
+                            ExternalMetricsError::Io {
+                                path: path.clone(),
+                                source: e,
+                            }
+                            .to_string(),
                             None,
                         )
                     })?;
@@ -445,14 +491,12 @@ pub async fn collect(
                         )
                     })?;
                     let values = extract_values(&payload, source_cfg).map_err(|e| {
-                        let kind_str = if matches!(
-                            e,
-                            ExternalMetricsError::SourceSchemaMismatch { .. }
-                        ) {
-                            Some("SOURCE_SCHEMA_MISMATCH".to_owned())
-                        } else {
-                            None
-                        };
+                        let kind_str =
+                            if matches!(e, ExternalMetricsError::SourceSchemaMismatch { .. }) {
+                                Some("SOURCE_SCHEMA_MISMATCH".to_owned())
+                            } else {
+                                None
+                            };
                         (e.to_string(), kind_str)
                     })?;
                     Ok(Observation {
@@ -498,14 +542,12 @@ pub async fn collect(
                         .await
                         .map_err(|e| (e.to_string(), None))?;
                     let values = extract_values(&payload, source_cfg).map_err(|e| {
-                        let kind_str = if matches!(
-                            e,
-                            ExternalMetricsError::SourceSchemaMismatch { .. }
-                        ) {
-                            Some("SOURCE_SCHEMA_MISMATCH".to_owned())
-                        } else {
-                            None
-                        };
+                        let kind_str =
+                            if matches!(e, ExternalMetricsError::SourceSchemaMismatch { .. }) {
+                                Some("SOURCE_SCHEMA_MISMATCH".to_owned())
+                            } else {
+                                None
+                            };
                         (e.to_string(), kind_str)
                     })?;
                     Ok(Observation {
@@ -517,7 +559,10 @@ pub async fn collect(
                 }
 
                 other => Err((
-                    ExternalMetricsError::UnsupportedKind { kind: other.to_owned() }.to_string(),
+                    ExternalMetricsError::UnsupportedKind {
+                        kind: other.to_owned(),
+                    }
+                    .to_string(),
                     None,
                 )),
             }
@@ -558,9 +603,8 @@ pub async fn collect(
     };
 
     if !settings["sink"].is_null() && settings["sink"].is_object() {
-        result.sink_result = Some(
-            export_metrics_sink(root, settings, &observations, &observed_at).await,
-        );
+        result.sink_result =
+            Some(export_metrics_sink(root, settings, &observations, &observed_at).await);
     }
 
     Ok(result)
@@ -592,7 +636,11 @@ pub fn score_delta_from_external(external_state: &Value) -> Option<f64> {
     }
     let mean = scalars.iter().sum::<f64>() / scalars.len() as f64;
     // Only return a positive delta when the aggregated signal genuinely improved
-    if mean <= 0.0 { None } else { Some(mean) }
+    if mean <= 0.0 {
+        None
+    } else {
+        Some(mean)
+    }
 }
 
 /// Write observations to the configured metrics sink (file or HTTP POST).
@@ -625,7 +673,11 @@ pub async fn export_metrics_sink(
                 .unwrap_or("generated/metrics");
             let output_dir = {
                 let p = Path::new(output_dir_raw);
-                if p.is_absolute() { p.to_path_buf() } else { root.join(p) }
+                if p.is_absolute() {
+                    p.to_path_buf()
+                } else {
+                    root.join(p)
+                }
             };
             if let Err(e) = std::fs::create_dir_all(&output_dir) {
                 return ExportResult {
@@ -636,7 +688,10 @@ pub async fn export_metrics_sink(
                     error: Some(e.to_string()),
                 };
             }
-            let fmt = sink.get("format").and_then(|v| v.as_str()).unwrap_or("jsonl");
+            let fmt = sink
+                .get("format")
+                .and_then(|v| v.as_str())
+                .unwrap_or("jsonl");
             // Sanitise timestamp for use in filename
             let safe_at: String = cycle_at
                 .chars()
@@ -663,8 +718,7 @@ pub async fn export_metrics_sink(
                         });
                         std::fs::write(
                             &filepath,
-                            serde_json::to_string_pretty(&payload)
-                                .unwrap_or_default(),
+                            serde_json::to_string_pretty(&payload).unwrap_or_default(),
                         )?;
                     }
                     "csv" => {
@@ -672,17 +726,13 @@ pub async fn export_metrics_sink(
                         let mut lines = Vec::new();
                         if let Some(first) = observations.first() {
                             // Header from first observation's keys
-                            let keys: Vec<String> =
-                                first.values.keys().cloned().collect();
+                            let keys: Vec<String> = first.values.keys().cloned().collect();
                             lines.push(format!("source,{}", keys.join(",")));
                             for obs in observations {
                                 let row: Vec<String> = keys
                                     .iter()
                                     .map(|k| {
-                                        obs.values
-                                            .get(k)
-                                            .map(|v| v.to_string())
-                                            .unwrap_or_default()
+                                        obs.values.get(k).map(|v| v.to_string()).unwrap_or_default()
                                     })
                                     .collect();
                                 lines.push(format!("{},{}", obs.source, row.join(",")));
@@ -698,8 +748,7 @@ pub async fn export_metrics_sink(
                         });
                         std::fs::write(
                             &filepath,
-                            serde_json::to_string_pretty(&payload)
-                                .unwrap_or_default(),
+                            serde_json::to_string_pretty(&payload).unwrap_or_default(),
                         )?;
                     }
                 }
@@ -767,8 +816,7 @@ pub async fn export_metrics_sink(
             if let Some(cred_env) = sink.get("credential_env").and_then(|v| v.as_str()) {
                 let token = std::env::var(cred_env).unwrap_or_default();
                 if !token.is_empty() {
-                    req_builder =
-                        req_builder.header("Authorization", format!("Bearer {token}"));
+                    req_builder = req_builder.header("Authorization", format!("Bearer {token}"));
                 }
             }
 
@@ -826,7 +874,7 @@ fn unix_to_parts(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
         let mut y = 1970u64;
         let mut remaining = days;
         loop {
-            let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+            let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
             let days_in_year = if leap { 366 } else { 365 };
             if remaining < days_in_year {
                 break;
@@ -837,7 +885,20 @@ fn unix_to_parts(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
         (y, remaining)
     };
     let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
-    let month_days = [31u64, if leap { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let month_days = [
+        31u64,
+        if leap { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     let mut mo = 1u64;
     let mut rem = doy;
     for &md in &month_days {

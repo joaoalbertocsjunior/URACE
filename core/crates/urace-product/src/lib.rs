@@ -1,9 +1,9 @@
 pub mod portfolio;
-pub mod product_similarity;
 pub mod portfolio_runner;
 pub mod product;
 pub mod product_creation;
 pub mod product_profile;
+pub mod product_similarity;
 pub mod product_store;
 
 pub use portfolio::{Portfolio, PortfolioEntry, PortfolioError, PortfolioStore};

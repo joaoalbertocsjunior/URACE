@@ -37,10 +37,7 @@ pub struct CostRecord {
 
 impl CostRecord {
     pub fn total_tokens(&self) -> u64 {
-        self.input_tokens
-            + self.output_tokens
-            + self.cache_read_tokens
-            + self.cache_write_tokens
+        self.input_tokens + self.output_tokens + self.cache_read_tokens + self.cache_write_tokens
     }
 }
 
@@ -63,10 +60,14 @@ impl CostLedger {
 
     /// Create with a custom `CostAdapter` (useful for tests or custom providers).
     pub fn with_adapter(adapter: Arc<dyn CostAdapter>) -> Self {
-        CostLedger { records: Mutex::new(Vec::new()), adapter }
+        CostLedger {
+            records: Mutex::new(Vec::new()),
+            adapter,
+        }
     }
 
     /// Record a single LLM call and compute USD cost via the adapter.
+    #[allow(clippy::too_many_arguments)]
     pub fn record_call(
         &self,
         provider: impl Into<String>,
@@ -117,7 +118,11 @@ impl CostLedger {
             .iter()
             .filter_map(|r| r.cost_usd)
             .collect();
-        if known.is_empty() { None } else { Some(known.iter().sum()) }
+        if known.is_empty() {
+            None
+        } else {
+            Some(known.iter().sum())
+        }
     }
 
     /// USD cost for a specific session; `None` if no priced record for that session.
@@ -129,12 +134,16 @@ impl CostLedger {
             .filter(|r| r.session_id == session_id)
             .filter_map(|r| r.cost_usd)
             .collect();
-        if known.is_empty() { None } else { Some(known.iter().sum()) }
+        if known.is_empty() {
+            None
+        } else {
+            Some(known.iter().sum())
+        }
     }
 
     /// Return `true` if total known USD cost exceeds `budget_usd`.
     pub fn exceeds_budget(&self, budget_usd: f64) -> bool {
-        self.total_cost_usd().map_or(false, |t| t > budget_usd)
+        self.total_cost_usd().is_some_and(|t| t > budget_usd)
     }
 
     /// Compact summary dict for cost snapshot reporting.
@@ -143,7 +152,11 @@ impl CostLedger {
         let total_tokens: u64 = records.iter().map(|r| r.total_tokens()).sum();
         let total_usd: Option<f64> = {
             let known: Vec<f64> = records.iter().filter_map(|r| r.cost_usd).collect();
-            if known.is_empty() { None } else { Some(known.iter().sum()) }
+            if known.is_empty() {
+                None
+            } else {
+                Some(known.iter().sum())
+            }
         };
         let providers: Vec<String> = {
             let mut set: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -174,7 +187,9 @@ impl CostLedger {
             e.0 += 1;
             e.1 += r.input_tokens;
             e.2 += r.output_tokens;
-            if let Some(c) = r.cost_usd { e.3.push(c); }
+            if let Some(c) = r.cost_usd {
+                e.3.push(c);
+            }
         }
         groups
             .into_iter()
@@ -226,8 +241,15 @@ mod tests {
         let ledger = CostLedger::new();
         let sid = session();
         let rec = ledger.record_call(
-            "anthropic", "claude-3-5-sonnet", "op-1", &sid,
-            1000, 500, 0, 0, 100.0,
+            "anthropic",
+            "claude-3-5-sonnet",
+            "op-1",
+            &sid,
+            1000,
+            500,
+            0,
+            0,
+            100.0,
         );
         assert_eq!(rec.input_tokens, 1000);
         assert!(rec.cost_usd.is_some());

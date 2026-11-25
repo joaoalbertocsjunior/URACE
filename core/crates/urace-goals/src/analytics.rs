@@ -32,7 +32,10 @@ pub struct MetricStore {
 }
 
 impl MetricStore {
-    pub fn open(path: impl AsRef<std::path::Path>, hmac_key: [u8; 32]) -> Result<Self, AnalyticsError> {
+    pub fn open(
+        path: impl AsRef<std::path::Path>,
+        hmac_key: [u8; 32],
+    ) -> Result<Self, AnalyticsError> {
         let journal = Journal::open(path, hmac_key)?;
         Ok(MetricStore { journal })
     }

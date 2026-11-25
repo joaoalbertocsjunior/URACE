@@ -91,7 +91,9 @@ impl Default for KeyStore {
 
 impl KeyStore {
     pub fn new() -> Self {
-        KeyStore { store: RwLock::new(HashMap::new()) }
+        KeyStore {
+            store: RwLock::new(HashMap::new()),
+        }
     }
 
     /// Generate a fresh Ed25519 keypair, record it as Active, return the KeyRecord.
@@ -105,7 +107,9 @@ impl KeyStore {
             state: KeyState::Active,
             created_at: now_iso(),
         };
-        self.store.write().insert(key_id.clone(), (record.clone(), keypair));
+        self.store
+            .write()
+            .insert(key_id.clone(), (record.clone(), keypair));
         info!(key_id = %key_id, "key generated");
         record
     }
@@ -134,7 +138,9 @@ impl KeyStore {
                 }
             }
 
-            record.state = KeyState::Rotated { rotated_at: now_iso() };
+            record.state = KeyState::Rotated {
+                rotated_at: now_iso(),
+            };
             info!(old_key_id = %key_id, "key rotated — old signatures invalidated");
 
             // Generate new keypair inside the write lock so there's no race.
@@ -160,13 +166,12 @@ impl KeyStore {
             .get_mut(key_id)
             .ok_or_else(|| KeyError::NotFound(key_id.to_string()))?;
 
-        match &record.state {
-            KeyState::Revoked { .. } => {
-                return Err(KeyError::AlreadyRevoked(key_id.to_string()));
-            }
-            _ => {}
+        if let KeyState::Revoked { .. } = &record.state {
+            return Err(KeyError::AlreadyRevoked(key_id.to_string()));
         }
-        record.state = KeyState::Revoked { revoked_at: now_iso() };
+        record.state = KeyState::Revoked {
+            revoked_at: now_iso(),
+        };
         warn!(key_id = %key_id, "key revoked");
         Ok(())
     }
@@ -193,11 +198,8 @@ impl KeyStore {
             .get(key_id)
             .ok_or_else(|| KeyError::NotFound(key_id.to_string()))?;
 
-        match &record.state {
-            KeyState::Revoked { .. } => {
-                return Err(KeyError::AlreadyRevoked(key_id.to_string()));
-            }
-            _ => {}
+        if let KeyState::Revoked { .. } = &record.state {
+            return Err(KeyError::AlreadyRevoked(key_id.to_string()));
         }
 
         let seed: Zeroizing<[u8; 32]> = keypair.to_seed();
@@ -213,8 +215,8 @@ impl KeyStore {
         encryption_key: &[u8; 32],
         rng: &mut R,
     ) -> Result<KeyRecord, KeyError> {
-        let plaintext = aes_decrypt(encryption_key, blob)
-            .map_err(|_| KeyError::DecryptionFailed)?;
+        let plaintext =
+            aes_decrypt(encryption_key, blob).map_err(|_| KeyError::DecryptionFailed)?;
 
         if plaintext.len() != 32 {
             return Err(KeyError::InvalidSeedLength);
@@ -233,7 +235,9 @@ impl KeyStore {
             state: KeyState::Active,
             created_at: now_iso(),
         };
-        self.store.write().insert(key_id.clone(), (record.clone(), keypair));
+        self.store
+            .write()
+            .insert(key_id.clone(), (record.clone(), keypair));
         info!(key_id = %key_id, "key imported from encrypted blob");
         Ok(record)
     }
@@ -311,7 +315,10 @@ mod tests {
         let store = KeyStore::new();
         let rec = store.generate(&mut rng());
         store.revoke(&rec.key_id).unwrap();
-        assert!(matches!(store.revoke(&rec.key_id), Err(KeyError::AlreadyRevoked(_))));
+        assert!(matches!(
+            store.revoke(&rec.key_id),
+            Err(KeyError::AlreadyRevoked(_))
+        ));
     }
 
     #[test]
@@ -320,7 +327,9 @@ mod tests {
         let enc_key = b"urace-test-enc-key-32bytes-pad!!";
         let old = store.generate(&mut rng());
 
-        let blob = store.export_encrypted(&old.key_id, enc_key, &mut rng()).unwrap();
+        let blob = store
+            .export_encrypted(&old.key_id, enc_key, &mut rng())
+            .unwrap();
         let new_rec = store.import_encrypted(&blob, enc_key, &mut rng()).unwrap();
 
         // Both should produce the same public key.
@@ -332,7 +341,9 @@ mod tests {
         let store = KeyStore::new();
         let rec = store.generate(&mut rng());
         let enc_key = b"urace-test-enc-key-32bytes-pad!!";
-        let blob = store.export_encrypted(&rec.key_id, enc_key, &mut rng()).unwrap();
+        let blob = store
+            .export_encrypted(&rec.key_id, enc_key, &mut rng())
+            .unwrap();
 
         let bad_key = b"bad-enc-key-32bytes-padding-here";
         assert!(matches!(
@@ -346,13 +357,22 @@ mod tests {
         let store = KeyStore::new();
         let old = store.generate(&mut rng());
         store.rotate(&old.key_id, &mut rng()).unwrap();
-        assert!(matches!(store.sign(&old.key_id, b"msg"), Err(KeyError::NotActive(_))));
+        assert!(matches!(
+            store.sign(&old.key_id, b"msg"),
+            Err(KeyError::NotActive(_))
+        ));
     }
 
     #[test]
     fn not_found_error() {
         let store = KeyStore::new();
-        assert!(matches!(store.rotate("nonexistent", &mut rng()), Err(KeyError::NotFound(_))));
-        assert!(matches!(store.revoke("nonexistent"), Err(KeyError::NotFound(_))));
+        assert!(matches!(
+            store.rotate("nonexistent", &mut rng()),
+            Err(KeyError::NotFound(_))
+        ));
+        assert!(matches!(
+            store.revoke("nonexistent"),
+            Err(KeyError::NotFound(_))
+        ));
     }
 }

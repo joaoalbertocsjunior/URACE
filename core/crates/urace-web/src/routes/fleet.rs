@@ -6,13 +6,13 @@
 //!
 //! Ports `routes/fleet.py`.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::State,
     routing::{get, post},
     Json, Router,
 };
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -23,32 +23,27 @@ pub fn router() -> Router<AppState> {
         .route("/config-push", post(fleet_config_push))
 }
 
-async fn fleet_status(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn fleet_status(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let status = state.get("fleet_status")
+    let status = state
+        .get("fleet_status")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
     Json(serde_json::Value::Array(status))
 }
 
-async fn fleet_capacity(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn fleet_capacity(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let capacity = state.get("fleet_capacity")
-        .cloned()
-        .unwrap_or_else(|| serde_json::json!({
+    let capacity = state.get("fleet_capacity").cloned().unwrap_or_else(|| {
+        serde_json::json!({
             "fleet_size": 0,
             "fleet_available": 0,
             "parallel_capacity": 0,
             "total_calls_remaining_24h": 0,
             "members": [],
-        }));
+        })
+    });
     Json(capacity)
 }
 
@@ -57,7 +52,9 @@ pub struct RunBody {
     #[serde(default = "default_dry_run")]
     pub dry_run: bool,
 }
-fn default_dry_run() -> bool { true }
+fn default_dry_run() -> bool {
+    true
+}
 
 async fn fleet_run(
     State(_s): State<AppState>,

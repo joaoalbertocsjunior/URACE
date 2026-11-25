@@ -182,8 +182,15 @@ impl Validator for OneOf {
 // ── Composite helper ─────────────────────────────────────────────────────────
 
 /// Run a slice of validators against a value and collect all errors.
-pub fn run_all(validators: &[Box<dyn Validator>], field: &str, value: &str) -> Vec<ValidationError> {
-    validators.iter().flat_map(|v| v.validate(field, value)).collect()
+pub fn run_all(
+    validators: &[Box<dyn Validator>],
+    field: &str,
+    value: &str,
+) -> Vec<ValidationError> {
+    validators
+        .iter()
+        .flat_map(|v| v.validate(field, value))
+        .collect()
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -236,13 +243,19 @@ mod tests {
 
     #[test]
     fn range_accepts_in_bounds() {
-        let v = Range { min: 1.0, max: 100.0 };
+        let v = Range {
+            min: 1.0,
+            max: 100.0,
+        };
         assert!(v.validate("score", "50").is_empty());
     }
 
     #[test]
     fn range_rejects_out_of_bounds() {
-        let v = Range { min: 1.0, max: 10.0 };
+        let v = Range {
+            min: 1.0,
+            max: 10.0,
+        };
         assert!(!v.validate("score", "99").is_empty());
     }
 

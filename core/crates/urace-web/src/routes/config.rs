@@ -3,12 +3,8 @@
 //! Ports `routes/config_router.py`. Full field schema and set endpoint are
 //! stubs pending a Rust config_schema module; reading values is implemented.
 
-use axum::{
-    extract::State,
-    routing::get,
-    Json, Router,
-};
-use crate::{AppState, auth::BearerToken};
+use crate::{auth::BearerToken, AppState};
+use axum::{extract::State, routing::get, Json, Router};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -16,10 +12,7 @@ pub fn router() -> Router<AppState> {
         .route("/fields", get(config_fields))
 }
 
-async fn config_values(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn config_values(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     // Read config.json from the root directory
     let config_path = s.root.join("config.json");
     let config: serde_json::Value = if config_path.exists() {
@@ -33,10 +26,7 @@ async fn config_values(
     Json(config)
 }
 
-async fn config_fields(
-    State(_s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn config_fields(State(_s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     // Field schema enumeration is a stub pending Rust config_schema module.
     Json(serde_json::json!([]))
 }

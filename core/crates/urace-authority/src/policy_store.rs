@@ -200,7 +200,7 @@ impl ExchangePolicyStore {
             .filter(|r| {
                 r.get("at_unix")
                     .and_then(|v| v.as_f64())
-                    .map_or(false, |t| t > window)
+                    .is_some_and(|t| t > window)
                     && matches!(
                         r.get("kind").and_then(|v| v.as_str()),
                         Some("SEND_RESERVED") | Some("RECEIVE_RESERVED")

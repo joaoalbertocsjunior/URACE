@@ -21,3 +21,6 @@ parking_lot.workspace = true
 dashmap.workspace    = true
 urace-types          = { path = "../urace-types" }
 urace-authority      = { path = "../urace-authority" }
+
+[dev-dependencies]
+tempfile.workspace = true

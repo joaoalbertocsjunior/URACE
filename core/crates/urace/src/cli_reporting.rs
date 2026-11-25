@@ -131,15 +131,12 @@ pub async fn handle_usage(root: &Path, args: &UsageArgs, json_mode: bool) -> Res
             let freeform_total = freeform_calls.len() as u64;
             let freeform_cache_hits = freeform_calls
                 .iter()
-                .filter(|c| {
-                    c.get("tokens")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(1)
-                        == 0
-                })
+                .filter(|c| c.get("tokens").and_then(|v| v.as_u64()).unwrap_or(1) == 0)
                 .count() as u64;
             let cache_hit_rate = if freeform_total > 0 {
-                Value::from((freeform_cache_hits as f64 / freeform_total as f64 * 1000.0).round() / 1000.0)
+                Value::from(
+                    (freeform_cache_hits as f64 / freeform_total as f64 * 1000.0).round() / 1000.0,
+                )
             } else {
                 Value::Null
             };
@@ -356,7 +353,10 @@ pub async fn handle_report(root: &Path, args: &ReportArgs, json_mode: bool) -> R
             let audit_path = candidates.iter().find(|p| p.exists());
             if audit_path.is_none() {
                 if json_mode {
-                    println!("{}", serde_json::json!({"report": "audit", "status": "no_audit_log"}));
+                    println!(
+                        "{}",
+                        serde_json::json!({"report": "audit", "status": "no_audit_log"})
+                    );
                 } else {
                     println!("No audit log found.");
                 }
@@ -368,7 +368,7 @@ pub async fn handle_report(root: &Path, args: &ReportArgs, json_mode: bool) -> R
                 .filter_map(|line| serde_json::from_str(line).ok())
                 .collect();
             let total = records.len();
-            let start = if total > 20 { total - 20 } else { 0 };
+            let start = total.saturating_sub(20);
             let page = &records[start..];
 
             if json_mode {
@@ -384,10 +384,7 @@ pub async fn handle_report(root: &Path, args: &ReportArgs, json_mode: bool) -> R
                 println!("=== Audit Report === ({total} total, showing last 20)");
                 for r in page {
                     let kind = r.get("kind").and_then(|v| v.as_str()).unwrap_or("?");
-                    let op = r
-                        .get("operation")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
+                    let op = r.get("operation").and_then(|v| v.as_str()).unwrap_or("?");
                     let at = r.get("at").and_then(|v| v.as_str()).unwrap_or("?");
                     println!("  {kind} | {op} | {at}");
                 }
@@ -418,14 +415,20 @@ mod tests {
     #[tokio::test]
     async fn test_handle_usage_summary_empty() {
         let dir = TempDir::new().unwrap();
-        let args = UsageArgs { action: "summary".into(), limit: 20 };
+        let args = UsageArgs {
+            action: "summary".into(),
+            limit: 20,
+        };
         handle_usage(dir.path(), &args, false).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_handle_usage_patterns_empty() {
         let dir = TempDir::new().unwrap();
-        let args = UsageArgs { action: "patterns".into(), limit: 10 };
+        let args = UsageArgs {
+            action: "patterns".into(),
+            limit: 10,
+        };
         handle_usage(dir.path(), &args, true).await.unwrap();
     }
 
@@ -440,28 +443,36 @@ mod tests {
                 "cycle_count": 7,
             }),
         );
-        let args = ReportArgs { action: "vitals".into() };
+        let args = ReportArgs {
+            action: "vitals".into(),
+        };
         handle_report(dir.path(), &args, true).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_handle_report_cycle() {
         let dir = TempDir::new().unwrap();
-        let args = ReportArgs { action: "cycle".into() };
+        let args = ReportArgs {
+            action: "cycle".into(),
+        };
         handle_report(dir.path(), &args, false).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_handle_report_audit_no_log() {
         let dir = TempDir::new().unwrap();
-        let args = ReportArgs { action: "audit".into() };
+        let args = ReportArgs {
+            action: "audit".into(),
+        };
         handle_report(dir.path(), &args, false).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_handle_report_unknown_action() {
         let dir = TempDir::new().unwrap();
-        let args = ReportArgs { action: "unknown".into() };
+        let args = ReportArgs {
+            action: "unknown".into(),
+        };
         let result = handle_report(dir.path(), &args, false).await;
         assert!(result.is_err());
     }

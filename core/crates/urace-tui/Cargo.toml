@@ -16,3 +16,6 @@ thiserror.workspace  = true
 tracing.workspace    = true
 tokio          = { workspace = true }
 urace-types    = { path = "../urace-types" }
+
+[dev-dependencies]
+tempfile.workspace = true

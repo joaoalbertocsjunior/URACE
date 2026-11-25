@@ -131,14 +131,14 @@ pub struct ScoredCandidate {
 ///
 /// `state` is the runtime state object forwarded by the caller; keys used:
 /// `constraints`, `current_objective`, `operations`.
-pub fn score_proposal(
-    proposal: &Value,
-    state: &HashMap<String, Value>,
-) -> DimensionScores {
+pub fn score_proposal(proposal: &Value, state: &HashMap<String, Value>) -> DimensionScores {
     let weights = ScoreWeights::default();
 
     let proposal_text = {
-        let msg = proposal.get("message").and_then(Value::as_str).unwrap_or("");
+        let msg = proposal
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("");
         let plan = proposal.get("plan").and_then(Value::as_str).unwrap_or("");
         format!("{msg}{plan}").to_lowercase()
     };
@@ -166,15 +166,13 @@ pub fn score_proposal(
         .get("current_objective")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let goal_alignment = if !current_objective.is_empty()
-        && proposal_text.contains(&current_objective.to_lowercase())
-    {
-        1.0
-    } else if proposal
-        .get("objective_id")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        == current_objective
+    let goal_alignment = if (!current_objective.is_empty()
+        && proposal_text.contains(&current_objective.to_lowercase()))
+        || proposal
+            .get("objective_id")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            == current_objective
     {
         1.0
     } else if proposal
@@ -221,7 +219,9 @@ pub fn score_proposal(
         .collect();
     let matches = recent_ops
         .iter()
-        .filter(|op| !op.is_empty() && !proposal_summary.is_empty() && op.contains(&proposal_summary))
+        .filter(|op| {
+            !op.is_empty() && !proposal_summary.is_empty() && op.contains(&proposal_summary)
+        })
         .count();
     let novelty = (1.0_f64 - 0.3 * matches as f64).max(0.0);
 
@@ -416,7 +416,10 @@ mod tests {
     fn score_proposal_constraint_violation_penalised() {
         let proposal = json!({"message": "we must not spend tokens", "plan": ""});
         let mut state = make_state("");
-        state.insert("constraints".into(), json!([{"text": "must not spend tokens"}]));
+        state.insert(
+            "constraints".into(),
+            json!([{"text": "must not spend tokens"}]),
+        );
         let scores = score_proposal(&proposal, &state);
         // 1 violation → 0.75
         assert!((scores.constraint_compliance - 0.75).abs() < 1e-9);

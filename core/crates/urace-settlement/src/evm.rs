@@ -5,7 +5,7 @@
 //! ABI address checksum validation is enforced.
 //! No live RPC without explicit `rpc_url` configuration.
 
-use crate::{SettlementError, SettlementResult, SettlementRail};
+use crate::{SettlementError, SettlementRail, SettlementResult};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,11 +35,7 @@ impl EvmSettlementAdapter {
         Ok(65_000) // ERC-20 transfer typical gas
     }
 
-    pub fn submit_transfer(
-        &self,
-        to: &str,
-        amount_ucr: i64,
-    ) -> SettlementResult {
+    pub fn submit_transfer(&self, to: &str, amount_ucr: i64) -> SettlementResult {
         if !self.config.token_settlement {
             return SettlementResult {
                 status: "skipped".into(),

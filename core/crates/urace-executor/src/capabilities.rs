@@ -169,7 +169,13 @@ pub fn select_skill(task_description: &str, available: &[&str]) -> Option<String
     }
 
     // Only return a match when at least one term matched.
-    best.and_then(|(score, id)| if score > 0 { Some(id.to_string()) } else { None })
+    best.and_then(|(score, id)| {
+        if score > 0 {
+            Some(id.to_string())
+        } else {
+            None
+        }
+    })
 }
 
 // ── Canonical digest ──────────────────────────────────────────────────────────
@@ -248,7 +254,11 @@ mod tests {
     #[test]
     fn builtins_instructions_non_empty() {
         for skill in builtins() {
-            assert!(!skill.instructions.is_empty(), "empty instructions for {}", skill.id);
+            assert!(
+                !skill.instructions.is_empty(),
+                "empty instructions for {}",
+                skill.id
+            );
         }
     }
 
@@ -258,7 +268,10 @@ mod tests {
     fn settings_known_skill() {
         let s = settings("urace-receipt-review").expect("should find built-in");
         assert_eq!(s["id"], "urace-receipt-review");
-        assert!(s.get("instructions").is_none(), "settings should not expose instructions");
+        assert!(
+            s.get("instructions").is_none(),
+            "settings should not expose instructions"
+        );
     }
 
     #[test]
@@ -269,7 +282,10 @@ mod tests {
     #[test]
     fn contract_known_skill_includes_instructions() {
         let c = contract("urace-continuity-review").expect("should find built-in");
-        assert!(c["instructions"].as_str().map(|s| !s.is_empty()).unwrap_or(false));
+        assert!(c["instructions"]
+            .as_str()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false));
     }
 
     #[test]

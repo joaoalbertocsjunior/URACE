@@ -41,7 +41,11 @@ pub enum EscrowError {
     #[error("escrow {0} not yet expired (monotonic_now={1}, release_at={2})")]
     NotExpired(String, u64, u64),
     #[error("caller {caller} is not the payer {payer} for escrow {id}")]
-    UnauthorizedRelease { id: String, caller: String, payer: String },
+    UnauthorizedRelease {
+        id: String,
+        caller: String,
+        payer: String,
+    },
     #[error("amount must be positive, got {0}")]
     NonPositiveAmount(i64),
 }
@@ -162,10 +166,7 @@ impl EscrowStore {
                     let id = p["id"].as_str().unwrap_or_default().to_owned();
                     let entry = EscrowEntry {
                         id: id.clone(),
-                        payer_peer_id: p["payer_peer_id"]
-                            .as_str()
-                            .unwrap_or_default()
-                            .to_owned(),
+                        payer_peer_id: p["payer_peer_id"].as_str().unwrap_or_default().to_owned(),
                         amount_ucr: p["amount_ucr"].as_i64().unwrap_or_default(),
                         locked_at: p["locked_at"].as_u64().unwrap_or_default(),
                         release_at: p["release_at"].as_u64().unwrap_or_default(),
@@ -291,7 +292,10 @@ mod tests {
         let e1_rep = entries.iter().find(|e| e.id == e1.id).unwrap();
         assert!(e1_rep.released);
         // e2 not released
-        let e2_rep = entries.iter().find(|e| e.payer_peer_id == "peer-2").unwrap();
+        let e2_rep = entries
+            .iter()
+            .find(|e| e.payer_peer_id == "peer-2")
+            .unwrap();
         assert!(!e2_rep.released);
     }
 }

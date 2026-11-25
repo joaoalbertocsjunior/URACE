@@ -101,7 +101,9 @@ pub fn handle_credit_settlement(
     }
 
     if payload.schema != SCHEMA {
-        return Err(SettlementEndpointError::UnsupportedSchema(payload.schema.clone()));
+        return Err(SettlementEndpointError::UnsupportedSchema(
+            payload.schema.clone(),
+        ));
     }
 
     if payload.units < 1 {

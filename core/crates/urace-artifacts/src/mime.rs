@@ -241,8 +241,8 @@ fn validate_json(b: &[u8]) -> Result<(), MimeError> {
     match serde_json::from_slice::<serde_json::Value>(b) {
         Err(_) => Err(MimeError::ValidationFailed("json_invalid".into())),
         Ok(v) => {
-            if (v.is_object() && v.as_object().map_or(true, |m| m.is_empty()))
-                || (v.is_array() && v.as_array().map_or(true, |a| a.is_empty()))
+            if (v.is_object() && v.as_object().is_none_or(|m| m.is_empty()))
+                || (v.is_array() && v.as_array().is_none_or(|a| a.is_empty()))
             {
                 return Err(MimeError::ValidationFailed("json_empty".into()));
             }

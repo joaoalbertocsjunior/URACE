@@ -7,16 +7,16 @@
 //! When the daemon RPC socket is available in a future Rust daemon, this
 //! handler can be enhanced to stream real output.
 
+use crate::{auth::BearerToken, AppState};
 use axum::{
     extract::State,
-    response::{IntoResponse, Response},
     response::sse::{Event, KeepAlive, Sse},
+    response::{IntoResponse, Response},
     routing::post,
     Json, Router,
 };
 use futures::stream;
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken};
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/run", post(shell_run))

@@ -45,7 +45,10 @@ mod tests {
     fn version_semver_shape() {
         // Check it has at least two dots (X.Y.Z)
         let dot_count = VERSION.chars().filter(|&c| c == '.').count();
-        assert!(dot_count >= 2, "VERSION should be semver-shaped X.Y.Z, got {VERSION}");
+        assert!(
+            dot_count >= 2,
+            "VERSION should be semver-shaped X.Y.Z, got {VERSION}"
+        );
     }
 
     #[test]

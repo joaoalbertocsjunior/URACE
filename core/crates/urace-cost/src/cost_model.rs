@@ -79,70 +79,130 @@ impl PricingTable {
         // ── Anthropic ──────────────────────────────────────────────────────────
         rate!(
             "claude-3-5-sonnet",
-            3.00, 15.00, 3.75, 0.30,
-            "anthropic", "anthropic.com/pricing", "2025-11"
+            3.00,
+            15.00,
+            3.75,
+            0.30,
+            "anthropic",
+            "anthropic.com/pricing",
+            "2025-11"
         );
         // Alias used in Python source
         rate!(
             "claude-sonnet-4-6",
-            3.00, 15.00, 3.75, 0.30,
-            "anthropic", "anthropic.com/pricing", "2025-11"
+            3.00,
+            15.00,
+            3.75,
+            0.30,
+            "anthropic",
+            "anthropic.com/pricing",
+            "2025-11"
         );
         rate!(
             "claude-3-5-haiku",
-            0.80, 4.00, 1.00, 0.08,
-            "anthropic", "anthropic.com/pricing", "2025-11"
+            0.80,
+            4.00,
+            1.00,
+            0.08,
+            "anthropic",
+            "anthropic.com/pricing",
+            "2025-11"
         );
         // Alias
         rate!(
             "claude-haiku-4-5-20251001",
-            0.80, 4.00, 1.00, 0.08,
-            "anthropic", "anthropic.com/pricing", "2025-11"
+            0.80,
+            4.00,
+            1.00,
+            0.08,
+            "anthropic",
+            "anthropic.com/pricing",
+            "2025-11"
         );
         rate!(
             "claude-3-opus",
-            15.00, 75.00, 18.75, 1.50,
-            "anthropic", "anthropic.com/pricing", "2025-11"
+            15.00,
+            75.00,
+            18.75,
+            1.50,
+            "anthropic",
+            "anthropic.com/pricing",
+            "2025-11"
         );
         // Alias
         rate!(
             "claude-opus-4-7",
-            15.00, 75.00, 18.75, 1.50,
-            "anthropic", "anthropic.com/pricing", "2025-11"
+            15.00,
+            75.00,
+            18.75,
+            1.50,
+            "anthropic",
+            "anthropic.com/pricing",
+            "2025-11"
         );
 
         // ── OpenAI ─────────────────────────────────────────────────────────────
         rate!(
             "gpt-4o",
-            2.50, 10.00, 0.00, 1.25,
-            "openai", "openai.com/api/pricing", "2025-11"
+            2.50,
+            10.00,
+            0.00,
+            1.25,
+            "openai",
+            "openai.com/api/pricing",
+            "2025-11"
         );
         rate!(
             "gpt-4o-mini",
-            0.15, 0.60, 0.00, 0.075,
-            "openai", "openai.com/api/pricing", "2025-11"
+            0.15,
+            0.60,
+            0.00,
+            0.075,
+            "openai",
+            "openai.com/api/pricing",
+            "2025-11"
         );
         rate!(
             "gpt-4-turbo",
-            10.00, 30.00, 0.00, 0.00,
-            "openai", "openai.com/api/pricing", "2025-11"
+            10.00,
+            30.00,
+            0.00,
+            0.00,
+            "openai",
+            "openai.com/api/pricing",
+            "2025-11"
         );
         rate!(
             "gpt-3.5-turbo",
-            0.50, 1.50, 0.00, 0.00,
-            "openai", "openai.com/api/pricing", "2025-11"
+            0.50,
+            1.50,
+            0.00,
+            0.00,
+            "openai",
+            "openai.com/api/pricing",
+            "2025-11"
         );
 
         // ── Mistral ────────────────────────────────────────────────────────────
         rate!(
             "mistral-large-latest",
-            4.00, 12.00, 0.00, 0.00,
-            "mistral", "mistral.ai/pricing", "2025-11"
+            4.00,
+            12.00,
+            0.00,
+            0.00,
+            "mistral",
+            "mistral.ai/pricing",
+            "2025-11"
         );
         rate!(
             "mistral-small-latest",
-            1.00, 3.00, 0.00, 0.00,
-            "mistral", "mistral.ai/pricing", "2025-11"
+            1.00,
+            3.00,
+            0.00,
+            0.00,
+            "mistral",
+            "mistral.ai/pricing",
+            "2025-11"
         );
 
         PricingTable { inner: t }
@@ -177,7 +237,12 @@ impl PricingTable {
         cache_read_tokens: u64,
     ) -> Result<f64, PricingError> {
         let rates = self.get(model)?;
-        Ok(rates.cost_usd(input_tokens, output_tokens, cache_write_tokens, cache_read_tokens))
+        Ok(rates.cost_usd(
+            input_tokens,
+            output_tokens,
+            cache_write_tokens,
+            cache_read_tokens,
+        ))
     }
 }
 
@@ -224,7 +289,10 @@ mod tests {
     #[test]
     fn unknown_model_error() {
         let t = PricingTable::default_table();
-        assert!(matches!(t.get("no-such-model"), Err(PricingError::UnknownModel(_))));
+        assert!(matches!(
+            t.get("no-such-model"),
+            Err(PricingError::UnknownModel(_))
+        ));
     }
 
     #[test]

@@ -222,8 +222,8 @@ pub fn verify(ref_fields: &HashMap<String, serde_json::Value>, state_root: &Path
             "spec_version",
             "generated_at",
         ] {
-            if let Some(rv) = ref_fields.get(*field) {
-                if artifact.get(*field) != Some(rv) {
+            if let (Some(rv), Some(av)) = (ref_fields.get(*field), artifact.get(*field)) {
+                if rv != av {
                     return Err(DerivedArtifactError::FieldMismatch(field.to_string()));
                 }
             }

@@ -676,13 +676,13 @@ pub fn evaluate_auto_buy_listing(
         ));
     }
     // Adoption gate with cold-start warm-up bypass
-    if ctx.adoption_count < cfg.min_adoption_count {
-        if cfg.warm_up_borrow_threshold == 0 || ctx.adoption_count >= cfg.warm_up_borrow_threshold {
-            return Err(format!(
-                "adoption {} < {}",
-                ctx.adoption_count, cfg.min_adoption_count
-            ));
-        }
+    if ctx.adoption_count < cfg.min_adoption_count
+        && (cfg.warm_up_borrow_threshold == 0 || ctx.adoption_count >= cfg.warm_up_borrow_threshold)
+    {
+        return Err(format!(
+            "adoption {} < {}",
+            ctx.adoption_count, cfg.min_adoption_count
+        ));
         // new feature — quality gate alone decides; adoption gate waived
     }
     // Price gate

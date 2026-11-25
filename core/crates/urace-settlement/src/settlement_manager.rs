@@ -48,7 +48,10 @@ impl SettlementManager {
             }
             "evm" => {
                 let evm_config = EvmConfig {
-                    rpc_url: config.get("evm_rpc_url").and_then(Value::as_str).map(String::from),
+                    rpc_url: config
+                        .get("evm_rpc_url")
+                        .and_then(Value::as_str)
+                        .map(String::from),
                     chain_id: config
                         .get("evm_chain_id")
                         .and_then(Value::as_u64)
@@ -87,7 +90,7 @@ impl SettlementManager {
         if let Some(ref mesh) = self.mesh_llm {
             // Convert UCR to msat (1 UCR = 1 sat = 1_000 msat for settlement purposes).
             // TODO(economics): wire proper UCR/msat conversion rate from cost_model.
-            let amount_msat = (amount_ucr.unsigned_abs() as u64) * 1_000;
+            let amount_msat = amount_ucr.unsigned_abs() * 1_000;
             return mesh.settle_work_payment(amount_msat, work_ref);
         }
 
@@ -112,7 +115,10 @@ mod tests {
     use serde_json::json;
 
     fn cfg(pairs: &[(&str, Value)]) -> HashMap<String, Value> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect()
     }
 
     #[test]

@@ -78,7 +78,11 @@ pub fn similarity_score(a: &ProductProfile, b: &ProductProfile) -> f64 {
     } else {
         let intersection = tags_a.intersection(&tags_b).count() as f64;
         let union = tags_a.union(&tags_b).count() as f64;
-        if union == 0.0 { 0.0 } else { intersection / union }
+        if union == 0.0 {
+            0.0
+        } else {
+            intersection / union
+        }
     };
 
     let name_overlap = token_overlap(&a.name, &b.name);
@@ -103,7 +107,11 @@ fn token_overlap(a: &str, b: &str) -> f64 {
     }
     let intersection = ta.intersection(&tb).count() as f64;
     let union = ta.union(&tb).count() as f64;
-    if union == 0.0 { 0.0 } else { intersection / union }
+    if union == 0.0 {
+        0.0
+    } else {
+        intersection / union
+    }
 }
 
 // ── ProductTypeDetector ───────────────────────────────────────────────────────
@@ -120,23 +128,78 @@ impl ProductTypeDetector {
 
         // Keyword sets — same signal vocabulary as the Python file scanner.
         let software_keywords = [
-            "software", "app", "application", "api", "library", "framework", "tool",
-            "service", "cli", "code", "rust", "python", "javascript", "typescript",
-            "golang", "java", "binary", "executable", "package", "crate", "module",
-            "backend", "frontend", "server", "client", "sdk", "plugin",
+            "software",
+            "app",
+            "application",
+            "api",
+            "library",
+            "framework",
+            "tool",
+            "service",
+            "cli",
+            "code",
+            "rust",
+            "python",
+            "javascript",
+            "typescript",
+            "golang",
+            "java",
+            "binary",
+            "executable",
+            "package",
+            "crate",
+            "module",
+            "backend",
+            "frontend",
+            "server",
+            "client",
+            "sdk",
+            "plugin",
         ];
         let doc_keywords = [
-            "documentation", "docs", "guide", "manual", "readme", "specification",
-            "spec", "reference", "tutorial", "wiki", "markdown", "text", "report",
+            "documentation",
+            "docs",
+            "guide",
+            "manual",
+            "readme",
+            "specification",
+            "spec",
+            "reference",
+            "tutorial",
+            "wiki",
+            "markdown",
+            "text",
+            "report",
             "whitepaper",
         ];
         let analysis_keywords = [
-            "analysis", "analytics", "report", "dashboard", "visualization", "chart",
-            "metric", "statistics", "notebook", "jupyter", "data science", "insights",
+            "analysis",
+            "analytics",
+            "report",
+            "dashboard",
+            "visualization",
+            "chart",
+            "metric",
+            "statistics",
+            "notebook",
+            "jupyter",
+            "data science",
+            "insights",
         ];
         let dataset_keywords = [
-            "dataset", "data", "csv", "parquet", "jsonl", "database", "schema",
-            "corpus", "collection", "records", "table", "sqlite", "tsv",
+            "dataset",
+            "data",
+            "csv",
+            "parquet",
+            "jsonl",
+            "database",
+            "schema",
+            "corpus",
+            "collection",
+            "records",
+            "table",
+            "sqlite",
+            "tsv",
         ];
 
         let sw = count_hits(&combined, &software_keywords);
@@ -148,10 +211,15 @@ impl ProductTypeDetector {
         if max == 0 {
             return ProductType::Software; // default, same as Python
         }
-        if sw == max { ProductType::Software }
-        else if doc == max { ProductType::Documentation }
-        else if analysis == max { ProductType::Analysis }
-        else { ProductType::Dataset }
+        if sw == max {
+            ProductType::Software
+        } else if doc == max {
+            ProductType::Documentation
+        } else if analysis == max {
+            ProductType::Analysis
+        } else {
+            ProductType::Dataset
+        }
     }
 }
 
@@ -229,7 +297,10 @@ mod tests {
         let a = profile("a", "My API", &["rust", "api", "web"]);
         let b = profile("b", "My API", &["rust", "api", "web"]);
         let s = similarity_score(&a, &b);
-        assert!((s - 1.0).abs() < 1e-9, "identical profiles should score 1.0, got {s}");
+        assert!(
+            (s - 1.0).abs() < 1e-9,
+            "identical profiles should score 1.0, got {s}"
+        );
     }
 
     #[test]
@@ -294,7 +365,10 @@ mod tests {
 
     #[test]
     fn runtime_product_engine_identity_stable() {
-        let sources = [("foo.rs", b"fn main() {}".as_slice()), ("bar.rs", b"pub fn bar() {}".as_slice())];
+        let sources = [
+            ("foo.rs", b"fn main() {}".as_slice()),
+            ("bar.rs", b"pub fn bar() {}".as_slice()),
+        ];
         let h1 = RuntimeProduct::engine_identity(&sources);
         let h2 = RuntimeProduct::engine_identity(&sources);
         assert_eq!(h1, h2);
@@ -302,8 +376,14 @@ mod tests {
 
     #[test]
     fn runtime_product_engine_identity_order_independent() {
-        let a = [("foo.rs", b"fn main() {}".as_slice()), ("bar.rs", b"fn bar() {}".as_slice())];
-        let b = [("bar.rs", b"fn bar() {}".as_slice()), ("foo.rs", b"fn main() {}".as_slice())];
+        let a = [
+            ("foo.rs", b"fn main() {}".as_slice()),
+            ("bar.rs", b"fn bar() {}".as_slice()),
+        ];
+        let b = [
+            ("bar.rs", b"fn bar() {}".as_slice()),
+            ("foo.rs", b"fn main() {}".as_slice()),
+        ];
         assert_eq!(
             RuntimeProduct::engine_identity(&a),
             RuntimeProduct::engine_identity(&b),

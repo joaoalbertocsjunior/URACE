@@ -74,7 +74,11 @@ impl PeerAddressBook {
         if let Some(oldest) = self
             .entries
             .iter()
-            .min_by(|a, b| a.last_seen.partial_cmp(&b.last_seen).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|a, b| {
+                a.last_seen
+                    .partial_cmp(&b.last_seen)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .map(|e| e.peer_id.clone())
         {
             self.entries.remove(&oldest);
@@ -133,10 +137,17 @@ impl PeerAddressBook {
         let mut v: Vec<_> = self
             .entries
             .iter()
-            .filter_map(|e| e.addrs.first().map(|a| (e.peer_id.clone(), *a, e.last_seen)))
+            .filter_map(|e| {
+                e.addrs
+                    .first()
+                    .map(|a| (e.peer_id.clone(), *a, e.last_seen))
+            })
             .collect();
         v.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
-        v.into_iter().take(n).map(|(id, addr, _)| (id, addr)).collect()
+        v.into_iter()
+            .take(n)
+            .map(|(id, addr, _)| (id, addr))
+            .collect()
     }
 
     pub fn len(&self) -> usize {

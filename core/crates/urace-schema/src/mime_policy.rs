@@ -136,11 +136,11 @@ pub enum Policy {
 
 impl Policy {
     /// Parse from the string values used in `config.json`.
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s {
             "hard_protected_only" => Policy::HardProtectedOnly,
-            "all_allowed"         => Policy::AllAllowed,
-            _                     => Policy::QualityGateOnly,
+            "all_allowed" => Policy::AllAllowed,
+            _ => Policy::QualityGateOnly,
         }
     }
 }
@@ -180,14 +180,18 @@ impl MimePolicy {
             let allowlist: Vec<String> = config
                 .pointer("/p2p/allowed_asset_mime_types")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect()
+                })
                 .unwrap_or_default();
             Self {
                 policy: Policy::Custom(allowlist),
             }
         } else {
             Self {
-                policy: Policy::from_str(policy_str),
+                policy: Policy::parse(policy_str),
             }
         }
     }
@@ -219,11 +223,7 @@ impl MimePolicy {
 // ── Internal helpers ─────────────────────────────────────────────────────────
 
 fn normalise(mime: &str) -> &str {
-    mime.trim()
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim()
+    mime.trim().split(';').next().unwrap_or("").trim()
 }
 
 fn protection_level_inner(ct: &str) -> &'static str {
@@ -254,7 +254,10 @@ fn is_allowed_with_policy(ct: &str, policy: &Policy) -> (bool, String) {
 
         Policy::Custom(allowlist) => {
             if allowlist.is_empty() {
-                return (false, "policy=custom but allowed_asset_mime_types is empty".into());
+                return (
+                    false,
+                    "policy=custom but allowed_asset_mime_types is empty".into(),
+                );
             }
             for pattern in allowlist {
                 let p = pattern.to_lowercase();
@@ -267,38 +270,68 @@ fn is_allowed_with_policy(ct: &str, policy: &Policy) -> (bool, String) {
                     return (true, format!("policy=custom allowlist match: {p}"));
                 }
             }
-            (false, format!("policy=custom: {ct:?} not in allowed_asset_mime_types"))
+            (
+                false,
+                format!("policy=custom: {ct:?} not in allowed_asset_mime_types"),
+            )
         }
 
         Policy::HardProtectedOnly => {
             if never_allowed().contains(ct) {
-                return (false, format!("policy=hard_protected_only: {ct:?} is in NEVER_ALLOWED"));
+                return (
+                    false,
+                    format!("policy=hard_protected_only: {ct:?} is in NEVER_ALLOWED"),
+                );
             }
             match protection_level_inner(ct) {
-                "strong" | "medium" => (true, format!("policy=hard_protected_only level={}", protection_level_inner(ct))),
-                "weak"              => (false, format!("policy=hard_protected_only: {ct:?} has weak ALE protection")),
-                _                   => (false, format!("policy=hard_protected_only: {ct:?} has no ALE fingerprinting")),
+                "strong" | "medium" => (
+                    true,
+                    format!(
+                        "policy=hard_protected_only level={}",
+                        protection_level_inner(ct)
+                    ),
+                ),
+                "weak" => (
+                    false,
+                    format!("policy=hard_protected_only: {ct:?} has weak ALE protection"),
+                ),
+                _ => (
+                    false,
+                    format!("policy=hard_protected_only: {ct:?} has no ALE fingerprinting"),
+                ),
             }
         }
 
         Policy::QualityGateOnly => {
             if never_allowed().contains(ct) {
-                return (false, format!("policy=quality_gate_only: {ct:?} is in NEVER_ALLOWED"));
+                return (
+                    false,
+                    format!("policy=quality_gate_only: {ct:?} is in NEVER_ALLOWED"),
+                );
             }
             // DEFAULT_ALLOWED = (tier1 ∪ tier2) ∩ (strong ∪ medium)
             let tier1 = tier1_code_types();
             let tier2 = tier2_dependent_types();
-            let hard_protected: HashSet<&str> = strong_protected().union(&medium_protected()).copied().collect();
+            let hard_protected: HashSet<&str> = strong_protected()
+                .union(&medium_protected())
+                .copied()
+                .collect();
 
             let quality_gate_validatable: HashSet<&str> = tier1.union(&tier2).copied().collect();
-            let default_allowed: HashSet<&str> = quality_gate_validatable.intersection(&hard_protected).copied().collect();
+            let default_allowed: HashSet<&str> = quality_gate_validatable
+                .intersection(&hard_protected)
+                .copied()
+                .collect();
 
             if default_allowed.contains(ct) {
                 return (true, "policy=quality_gate_only".into());
             }
             // Tier 1 code types with Winnowing coverage (medium protected) are admitted.
             if tier1.contains(ct) && matches!(protection_level_inner(ct), "strong" | "medium") {
-                return (true, format!("policy=quality_gate_only tier-1 code type: {ct}"));
+                return (
+                    true,
+                    format!("policy=quality_gate_only tier-1 code type: {ct}"),
+                );
             }
             let lvl = protection_level_inner(ct);
             if matches!(lvl, "strong" | "medium") {
@@ -307,10 +340,13 @@ fn is_allowed_with_policy(ct: &str, policy: &Policy) -> (bool, String) {
                      scored by the APS quality gate. Set p2p.mime_policy=hard_protected_only to allow."
                 ));
             }
-            (false, format!(
-                "policy=quality_gate_only: {ct:?} has no ALE hard-protection. \
+            (
+                false,
+                format!(
+                    "policy=quality_gate_only: {ct:?} has no ALE hard-protection. \
                  Set p2p.mime_policy=hard_protected_only or p2p.mime_policy=all_allowed to permit."
-            ))
+                ),
+            )
         }
     }
 }

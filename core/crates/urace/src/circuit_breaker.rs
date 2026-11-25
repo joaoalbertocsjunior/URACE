@@ -30,11 +30,11 @@ pub const DEFAULT_RESET_TIMEOUT_SECS: u64 = 60;
 /// Jitter is deterministic (no rand dep): `attempt * 7 % 20` seconds.
 pub fn backoff_secs(class: &UnavailabilityClass, attempt: u32) -> u64 {
     let (base, max, multiplier): (f64, f64, f64) = match class {
-        UnavailabilityClass::RateLimit            => (120.0, 1800.0, 2.0),
-        UnavailabilityClass::NetworkError         => (30.0,  300.0,  2.0),
-        UnavailabilityClass::AuthFailure          => (3600.0, 3600.0, 1.0),
+        UnavailabilityClass::RateLimit => (120.0, 1800.0, 2.0),
+        UnavailabilityClass::NetworkError => (30.0, 300.0, 2.0),
+        UnavailabilityClass::AuthFailure => (3600.0, 3600.0, 1.0),
         UnavailabilityClass::ExecutionEnvironment => (300.0, 1800.0, 1.5),
-        UnavailabilityClass::Unknown              => (60.0,  300.0,  2.0),
+        UnavailabilityClass::Unknown => (60.0, 300.0, 2.0),
     };
     let raw = base * multiplier.powi(attempt as i32);
     let capped = raw.min(max) as u64;
@@ -262,7 +262,9 @@ mod tests {
 
     #[test]
     fn rate_limit_backoff_grows_with_attempts() {
-        let delays: Vec<u64> = (0..4).map(|a| backoff_secs(&UnavailabilityClass::RateLimit, a)).collect();
+        let delays: Vec<u64> = (0..4)
+            .map(|a| backoff_secs(&UnavailabilityClass::RateLimit, a))
+            .collect();
         for w in delays.windows(2) {
             assert!(w[1] >= w[0], "backoff must be non-decreasing: {:?}", delays);
         }

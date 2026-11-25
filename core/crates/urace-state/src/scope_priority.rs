@@ -144,8 +144,7 @@ impl PriorityQueue {
         let mean = total / count as f64;
         for mut entry in self.scores.iter_mut() {
             entry.normalized_weight = round4(entry.raw_weight / total);
-            entry.ranking_multiplier =
-                round4((entry.raw_weight / mean).min(1.25).max(0.75));
+            entry.ranking_multiplier = round4((entry.raw_weight / mean).clamp(0.75, 1.25));
         }
     }
 
@@ -157,12 +156,20 @@ impl PriorityQueue {
     /// Return all scores, sorted by raw_weight descending.
     pub fn ranked(&self) -> Vec<ScopeScore> {
         let mut v: Vec<ScopeScore> = self.scores.iter().map(|e| e.clone()).collect();
-        v.sort_by(|a, b| b.raw_weight.partial_cmp(&a.raw_weight).unwrap_or(std::cmp::Ordering::Equal));
+        v.sort_by(|a, b| {
+            b.raw_weight
+                .partial_cmp(&a.raw_weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         v
     }
 
     /// Largest-remainder slot allocation (mirrors `allocate` in Python).
-    pub fn allocate(&self, names: &[&str], slots: usize) -> std::collections::HashMap<String, usize> {
+    pub fn allocate(
+        &self,
+        names: &[&str],
+        slots: usize,
+    ) -> std::collections::HashMap<String, usize> {
         let mut allocation: std::collections::HashMap<String, usize> = names
             .iter()
             .map(|n| (n.to_string(), if slots >= names.len() { 1 } else { 0 }))
@@ -182,8 +189,7 @@ impl PriorityQueue {
             .collect();
         for name in names {
             let whole = shares[*name].floor() as isize;
-            *allocation.get_mut(*name).unwrap() =
-                (allocation[*name] as isize + whole) as usize;
+            *allocation.get_mut(*name).unwrap() = (allocation[*name] as isize + whole) as usize;
             remaining -= whole;
         }
         // Distribute remainder by fractional descending.
@@ -213,7 +219,9 @@ mod tests {
     use super::*;
 
     fn make_score(name: &str, base: f64) -> ScopeScore {
-        ScopeScore::new(name, name, base, 0.5, 3.0, 0, 0, 0.0, 0.0, 0.0, 0, None, 0.25)
+        ScopeScore::new(
+            name, name, base, 0.5, 3.0, 0, 0, 0.0, 0.0, 0.0, 0, None, 0.25,
+        )
     }
 
     #[test]
@@ -232,7 +240,19 @@ mod tests {
     #[test]
     fn step_limiting() {
         let score = ScopeScore::new(
-            "s", "s", 1.0, 0.5, 3.0, 10, 5, 20.0, 0.8, 0.8, 3, Some(1.0), 0.25,
+            "s",
+            "s",
+            1.0,
+            0.5,
+            3.0,
+            10,
+            5,
+            20.0,
+            0.8,
+            0.8,
+            3,
+            Some(1.0),
+            0.25,
         );
         // Target would be high, but limited to prior + 0.25
         assert!(score.raw_weight <= 1.0 + 0.25 + 1e-6);

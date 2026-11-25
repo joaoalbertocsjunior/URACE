@@ -49,7 +49,9 @@ pub enum PolicyError {
     InvalidReleaseTime,
     #[error("essential shared-core features cannot be exclusively paywalled")]
     EssentialMustBeOpen,
-    #[error("open sharing requires explicit reusable license terms (not LicenseRef-Owner-Reviewed-*)")]
+    #[error(
+        "open sharing requires explicit reusable license terms (not LicenseRef-Owner-Reviewed-*)"
+    )]
     OpenRequiresReusableLicense,
     #[error("timed open release requires explicit reusable license terms")]
     TimedReleaseRequiresReusableLicense,
@@ -146,9 +148,7 @@ pub fn validate(policy: FeaturePolicy) -> Result<FeaturePolicy, PolicyError> {
         return Err(PolicyError::EssentialMustBeOpen);
     }
     // open access → cannot use the owner-review placeholder license
-    if policy.access == ACCESS_OPEN
-        && policy.license_id.starts_with("LicenseRef-Owner-Reviewed")
-    {
+    if policy.access == ACCESS_OPEN && policy.license_id.starts_with("LicenseRef-Owner-Reviewed") {
         return Err(PolicyError::OpenRequiresReusableLicense);
     }
     // timed open release → must have a reusable license
@@ -169,11 +169,8 @@ pub fn validate(policy: FeaturePolicy) -> Result<FeaturePolicy, PolicyError> {
 /// Mirrors Python `effective()`.
 pub fn effective(policy: FeaturePolicy, now: f64) -> Result<EffectivePolicy, PolicyError> {
     let policy = validate(policy)?;
-    let released = policy.access == ACCESS_OPEN
-        || policy
-            .open_after_unix
-            .map(|t| now >= t)
-            .unwrap_or(false);
+    let released =
+        policy.access == ACCESS_OPEN || policy.open_after_unix.map(|t| now >= t).unwrap_or(false);
     let effective_access = if released {
         ACCESS_OPEN.to_owned()
     } else {

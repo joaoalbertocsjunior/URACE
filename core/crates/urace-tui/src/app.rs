@@ -3,8 +3,8 @@
 //! `App` is a plain data struct — no I/O, no async calls.
 //! All fields are set by the caller before each render pass.
 
-use std::path::Path;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 use crate::command_dispatch::{self, TuiCommand};
 use crate::vitals_collector::{self, LiveVitals};
@@ -23,19 +23,19 @@ impl Panel {
     /// Cycle to the next panel (tab key).
     pub fn next(self) -> Self {
         match self {
-            Panel::Sources    => Panel::WorkQueue,
-            Panel::WorkQueue  => Panel::Settlement,
+            Panel::Sources => Panel::WorkQueue,
+            Panel::WorkQueue => Panel::Settlement,
             Panel::Settlement => Panel::Logs,
-            Panel::Logs       => Panel::Sources,
+            Panel::Logs => Panel::Sources,
         }
     }
 
     pub fn title(self) -> &'static str {
         match self {
-            Panel::Sources    => "Sources",
-            Panel::WorkQueue  => "Work Queue",
+            Panel::Sources => "Sources",
+            Panel::WorkQueue => "Work Queue",
             Panel::Settlement => "Settlement",
-            Panel::Logs       => "Logs",
+            Panel::Logs => "Logs",
         }
     }
 }
@@ -83,7 +83,6 @@ pub struct App {
     pub should_quit: bool,
 
     // ── panel data ──────────────────────────────────────────────────────────
-
     /// Registered sources with sync status.
     pub sources: Vec<SourceEntry>,
 
@@ -97,7 +96,6 @@ pub struct App {
     pub log_lines: Vec<String>,
 
     // ── status bar ──────────────────────────────────────────────────────────
-
     /// Short status message shown in the status bar (e.g. "refreshed").
     pub status_message: String,
 
@@ -108,12 +106,10 @@ pub struct App {
     pub version: String,
 
     // ── vitals ──────────────────────────────────────────────────────────────
-
     /// Live vitals collected from state files on the last refresh.
     pub vitals: LiveVitals,
 
     // ── inline command bar ───────────────────────────────────────────────────
-
     /// Text the user is currently typing in the command bar.
     pub command_input: String,
 
@@ -179,21 +175,18 @@ impl App {
             }
             TuiCommand::SwitchTab(ref name) => {
                 let panel = match name.to_lowercase().as_str() {
-                    "sources"    => Some(Panel::Sources),
-                    "workqueue" | "work_queue" | "work queue" | "queue" => {
-                        Some(Panel::WorkQueue)
-                    }
+                    "sources" => Some(Panel::Sources),
+                    "workqueue" | "work_queue" | "work queue" | "queue" => Some(Panel::WorkQueue),
                     "settlement" => Some(Panel::Settlement),
-                    "logs"       => Some(Panel::Logs),
-                    _            => None,
+                    "logs" => Some(Panel::Logs),
+                    _ => None,
                 };
                 if let Some(p) = panel {
                     self.active_panel = p;
                     self.cursor = 0;
                     self.command_result = Some(format!("switched to {}", p.title()));
                 } else {
-                    self.command_result =
-                        Some(format!("unknown tab: {name}"));
+                    self.command_result = Some(format!("unknown tab: {name}"));
                 }
             }
             TuiCommand::Help => {
@@ -203,8 +196,7 @@ impl App {
                 if text.is_empty() {
                     self.command_result = None;
                 } else {
-                    self.command_result =
-                        Some(format!("unknown command: {text}"));
+                    self.command_result = Some(format!("unknown command: {text}"));
                 }
             }
         }
@@ -213,10 +205,10 @@ impl App {
     /// Return the number of items in the currently focused panel.
     pub fn current_len(&self) -> usize {
         match self.active_panel {
-            Panel::Sources    => self.sources.len(),
-            Panel::WorkQueue  => self.work_queue.len(),
+            Panel::Sources => self.sources.len(),
+            Panel::WorkQueue => self.work_queue.len(),
             Panel::Settlement => self.settlements.len(),
-            Panel::Logs       => self.log_lines.len(),
+            Panel::Logs => self.log_lines.len(),
         }
     }
 

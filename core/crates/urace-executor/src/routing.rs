@@ -82,7 +82,10 @@ pub fn classify_unavailability(error_msg: &str) -> UnavailabilityClass {
     if AUTH_FAILURE_MARKERS.iter().any(|m| lower.contains(m)) {
         return UnavailabilityClass::AuthFailure;
     }
-    if EXECUTION_ENVIRONMENT_FAILURES.iter().any(|m| lower.contains(m)) {
+    if EXECUTION_ENVIRONMENT_FAILURES
+        .iter()
+        .any(|m| lower.contains(m))
+    {
         return UnavailabilityClass::ExecutionEnvironment;
     }
     if TRANSIENT_NETWORK_MARKERS.iter().any(|m| lower.contains(m)) {
@@ -208,11 +211,11 @@ fn parse_provider(obj: &Value) -> Option<ProviderDef> {
         .and_then(Value::as_str)
         .unwrap_or("codex-cli")
         .to_string();
-    let command = map.get("command").and_then(Value::as_str).map(str::to_string);
-    let priority = map
-        .get("priority")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
+    let command = map
+        .get("command")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let priority = map.get("priority").and_then(Value::as_i64).unwrap_or(0);
 
     let capabilities: Vec<String> = match map.get("capabilities") {
         Some(Value::Array(arr)) => arr
@@ -231,16 +234,22 @@ fn parse_provider(obj: &Value) -> Option<ProviderDef> {
             None => HashMap::new(),
         };
 
-    let transport_ceiling_tokens = map
-        .get("transport_ceiling_tokens")
-        .and_then(Value::as_u64);
+    let transport_ceiling_tokens = map.get("transport_ceiling_tokens").and_then(Value::as_u64);
 
     // Carry through any remaining keys as `extra`.
-    let reserved: HashSet<&str> = ["id", "adapter", "command", "priority", "capabilities",
-        "capability_priorities", "enabled", "transport_ceiling_tokens"]
-        .iter()
-        .copied()
-        .collect();
+    let reserved: HashSet<&str> = [
+        "id",
+        "adapter",
+        "command",
+        "priority",
+        "capabilities",
+        "capability_priorities",
+        "enabled",
+        "transport_ceiling_tokens",
+    ]
+    .iter()
+    .copied()
+    .collect();
     let extra: HashMap<String, Value> = map
         .iter()
         .filter(|(k, _)| !reserved.contains(k.as_str()))

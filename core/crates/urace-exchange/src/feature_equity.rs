@@ -133,11 +133,7 @@ impl FeatureEquityLedger {
             return Err(EquityError::BelowMinimumTrade(units));
         }
         let key = (atom_id.to_owned(), holder_id.to_owned());
-        let held = self
-            .positions
-            .get(&key)
-            .map(|p| p.units)
-            .unwrap_or(0);
+        let held = self.positions.get(&key).map(|p| p.units).unwrap_or(0);
         if held < units {
             return Err(EquityError::InsufficientEquity {
                 holder_id: holder_id.to_owned(),
@@ -148,10 +144,7 @@ impl FeatureEquityLedger {
         if held == units {
             self.positions.remove(&key);
         } else {
-            self.positions
-                .get_mut(&key)
-                .expect("checked above")
-                .units -= units;
+            self.positions.get_mut(&key).expect("checked above").units -= units;
         }
         Ok(())
     }

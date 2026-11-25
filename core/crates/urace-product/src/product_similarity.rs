@@ -157,13 +157,13 @@ fn max_tfidf_sim(feature_id: &str, local_features: &HashSet<String>) -> f64 {
     if local_features.is_empty() {
         return 0.0;
     }
-    let feat_tokens = tokenize(&feature_id.replace('-', " ").replace('_', " "));
+    let feat_tokens = tokenize(&feature_id.replace(['-', '_'], " "));
     if feat_tokens.is_empty() {
         return 0.0;
     }
     let mut best = 0.0_f64;
     for lf in local_features {
-        let lf_tokens = tokenize(&lf.replace('-', " ").replace('_', " "));
+        let lf_tokens = tokenize(&lf.replace(['-', '_'], " "));
         if lf_tokens.is_empty() {
             continue;
         }

@@ -33,13 +33,13 @@ pub use crate::cli_governance::{
     BlockerArgs, ComplianceArgs, DecisionArgs, EvidenceArgs, InboxArgs, MilestoneArgs, RulesArgs,
 };
 pub use crate::cli_metrics::{AuditArgs, DataArgs, GoalsArgs, TraceArgs, VitalsArgs};
+pub use crate::cli_product::{ContentArgs, PeerReviewArgs, ProductArgs, RollbackArgs};
 pub use crate::cli_reporting::{ReportArgs, UsageArgs};
+pub use crate::cli_runtime::{CrcArgs, FeaturesArgs, TrialArgs, UpdateArgs};
 pub use crate::cli_work::{
     CheckArgs, ClassifyArgs, ContextArgs, DeriveArgs, GithubArgs, PlanArgs, ProposeArgs,
     QualityArgs,
 };
-pub use crate::cli_runtime::{CrcArgs, FeaturesArgs, TrialArgs, UpdateArgs};
-pub use crate::cli_product::{ContentArgs, PeerReviewArgs, ProductArgs, RollbackArgs};
 
 // ── Top-level CLI ─────────────────────────────────────────────────────────────
 
@@ -101,7 +101,6 @@ pub enum Commands {
     Web(WebArgs),
 
     // ── Governance ────────────────────────────────────────────────────────────
-
     /// Browse evidence records
     Evidence(EvidenceArgs),
 
@@ -124,7 +123,6 @@ pub enum Commands {
     Inbox(InboxArgs),
 
     // ── Metrics ───────────────────────────────────────────────────────────────
-
     /// Show runtime vitals (lifecycle, APS score, cycle count, counts)
     Vitals(VitalsArgs),
 
@@ -141,7 +139,6 @@ pub enum Commands {
     Trace(TraceArgs),
 
     // ── Reporting ─────────────────────────────────────────────────────────────
-
     /// Show executor usage patterns and summary
     Usage(UsageArgs),
 
@@ -149,12 +146,10 @@ pub enum Commands {
     Report(ReportArgs),
 
     // ── Exchange / feature market ─────────────────────────────────────────────
-
     /// Feature market commands (status, list, show, rank, ask, fill, …)
     Exchange(ExchangeArgs),
 
     // ── Work / plan / quality ─────────────────────────────────────────────────
-
     /// GitHub integration (status / connect / push-goals / trigger-workflow)
     Github(GithubArgs),
     /// Work planning (show / create / status)
@@ -173,7 +168,6 @@ pub enum Commands {
     Propose(ProposeArgs),
 
     // ── Runtime / trial / upgrade ─────────────────────────────────────────────
-
     /// Run qualification trial or show trial status
     Trial(TrialArgs),
     /// Upgrade runtime (check / apply / rollback)
@@ -184,7 +178,6 @@ pub enum Commands {
     Crc(CrcArgs),
 
     // ── Product management ────────────────────────────────────────────────────
-
     /// Product registry management
     Product(ProductArgs),
     /// Content store management
@@ -457,10 +450,8 @@ mod tests {
 
     #[test]
     fn exchange_ask_parses() {
-        let cli = Cli::try_parse_from([
-            "urace", "exchange", "ask", "feat-001", "--price", "500",
-        ])
-        .unwrap();
+        let cli = Cli::try_parse_from(["urace", "exchange", "ask", "feat-001", "--price", "500"])
+            .unwrap();
         if let Commands::Exchange(ExchangeArgs {
             cmd: ExchangeCommands::Ask { atom_id, price, .. },
         }) = cli.command

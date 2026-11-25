@@ -94,10 +94,7 @@ impl DecisionRecord {
         Ok(self)
     }
 
-    pub fn supersede(
-        mut self,
-        notice: impl Into<String>,
-    ) -> Result<Self, DecisionStoreError> {
+    pub fn supersede(mut self, notice: impl Into<String>) -> Result<Self, DecisionStoreError> {
         let notice = notice.into();
         if notice.is_empty() {
             return Err(DecisionStoreError::RevisionNoticeRequired);
@@ -188,10 +185,8 @@ impl DecisionStore {
                 ));
             }
         }
-        self.journal.append(
-            "DECISION_REVISED",
-            json!({ "id": id, "notice": notice }),
-        )?;
+        self.journal
+            .append("DECISION_REVISED", json!({ "id": id, "notice": notice }))?;
         if let Some(rec) = self.index.write().iter_mut().find(|r| r.id == id) {
             rec.provenance_status = ProvenanceStatus::ProvenanceRevised;
             rec.revision_notice = Some(notice);
@@ -235,7 +230,15 @@ mod tests {
     }
 
     fn make_record(kind: &str) -> DecisionRecord {
-        DecisionRecord::new(kind, "subject", "outcome", "intent-1", "digest-abc", None, json!({}))
+        DecisionRecord::new(
+            kind,
+            "subject",
+            "outcome",
+            "intent-1",
+            "digest-abc",
+            None,
+            json!({}),
+        )
     }
 
     #[test]

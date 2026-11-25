@@ -169,7 +169,10 @@ mod tests {
     #[test]
     fn load_missing_fails() {
         let dir = tempdir().unwrap();
-        assert!(matches!(load_node_identity(dir.path()), Err(IdentityError::Missing)));
+        assert!(matches!(
+            load_node_identity(dir.path()),
+            Err(IdentityError::Missing)
+        ));
     }
 
     #[test]

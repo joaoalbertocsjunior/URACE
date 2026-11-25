@@ -9,6 +9,6 @@ pub mod event_handler;
 pub mod ui;
 pub mod vitals_collector;
 
-pub use app::{App, Panel, SourceEntry, WorkTask, SettlementEntry};
+pub use app::{App, Panel, SettlementEntry, SourceEntry, WorkTask};
 pub use event_handler::{handle_key_event, AppEvent};
 pub use ui::render;

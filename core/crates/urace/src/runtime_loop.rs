@@ -109,8 +109,10 @@ impl LoopContext {
         let replan_secs = config.sources.auto_sync_interval_s.max(1) * 10;
         let auto_planner = Arc::new(AutoPlanner::new(replan_secs));
 
-        let mut initial_status = LoopStatus::default();
-        initial_status.running = true;
+        let initial_status = LoopStatus {
+            running: true,
+            ..Default::default()
+        };
 
         LoopContext {
             config,
@@ -285,7 +287,10 @@ async fn run_auto_plan(ctx: &Arc<LoopContext>) {
         })
         .collect();
 
-    let Some(result) = ctx.auto_planner.maybe_plan(tasks, &PlanningContext::default()) else {
+    let Some(result) = ctx
+        .auto_planner
+        .maybe_plan(tasks, &PlanningContext::default())
+    else {
         return; // interval not elapsed
     };
 

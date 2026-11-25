@@ -55,9 +55,8 @@ pub fn split<R: RngCore + CryptoRng>(
     }
 
     let len = secret.len();
-    let mut shares: Vec<Zeroizing<Vec<u8>>> = (0..n)
-        .map(|_| Zeroizing::new(vec![0u8; len]))
-        .collect();
+    let mut shares: Vec<Zeroizing<Vec<u8>>> =
+        (0..n).map(|_| Zeroizing::new(vec![0u8; len])).collect();
 
     // Random coefficients for each byte position.
     let coeff_count = k.saturating_sub(1);
@@ -85,7 +84,10 @@ pub fn split<R: RngCore + CryptoRng>(
     Ok(shares
         .into_iter()
         .enumerate()
-        .map(|(i, data)| Share { x: (i + 1) as u8, data })
+        .map(|(i, data)| Share {
+            x: (i + 1) as u8,
+            data,
+        })
         .collect())
 }
 
@@ -177,11 +179,17 @@ mod tests {
 
     #[test]
     fn error_on_empty_secret() {
-        assert!(matches!(split(b"", 1, 1, &mut rng()), Err(ShamirError::EmptySecret)));
+        assert!(matches!(
+            split(b"", 1, 1, &mut rng()),
+            Err(ShamirError::EmptySecret)
+        ));
     }
 
     #[test]
     fn error_k_exceeds_n() {
-        assert!(matches!(split(b"x", 5, 3, &mut rng()), Err(ShamirError::KExceedsN { .. })));
+        assert!(matches!(
+            split(b"x", 5, 3, &mut rng()),
+            Err(ShamirError::KExceedsN { .. })
+        ));
     }
 }

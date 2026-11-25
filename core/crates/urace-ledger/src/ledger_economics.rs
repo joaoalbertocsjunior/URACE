@@ -53,10 +53,7 @@ pub fn feature_borrow_cost_with_rep(
 }
 
 /// Soft quadratic supply pressure multiplier against physics-bounded ceiling.
-pub fn supply_pressure_multiplier(
-    total_supply_units: i64,
-    estimated_network_size: u64,
-) -> f64 {
+pub fn supply_pressure_multiplier(total_supply_units: i64, estimated_network_size: u64) -> f64 {
     let physics_max = (crate::tokenomics::PEER_CAP * 10)
         .max(crate::tokenomics::PEER_CAP * estimated_network_size.max(1) as i64);
     let cap = physics_max.max(1) as f64;
@@ -72,7 +69,9 @@ pub const DISTRIBUTION_FEE_DEFAULT: f64 = 0.05;
 pub fn distribution_fee_units(borrow_cost: i64, quality_score: Option<f64>) -> i64 {
     let frac = match quality_score {
         None => DISTRIBUTION_FEE_DEFAULT,
-        Some(q) => q.mul_add(DISTRIBUTION_FEE_MAX, 0.0).min(DISTRIBUTION_FEE_MAX).max(DISTRIBUTION_FEE_MIN),
+        Some(q) => q
+            .mul_add(DISTRIBUTION_FEE_MAX, 0.0)
+            .clamp(DISTRIBUTION_FEE_MIN, DISTRIBUTION_FEE_MAX),
     };
     ((borrow_cost as f64 * frac) as i64).max(0)
 }
@@ -165,7 +164,10 @@ mod tests {
         let cost = feature_borrow_cost_units(0, 0, 0);
         assert!(cost >= UNIT / 10_000, "cost must be >= floor");
         // The actual value should be UNIT/10 (complexity=1 → score/10)
-        assert_eq!(cost, (feature_complexity_score(0, 0, 0) * UNIT as f64 / 10.0) as i64);
+        assert_eq!(
+            cost,
+            (feature_complexity_score(0, 0, 0) * UNIT as f64 / 10.0) as i64
+        );
     }
 
     #[test]

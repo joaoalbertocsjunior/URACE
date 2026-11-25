@@ -174,7 +174,7 @@ pub fn extract_headings(text: &str) -> Vec<String> {
         .filter(|line| {
             let trimmed = line.trim_start_matches('#');
             let n = line.len() - trimmed.len();
-            n >= 1 && n <= 6 && trimmed.starts_with(' ')
+            (1..=6).contains(&n) && trimmed.starts_with(' ')
         })
         .map(|s| s.to_owned())
         .collect()
@@ -199,13 +199,12 @@ pub fn review_passes(review: &ReviewResult) -> bool {
     // After scores must be >= before in every dimension, and strictly > in at least one.
     let before = &review.scores.before;
     let after = &review.scores.after;
-    let improved = after.clarity >= before.clarity
+    after.clarity >= before.clarity
         && after.consistency >= before.consistency
         && after.conciseness >= before.conciseness
         && (after.clarity > before.clarity
             || after.consistency > before.consistency
-            || after.conciseness > before.conciseness);
-    improved
+            || after.conciseness > before.conciseness)
 }
 
 /// Validate a proposed editorial patch against `section`.
@@ -321,7 +320,7 @@ mod tests {
         let proposal = Proposal {
             old: "It explains something useful here.".to_owned(),
             new: "It clarifies something useful here.".to_owned(),
-            evidence_quote: "It explains something useful".to_owned(),
+            evidence_quote: "It explains something useful here".to_owned(),
             reason: "Improve clarity".to_owned(),
             failure_case: "A".repeat(40),
         };

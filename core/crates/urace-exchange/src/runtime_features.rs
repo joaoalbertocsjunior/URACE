@@ -191,7 +191,11 @@ impl FeatureRegistry {
             .collect();
         candidates.sort_by_key(|f| {
             (
-                if f.tags.contains(&TAG_CORE.to_owned()) { 0 } else { 1 },
+                if f.tags.contains(&TAG_CORE.to_owned()) {
+                    0
+                } else {
+                    1
+                },
                 f.id.clone(),
             )
         });
@@ -952,9 +956,7 @@ mod tests {
         let cands = reg.improvement_candidates();
         for f in &cands {
             assert!(
-                f.status == STATUS_STUB
-                    || f.status == STATUS_STALE
-                    || f.status == STATUS_REVIEW,
+                f.status == STATUS_STUB || f.status == STATUS_STALE || f.status == STATUS_REVIEW,
                 "unexpected status {:?} for {:?}",
                 f.status,
                 f.id

@@ -156,7 +156,7 @@ pub fn parse_retry_after(error_text: &str) -> Option<Duration> {
 
     // "Retry-After: 120" (HTTP header format, plain seconds)
     if let Some(rest) = lower.find("retry-after:").map(|i| &lower[i + 12..]) {
-        let secs: u64 = rest.trim().split_whitespace().next()?.parse().ok()?;
+        let secs: u64 = rest.split_whitespace().next()?.parse().ok()?;
         return Some(Duration::from_secs(secs));
     }
 
@@ -224,7 +224,10 @@ struct ProviderRetryState {
 
 impl ProviderRetryState {
     fn new() -> Self {
-        Self { status: ProviderStatus::Monitoring, last_error_fingerprint: None }
+        Self {
+            status: ProviderStatus::Monitoring,
+            last_error_fingerprint: None,
+        }
     }
 }
 
@@ -241,18 +244,14 @@ pub enum RetryOutcome {
         resume_at: Instant,
     },
     /// All retry budgets for this class are exhausted; provider is parked.
-    GaveUp {
-        reason: UnavailabilityClass,
-    },
+    GaveUp { reason: UnavailabilityClass },
     /// A fresh failure was recorded; provider entered a wait window.
     Tripped {
         reason: UnavailabilityClass,
         resume_at: Instant,
     },
     /// An existing fallback wait was shortened because the real reset time appeared.
-    WaitCorrected {
-        new_resume_at: Instant,
-    },
+    WaitCorrected { new_resume_at: Instant },
     /// Provider recovered (success recorded); back to Monitoring.
     Recovered,
 }
@@ -269,7 +268,9 @@ pub struct RetryEngine {
 
 impl RetryEngine {
     pub fn new() -> Self {
-        RetryEngine { providers: Mutex::new(HashMap::new()) }
+        RetryEngine {
+            providers: Mutex::new(HashMap::new()),
+        }
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -279,7 +280,9 @@ impl RetryEngine {
     /// Call this BEFORE dispatching to a provider.
     pub fn should_allow(&self, provider_id: &str) -> RetryOutcome {
         let mut map = self.providers.lock();
-        let state = map.entry(provider_id.to_owned()).or_insert_with(ProviderRetryState::new);
+        let state = map
+            .entry(provider_id.to_owned())
+            .or_insert_with(ProviderRetryState::new);
         self.evaluate_status(state)
     }
 
@@ -293,7 +296,9 @@ impl RetryEngine {
         let parsed_wait = parse_retry_after(error_text);
 
         let mut map = self.providers.lock();
-        let state = map.entry(provider_id.to_owned()).or_insert_with(ProviderRetryState::new);
+        let state = map
+            .entry(provider_id.to_owned())
+            .or_insert_with(ProviderRetryState::new);
 
         // Deduplication: same stale error re-detected — no new transition.
         if state.last_error_fingerprint.as_deref() == Some(&fingerprint) {
@@ -303,7 +308,11 @@ impl RetryEngine {
 
         // If already in a fallback rate-limit wait and we now have a real reset time,
         // shorten the wait (mirrors claude-auto-retry's correctUsageWait).
-        if let ProviderStatus::RateLimitWait { is_fallback: true, until } = state.status {
+        if let ProviderStatus::RateLimitWait {
+            is_fallback: true,
+            until,
+        } = state.status
+        {
             if let Some(wait) = parsed_wait {
                 let new_until = Instant::now() + wait;
                 if new_until < until {
@@ -311,7 +320,9 @@ impl RetryEngine {
                         until: new_until,
                         is_fallback: false,
                     };
-                    return RetryOutcome::WaitCorrected { new_resume_at: new_until };
+                    return RetryOutcome::WaitCorrected {
+                        new_resume_at: new_until,
+                    };
                 }
             }
         }
@@ -323,7 +334,9 @@ impl RetryEngine {
     /// Record a success. Transitions the provider back to Monitoring.
     pub fn on_success(&self, provider_id: &str) -> RetryOutcome {
         let mut map = self.providers.lock();
-        let state = map.entry(provider_id.to_owned()).or_insert_with(ProviderRetryState::new);
+        let state = map
+            .entry(provider_id.to_owned())
+            .or_insert_with(ProviderRetryState::new);
         state.status = ProviderStatus::Monitoring;
         state.last_error_fingerprint = None;
         RetryOutcome::Recovered
@@ -425,22 +438,32 @@ impl RetryEngine {
                 };
                 let until = Instant::now() + wait;
                 state.status = ProviderStatus::RateLimitWait { until, is_fallback };
-                RetryOutcome::Tripped { reason: class.clone(), resume_at: until }
+                RetryOutcome::Tripped {
+                    reason: class.clone(),
+                    resume_at: until,
+                }
             }
 
             UnavailabilityClass::NetworkError => {
                 let (attempts, total_wait) = match &state.status {
-                    ProviderStatus::Overload { attempts, total_wait, .. } => {
-                        (*attempts, *total_wait)
-                    }
+                    ProviderStatus::Overload {
+                        attempts,
+                        total_wait,
+                        ..
+                    } => (*attempts, *total_wait),
                     _ => (0, Duration::ZERO),
                 };
 
                 if let Some(cap) = policy.total_cap {
                     if total_wait >= cap || attempts >= policy.max_attempts {
                         let until = Instant::now() + policy.steady_state;
-                        state.status = ProviderStatus::GaveUp { until, reason: class.clone() };
-                        return RetryOutcome::GaveUp { reason: class.clone() };
+                        state.status = ProviderStatus::GaveUp {
+                            until,
+                            reason: class.clone(),
+                        };
+                        return RetryOutcome::GaveUp {
+                            reason: class.clone(),
+                        };
                     }
                 }
 
@@ -452,13 +475,19 @@ impl RetryEngine {
                     attempts: attempts + 1,
                     total_wait: new_total,
                 };
-                RetryOutcome::Tripped { reason: class.clone(), resume_at: until }
+                RetryOutcome::Tripped {
+                    reason: class.clone(),
+                    resume_at: until,
+                }
             }
 
             UnavailabilityClass::AuthFailure => {
                 let until = Instant::now() + policy.fallback_wait;
                 state.status = ProviderStatus::AuthFailure { until };
-                RetryOutcome::Tripped { reason: class.clone(), resume_at: until }
+                RetryOutcome::Tripped {
+                    reason: class.clone(),
+                    resume_at: until,
+                }
             }
 
             UnavailabilityClass::ExecutionEnvironment => {
@@ -469,8 +498,13 @@ impl RetryEngine {
                 };
                 if attempts >= policy.max_attempts {
                     let until = Instant::now() + policy.steady_state;
-                    state.status = ProviderStatus::GaveUp { until, reason: class.clone() };
-                    return RetryOutcome::GaveUp { reason: class.clone() };
+                    state.status = ProviderStatus::GaveUp {
+                        until,
+                        reason: class.clone(),
+                    };
+                    return RetryOutcome::GaveUp {
+                        reason: class.clone(),
+                    };
                 }
                 let wait = policy.wait_with_jitter(attempts);
                 let until = Instant::now() + wait;
@@ -479,27 +513,43 @@ impl RetryEngine {
                     attempts: attempts + 1,
                     total_wait: wait,
                 };
-                RetryOutcome::Tripped { reason: class.clone(), resume_at: until }
+                RetryOutcome::Tripped {
+                    reason: class.clone(),
+                    resume_at: until,
+                }
             }
 
             UnavailabilityClass::Unknown => {
                 let (attempts, total_wait) = match &state.status {
                     ProviderStatus::Safeguard { attempts, .. } => (*attempts, Duration::ZERO),
-                    ProviderStatus::Overload { attempts, total_wait, .. } => {
-                        (*attempts, *total_wait)
-                    }
+                    ProviderStatus::Overload {
+                        attempts,
+                        total_wait,
+                        ..
+                    } => (*attempts, *total_wait),
                     _ => (0, Duration::ZERO),
                 };
                 if attempts >= policy.max_attempts {
                     let until = Instant::now() + policy.steady_state;
-                    state.status = ProviderStatus::GaveUp { until, reason: class.clone() };
-                    return RetryOutcome::GaveUp { reason: class.clone() };
+                    state.status = ProviderStatus::GaveUp {
+                        until,
+                        reason: class.clone(),
+                    };
+                    return RetryOutcome::GaveUp {
+                        reason: class.clone(),
+                    };
                 }
                 let wait = policy.wait_with_jitter(attempts);
                 let until = Instant::now() + wait;
-                state.status = ProviderStatus::Safeguard { until, attempts: attempts + 1 };
+                state.status = ProviderStatus::Safeguard {
+                    until,
+                    attempts: attempts + 1,
+                };
                 let _ = total_wait;
-                RetryOutcome::Tripped { reason: class.clone(), resume_at: until }
+                RetryOutcome::Tripped {
+                    reason: class.clone(),
+                    resume_at: until,
+                }
             }
         }
     }
@@ -523,7 +573,11 @@ fn status_label(status: &ProviderStatus) -> String {
     match status {
         ProviderStatus::Monitoring => "monitoring".into(),
         ProviderStatus::RateLimitWait { is_fallback, .. } => {
-            if *is_fallback { "rate-limit-wait(fallback)".into() } else { "rate-limit-wait".into() }
+            if *is_fallback {
+                "rate-limit-wait(fallback)".into()
+            } else {
+                "rate-limit-wait".into()
+            }
         }
         ProviderStatus::Overload { attempts, .. } => format!("overload(attempt {})", attempts),
         ProviderStatus::AuthFailure { .. } => "auth-failure".into(),
@@ -600,14 +654,23 @@ mod tests {
     fn rate_limit_trips_provider() {
         let engine = RetryEngine::new();
         let outcome = engine.on_failure("p1", "usage limit exceeded");
-        assert!(matches!(outcome, RetryOutcome::Tripped { reason: UnavailabilityClass::RateLimit, .. }));
+        assert!(matches!(
+            outcome,
+            RetryOutcome::Tripped {
+                reason: UnavailabilityClass::RateLimit,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn tripped_provider_returns_waiting() {
         let engine = RetryEngine::new();
         engine.on_failure("p1", "usage limit exceeded");
-        assert!(matches!(engine.should_allow("p1"), RetryOutcome::Waiting { .. }));
+        assert!(matches!(
+            engine.should_allow("p1"),
+            RetryOutcome::Waiting { .. }
+        ));
     }
 
     #[test]
@@ -628,8 +691,12 @@ mod tests {
         let outcome = engine.should_allow("p1");
         // Should be either Waiting (still in hold) or GaveUp
         assert!(
-            matches!(outcome, RetryOutcome::Waiting { .. } | RetryOutcome::GaveUp { .. }),
-            "expected Waiting or GaveUp, got {:?}", outcome
+            matches!(
+                outcome,
+                RetryOutcome::Waiting { .. } | RetryOutcome::GaveUp { .. }
+            ),
+            "expected Waiting or GaveUp, got {:?}",
+            outcome
         );
     }
 
@@ -642,7 +709,8 @@ mod tests {
         let second = engine.on_failure("p1", err);
         assert!(
             !matches!(second, RetryOutcome::Tripped { .. }),
-            "same error should not re-trip: {:?}", second
+            "same error should not re-trip: {:?}",
+            second
         );
     }
 
@@ -655,8 +723,12 @@ mod tests {
         let outcome = engine.on_failure("p1", "usage limit exceeded, try again in 1 minutes");
         // Should shorten the wait
         assert!(
-            matches!(outcome, RetryOutcome::WaitCorrected { .. } | RetryOutcome::Tripped { .. }),
-            "expected correction or re-trip, got {:?}", outcome
+            matches!(
+                outcome,
+                RetryOutcome::WaitCorrected { .. } | RetryOutcome::Tripped { .. }
+            ),
+            "expected correction or re-trip, got {:?}",
+            outcome
         );
     }
 
@@ -667,7 +739,10 @@ mod tests {
         let outcome = engine.should_allow("p1");
         if let RetryOutcome::Waiting { resume_at, .. } = outcome {
             let remaining = resume_at.duration_since(Instant::now());
-            assert!(remaining > Duration::from_secs(1800), "auth hold should be long");
+            assert!(
+                remaining > Duration::from_secs(1800),
+                "auth hold should be long"
+            );
         } else {
             panic!("expected Waiting, got {:?}", outcome);
         }

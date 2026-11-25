@@ -45,7 +45,10 @@ pub struct TelemetryEmitter {
 }
 
 impl TelemetryEmitter {
-    pub fn open(path: impl AsRef<std::path::Path>, hmac_key: [u8; 32]) -> Result<Self, TelemetryError> {
+    pub fn open(
+        path: impl AsRef<std::path::Path>,
+        hmac_key: [u8; 32],
+    ) -> Result<Self, TelemetryError> {
         let journal = Journal::open(path, hmac_key)?;
         Ok(TelemetryEmitter {
             inner: Mutex::new(Inner {

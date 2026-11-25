@@ -274,12 +274,9 @@ pub fn plan(
     }
 
     // Run petgraph toposort. Err means a cycle exists among schedulable nodes.
-    let (topo_order, cyclic_ids): (Vec<String>, HashSet<String>) = match toposort(&graph, None) {
+    let (topo_order, _cyclic_ids): (Vec<String>, HashSet<String>) = match toposort(&graph, None) {
         Ok(indices) => {
-            let order = indices
-                .into_iter()
-                .map(|idx| graph[idx].clone())
-                .collect();
+            let order = indices.into_iter().map(|idx| graph[idx].clone()).collect();
             (order, HashSet::new())
         }
         Err(_cycle_err) => {
@@ -415,7 +412,10 @@ pub fn plan(
     }
 
     // Remaining active tasks that are blocked: unknown deps, skip-status, or cyclic.
-    let ranked_ids: HashSet<String> = rows.iter().filter_map(|r| r.rank.map(|_| r.id.clone())).collect();
+    let ranked_ids: HashSet<String> = rows
+        .iter()
+        .filter_map(|r| r.rank.map(|_| r.id.clone()))
+        .collect();
     let mut blocked_keys: Vec<String> = active
         .keys()
         .filter(|k| !ranked_ids.contains(*k))
@@ -427,11 +427,6 @@ pub fn plan(
         let task = &active[&key];
         let reasons = if !blocked_reasons[&key].is_empty() {
             blocked_reasons[&key].clone()
-        } else if cyclic_ids.contains(&key) {
-            vec![
-                "Blocked/cyclic or unresolved predecessor chain; explicit owner/action review required"
-                    .into(),
-            ]
         } else {
             vec![
                 "Blocked/cyclic or unresolved predecessor chain; explicit owner/action review required"

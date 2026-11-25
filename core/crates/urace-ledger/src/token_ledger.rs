@@ -26,11 +26,7 @@ pub enum TokenLedgerError {
     #[error("journal error: {0}")]
     Journal(#[from] JournalError),
     #[error("insufficient balance: peer {peer} has {have}, needs {need}")]
-    InsufficientBalance {
-        peer: String,
-        have: i64,
-        need: i64,
-    },
+    InsufficientBalance { peer: String, have: i64, need: i64 },
     #[error("peer cap exceeded: cap {cap}, would reach {would_reach}")]
     PeerCapExceeded { cap: i64, would_reach: i64 },
     #[error("non-positive amount: {0}")]
@@ -47,7 +43,10 @@ pub struct TokenLedger {
 impl TokenLedger {
     pub fn open(path: impl AsRef<Path>, hmac_key: [u8; 32]) -> Result<Self, TokenLedgerError> {
         let journal = Journal::open(path, hmac_key)?;
-        Ok(TokenLedger { journal, lock: Mutex::new(()) })
+        Ok(TokenLedger {
+            journal,
+            lock: Mutex::new(()),
+        })
     }
 
     fn now_unix() -> f64 {
@@ -62,7 +61,8 @@ impl TokenLedger {
     fn balances_inner(&self) -> Result<HashMap<String, i64>, TokenLedgerError> {
         let entries = self.journal.verify_integrity()?;
         let mut balances: HashMap<String, i64> = HashMap::new();
-        let mut baseline_unlocked: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut baseline_unlocked: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
 
         for entry in &entries {
             match entry.kind.as_str() {

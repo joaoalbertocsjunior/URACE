@@ -48,7 +48,11 @@ impl Journal {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        Ok(Journal { path, lock: Mutex::new(()), hmac_key })
+        Ok(Journal {
+            path,
+            lock: Mutex::new(()),
+            hmac_key,
+        })
     }
 
     fn canonical_bytes(seq: u64, kind: &str, payload: &Value) -> Vec<u8> {
@@ -74,11 +78,7 @@ impl Journal {
     }
 
     /// Append a row of `kind` with `payload`. Returns the written `LedgerEntry`.
-    pub fn append(
-        &self,
-        kind: &str,
-        payload: Value,
-    ) -> Result<LedgerEntry, JournalError> {
+    pub fn append(&self, kind: &str, payload: Value) -> Result<LedgerEntry, JournalError> {
         let _guard = self.lock.lock();
 
         let seq = self.next_seq()?;
@@ -118,21 +118,23 @@ impl Journal {
             if line.trim().is_empty() {
                 continue;
             }
-            let entry: LedgerEntry = serde_json::from_str(line)
-                .map_err(|e| JournalError::IntegrityViolation(
-                    format!("line {}: parse error: {e}", line_no + 1)
-                ))?;
+            let entry: LedgerEntry = serde_json::from_str(line).map_err(|e| {
+                JournalError::IntegrityViolation(format!("line {}: parse error: {e}", line_no + 1))
+            })?;
 
             let expected = self.compute_hmac(entry.seq, &entry.kind, &entry.payload);
             if !constant_time_eq(&expected, &entry.hmac) {
-                return Err(JournalError::IntegrityViolation(
-                    format!("seq={} HMAC mismatch", entry.seq)
-                ));
+                return Err(JournalError::IntegrityViolation(format!(
+                    "seq={} HMAC mismatch",
+                    entry.seq
+                )));
             }
             if entry.seq != entries.len() as u64 {
-                return Err(JournalError::IntegrityViolation(
-                    format!("seq gap: expected {}, got {}", entries.len(), entry.seq)
-                ));
+                return Err(JournalError::IntegrityViolation(format!(
+                    "seq gap: expected {}, got {}",
+                    entries.len(),
+                    entry.seq
+                )));
             }
             entries.push(entry);
         }
@@ -198,7 +200,10 @@ mod tests {
         bytes[hmac_pos] ^= 0x01;
         fs::write(&path, bytes).unwrap();
 
-        assert!(matches!(j.verify_integrity(), Err(JournalError::IntegrityViolation(_))));
+        assert!(matches!(
+            j.verify_integrity(),
+            Err(JournalError::IntegrityViolation(_))
+        ));
     }
 
     #[test]
@@ -208,6 +213,9 @@ mod tests {
         let link = dir.path().join("link.jsonl");
         fs::write(&real, b"").unwrap();
         std::os::unix::fs::symlink(&real, &link).unwrap();
-        assert!(matches!(Journal::open(&link, KEY), Err(JournalError::SymlinkProhibited)));
+        assert!(matches!(
+            Journal::open(&link, KEY),
+            Err(JournalError::SymlinkProhibited)
+        ));
     }
 }

@@ -8,16 +8,16 @@
 //! * `POST /api/logs/components/{name}/enable`  — enable a component (stub)
 //! * `POST /api/logs/components/{name}/disable` — disable a component (stub)
 
+use crate::{auth::BearerToken, AppState};
 use axum::{
     extract::{Path, State},
-    response::{IntoResponse, Response},
     response::sse::{Event, KeepAlive, Sse},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
 use futures::stream;
 use serde_json::Value;
-use crate::{AppState, auth::BearerToken};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -84,10 +84,7 @@ fn read_log_entries(root: &std::path::Path, limit: usize) -> Vec<Value> {
     entries
 }
 
-async fn log_history(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<Value> {
+async fn log_history(State(s): State<AppState>, _auth: BearerToken) -> Json<Value> {
     let entries = read_log_entries(&s.root, 100);
     let count = entries.len();
     Json(serde_json::json!({
@@ -96,10 +93,7 @@ async fn log_history(
     }))
 }
 
-async fn log_stream(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Response {
+async fn log_stream(State(s): State<AppState>, _auth: BearerToken) -> Response {
     // Emit a snapshot of the last 50 entries then keep the connection alive.
     // Full live-streaming would require a shared ring-buffer; that is a future
     // enhancement once a Rust logging sink is wired in.
@@ -118,10 +112,7 @@ async fn log_stream(
         .into_response()
 }
 
-async fn list_components(
-    State(_s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<Value> {
+async fn list_components(State(_s): State<AppState>, _auth: BearerToken) -> Json<Value> {
     // Component registry is not yet wired to the Rust logging layer.
     // Returns an empty list; the Python original also had limited impl here.
     Json(serde_json::json!({ "components": [] }))

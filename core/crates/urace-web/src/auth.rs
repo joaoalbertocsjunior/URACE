@@ -4,12 +4,16 @@
 //! Page routes do NOT require this extractor — the token is embedded in the
 //! HTML via the template so the browser-side JS can include it.
 
-use axum::{async_trait, extract::FromRequestParts, http::{request::Parts, StatusCode}};
+use crate::AppState;
+use axum::{
+    async_trait,
+    extract::FromRequestParts,
+    http::{request::Parts, StatusCode},
+};
 use axum_extra::{
     headers::{authorization::Bearer, Authorization},
     TypedHeader,
 };
-use crate::AppState;
 
 /// Zero-sized marker type extracted from the Authorization header.
 /// Add `_auth: BearerToken` to any handler that must be token-gated.

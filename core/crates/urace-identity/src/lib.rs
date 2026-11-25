@@ -17,8 +17,7 @@ pub mod shamir_delivery;
 pub use crypto_wallet::{Wallet, WalletError};
 pub use key_lifecycle::{KeyError, KeyRecord, KeyState, KeyStore};
 pub use mesh_identity::{
-    generate_node_identity, load_node_identity, persist_node_identity, IdentityError,
-    NodeIdentity,
+    generate_node_identity, load_node_identity, persist_node_identity, IdentityError, NodeIdentity,
 };
 pub use session_dek::{DekError, SessionDek};
 pub use shamir_delivery::{DeliveryError, DeliveryTracker, ShareDelivery};

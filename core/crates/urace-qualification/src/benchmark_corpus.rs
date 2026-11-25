@@ -306,7 +306,7 @@ pub fn load_corpus(corpus_dir: &Path) -> Result<Vec<CorpusRecord>, CorpusError> 
         .unwrap_or_default()
         .lines()
         .filter(|l| !l.trim().is_empty())
-        .map(|l| serde_json::from_str(l))
+        .map(serde_json::from_str)
         .collect::<Result<_, _>>()?;
     if records.len() != manifest.task_count {
         return Err(CorpusError::IntegrityError);

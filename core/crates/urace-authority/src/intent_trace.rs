@@ -46,8 +46,8 @@ pub fn source_coverage(text: &str, sections: &[Value]) -> Value {
         let mut start = 0usize;
         while start + part_len <= text_bytes.len() {
             if &text_bytes[start..start + part_len] == part_bytes {
-                for i in start..start + part_len {
-                    covered[i] = true;
+                for item in covered.iter_mut().skip(start).take(part_len) {
+                    *item = true;
                 }
                 start += part_len;
             } else {
@@ -59,10 +59,11 @@ pub fn source_coverage(text: &str, sections: &[Value]) -> Value {
     // Collect uncovered non-whitespace tokens.
     // A token is uncovered if any of its bytes are both alphanumeric in `text`
     // and not covered. Skip common filler words.
-    let stop_words: std::collections::HashSet<&str> = ["and", "or", "also", "please", "then", "e", "ou"]
-        .iter()
-        .copied()
-        .collect();
+    let stop_words: std::collections::HashSet<&str> =
+        ["and", "or", "also", "please", "then", "e", "ou"]
+            .iter()
+            .copied()
+            .collect();
 
     let mut unassigned: Vec<Value> = Vec::new();
 
@@ -96,7 +97,12 @@ pub fn source_coverage(text: &str, sections: &[Value]) -> Value {
         // Normalise word: strip punctuation, lowercase.
         let word: String = token
             .chars()
-            .filter(|c| !matches!(c, '.' | ',' | ';' | ':' | '!' | '?' | '(' | ')' | '[' | ']' | '{' | '}'))
+            .filter(|c| {
+                !matches!(
+                    c,
+                    '.' | ',' | ';' | ':' | '!' | '?' | '(' | ')' | '[' | ']' | '{' | '}'
+                )
+            })
             .collect::<String>()
             .to_lowercase();
 
@@ -175,7 +181,8 @@ pub fn claim_coverage(claims: &[&str], evidence: &[&str]) -> f64 {
             let claim_lower = claim.to_lowercase();
             evidence.iter().any(|ev| {
                 let ev_lower = ev.to_lowercase();
-                !ev_lower.is_empty() && (claim_lower.contains(&ev_lower) || ev_lower.contains(&claim_lower))
+                !ev_lower.is_empty()
+                    && (claim_lower.contains(&ev_lower) || ev_lower.contains(&claim_lower))
             })
         })
         .count();
@@ -200,10 +207,8 @@ pub fn assessment(requirements: &[Value], claims: &[Value]) -> Value {
         })
         .collect();
 
-    let mut mapped: std::collections::HashMap<String, Vec<&Value>> = by_id
-        .keys()
-        .map(|k| (k.clone(), Vec::new()))
-        .collect();
+    let mut mapped: std::collections::HashMap<String, Vec<&Value>> =
+        by_id.keys().map(|k| (k.clone(), Vec::new())).collect();
 
     let mut unsupported: Vec<Value> = Vec::new();
 
@@ -240,7 +245,7 @@ pub fn assessment(requirements: &[Value], claims: &[Value]) -> Value {
     let rows: Vec<Value> = by_id
         .iter()
         .map(|(key, requirement)| {
-            let linked: Vec<&Value> = mapped.get(key).map(|v| v.clone()).unwrap_or_default();
+            let linked: Vec<&Value> = mapped.get(key).cloned().unwrap_or_default();
             let verified: Vec<&&Value> = linked
                 .iter()
                 .filter(|c| {
@@ -362,26 +367,43 @@ mod tests {
     fn stop_words_not_reported_as_unassigned() {
         // "and", "or", "also" are stop words and should not appear in unassigned
         let text = "this and that or also here";
-        let sections = vec![serde_json::json!({ "raw_text": "this" }),
-                             serde_json::json!({ "raw_text": "that" }),
-                             serde_json::json!({ "raw_text": "here" })];
+        let sections = vec![
+            serde_json::json!({ "raw_text": "this" }),
+            serde_json::json!({ "raw_text": "that" }),
+            serde_json::json!({ "raw_text": "here" }),
+        ];
         let result = source_coverage(text, &sections);
         let unassigned = result["unassigned"].as_array().unwrap();
         let texts: Vec<&str> = unassigned
             .iter()
             .map(|u| u["text"].as_str().unwrap())
             .collect();
-        assert!(!texts.contains(&"and"), "stop word 'and' should not be unassigned");
-        assert!(!texts.contains(&"or"), "stop word 'or' should not be unassigned");
-        assert!(!texts.contains(&"also"), "stop word 'also' should not be unassigned");
+        assert!(
+            !texts.contains(&"and"),
+            "stop word 'and' should not be unassigned"
+        );
+        assert!(
+            !texts.contains(&"or"),
+            "stop word 'or' should not be unassigned"
+        );
+        assert!(
+            !texts.contains(&"also"),
+            "stop word 'also' should not be unassigned"
+        );
     }
 
     #[test]
     fn source_coverage_has_correct_schema_fields() {
         let result = source_coverage("test", &[]);
-        assert_eq!(result["schema"].as_str().unwrap(), "intent-source-coverage-v1");
+        assert_eq!(
+            result["schema"].as_str().unwrap(),
+            "intent-source-coverage-v1"
+        );
         assert!(result.get("source_sha256").is_some());
-        assert_eq!(result["semantic_completeness_proven"].as_bool().unwrap(), false);
+        assert_eq!(
+            result["semantic_completeness_proven"].as_bool().unwrap(),
+            false
+        );
         // SHA-256 is 64 hex chars
         assert_eq!(result["source_sha256"].as_str().unwrap().len(), 64);
     }
@@ -477,8 +499,16 @@ mod tests {
             result["schema"].as_str().unwrap(),
             "request-claim-evidence-trace-v1"
         );
-        assert_eq!(result["complete_assessment_proven"].as_bool().unwrap(), false);
-        assert_eq!(result["evidence_truth_independently_verified"].as_bool().unwrap(), false);
+        assert_eq!(
+            result["complete_assessment_proven"].as_bool().unwrap(),
+            false
+        );
+        assert_eq!(
+            result["evidence_truth_independently_verified"]
+                .as_bool()
+                .unwrap(),
+            false
+        );
     }
 
     #[test]
@@ -535,10 +565,7 @@ mod tests {
     #[test]
     fn assessment_empty_requirements_and_claims() {
         let result = assessment(&[], &[]);
-        assert_eq!(
-            result["requirements"].as_array().unwrap().len(),
-            0
-        );
+        assert_eq!(result["requirements"].as_array().unwrap().len(), 0);
         assert!(!result["linkage_complete"].as_bool().unwrap());
     }
 }

@@ -5,13 +5,13 @@
 //! Ports `routes/compliance.py`. The Python handler dispatched to the daemon
 //! via RPC; in Rust we read compliance records directly from state.json.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Path, Query, State},
     routing::get,
     Json, Router,
 };
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -20,12 +20,16 @@ pub fn router() -> Router<AppState> {
         .route("/history", get(compliance_history))
 }
 
-fn extract_compliance(state: &serde_json::Value) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
-    let domains = state.get("compliance_domains")
+fn extract_compliance(
+    state: &serde_json::Value,
+) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
+    let domains = state
+        .get("compliance_domains")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
-    let records = state.get("compliance_records")
+    let records = state
+        .get("compliance_records")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
@@ -38,7 +42,7 @@ async fn compliance_summary(
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
     let (domains, records) = extract_compliance(&state);
-    let all: Vec<_> = records.iter().cloned().collect();
+    let all: Vec<_> = records.to_vec();
     let start = all.len().saturating_sub(20);
     let recent = all[start..].to_vec();
     Json(serde_json::json!({
@@ -54,11 +58,13 @@ async fn compliance_domain(
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
     let (domains, records) = extract_compliance(&state);
-    let filtered_domains: Vec<_> = domains.iter()
+    let filtered_domains: Vec<_> = domains
+        .iter()
         .filter(|d| d.get("domain").and_then(|v| v.as_str()) == Some(&domain))
         .cloned()
         .collect();
-    let filtered_records: Vec<_> = records.iter()
+    let filtered_records: Vec<_> = records
+        .iter()
         .filter(|r| r.get("domain").and_then(|v| v.as_str()) == Some(&domain))
         .cloned()
         .collect();
@@ -75,7 +81,9 @@ pub struct HistoryQuery {
     #[serde(default = "default_history_limit")]
     pub limit: usize,
 }
-fn default_history_limit() -> usize { 20 }
+fn default_history_limit() -> usize {
+    20
+}
 
 async fn compliance_history(
     State(s): State<AppState>,
@@ -83,7 +91,8 @@ async fn compliance_history(
     Query(q): Query<HistoryQuery>,
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let records = state.get("compliance_records")
+    let records = state
+        .get("compliance_records")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();

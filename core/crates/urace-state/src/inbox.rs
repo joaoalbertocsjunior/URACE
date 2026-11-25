@@ -158,7 +158,11 @@ mod tests {
         // Push a 4th — "A" (oldest) should be dropped
         inbox.push(msg("D"));
         assert_eq!(inbox.len(), 3);
-        let all: Vec<_> = inbox.peek_all().into_iter().map(|m| m.kind.clone()).collect();
+        let all: Vec<_> = inbox
+            .peek_all()
+            .into_iter()
+            .map(|m| m.kind.clone())
+            .collect();
         assert!(!all.contains(&"A".to_string()), "oldest should be dropped");
         assert!(all.contains(&"D".to_string()), "newest should be retained");
         assert!(all.contains(&"B".to_string()));

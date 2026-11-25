@@ -63,10 +63,10 @@ pub fn verify(
     msg: &[u8],
     signature: &[u8; SIGNATURE_LENGTH],
 ) -> Result<(), Ed25519Error> {
-    let vk = VerifyingKey::from_bytes(public_key)
-        .map_err(|_| Ed25519Error::InvalidPublicKey)?;
+    let vk = VerifyingKey::from_bytes(public_key).map_err(|_| Ed25519Error::InvalidPublicKey)?;
     let sig = Signature::from_bytes(signature);
-    vk.verify(msg, &sig).map_err(|_| Ed25519Error::VerificationFailed)
+    vk.verify(msg, &sig)
+        .map_err(|_| Ed25519Error::VerificationFailed)
 }
 
 #[cfg(test)]
@@ -75,7 +75,9 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
-    fn rng() -> StdRng { StdRng::seed_from_u64(0) }
+    fn rng() -> StdRng {
+        StdRng::seed_from_u64(0)
+    }
 
     #[test]
     fn sign_verify_roundtrip() {

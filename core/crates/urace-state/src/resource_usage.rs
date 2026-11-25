@@ -42,7 +42,7 @@ impl ResourceUsage {
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_secs_f64())
                 .unwrap_or(0.0),
-            cpu_fraction: cpu_fraction.min(1.0).max(0.0),
+            cpu_fraction: cpu_fraction.clamp(0.0, 1.0),
             mem_bytes,
             disk_bytes,
             net_bytes_sent,
@@ -98,7 +98,12 @@ impl UsageTracker {
 
     /// Peak memory over all retained samples.
     pub fn peak_mem_bytes(&self) -> u64 {
-        self.samples.read().iter().map(|s| s.mem_bytes).max().unwrap_or(0)
+        self.samples
+            .read()
+            .iter()
+            .map(|s| s.mem_bytes)
+            .max()
+            .unwrap_or(0)
     }
 
     pub fn len(&self) -> usize {

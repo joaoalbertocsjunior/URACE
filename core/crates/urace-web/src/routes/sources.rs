@@ -9,13 +9,13 @@
 //! Ports `routes/sources.py`. Source registry read is implemented from state;
 //! the act endpoint is a stub (requires live adapter registration).
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Path, Query, State},
     routing::{delete, get, post},
     Json, Router,
 };
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -23,8 +23,14 @@ pub fn router() -> Router<AppState> {
         .route("/kinds", get(list_kinds))
         .route("/:source_id", get(get_source))
         .route("/:source_id/actions", get(get_source_actions))
-        .route("/:source_id/actions/:action_name/enable", post(enable_source_action))
-        .route("/:source_id/actions/:action_name/enable", delete(disable_source_action))
+        .route(
+            "/:source_id/actions/:action_name/enable",
+            post(enable_source_action),
+        )
+        .route(
+            "/:source_id/actions/:action_name/enable",
+            delete(disable_source_action),
+        )
         .route("/:source_id/act", post(act_on_source))
 }
 
@@ -39,15 +45,18 @@ async fn list_sources(
     Query(q): Query<SourcesQuery>,
 ) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let sources_state = state.get("sources")
+    let sources_state = state
+        .get("sources")
         .and_then(|v| v.as_object())
         .cloned()
         .unwrap_or_default();
 
     // Build adapter summary from state (without live adapter registry)
-    let mut kinds_seen: std::collections::BTreeMap<String, Vec<serde_json::Value>> = Default::default();
+    let mut kinds_seen: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
+        Default::default();
     for (_id, record) in &sources_state {
-        let kind = record.get("kind")
+        let kind = record
+            .get("kind")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown")
             .to_string();
@@ -59,25 +68,31 @@ async fn list_sources(
         kinds_seen.entry(kind).or_default().push(record.clone());
     }
 
-    let adapters: Vec<serde_json::Value> = kinds_seen.into_iter().map(|(kind, instances)| {
-        let instance_list: Vec<serde_json::Value> = instances.iter().map(|s| {
+    let adapters: Vec<serde_json::Value> = kinds_seen
+        .into_iter()
+        .map(|(kind, instances)| {
+            let instance_list: Vec<serde_json::Value> = instances
+                .iter()
+                .map(|s| {
+                    serde_json::json!({
+                        "id": s.get("id"),
+                        "status": s.get("status"),
+                        "enabled": s.get("enabled"),
+                        "enabled_actions": s.get("adapter_state")
+                            .and_then(|a| a.get("enabled_actions"))
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Array(vec![])),
+                    })
+                })
+                .collect();
             serde_json::json!({
-                "id": s.get("id"),
-                "status": s.get("status"),
-                "enabled": s.get("enabled"),
-                "enabled_actions": s.get("adapter_state")
-                    .and_then(|a| a.get("enabled_actions"))
-                    .cloned()
-                    .unwrap_or(serde_json::Value::Array(vec![])),
+                "kind": kind,
+                "registered": true,
+                "instance_count": instance_list.len(),
+                "instances": instance_list,
             })
-        }).collect();
-        serde_json::json!({
-            "kind": kind,
-            "registered": true,
-            "instance_count": instance_list.len(),
-            "instances": instance_list,
         })
-    }).collect();
+        .collect();
 
     // allow_act_global from config
     let allow_act = {
@@ -85,7 +100,11 @@ async fn list_sources(
         std::fs::read_to_string(&config_path)
             .ok()
             .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
-            .and_then(|c| c.get("sources").and_then(|s| s.get("allow_act")).and_then(|v| v.as_bool()))
+            .and_then(|c| {
+                c.get("sources")
+                    .and_then(|s| s.get("allow_act"))
+                    .and_then(|v| v.as_bool())
+            })
             .unwrap_or(false)
     };
 
@@ -96,10 +115,7 @@ async fn list_sources(
     }))
 }
 
-async fn list_kinds(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn list_kinds(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
     let mut kinds: std::collections::BTreeSet<String> = Default::default();
     if let Some(sources) = state.get("sources").and_then(|v| v.as_object()) {
@@ -121,8 +137,10 @@ async fn get_source(
     if let Some(record) = state.get("sources").and_then(|v| v.get(&source_id)) {
         (axum::http::StatusCode::OK, Json(record.clone()))
     } else {
-        (axum::http::StatusCode::NOT_FOUND,
-         Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })))
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })),
+        )
     }
 }
 
@@ -134,7 +152,11 @@ async fn get_source_actions(
     let state = state_reader::read_state(&s.root);
     let sources = state.get("sources").and_then(|v| v.as_object());
     if let Some(record) = sources.and_then(|m| m.get(&source_id)) {
-        let kind = record.get("kind").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let kind = record
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         let enabled = record
             .get("adapter_state")
             .and_then(|a| a.get("enabled_actions"))
@@ -145,18 +167,27 @@ async fn get_source_actions(
             std::fs::read_to_string(&config_path)
                 .ok()
                 .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
-                .and_then(|c| c.get("sources").and_then(|s| s.get("allow_act")).and_then(|v| v.as_bool()))
+                .and_then(|c| {
+                    c.get("sources")
+                        .and_then(|s| s.get("allow_act"))
+                        .and_then(|v| v.as_bool())
+                })
                 .unwrap_or(false)
         };
-        (axum::http::StatusCode::OK, Json(serde_json::json!({
-            "source_id": source_id,
-            "kind": kind,
-            "actions": enabled,
-            "allow_act_global": allow_act,
-        })))
+        (
+            axum::http::StatusCode::OK,
+            Json(serde_json::json!({
+                "source_id": source_id,
+                "kind": kind,
+                "actions": enabled,
+                "allow_act_global": allow_act,
+            })),
+        )
     } else {
-        (axum::http::StatusCode::NOT_FOUND,
-         Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })))
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })),
+        )
     }
 }
 
@@ -169,8 +200,12 @@ async fn enable_source_action(
     let mut state = state_reader::read_state(&s.root);
     let sources = match state.get_mut("sources").and_then(|v| v.as_object_mut()) {
         Some(m) => m,
-        None => return (axum::http::StatusCode::NOT_FOUND,
-                        Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") }))),
+        None => {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })),
+            )
+        }
     };
     if let Some(record) = sources.get_mut(&source_id) {
         let astate = record
@@ -185,18 +220,28 @@ async fn enable_source_action(
                     arr.push(serde_json::Value::String(action_name.clone()));
                 }
             }
-            let _ = std::fs::write(&state_path, serde_json::to_string(&state).unwrap_or_default());
-            (axum::http::StatusCode::OK, Json(serde_json::json!({
-                "source_id": source_id,
-                "action": action_name,
-            })))
+            let _ = std::fs::write(
+                &state_path,
+                serde_json::to_string(&state).unwrap_or_default(),
+            );
+            (
+                axum::http::StatusCode::OK,
+                Json(serde_json::json!({
+                    "source_id": source_id,
+                    "action": action_name,
+                })),
+            )
         } else {
-            (axum::http::StatusCode::UNPROCESSABLE_ENTITY,
-             Json(serde_json::json!({ "detail": "No adapter_state on record" })))
+            (
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({ "detail": "No adapter_state on record" })),
+            )
         }
     } else {
-        (axum::http::StatusCode::NOT_FOUND,
-         Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })))
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })),
+        )
     }
 }
 
@@ -209,26 +254,46 @@ async fn disable_source_action(
     let mut state = state_reader::read_state(&s.root);
     let sources = match state.get_mut("sources").and_then(|v| v.as_object_mut()) {
         Some(m) => m,
-        None => return (axum::http::StatusCode::NOT_FOUND,
-                        Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") }))),
+        None => {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })),
+            )
+        }
     };
     if let Some(record) = sources.get_mut(&source_id) {
-        if let Some(astate) = record.get_mut("adapter_state").and_then(|v| v.as_object_mut()) {
-            if let Some(enabled) = astate.get_mut("enabled_actions").and_then(|v| v.as_array_mut()) {
+        if let Some(astate) = record
+            .get_mut("adapter_state")
+            .and_then(|v| v.as_object_mut())
+        {
+            if let Some(enabled) = astate
+                .get_mut("enabled_actions")
+                .and_then(|v| v.as_array_mut())
+            {
                 enabled.retain(|v| v.as_str() != Some(&action_name));
             }
-            let _ = std::fs::write(&state_path, serde_json::to_string(&state).unwrap_or_default());
-            (axum::http::StatusCode::OK, Json(serde_json::json!({
-                "source_id": source_id,
-                "action": action_name,
-            })))
+            let _ = std::fs::write(
+                &state_path,
+                serde_json::to_string(&state).unwrap_or_default(),
+            );
+            (
+                axum::http::StatusCode::OK,
+                Json(serde_json::json!({
+                    "source_id": source_id,
+                    "action": action_name,
+                })),
+            )
         } else {
-            (axum::http::StatusCode::UNPROCESSABLE_ENTITY,
-             Json(serde_json::json!({ "detail": "No adapter_state on record" })))
+            (
+                axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                Json(serde_json::json!({ "detail": "No adapter_state on record" })),
+            )
         }
     } else {
-        (axum::http::StatusCode::NOT_FOUND,
-         Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })))
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "detail": format!("Source {source_id:?} not found") })),
+        )
     }
 }
 
@@ -238,7 +303,10 @@ async fn act_on_source(
     Path(source_id): Path<String>,
 ) -> (axum::http::StatusCode, Json<serde_json::Value>) {
     // Live adapter dispatch requires the adapter registry; stub for now.
-    (axum::http::StatusCode::NOT_IMPLEMENTED, Json(serde_json::json!({
-        "detail": format!("Live act on source {source_id}: adapter dispatch not yet wired in Rust web layer.")
-    })))
+    (
+        axum::http::StatusCode::NOT_IMPLEMENTED,
+        Json(serde_json::json!({
+            "detail": format!("Live act on source {source_id}: adapter dispatch not yet wired in Rust web layer.")
+        })),
+    )
 }

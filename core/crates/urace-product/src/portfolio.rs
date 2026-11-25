@@ -111,7 +111,11 @@ impl PortfolioStore {
     }
 
     /// Record a selection event (which variant was selected).
-    pub fn record_selection(&self, portfolio_id: &str, variant_name: &str) -> Result<(), PortfolioError> {
+    pub fn record_selection(
+        &self,
+        portfolio_id: &str,
+        variant_name: &str,
+    ) -> Result<(), PortfolioError> {
         let payload = json!({
             "portfolio_id": portfolio_id,
             "selected": variant_name,
@@ -223,7 +227,13 @@ mod tests {
         store.record_portfolio(&p).unwrap();
 
         let e1 = PortfolioEntry::new("alpha", None, 1, "add caching", "cache reduces latency");
-        let e2 = PortfolioEntry::new("beta", Some("alpha".to_owned()), 2, "tune params", "better defaults");
+        let e2 = PortfolioEntry::new(
+            "beta",
+            Some("alpha".to_owned()),
+            2,
+            "tune params",
+            "better defaults",
+        );
         store.add_entry(&e1).unwrap();
         store.add_entry(&e2).unwrap();
 

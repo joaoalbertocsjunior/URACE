@@ -11,6 +11,7 @@
 //! * `GET  /api/skills/vocabulary`   — return the skill vocabulary list
 //! * `GET  /api/skills/{skill_id}`   — get a specific skill's contract (404 stub)
 
+use crate::{auth::BearerToken, AppState};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -18,7 +19,6 @@ use axum::{
     Json, Router,
 };
 use serde_json::Value;
-use crate::{AppState, auth::BearerToken};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -27,10 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/{skill_id}", get(get_skill))
 }
 
-async fn list_skills(
-    State(_s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<Value> {
+async fn list_skills(State(_s): State<AppState>, _auth: BearerToken) -> Json<Value> {
     // executor_capabilities is not yet wired to the Rust web layer.
     Json(serde_json::json!({
         "skills": [],
@@ -38,10 +35,7 @@ async fn list_skills(
     }))
 }
 
-async fn skill_vocabulary(
-    State(_s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<Value> {
+async fn skill_vocabulary(State(_s): State<AppState>, _auth: BearerToken) -> Json<Value> {
     Json(serde_json::json!({ "vocabulary": [] }))
 }
 

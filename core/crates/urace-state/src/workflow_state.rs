@@ -50,7 +50,10 @@ impl WorkflowState {
         if allowed {
             Ok(next)
         } else {
-            Err(WorkflowError::InvalidTransition { from: self, to: next })
+            Err(WorkflowError::InvalidTransition {
+                from: self,
+                to: next,
+            })
         }
     }
 }
@@ -125,7 +128,9 @@ mod tests {
         assert_eq!(r.state, WorkflowState::Pending);
         let r = r.transition(WorkflowState::Running, None).unwrap();
         assert_eq!(r.state, WorkflowState::Running);
-        let r = r.transition(WorkflowState::Completed, Some("done".into())).unwrap();
+        let r = r
+            .transition(WorkflowState::Completed, Some("done".into()))
+            .unwrap();
         assert_eq!(r.state, WorkflowState::Completed);
         assert!(r.state.is_terminal());
     }

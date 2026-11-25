@@ -55,10 +55,7 @@ pub struct AuditLedger {
 }
 
 impl AuditLedger {
-    pub fn open(
-        path: impl AsRef<std::path::Path>,
-        hmac_key: [u8; 32],
-    ) -> Result<Self, AuditError> {
+    pub fn open(path: impl AsRef<std::path::Path>, hmac_key: [u8; 32]) -> Result<Self, AuditError> {
         let journal = Journal::open(path, hmac_key)?;
         Ok(AuditLedger { journal })
     }

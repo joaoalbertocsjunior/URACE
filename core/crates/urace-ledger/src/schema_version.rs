@@ -83,7 +83,10 @@ mod tests {
 
     #[test]
     fn current_version_is_readable() {
-        assert!(can_read_schema(CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION));
+        assert!(can_read_schema(
+            CURRENT_SCHEMA_VERSION,
+            CURRENT_SCHEMA_VERSION
+        ));
     }
 
     #[test]
@@ -93,7 +96,10 @@ mod tests {
 
     #[test]
     fn future_version_is_unreadable() {
-        assert!(!can_read_schema(CURRENT_SCHEMA_VERSION + 1, CURRENT_SCHEMA_VERSION));
+        assert!(!can_read_schema(
+            CURRENT_SCHEMA_VERSION + 1,
+            CURRENT_SCHEMA_VERSION
+        ));
     }
 
     #[test]

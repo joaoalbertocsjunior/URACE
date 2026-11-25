@@ -446,9 +446,9 @@ pub fn hex_to_bytes32(hex: &str) -> [u8; 32] {
     let padded = format!("{:0<64}", stripped);
     let truncated = &padded[..padded.len().min(64)];
     let mut out = [0u8; 32];
-    for i in 0..32 {
+    for (i, item) in out.iter_mut().enumerate() {
         let byte_str = truncated.get(i * 2..i * 2 + 2).unwrap_or("00");
-        out[i] = u8::from_str_radix(byte_str, 16).unwrap_or(0);
+        *item = u8::from_str_radix(byte_str, 16).unwrap_or(0);
     }
     out
 }

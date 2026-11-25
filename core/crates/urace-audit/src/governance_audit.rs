@@ -14,7 +14,10 @@ pub struct GovernanceAuditor<'a> {
 
 impl<'a> GovernanceAuditor<'a> {
     pub fn new(ledger: &'a AuditLedger, node_id: impl Into<String>) -> Self {
-        GovernanceAuditor { ledger, node_id: node_id.into() }
+        GovernanceAuditor {
+            ledger,
+            node_id: node_id.into(),
+        }
     }
 
     pub fn record_policy_update(
@@ -36,11 +39,7 @@ impl<'a> GovernanceAuditor<'a> {
         self.ledger.record(evt)
     }
 
-    pub fn record_policy_violation(
-        &self,
-        policy_id: &str,
-        reason: &str,
-    ) -> Result<(), AuditError> {
+    pub fn record_policy_violation(&self, policy_id: &str, reason: &str) -> Result<(), AuditError> {
         let evt = AuditEvent::new(
             AuditKind::PolicyViolation,
             &self.node_id,
@@ -53,11 +52,7 @@ impl<'a> GovernanceAuditor<'a> {
         self.ledger.record(evt)
     }
 
-    pub fn record_authority_decision(
-        &self,
-        action: &str,
-        outcome: &str,
-    ) -> Result<(), AuditError> {
+    pub fn record_authority_decision(&self, action: &str, outcome: &str) -> Result<(), AuditError> {
         let evt = AuditEvent::new(
             AuditKind::AuthorityDecision,
             &self.node_id,
@@ -80,7 +75,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ledger = AuditLedger::open(dir.path().join("gov.jsonl"), KEY).unwrap();
         let auditor = GovernanceAuditor::new(&ledger, "node-a");
-        auditor.record_policy_update("fleet-policy-1", 0, 1).unwrap();
+        auditor
+            .record_policy_update("fleet-policy-1", 0, 1)
+            .unwrap();
         let events = ledger.all_events().unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].kind, AuditKind::PolicyUpdated);
@@ -91,7 +88,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let ledger = AuditLedger::open(dir.path().join("gov.jsonl"), KEY).unwrap();
         let auditor = GovernanceAuditor::new(&ledger, "node-a");
-        auditor.record_policy_violation("fp-1", "generation stale").unwrap();
+        auditor
+            .record_policy_violation("fp-1", "generation stale")
+            .unwrap();
         let events = ledger.all_events().unwrap();
         assert_eq!(events[0].kind, AuditKind::PolicyViolation);
     }

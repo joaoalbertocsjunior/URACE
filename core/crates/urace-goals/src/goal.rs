@@ -98,11 +98,7 @@ impl GoalStore {
     /// Mark a goal as completed with a `score_delta`.
     ///
     /// Returns a `MintSignal` with `should_mint=true` only if `score_delta > 0`.
-    pub fn complete(
-        &self,
-        goal_id: &str,
-        score_delta: i64,
-    ) -> Result<MintSignal, GoalError> {
+    pub fn complete(&self, goal_id: &str, score_delta: i64) -> Result<MintSignal, GoalError> {
         let mut goal = self
             .goals
             .get_mut(goal_id)
@@ -158,10 +154,8 @@ impl GoalStore {
         }
 
         goal.status = GoalStatus::Cancelled;
-        self.journal.append(
-            "GOAL_CANCELLED",
-            json!({ "goal_id": goal_id }),
-        )?;
+        self.journal
+            .append("GOAL_CANCELLED", json!({ "goal_id": goal_id }))?;
         Ok(())
     }
 
@@ -169,9 +163,7 @@ impl GoalStore {
     pub fn active_goals(&self) -> Vec<Goal> {
         self.goals
             .iter()
-            .filter(|g| {
-                matches!(g.status, GoalStatus::Pending | GoalStatus::Active)
-            })
+            .filter(|g| matches!(g.status, GoalStatus::Pending | GoalStatus::Active))
             .map(|g| g.clone())
             .collect()
     }

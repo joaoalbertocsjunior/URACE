@@ -139,10 +139,12 @@ async fn probe_stun_async(server: &str) -> Result<(String, u16), StunError> {
     use tokio::net::lookup_host;
     let mut addrs = lookup_host(server)
         .await
-        .map_err(|e| StunError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
-    let addr = addrs
-        .next()
-        .ok_or_else(|| StunError::Io(std::io::Error::new(std::io::ErrorKind::Other, "DNS resolution returned no addresses")))?;
+        .map_err(|e| StunError::Io(std::io::Error::other(e.to_string())))?;
+    let addr = addrs.next().ok_or_else(|| {
+        StunError::Io(std::io::Error::other(
+            "DNS resolution returned no addresses",
+        ))
+    })?;
 
     let sock = TokioUdpSocket::bind("0.0.0.0:0")
         .await
@@ -164,21 +166,23 @@ async fn probe_stun_async(server: &str) -> Result<(String, u16), StunError> {
     };
 
     let mut req = [0u8; 20];
-    req[0] = 0x00; req[1] = 0x01; // Binding Request
-    req[2] = 0x00; req[3] = 0x00; // Length = 0
-    req[4] = 0x21; req[5] = 0x12; req[6] = 0xA4; req[7] = 0x42; // Magic cookie
+    req[0] = 0x00;
+    req[1] = 0x01; // Binding Request
+    req[2] = 0x00;
+    req[3] = 0x00; // Length = 0
+    req[4] = 0x21;
+    req[5] = 0x12;
+    req[6] = 0xA4;
+    req[7] = 0x42; // Magic cookie
     req[8..20].copy_from_slice(&tid);
 
     sock.send_to(&req, addr).await.map_err(StunError::Io)?;
 
     let mut buf = [0u8; 2048];
-    let (n, _) = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        sock.recv_from(&mut buf),
-    )
-    .await
-    .map_err(|_| StunError::Timeout)?
-    .map_err(StunError::Io)?;
+    let (n, _) = tokio::time::timeout(std::time::Duration::from_secs(5), sock.recv_from(&mut buf))
+        .await
+        .map_err(|_| StunError::Timeout)?
+        .map_err(StunError::Io)?;
 
     parse_stun_response(&buf[..n])
 }
@@ -218,7 +222,7 @@ fn epoch_to_ymd_hms(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
 }
 
 fn is_leap(y: u64) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)
+    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }
 
 fn days_to_year(mut days: u64) -> (u64, u64) {
@@ -239,13 +243,11 @@ fn doy_to_month_day(mut doy: u64, leap: bool) -> (u64, u64) {
     } else {
         &[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     };
-    let mut m = 1u64;
-    for &days_in_month in months {
+    for (m, &days_in_month) in (1u64..).zip(months.iter()) {
         if doy < days_in_month {
             return (m, doy + 1);
         }
         doy -= days_in_month;
-        m += 1;
     }
     (12, 31)
 }

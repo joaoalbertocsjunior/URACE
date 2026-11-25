@@ -4,7 +4,7 @@
 //!
 //! - `work_policy`        — `WorkPolicy` with conservative defaults; `PolicyViolation` errors.
 //! - `matching`           — `WorkTask`, `WorkBid`, `match_score`, `DemandCounter` (local-only),
-//!                          `select_best_bid`.
+//!   `select_best_bid`.
 //! - `work_market`        — `WorkMarket` concurrent registry with policy enforcement.
 //! - `receipt`            — `WorkReceipt`, `ReceiptStore` (append-only journal).
 //! - `purchase_settlement`— `PurchaseSettlement`, `SettlementStore` (append-only journal).
@@ -26,8 +26,8 @@ pub mod work_market;
 pub mod work_policy;
 
 pub use exchange_endpoint::{
-    build_settlement_router, handle_credit_settlement, SettlementEndpointError,
-    SettlementPayload, SettlementResponse, SettlementRouterConfig, SCHEMA as CREDIT_SETTLEMENT_SCHEMA,
+    build_settlement_router, handle_credit_settlement, SettlementEndpointError, SettlementPayload,
+    SettlementResponse, SettlementRouterConfig, SCHEMA as CREDIT_SETTLEMENT_SCHEMA,
 };
 pub use implementation_sequence::PlanningContext;
 pub use matching::{match_score, select_best_bid, DemandCounter, WorkBid, WorkTask};

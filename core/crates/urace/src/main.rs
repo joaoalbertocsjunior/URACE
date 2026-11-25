@@ -29,15 +29,14 @@ use clap::Parser;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use urace_mcp::{McpServer, McpServerConfig};
-use urace_web;
-#[allow(unused_imports)]
-use urace_tui::{App, Panel, SourceEntry, WorkTask as TuiWorkTask, SettlementEntry};
 use crate::cli::{
-    Cli, Commands, ConfigArgs, ConfigCommands, RunArgs, SourceCommands, StatusArgs,
-    TuiArgs, WebArgs, WorkCommands,
+    Cli, Commands, ConfigArgs, ConfigCommands, RunArgs, SourceCommands, StatusArgs, TuiArgs,
+    WebArgs, WorkCommands,
 };
 use crate::state::RuntimeState;
+use urace_mcp::{McpServer, McpServerConfig};
+#[allow(unused_imports)]
+use urace_tui::{App, Panel, SettlementEntry, SourceEntry, WorkTask as TuiWorkTask};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -73,14 +72,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Config(args) => {
-            handle_config(
-                &root,
-                args,
-                config_path.as_deref(),
-                boot.config,
-                cli.json,
-            )
-            .await?;
+            handle_config(&root, args, config_path.as_deref(), boot.config, cli.json).await?;
         }
 
         Commands::Source { cmd } => {
@@ -100,7 +92,6 @@ async fn main() -> Result<()> {
         }
 
         // ── Governance ────────────────────────────────────────────────────────
-
         Commands::Evidence(args) => {
             cli_governance::handle_evidence(&root, &args, cli.json).await?;
         }
@@ -130,7 +121,6 @@ async fn main() -> Result<()> {
         }
 
         // ── Metrics ───────────────────────────────────────────────────────────
-
         Commands::Vitals(args) => {
             cli_metrics::handle_vitals(&root, &args, cli.json).await?;
         }
@@ -152,7 +142,6 @@ async fn main() -> Result<()> {
         }
 
         // ── Reporting ─────────────────────────────────────────────────────────
-
         Commands::Usage(args) => {
             cli_reporting::handle_usage(&root, &args, cli.json).await?;
         }
@@ -162,13 +151,11 @@ async fn main() -> Result<()> {
         }
 
         // ── Exchange / feature market ─────────────────────────────────────────
-
         Commands::Exchange(args) => {
             cli_exchange::handle_exchange(&root, args, cli.json).await?;
         }
 
         // ── Work / plan / quality ─────────────────────────────────────────────
-
         Commands::Github(args) => cli_work::handle_github(&root, &args, cli.json).await?,
         Commands::Plan(args) => cli_work::handle_plan(&root, &args, cli.json).await?,
         Commands::Check(args) => cli_work::handle_check(&root, &args, cli.json).await?,
@@ -179,18 +166,18 @@ async fn main() -> Result<()> {
         Commands::Propose(args) => cli_work::handle_propose(&root, &args, cli.json).await?,
 
         // ── Runtime / trial / upgrade ─────────────────────────────────────────
-
         Commands::Trial(args) => cli_runtime::handle_trial(&root, &args, cli.json).await?,
         Commands::Update(args) => cli_runtime::handle_update(&root, &args, cli.json).await?,
         Commands::Features(args) => cli_runtime::handle_features(&root, &args, cli.json).await?,
         Commands::Crc(args) => cli_runtime::handle_crc(&root, &args, cli.json).await?,
 
         // ── Product management ────────────────────────────────────────────────
-
         Commands::Product(args) => cli_product::handle_product(&root, &args, cli.json).await?,
         Commands::Content(args) => cli_product::handle_content(&root, &args, cli.json).await?,
         Commands::Rollback(args) => cli_product::handle_rollback(&root, &args, cli.json).await?,
-        Commands::PeerReview(args) => cli_product::handle_peer_review(&root, &args, cli.json).await?,
+        Commands::PeerReview(args) => {
+            cli_product::handle_peer_review(&root, &args, cli.json).await?
+        }
     }
 
     Ok(())
@@ -212,7 +199,10 @@ fn handle_version(json_mode: bool) {
     } else {
         println!("urace {}", version::VERSION);
         println!("  format_version:        {}", version::FORMAT_VERSION);
-        println!("  config_schema_version: {}", version::CONFIG_SCHEMA_VERSION);
+        println!(
+            "  config_schema_version: {}",
+            version::CONFIG_SCHEMA_VERSION
+        );
         println!("  bridge_version:        {}", version::BRIDGE_VERSION);
     }
 }
@@ -329,11 +319,7 @@ async fn handle_config(
 
     match args.cmd {
         ConfigCommands::Show => {
-            if json_mode {
-                println!("{}", serde_json::to_string_pretty(&cfg)?);
-            } else {
-                println!("{}", serde_json::to_string_pretty(&cfg)?);
-            }
+            println!("{}", serde_json::to_string_pretty(&cfg)?);
         }
 
         ConfigCommands::Get { path } => {
@@ -341,9 +327,9 @@ async fn handle_config(
             let parts: Vec<&str> = path.split('.').collect();
             let mut cur = &value;
             for part in &parts {
-                cur = cur.get(part).ok_or_else(|| {
-                    anyhow::anyhow!("config key {path:?} not found")
-                })?;
+                cur = cur
+                    .get(part)
+                    .ok_or_else(|| anyhow::anyhow!("config key {path:?} not found"))?;
             }
             if json_mode {
                 println!("{}", cur);
@@ -386,7 +372,10 @@ async fn handle_config(
 
             config::save(&cfg, &resolved_path)?;
             if json_mode {
-                println!("{}", serde_json::json!({"status": "ok", "path": path, "value": value}));
+                println!(
+                    "{}",
+                    serde_json::json!({"status": "ok", "path": path, "value": value})
+                );
             } else {
                 println!("set {path} = {value}");
             }
@@ -395,9 +384,12 @@ async fn handle_config(
         ConfigCommands::Validate => {
             let errors = config::validate(&cfg);
             if json_mode {
-                println!("{}", serde_json::json!({"errors": errors.iter().map(|e| {
+                println!(
+                    "{}",
+                    serde_json::json!({"errors": errors.iter().map(|e| {
                     serde_json::json!({"path": e.path, "error": e.message})
-                }).collect::<Vec<_>>()}));
+                }).collect::<Vec<_>>()})
+                );
             } else if errors.is_empty() {
                 println!("config OK");
             } else {
@@ -438,17 +430,16 @@ fn set_nested_json(
         }
         Ok(())
     } else {
-        Err(anyhow::anyhow!("cannot navigate into non-object at {}", head))
+        Err(anyhow::anyhow!(
+            "cannot navigate into non-object at {}",
+            head
+        ))
     }
 }
 
 // ── source ────────────────────────────────────────────────────────────────────
 
-async fn handle_source(
-    root: &std::path::Path,
-    cmd: SourceCommands,
-    json_mode: bool,
-) -> Result<()> {
+async fn handle_source(root: &std::path::Path, cmd: SourceCommands, json_mode: bool) -> Result<()> {
     let state_dir = root.join("state");
     let mut runtime_state = RuntimeState::load(&state_dir)?;
 
@@ -523,16 +514,15 @@ async fn handle_source(
 
 // ── work ──────────────────────────────────────────────────────────────────────
 
-async fn handle_work(
-    _root: &std::path::Path,
-    cmd: WorkCommands,
-    json_mode: bool,
-) -> Result<()> {
+async fn handle_work(_root: &std::path::Path, cmd: WorkCommands, json_mode: bool) -> Result<()> {
     match cmd {
         WorkCommands::List { status } => {
             let filter = status.as_deref().unwrap_or("open");
             if json_mode {
-                println!("{}", serde_json::json!({"work_items": [], "filter": filter}));
+                println!(
+                    "{}",
+                    serde_json::json!({"work_items": [], "filter": filter})
+                );
             } else {
                 println!("work items (filter={filter}): (none — work market not yet wired)");
             }
@@ -591,8 +581,17 @@ async fn handle_tui(root: &std::path::Path, _args: TuiArgs) -> Result<()> {
             .sources
             .iter()
             .map(|(id, rec)| {
-                let kind = rec.get("kind").and_then(|v| v.as_str()).unwrap_or("?").to_string();
-                SourceEntry { name: id.clone(), kind, status: "ok".into(), last_sync: None }
+                let kind = rec
+                    .get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?")
+                    .to_string();
+                SourceEntry {
+                    name: id.clone(),
+                    kind,
+                    status: "ok".into(),
+                    last_sync: None,
+                }
             })
             .collect();
 
@@ -620,7 +619,11 @@ async fn handle_tui(root: &std::path::Path, _args: TuiArgs) -> Result<()> {
     }
 
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )?;
     terminal.show_cursor()?;
     Ok(())
 }

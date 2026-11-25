@@ -181,13 +181,11 @@ pub fn validate_forecast(forecast: &Forecast) -> Result<Forecast, FeedbackError>
                 });
             }
         }
-        for val in [b.baseline, b.expected] {
-            if let Some(v) = val {
-                if !is_finite_f64(v) {
-                    return Err(FeedbackError::InvalidForecast {
-                        reason: "baseline and expected must be finite".into(),
-                    });
-                }
+        for v in [b.baseline, b.expected].into_iter().flatten() {
+            if !is_finite_f64(v) {
+                return Err(FeedbackError::InvalidForecast {
+                    reason: "baseline and expected must be finite".into(),
+                });
             }
         }
     }
@@ -350,9 +348,7 @@ pub fn register_forecast(
         .and_then(|m| m.get(decision_id))
     {
         if existing.get("id").and_then(Value::as_str) == Some(&id) {
-            return Ok(
-                serde_json::from_value(existing.clone()).map_err(FeedbackError::Serialization)?
-            );
+            return serde_json::from_value(existing.clone()).map_err(FeedbackError::Serialization);
         }
     }
 

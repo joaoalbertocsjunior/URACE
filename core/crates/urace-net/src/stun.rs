@@ -70,7 +70,10 @@ impl StunClient {
             // Deterministic-ish 12 bytes from two u64 seeds
             let mut tid = [0u8; 12];
             let b1 = seed.to_be_bytes();
-            let b2 = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407).to_be_bytes();
+            let b2 = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407)
+                .to_be_bytes();
             tid[..8].copy_from_slice(&b1);
             tid[8..12].copy_from_slice(&b2[..4]);
             tid
@@ -116,7 +119,9 @@ impl StunClient {
 /// Parse a raw STUN response buffer; returns `(ip_string, port)`.
 pub(crate) fn parse_stun_response(data: &[u8]) -> Result<(String, u16), StunError> {
     if data.len() < 20 {
-        return Err(StunError::InvalidResponse("response shorter than 20 bytes".into()));
+        return Err(StunError::InvalidResponse(
+            "response shorter than 20 bytes".into(),
+        ));
     }
     let msg_type = u16::from_be_bytes([data[0], data[1]]);
     if msg_type != MSG_BINDING_RESPONSE {
@@ -233,7 +238,10 @@ mod tests {
         pkt[1] = (MSG_BINDING_RESPONSE & 0xFF) as u8;
         pkt[2] = (msg_len >> 8) as u8;
         pkt[3] = (msg_len & 0xFF) as u8;
-        pkt[4] = 0x21; pkt[5] = 0x12; pkt[6] = 0xA4; pkt[7] = 0x42;
+        pkt[4] = 0x21;
+        pkt[5] = 0x12;
+        pkt[6] = 0xA4;
+        pkt[7] = 0x42;
         pkt.push((ATTR_MAPPED_ADDRESS >> 8) as u8);
         pkt.push((ATTR_MAPPED_ADDRESS & 0xFF) as u8);
         pkt.push(0);
@@ -256,7 +264,8 @@ mod tests {
     #[test]
     fn test_wrong_msg_type() {
         let mut pkt = [0u8; 20];
-        pkt[0] = 0x01; pkt[1] = 0x11; // 0x0111 — not 0x0101
+        pkt[0] = 0x01;
+        pkt[1] = 0x11; // 0x0111 — not 0x0101
         assert!(parse_stun_response(&pkt).is_err());
     }
 

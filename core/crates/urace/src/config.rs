@@ -471,7 +471,11 @@ pub fn save(cfg: &RuntimeConfig, path: &std::path::Path) -> Result<()> {
     } else {
         serde_json::to_string_pretty(cfg)?
     };
-    let tmp_ext = if ext == "yaml" { "yaml.tmp" } else { "json.tmp" };
+    let tmp_ext = if ext == "yaml" {
+        "yaml.tmp"
+    } else {
+        "json.tmp"
+    };
     let tmp = path.with_extension(tmp_ext);
     std::fs::write(&tmp, content.as_bytes())
         .with_context(|| format!("writing config to {}", tmp.display()))?;

@@ -5,13 +5,13 @@
 //! replicated faithfully; the `since` field is compared lexicographically
 //! (ISO-8601 strings sort correctly).
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Query, State},
     routing::get,
     Json, Router,
 };
 use serde::Deserialize;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -35,7 +35,9 @@ pub struct EvidenceQuery {
     pub limit: usize,
 }
 
-fn default_limit() -> usize { 50 }
+fn default_limit() -> usize {
+    50
+}
 
 async fn audit_decisions(
     State(s): State<AppState>,
@@ -50,9 +52,7 @@ async fn audit_decisions(
         .unwrap_or_default();
 
     if let Some(outcome) = &q.outcome {
-        decisions.retain(|d| {
-            d.get("outcome").and_then(|v| v.as_str()) == Some(outcome.as_str())
-        });
+        decisions.retain(|d| d.get("outcome").and_then(|v| v.as_str()) == Some(outcome.as_str()));
     }
 
     if let Some(since) = &q.since {
@@ -65,7 +65,7 @@ async fn audit_decisions(
         });
     }
 
-    let limit = q.limit.min(500).max(1);
+    let limit = q.limit.clamp(1, 500);
     decisions.reverse();
     decisions.truncate(limit);
     decisions.reverse();
@@ -86,9 +86,7 @@ async fn audit_evidence(
         .unwrap_or_default();
 
     if let Some(kind) = &q.kind {
-        evidence.retain(|e| {
-            e.get("kind").and_then(|v| v.as_str()) == Some(kind.as_str())
-        });
+        evidence.retain(|e| e.get("kind").and_then(|v| v.as_str()) == Some(kind.as_str()));
     }
 
     if let Some(since) = &q.since {
@@ -100,7 +98,7 @@ async fn audit_evidence(
         });
     }
 
-    let limit = q.limit.min(500).max(1);
+    let limit = q.limit.clamp(1, 500);
     evidence.reverse();
     evidence.truncate(limit);
     evidence.reverse();

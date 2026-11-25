@@ -4,11 +4,11 @@
 //! ratatui `Frame`, and produce no side effects beyond writing to the frame.
 
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, List, ListItem, ListState, Paragraph, Row, Table},
+    Frame,
 };
 
 use crate::app::{App, Panel};
@@ -86,9 +86,10 @@ fn render_sources(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.active_panel == Panel::Sources;
     let block = panel_block("Sources", focused);
 
-    let header = Row::new(["Name", "Kind", "Status", "Last Sync"].map(|h| {
-        Cell::from(h).style(Style::default().add_modifier(Modifier::BOLD))
-    }))
+    let header = Row::new(
+        ["Name", "Kind", "Status", "Last Sync"]
+            .map(|h| Cell::from(h).style(Style::default().add_modifier(Modifier::BOLD))),
+    )
     .bottom_margin(1);
 
     let rows: Vec<Row> = app
@@ -102,9 +103,9 @@ fn render_sources(frame: &mut Frame, app: &App, area: Rect) {
                 Style::default()
             };
             let status_color = match s.status.as_str() {
-                "ok" | "synced"  => Color::Green,
+                "ok" | "synced" => Color::Green,
                 "error" | "fail" => Color::Red,
-                _                => Color::Yellow,
+                _ => Color::Yellow,
             };
             Row::new([
                 Cell::from(s.name.clone()),
@@ -149,9 +150,9 @@ fn render_work_queue(frame: &mut Frame, app: &App, area: Rect) {
             };
             let status_color = match task.status.as_str() {
                 "active" | "running" => Color::Green,
-                "failed"             => Color::Red,
-                "pending"            => Color::Yellow,
-                _                    => Color::White,
+                "failed" => Color::Red,
+                "pending" => Color::Yellow,
+                _ => Color::White,
             };
             ListItem::new(Line::from(vec![
                 Span::styled(
@@ -179,9 +180,10 @@ fn render_settlement(frame: &mut Frame, app: &App, area: Rect) {
     let focused = app.active_panel == Panel::Settlement;
     let block = panel_block("Settlement", focused);
 
-    let header = Row::new(["ID", "Amount", "Status", "Settled At"].map(|h| {
-        Cell::from(h).style(Style::default().add_modifier(Modifier::BOLD))
-    }))
+    let header = Row::new(
+        ["ID", "Amount", "Status", "Settled At"]
+            .map(|h| Cell::from(h).style(Style::default().add_modifier(Modifier::BOLD))),
+    )
     .bottom_margin(1);
 
     let rows: Vec<Row> = app
@@ -196,8 +198,8 @@ fn render_settlement(frame: &mut Frame, app: &App, area: Rect) {
             };
             let status_color = match s.status.as_str() {
                 "confirmed" | "ok" => Color::Green,
-                "failed"           => Color::Red,
-                _                  => Color::Yellow,
+                "failed" => Color::Red,
+                _ => Color::Yellow,
             };
             Row::new([
                 Cell::from(s.id.clone()),
@@ -261,11 +263,7 @@ fn render_status(frame: &mut Frame, app: &App, area: Rect) {
         app.status_message.clone()
     };
 
-    let para = Paragraph::new(hint).style(
-        Style::default()
-            .fg(Color::White)
-            .bg(Color::Blue),
-    );
+    let para = Paragraph::new(hint).style(Style::default().fg(Color::White).bg(Color::Blue));
     frame.render_widget(para, area);
 }
 
@@ -273,7 +271,9 @@ fn render_status(frame: &mut Frame, app: &App, area: Rect) {
 
 fn panel_block(title: &str, focused: bool) -> Block<'_> {
     let border_style = if focused {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default().fg(Color::DarkGray)
     };

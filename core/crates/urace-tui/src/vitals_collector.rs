@@ -5,8 +5,8 @@
 //! The function never panics and never propagates I/O errors — a missing or
 //! unreadable file silently returns a default value for the affected field.
 
-use std::path::Path;
 use serde_json::Value;
+use std::path::Path;
 
 /// A snapshot of live runtime vitals derived from state files.
 #[derive(Debug, Clone, Default)]
@@ -71,10 +71,7 @@ pub fn collect(root: &Path) -> LiveVitals {
             .get("checkpoints")
             .and_then(|v| v.as_array())
             .and_then(|cps| cps.last())
-            .and_then(|c| {
-                c.get("completed_at")
-                    .or_else(|| c.get("started_at"))
-            })
+            .and_then(|c| c.get("completed_at").or_else(|| c.get("started_at")))
             .and_then(|v| v.as_str())
             .map(|s| s.to_string()),
 
@@ -193,10 +190,7 @@ mod tests {
         assert_eq!(v.objectives_count, 2);
         assert_eq!(v.evidence_count, 1);
         assert_eq!(v.cycle_count, 2);
-        assert_eq!(
-            v.last_cycle_at.as_deref(),
-            Some("2026-11-24T11:00:00Z")
-        );
+        assert_eq!(v.last_cycle_at.as_deref(), Some("2026-11-24T11:00:00Z"));
     }
 
     /// Falls back to alternative `aps_score` key name `current_aps_score`.

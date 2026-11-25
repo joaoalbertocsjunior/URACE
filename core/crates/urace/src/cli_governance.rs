@@ -135,10 +135,7 @@ pub async fn handle_evidence(root: &Path, args: &EvidenceArgs, json_mode: bool) 
                     let id = r.get("id").and_then(|v| v.as_str()).unwrap_or("?");
                     let kind = r.get("kind").and_then(|v| v.as_str()).unwrap_or("?");
                     let at = r.get("at").and_then(|v| v.as_str()).unwrap_or("?");
-                    let summary = r
-                        .get("summary")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or(kind);
+                    let summary = r.get("summary").and_then(|v| v.as_str()).unwrap_or(kind);
                     let summary_short: String = summary.chars().take(60).collect();
                     println!("{id}: {kind} at={at} {summary_short}");
                 }
@@ -224,10 +221,7 @@ pub async fn handle_blocker(root: &Path, args: &BlockerArgs, json_mode: bool) ->
                         .get("classification")
                         .and_then(|v| v.as_str())
                         .unwrap_or("?");
-                    let last = b
-                        .get("last_at")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
+                    let last = b.get("last_at").and_then(|v| v.as_str()).unwrap_or("?");
                     println!("{id}: scope={scope} count={count} [{cls}] last_at={last}");
                 }
             }
@@ -663,11 +657,11 @@ pub async fn handle_rules(root: &Path, args: &RulesArgs, json_mode: bool) -> Res
                         .get("name")
                         .and_then(|v| v.as_str())
                         .unwrap_or("(unnamed)");
-                    let enabled = r
-                        .get("enabled")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(true);
-                    println!("{id}: {name} [{}]", if enabled { "enabled" } else { "disabled" });
+                    let enabled = r.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                    println!(
+                        "{id}: {name} [{}]",
+                        if enabled { "enabled" } else { "disabled" }
+                    );
                 }
             }
         }
@@ -736,9 +730,7 @@ pub async fn handle_inbox(root: &Path, args: &InboxArgs, json_mode: bool) -> Res
                 .unwrap_or(&empty);
             let pending = proposals
                 .iter()
-                .filter(|p| {
-                    p.get("status").and_then(|v| v.as_str()) == Some("PENDING")
-                })
+                .filter(|p| p.get("status").and_then(|v| v.as_str()) == Some("PENDING"))
                 .count();
             if json_mode {
                 println!(
@@ -768,10 +760,7 @@ pub async fn handle_inbox(root: &Path, args: &InboxArgs, json_mode: bool) -> Res
                 for p in items {
                     let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("?");
                     let kind = p.get("kind").and_then(|v| v.as_str()).unwrap_or("unknown");
-                    let status = p
-                        .get("status")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("QUEUED");
+                    let status = p.get("status").and_then(|v| v.as_str()).unwrap_or("QUEUED");
                     println!("{id}: {kind} {status}");
                 }
             }

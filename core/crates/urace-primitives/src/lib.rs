@@ -7,13 +7,19 @@ use std::sync::OnceLock;
 #[derive(Debug, thiserror::Error)]
 pub enum PrimitivesError {
     #[error("validation failed for {type_name}: {reason}")]
-    Invalid { type_name: &'static str, reason: String },
+    Invalid {
+        type_name: &'static str,
+        reason: String,
+    },
     #[error("unknown primitive type: {0}")]
     UnknownType(String),
 }
 
 fn inv(type_name: &'static str, reason: impl Into<String>) -> PrimitivesError {
-    PrimitivesError::Invalid { type_name, reason: reason.into() }
+    PrimitivesError::Invalid {
+        type_name,
+        reason: reason.into(),
+    }
 }
 
 fn require_field<'a>(
@@ -21,7 +27,8 @@ fn require_field<'a>(
     field: &str,
     type_name: &'static str,
 ) -> Result<&'a serde_json::Value, PrimitivesError> {
-    obj.get(field).ok_or_else(|| inv(type_name, format!("missing required field '{field}'")))
+    obj.get(field)
+        .ok_or_else(|| inv(type_name, format!("missing required field '{field}'")))
 }
 
 fn require_str_field<'a>(
@@ -30,14 +37,17 @@ fn require_str_field<'a>(
     type_name: &'static str,
 ) -> Result<&'a str, PrimitivesError> {
     let v = require_field(obj, field, type_name)?;
-    v.as_str().ok_or_else(|| inv(type_name, format!("field '{field}' must be a string")))
+    v.as_str()
+        .ok_or_else(|| inv(type_name, format!("field '{field}' must be a string")))
 }
 
 fn as_obj<'a>(
     value: &'a serde_json::Value,
     type_name: &'static str,
 ) -> Result<&'a serde_json::Map<String, serde_json::Value>, PrimitivesError> {
-    value.as_object().ok_or_else(|| inv(type_name, "must be an object"))
+    value
+        .as_object()
+        .ok_or_else(|| inv(type_name, "must be an object"))
 }
 
 // ── §62d Canonical Primitives ─────────────────────────────────────────────────
@@ -49,7 +59,10 @@ static HEX64_RE: OnceLock<Regex> = OnceLock::new();
 pub fn validate_identifier(value: &str) -> Result<(), PrimitivesError> {
     let re = IDENTIFIER_RE.get_or_init(|| Regex::new(r"^[a-z][a-z0-9]*-[0-9a-f]{10}$").unwrap());
     if !re.is_match(value) {
-        return Err(inv("Identifier", format!("'{value}' does not match {{prefix}}-{{10-char-lowercase-hex}}")));
+        return Err(inv(
+            "Identifier",
+            format!("'{value}' does not match {{prefix}}-{{10-char-lowercase-hex}}"),
+        ));
     }
     Ok(())
 }
@@ -58,7 +71,10 @@ pub fn validate_identifier(value: &str) -> Result<(), PrimitivesError> {
 pub fn validate_digest_value(value: &str) -> Result<(), PrimitivesError> {
     let re = HEX64_RE.get_or_init(|| Regex::new(r"^[0-9a-f]{64}$").unwrap());
     if value.len() != 64 {
-        return Err(inv("DigestValue", format!("must be 64 chars, got {}", value.len())));
+        return Err(inv(
+            "DigestValue",
+            format!("must be 64 chars, got {}", value.len()),
+        ));
     }
     if !re.is_match(value) {
         return Err(inv("DigestValue", "must be lowercase hex (0-9a-f)"));
@@ -69,20 +85,30 @@ pub fn validate_digest_value(value: &str) -> Result<(), PrimitivesError> {
 /// §62d: UnitFloat — float in [0.0, 1.0], no NaN/inf
 pub fn validate_unit_float(value: f64) -> Result<(), PrimitivesError> {
     if value.is_nan() || value.is_infinite() {
-        return Err(inv("UnitFloat", format!("must not be NaN or inf, got {value}")));
+        return Err(inv(
+            "UnitFloat",
+            format!("must not be NaN or inf, got {value}"),
+        ));
     }
     if !(0.0..=1.0).contains(&value) {
-        return Err(inv("UnitFloat", format!("must be in [0.0, 1.0], got {value}")));
+        return Err(inv(
+            "UnitFloat",
+            format!("must be in [0.0, 1.0], got {value}"),
+        ));
     }
     Ok(())
 }
 
-pub const PRODUCT_SCOPE_VALUES: &[&str] = &["documentation", "runtime", "metrics", "rebootstrap", "*"];
+pub const PRODUCT_SCOPE_VALUES: &[&str] =
+    &["documentation", "runtime", "metrics", "rebootstrap", "*"];
 
 /// §62d: ProductScope
 pub fn validate_product_scope(value: &str) -> Result<(), PrimitivesError> {
     if !PRODUCT_SCOPE_VALUES.contains(&value) {
-        return Err(inv("ProductScope", format!("'{value}' not valid; expected one of {PRODUCT_SCOPE_VALUES:?}")));
+        return Err(inv(
+            "ProductScope",
+            format!("'{value}' not valid; expected one of {PRODUCT_SCOPE_VALUES:?}"),
+        ));
     }
     Ok(())
 }
@@ -93,7 +119,10 @@ pub fn validate_status_transition(value: &serde_json::Value) -> Result<(), Primi
     for field in ["status", "at"] {
         let v = require_field(obj, field, "StatusTransition")?;
         if !v.is_string() {
-            return Err(inv("StatusTransition", format!("'{field}' must be a string")));
+            return Err(inv(
+                "StatusTransition",
+                format!("'{field}' must be a string"),
+            ));
         }
     }
     Ok(())
@@ -119,7 +148,10 @@ pub fn validate_metric_snapshot(value: &serde_json::Value) -> Result<(), Primiti
             return Err(inv("MetricSnapshot", "keys must be non-empty strings"));
         }
         if !v.is_number() {
-            return Err(inv("MetricSnapshot", format!("value for '{k}' must be numeric")));
+            return Err(inv(
+                "MetricSnapshot",
+                format!("value for '{k}' must be numeric"),
+            ));
         }
     }
     Ok(())
@@ -128,13 +160,24 @@ pub fn validate_metric_snapshot(value: &serde_json::Value) -> Result<(), Primiti
 /// §62d: ExecutorAttribution — required: executor_id, adapter, capability, attempted_executors, logical_reservation
 pub fn validate_executor_attribution(value: &serde_json::Value) -> Result<(), PrimitivesError> {
     let obj = as_obj(value, "ExecutorAttribution")?;
-    for field in ["executor_id", "adapter", "capability", "logical_reservation"] {
+    for field in [
+        "executor_id",
+        "adapter",
+        "capability",
+        "logical_reservation",
+    ] {
         if !require_field(obj, field, "ExecutorAttribution")?.is_string() {
-            return Err(inv("ExecutorAttribution", format!("'{field}' must be a string")));
+            return Err(inv(
+                "ExecutorAttribution",
+                format!("'{field}' must be a string"),
+            ));
         }
     }
     if !require_field(obj, "attempted_executors", "ExecutorAttribution")?.is_array() {
-        return Err(inv("ExecutorAttribution", "'attempted_executors' must be a list"));
+        return Err(inv(
+            "ExecutorAttribution",
+            "'attempted_executors' must be a list",
+        ));
     }
     Ok(())
 }
@@ -144,7 +187,10 @@ pub fn validate_validation_check(value: &serde_json::Value) -> Result<(), Primit
     let obj = as_obj(value, "ValidationCheck")?;
     for field in ["check", "detail", "result"] {
         if !require_field(obj, field, "ValidationCheck")?.is_string() {
-            return Err(inv("ValidationCheck", format!("'{field}' must be a string")));
+            return Err(inv(
+                "ValidationCheck",
+                format!("'{field}' must be a string"),
+            ));
         }
     }
     Ok(())
@@ -318,7 +364,12 @@ pub fn validate_compaction_summary(value: &serde_json::Value) -> Result<(), Prim
     for field in ["original_count", "compacted_count"] {
         match require_field(obj, field, "CompactionSummary")?.as_i64() {
             Some(n) if n >= 0 => {}
-            _ => return Err(inv("CompactionSummary", format!("'{field}' must be int >= 0"))),
+            _ => {
+                return Err(inv(
+                    "CompactionSummary",
+                    format!("'{field}' must be int >= 0"),
+                ))
+            }
         }
     }
     Ok(())
@@ -363,7 +414,9 @@ pub fn validate_archive_amendment(value: &serde_json::Value) -> Result<(), Primi
 }
 
 /// §62d r2: SourceBindingSupersession — required: superseded_id, superseding_id
-pub fn validate_source_binding_supersession(value: &serde_json::Value) -> Result<(), PrimitivesError> {
+pub fn validate_source_binding_supersession(
+    value: &serde_json::Value,
+) -> Result<(), PrimitivesError> {
     let obj = as_obj(value, "SourceBindingSupersession")?;
     require_str_field(obj, "superseded_id", "SourceBindingSupersession")?;
     require_str_field(obj, "superseding_id", "SourceBindingSupersession")?;
@@ -380,7 +433,9 @@ pub fn validate_source_binding_record(value: &serde_json::Value) -> Result<(), P
 }
 
 /// §62d r2: TechniqueApplicationRecord — required: technique_id, applied_at
-pub fn validate_technique_application_record(value: &serde_json::Value) -> Result<(), PrimitivesError> {
+pub fn validate_technique_application_record(
+    value: &serde_json::Value,
+) -> Result<(), PrimitivesError> {
     let obj = as_obj(value, "TechniqueApplicationRecord")?;
     require_str_field(obj, "technique_id", "TechniqueApplicationRecord")?;
     require_str_field(obj, "applied_at", "TechniqueApplicationRecord")?;
@@ -538,7 +593,9 @@ pub fn validate_quality_state_entry(value: &serde_json::Value) -> Result<(), Pri
 // ── §62i AP4 ProducerConsumerContract (r33) ───────────────────────────────────
 
 /// §62i r33: ProducerConsumerContract — required: contract_id, producer_id, consumer_id, interface
-pub fn validate_producer_consumer_contract(value: &serde_json::Value) -> Result<(), PrimitivesError> {
+pub fn validate_producer_consumer_contract(
+    value: &serde_json::Value,
+) -> Result<(), PrimitivesError> {
     let obj = as_obj(value, "ProducerConsumerContract")?;
     for field in ["contract_id", "producer_id", "consumer_id", "interface"] {
         require_str_field(obj, field, "ProducerConsumerContract")?;
@@ -548,7 +605,8 @@ pub fn validate_producer_consumer_contract(value: &serde_json::Value) -> Result<
 
 // ── §62l GoverningRecord / RevalidationScope (r39) ───────────────────────────
 
-pub const GOVERNING_RECORD_REQUIRED: &[&str] = &["id", "authority_basis", "scope", "established_at"];
+pub const GOVERNING_RECORD_REQUIRED: &[&str] =
+    &["id", "authority_basis", "scope", "established_at"];
 
 /// Verify a citizen declares all GoverningRecord canonical fields (§62l).
 pub fn check_governing_record_fields(
@@ -565,7 +623,10 @@ pub fn check_governing_record_fields(
     for field in ["authority_basis", "scope"] {
         let s = require_str_field(obj, field, "GoverningRecord")?;
         if s.trim().is_empty() {
-            return Err(inv("GoverningRecord", format!("{citizen_name}.{field} must be non-empty")));
+            return Err(inv(
+                "GoverningRecord",
+                format!("{citizen_name}.{field} must be non-empty"),
+            ));
         }
     }
     Ok(())
@@ -576,7 +637,10 @@ pub const REVALIDATION_SCOPES: &[&str] = &["DECISION_ONLY", "DEPENDENT_PLANS", "
 /// Validate a RevalidationScope value (§62l).
 pub fn validate_revalidation_scope(value: &str) -> Result<(), PrimitivesError> {
     if !REVALIDATION_SCOPES.contains(&value) {
-        return Err(inv("RevalidationScope", format!("must be one of {REVALIDATION_SCOPES:?}, got '{value}'")));
+        return Err(inv(
+            "RevalidationScope",
+            format!("must be one of {REVALIDATION_SCOPES:?}, got '{value}'"),
+        ));
     }
     Ok(())
 }
@@ -604,13 +668,23 @@ fn revalidation_scope_map() -> &'static HashMap<&'static str, &'static str> {
 
 /// Return minimum RevalidationScope for a premise change class (§62l r39).
 pub fn determine_revalidation_scope(change_class: &str) -> &'static str {
-    revalidation_scope_map().get(change_class).copied().unwrap_or("FULL_LIFECYCLE")
+    revalidation_scope_map()
+        .get(change_class)
+        .copied()
+        .unwrap_or("FULL_LIFECYCLE")
 }
 
 const NON_AUTHORITY_SOURCES: &[&str] = &[
-    "evidence", "priority", "capability", "market_signal",
-    "trigger", "schedule", "executor_recommendation", "product_value",
-    "user_absence", "market_success",
+    "evidence",
+    "priority",
+    "capability",
+    "market_signal",
+    "trigger",
+    "schedule",
+    "executor_recommendation",
+    "product_value",
+    "user_absence",
+    "market_success",
 ];
 
 /// Return true if action_source is a valid Authority origin (§62l r39).
@@ -631,25 +705,97 @@ static INTEGRITY_GAP_CATALOG: OnceLock<HashMap<&'static str, GapEntry>> = OnceLo
 pub fn integrity_gap_catalog() -> &'static HashMap<&'static str, GapEntry> {
     INTEGRITY_GAP_CATALOG.get_or_init(|| {
         [
-            ("missing-authority-gate", "CRITICAL", "Qualifying action taken without authority confirmation"),
-            ("append-only-violation", "CRITICAL", "Ledger row mutated or deleted after write"),
-            ("silent-exception", "HIGH", "Swallowed error in financial/signing path"),
-            ("hardcoded-secret", "CRITICAL", "Hardcoded key, token, or credential in source"),
-            ("state-file-committed", "HIGH", "Runtime state file committed to version control"),
-            ("undocumented-feature", "MEDIUM", "Feature documented without matching implementation"),
-            ("mint-without-score-delta", "CRITICAL", "Mint triggered without score_delta > 0"),
-            ("unit-constant-changed", "CRITICAL", "UNIT constant value modified"),
-            ("exit-code-changed", "CRITICAL", "EXIT_REVALIDATE or EXIT_ONE_RETRY constant modified"),
-            ("non-atomic-write", "HIGH", "Journal write not using atomic append helpers"),
-            ("credential-leak", "CRITICAL", "Private key material in trace/error/return value"),
-            ("sandbox-bypass", "HIGH", "Executor code path bypasses SandboxBackend"),
-            ("env-credential-leak", "HIGH", "Parent environment inherited in executor subprocess"),
-            ("peer-admission-bypass", "HIGH", "Peer added to routing table without AdmissionGate check"),
-            ("quorum-below-supermajority", "HIGH", "Quorum threshold below strict 2/3 supermajority"),
-            ("bearer-token-missing", "HIGH", "/api/* handler missing BearerToken extractor"),
+            (
+                "missing-authority-gate",
+                "CRITICAL",
+                "Qualifying action taken without authority confirmation",
+            ),
+            (
+                "append-only-violation",
+                "CRITICAL",
+                "Ledger row mutated or deleted after write",
+            ),
+            (
+                "silent-exception",
+                "HIGH",
+                "Swallowed error in financial/signing path",
+            ),
+            (
+                "hardcoded-secret",
+                "CRITICAL",
+                "Hardcoded key, token, or credential in source",
+            ),
+            (
+                "state-file-committed",
+                "HIGH",
+                "Runtime state file committed to version control",
+            ),
+            (
+                "undocumented-feature",
+                "MEDIUM",
+                "Feature documented without matching implementation",
+            ),
+            (
+                "mint-without-score-delta",
+                "CRITICAL",
+                "Mint triggered without score_delta > 0",
+            ),
+            (
+                "unit-constant-changed",
+                "CRITICAL",
+                "UNIT constant value modified",
+            ),
+            (
+                "exit-code-changed",
+                "CRITICAL",
+                "EXIT_REVALIDATE or EXIT_ONE_RETRY constant modified",
+            ),
+            (
+                "non-atomic-write",
+                "HIGH",
+                "Journal write not using atomic append helpers",
+            ),
+            (
+                "credential-leak",
+                "CRITICAL",
+                "Private key material in trace/error/return value",
+            ),
+            (
+                "sandbox-bypass",
+                "HIGH",
+                "Executor code path bypasses SandboxBackend",
+            ),
+            (
+                "env-credential-leak",
+                "HIGH",
+                "Parent environment inherited in executor subprocess",
+            ),
+            (
+                "peer-admission-bypass",
+                "HIGH",
+                "Peer added to routing table without AdmissionGate check",
+            ),
+            (
+                "quorum-below-supermajority",
+                "HIGH",
+                "Quorum threshold below strict 2/3 supermajority",
+            ),
+            (
+                "bearer-token-missing",
+                "HIGH",
+                "/api/* handler missing BearerToken extractor",
+            ),
         ]
         .into_iter()
-        .map(|(k, s, d)| (k, GapEntry { severity: s, description: d }))
+        .map(|(k, s, d)| {
+            (
+                k,
+                GapEntry {
+                    severity: s,
+                    description: d,
+                },
+            )
+        })
         .collect()
     })
 }
@@ -752,7 +898,10 @@ mod tests {
 
     #[test]
     fn dispatch_unknown_type() {
-        assert!(matches!(validate("NoSuchType", &json!({})), Err(PrimitivesError::UnknownType(_))));
+        assert!(matches!(
+            validate("NoSuchType", &json!({})),
+            Err(PrimitivesError::UnknownType(_))
+        ));
     }
 
     #[test]
@@ -772,8 +921,14 @@ mod tests {
 
     #[test]
     fn revalidation_scope() {
-        assert_eq!(determine_revalidation_scope("evidence-retracted"), "DECISION_ONLY");
-        assert_eq!(determine_revalidation_scope("unknown-class"), "FULL_LIFECYCLE");
+        assert_eq!(
+            determine_revalidation_scope("evidence-retracted"),
+            "DECISION_ONLY"
+        );
+        assert_eq!(
+            determine_revalidation_scope("unknown-class"),
+            "FULL_LIFECYCLE"
+        );
         assert!(validate_revalidation_scope("DECISION_ONLY").is_ok());
         assert!(validate_revalidation_scope("INVALID").is_err());
     }

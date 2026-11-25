@@ -49,7 +49,9 @@ impl TunnelConfig {
             return Err(TunnelError::InvalidConfig("remote_addr is empty".into()));
         }
         if self.auth_token.is_empty() {
-            return Err(TunnelError::InvalidConfig("auth_token must not be empty".into()));
+            return Err(TunnelError::InvalidConfig(
+                "auth_token must not be empty".into(),
+            ));
         }
         Ok(())
     }
@@ -97,7 +99,10 @@ impl TunnelManager {
     /// Returns the new `TunnelState` (Connected or Failed).
     pub fn start(&self, config: TunnelConfig) -> TunnelState {
         let mut state = self.state.lock().expect("mutex poisoned");
-        if matches!(*state, TunnelState::Connected { .. } | TunnelState::Connecting) {
+        if matches!(
+            *state,
+            TunnelState::Connected { .. } | TunnelState::Connecting
+        ) {
             warn!("tunnel already running; ignoring start()");
             return state.clone();
         }
@@ -106,7 +111,9 @@ impl TunnelManager {
         if let Err(e) = config.validate() {
             let reason = e.to_string();
             warn!(reason = %reason, "tunnel config invalid");
-            *state = TunnelState::Failed { reason: reason.clone() };
+            *state = TunnelState::Failed {
+                reason: reason.clone(),
+            };
             return state.clone();
         }
 
@@ -164,22 +171,33 @@ fn epoch_parts(secs: u64) -> (u64, u64, u64, u64, u64, u64) {
         let mut rem = days;
         let mut yr = 1970u64;
         loop {
-            let dy = if (yr % 4 == 0 && yr % 100 != 0) || yr % 400 == 0 { 366 } else { 365 };
-            if rem < dy { break (yr, rem); }
-            rem -= dy; yr += 1;
+            let dy = if (yr.is_multiple_of(4) && !yr.is_multiple_of(100)) || yr.is_multiple_of(400)
+            {
+                366
+            } else {
+                365
+            };
+            if rem < dy {
+                break (yr, rem);
+            }
+            rem -= dy;
+            yr += 1;
         }
     };
     let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
     let months: &[u64] = if leap {
-        &[31,29,31,30,31,30,31,31,30,31,30,31]
+        &[31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     } else {
-        &[31,28,31,30,31,30,31,31,30,31,30,31]
+        &[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     };
     let mut rem = doy;
     let mut mo = 1u64;
     for &dm in months {
-        if rem < dm { break; }
-        rem -= dm; mo += 1;
+        if rem < dm {
+            break;
+        }
+        rem -= dm;
+        mo += 1;
     }
     (y, mo, rem + 1, h, mi, s)
 }
@@ -201,8 +219,12 @@ mod tests {
         let states = vec![
             TunnelState::Stopped,
             TunnelState::Connecting,
-            TunnelState::Connected { since: "2024-01-01T00:00:00Z".into() },
-            TunnelState::Failed { reason: "timeout".into() },
+            TunnelState::Connected {
+                since: "2024-01-01T00:00:00Z".into(),
+            },
+            TunnelState::Failed {
+                reason: "timeout".into(),
+            },
         ];
         for s in states {
             let json = serde_json::to_string(&s).unwrap();

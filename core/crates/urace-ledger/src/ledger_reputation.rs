@@ -64,7 +64,12 @@ impl ReputationStore {
                 "at": at,
             }),
         )?;
-        Ok(ReputationEntry { peer_id, delta, reason, at })
+        Ok(ReputationEntry {
+            peer_id,
+            delta,
+            reason,
+            at,
+        })
     }
 
     /// Compute the current reputation score for `peer_id` as the sum of all deltas.

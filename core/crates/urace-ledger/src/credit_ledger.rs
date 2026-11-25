@@ -37,7 +37,10 @@ pub struct CreditLedger {
 impl CreditLedger {
     pub fn open(path: impl AsRef<Path>, hmac_key: [u8; 32]) -> Result<Self, CreditError> {
         let journal = Journal::open(path, hmac_key)?;
-        Ok(CreditLedger { journal, lock: Mutex::new(()) })
+        Ok(CreditLedger {
+            journal,
+            lock: Mutex::new(()),
+        })
     }
 
     /// Replay journal to compute balances for all peers.
@@ -117,7 +120,10 @@ impl CreditLedger {
         let _guard = self.lock.lock();
         let current = self.balance(peer_id)?;
         if current < amount {
-            return Err(CreditError::InsufficientBalance { have: current, need: amount });
+            return Err(CreditError::InsufficientBalance {
+                have: current,
+                need: amount,
+            });
         }
 
         let entry_id = Uuid::new_v4().to_string();
@@ -176,7 +182,9 @@ mod tests {
         let ledger = CreditLedger::open(dir.path().join("credit.jsonl"), KEY).unwrap();
         ledger.credit("peer-1", UNIT, "initial", None).unwrap();
 
-        let err = ledger.debit("peer-1", 2 * UNIT, "overspend", None).unwrap_err();
+        let err = ledger
+            .debit("peer-1", 2 * UNIT, "overspend", None)
+            .unwrap_err();
         assert!(matches!(err, CreditError::InsufficientBalance { .. }));
     }
 
@@ -185,7 +193,9 @@ mod tests {
         let dir = tempdir().unwrap();
         let ledger = CreditLedger::open(dir.path().join("credit.jsonl"), KEY).unwrap();
 
-        let err = ledger.credit("peer-1", PEER_CAP + 1, "over cap", None).unwrap_err();
+        let err = ledger
+            .credit("peer-1", PEER_CAP + 1, "over cap", None)
+            .unwrap_err();
         assert!(matches!(err, CreditError::PeerCapExceeded { .. }));
     }
 }

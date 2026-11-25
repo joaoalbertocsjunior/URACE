@@ -4,9 +4,9 @@ pub mod state_reader;
 
 use anyhow::Result;
 use axum::Router;
+use minijinja::Environment;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc};
 use tower_http::services::ServeDir;
-use minijinja::Environment;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -73,24 +73,55 @@ pub async fn serve(root: PathBuf, port: u16, bind: &str, token: String) -> Resul
 
 fn build_env() -> Environment<'static> {
     let mut env = Environment::new();
-    env.add_template("base.html", include_str!("../templates/base.html")).unwrap();
-    env.add_template("shell.html", include_str!("../templates/shell.html")).unwrap();
-    env.add_template("config.html", include_str!("../templates/config.html")).unwrap();
-    env.add_template("vitals.html", include_str!("../templates/vitals.html")).unwrap();
-    env.add_template("wallet.html", include_str!("../templates/wallet.html")).unwrap();
-    env.add_template("cycle.html", include_str!("../templates/cycle.html")).unwrap();
-    env.add_template("cycle_state.html", include_str!("../templates/cycle_state.html")).unwrap();
-    env.add_template("daemon_bar.html", include_str!("../templates/daemon_bar.html")).unwrap();
-    env.add_template("goals.html", include_str!("../templates/goals.html")).unwrap();
-    env.add_template("inbox.html", include_str!("../templates/inbox.html")).unwrap();
-    env.add_template("audit.html", include_str!("../templates/audit.html")).unwrap();
-    env.add_template("compliance.html", include_str!("../templates/compliance.html")).unwrap();
-    env.add_template("rules.html", include_str!("../templates/rules.html")).unwrap();
-    env.add_template("github.html", include_str!("../templates/github.html")).unwrap();
-    env.add_template("exchange.html", include_str!("../templates/exchange.html")).unwrap();
-    env.add_template("products.html", include_str!("../templates/products.html")).unwrap();
-    env.add_template("fleet.html", include_str!("../templates/fleet.html")).unwrap();
-    env.add_template("portfolio.html", include_str!("../templates/portfolio.html")).unwrap();
-    env.add_template("sources.html", include_str!("../templates/sources.html")).unwrap();
+    env.add_template("base.html", include_str!("../templates/base.html"))
+        .unwrap();
+    env.add_template("shell.html", include_str!("../templates/shell.html"))
+        .unwrap();
+    env.add_template("config.html", include_str!("../templates/config.html"))
+        .unwrap();
+    env.add_template("vitals.html", include_str!("../templates/vitals.html"))
+        .unwrap();
+    env.add_template("wallet.html", include_str!("../templates/wallet.html"))
+        .unwrap();
+    env.add_template("cycle.html", include_str!("../templates/cycle.html"))
+        .unwrap();
+    env.add_template(
+        "cycle_state.html",
+        include_str!("../templates/cycle_state.html"),
+    )
+    .unwrap();
+    env.add_template(
+        "daemon_bar.html",
+        include_str!("../templates/daemon_bar.html"),
+    )
+    .unwrap();
+    env.add_template("goals.html", include_str!("../templates/goals.html"))
+        .unwrap();
+    env.add_template("inbox.html", include_str!("../templates/inbox.html"))
+        .unwrap();
+    env.add_template("audit.html", include_str!("../templates/audit.html"))
+        .unwrap();
+    env.add_template(
+        "compliance.html",
+        include_str!("../templates/compliance.html"),
+    )
+    .unwrap();
+    env.add_template("rules.html", include_str!("../templates/rules.html"))
+        .unwrap();
+    env.add_template("github.html", include_str!("../templates/github.html"))
+        .unwrap();
+    env.add_template("exchange.html", include_str!("../templates/exchange.html"))
+        .unwrap();
+    env.add_template("products.html", include_str!("../templates/products.html"))
+        .unwrap();
+    env.add_template("fleet.html", include_str!("../templates/fleet.html"))
+        .unwrap();
+    env.add_template(
+        "portfolio.html",
+        include_str!("../templates/portfolio.html"),
+    )
+    .unwrap();
+    env.add_template("sources.html", include_str!("../templates/sources.html"))
+        .unwrap();
     env
 }

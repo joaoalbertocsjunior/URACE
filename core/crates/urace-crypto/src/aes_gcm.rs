@@ -36,7 +36,9 @@ pub fn encrypt<R: RngCore + CryptoRng>(
     rng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let ct = cipher.encrypt(nonce, plaintext).expect("AES-GCM encryption never fails");
+    let ct = cipher
+        .encrypt(nonce, plaintext)
+        .expect("AES-GCM encryption never fails");
     let mut out = Vec::with_capacity(NONCE_LEN + ct.len());
     out.extend_from_slice(&nonce_bytes);
     out.extend_from_slice(&ct);
@@ -79,7 +81,10 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
         let blob = encrypt(KEY, b"data", &mut rng);
         let bad_key = b"bad-key-32-bytes-of-padding-here";
-        assert!(matches!(decrypt(bad_key, &blob), Err(AesGcmError::DecryptionFailed)));
+        assert!(matches!(
+            decrypt(bad_key, &blob),
+            Err(AesGcmError::DecryptionFailed)
+        ));
     }
 
     #[test]
@@ -87,6 +92,9 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(42);
         let mut blob = encrypt(KEY, b"data", &mut rng);
         blob[NONCE_LEN] ^= 0xFF; // flip byte in ciphertext
-        assert!(matches!(decrypt(KEY, &blob), Err(AesGcmError::DecryptionFailed)));
+        assert!(matches!(
+            decrypt(KEY, &blob),
+            Err(AesGcmError::DecryptionFailed)
+        ));
     }
 }

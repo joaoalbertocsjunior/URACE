@@ -102,7 +102,9 @@ pub fn check_chunk_concentration(
         let mut shared_chunks: HashSet<usize> = chunks_i.clone();
 
         for j in 0..peers.len() {
-            if i == j { continue; }
+            if i == j {
+                continue;
+            }
             let chunks_j = &peer_chunks[&peers[j]];
             let overlap: HashSet<usize> = chunks_i.intersection(chunks_j).cloned().collect();
             if !overlap.is_empty() {
@@ -166,13 +168,15 @@ pub struct IpBucketGuard {
 
 impl IpBucketGuard {
     pub fn new() -> Self {
-        IpBucketGuard { slots: DashMap::new() }
+        IpBucketGuard {
+            slots: DashMap::new(),
+        }
     }
 
     /// Returns true and records the slot if the IP has NOT already occupied `bucket_idx`.
     /// Returns false (Sybil rejected) if the IP is already in that bucket.
     pub fn check(&self, ip: &str, bucket_idx: usize) -> bool {
-        let mut entry = self.slots.entry(ip.to_string()).or_insert_with(HashSet::new);
+        let mut entry = self.slots.entry(ip.to_string()).or_default();
         if entry.contains(&bucket_idx) {
             return false;
         }
@@ -200,7 +204,10 @@ mod tests {
 
     fn make_row(peer_id: &str, chunk_idx: u64, feature_id: &str) -> HashMap<String, Value> {
         let mut m = HashMap::new();
-        m.insert("kind".into(), Value::String("BUNDLE_REPLICA_REGISTERED".into()));
+        m.insert(
+            "kind".into(),
+            Value::String("BUNDLE_REPLICA_REGISTERED".into()),
+        );
         m.insert("peer_id".into(), Value::String(peer_id.into()));
         m.insert("chunk_idx".into(), Value::Number(chunk_idx.into()));
         m.insert("feature_id".into(), Value::String(feature_id.into()));
@@ -214,7 +221,11 @@ mod tests {
             .map(|i| make_row(&format!("peer-{}", i), i, "feat-1"))
             .collect();
         let result = check_chunk_concentration("feat-1", &rows, N_TOTAL, DEFAULT_THRESHOLD);
-        assert!(!result.flagged, "diverse peers should not be flagged: {:?}", result.flag_reason);
+        assert!(
+            !result.flagged,
+            "diverse peers should not be flagged: {:?}",
+            result.flag_reason
+        );
     }
 
     #[test]
@@ -234,14 +245,20 @@ mod tests {
     fn test_ip_bucket_guard_sybil_rejection() {
         let guard = IpBucketGuard::new();
         assert!(guard.check("1.2.3.4", 5), "first entry should succeed");
-        assert!(!guard.check("1.2.3.4", 5), "same IP, same bucket must be rejected");
+        assert!(
+            !guard.check("1.2.3.4", 5),
+            "same IP, same bucket must be rejected"
+        );
     }
 
     #[test]
     fn test_ip_bucket_guard_different_buckets() {
         let guard = IpBucketGuard::new();
         assert!(guard.check("1.2.3.4", 0));
-        assert!(guard.check("1.2.3.4", 1), "different bucket should be allowed");
+        assert!(
+            guard.check("1.2.3.4", 1),
+            "different bucket should be allowed"
+        );
     }
 
     #[test]

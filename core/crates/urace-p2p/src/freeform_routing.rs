@@ -92,10 +92,7 @@ impl RouteCache {
 /// # Security invariant
 /// MUST NOT return a peer that failed AdmissionGate — admitted check is applied
 /// before any scoring. Returns `None` if no admitted candidates exist.
-pub fn select_target<'a>(
-    candidates: &'a [NodeInfo],
-    gate: &AdmissionGate,
-) -> Option<&'a NodeInfo> {
+pub fn select_target<'a>(candidates: &'a [NodeInfo], gate: &AdmissionGate) -> Option<&'a NodeInfo> {
     // Filter to only admitted peers — security invariant.
     let admitted: Vec<&NodeInfo> = candidates
         .iter()
@@ -104,16 +101,18 @@ pub fn select_target<'a>(
 
     // Among admitted peers, pick the most recently seen one as a simple
     // freshness heuristic (matches Python peer selection behaviour).
-    admitted
-        .into_iter()
-        .max_by(|a, b| a.last_seen_secs.partial_cmp(&b.last_seen_secs).unwrap_or(std::cmp::Ordering::Equal))
+    admitted.into_iter().max_by(|a, b| {
+        a.last_seen_secs
+            .partial_cmp(&b.last_seen_secs)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::peer_discovery::AdmissionGate;
     use crate::kademlia::NodeInfo;
+    use crate::peer_discovery::AdmissionGate;
 
     #[test]
     fn test_reputation_initial_neutral() {
@@ -137,7 +136,10 @@ mod tests {
     fn test_route_cache() {
         let cache = RouteCache::new();
         cache.insert("target-1", vec!["hop-a".into(), "hop-b".into()]);
-        assert_eq!(cache.get("target-1"), Some(vec!["hop-a".into(), "hop-b".into()]));
+        assert_eq!(
+            cache.get("target-1"),
+            Some(vec!["hop-a".into(), "hop-b".into()])
+        );
         cache.invalidate("target-1");
         assert!(cache.get("target-1").is_none());
     }

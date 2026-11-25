@@ -26,7 +26,7 @@ pub fn consensus_threshold(network_size: usize) -> usize {
         return 2;
     }
     // ceil(2*N/3) = (2*N + 2) / 3 in integer arithmetic
-    let supermajority = (2 * network_size + 2) / 3;
+    let supermajority = (2 * network_size).div_ceil(3);
     supermajority.max(2)
 }
 
@@ -104,20 +104,14 @@ impl VoteCollector {
 
     /// Add a vote. Silently drops duplicate votes from the same peer_id.
     pub fn add_vote(&self, vote: SealVote) {
-        let mut bucket = self
-            .votes
-            .entry(vote.seal_hash.clone())
-            .or_insert_with(HashMap::new);
+        let mut bucket = self.votes.entry(vote.seal_hash.clone()).or_default();
         // Each peer may cast at most one vote per seal_hash.
         bucket.entry(vote.peer_id.clone()).or_insert(vote);
     }
 
     /// Returns the number of distinct peers that have voted for `seal_hash`.
     pub fn vote_count(&self, seal_hash: &str) -> usize {
-        self.votes
-            .get(seal_hash)
-            .map(|b| b.len())
-            .unwrap_or(0)
+        self.votes.get(seal_hash).map(|b| b.len()).unwrap_or(0)
     }
 
     /// Returns true iff `seal_hash` has received at least `threshold` distinct peer votes.
@@ -186,7 +180,11 @@ mod tests {
     fn test_minimum_threshold_is_two() {
         // No single peer should ever determine outcome.
         for n in 0..=3 {
-            assert!(consensus_threshold(n) >= 2, "threshold for n={} must be >=2", n);
+            assert!(
+                consensus_threshold(n) >= 2,
+                "threshold for n={} must be >=2",
+                n
+            );
         }
     }
 

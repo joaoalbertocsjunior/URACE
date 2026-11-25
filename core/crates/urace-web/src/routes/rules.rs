@@ -6,12 +6,8 @@
 //! state directly (rule data stored under "rules" / "rule_relationships" /
 //! "rule_conflicts" in state.json).
 
-use axum::{
-    extract::State,
-    routing::get,
-    Json, Router,
-};
-use crate::{AppState, auth::BearerToken, state_reader};
+use crate::{auth::BearerToken, state_reader, AppState};
+use axum::{extract::State, routing::get, Json, Router};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -20,28 +16,25 @@ pub fn router() -> Router<AppState> {
         .route("/conflicts", get(rules_conflicts))
 }
 
-async fn rules_list(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn rules_list(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let rules = state.get("rules")
+    let rules = state
+        .get("rules")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
     Json(serde_json::Value::Array(rules))
 }
 
-async fn rules_graph(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn rules_graph(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let rules = state.get("rules")
+    let rules = state
+        .get("rules")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
-    let relationships = state.get("rule_relationships")
+    let relationships = state
+        .get("rule_relationships")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
@@ -51,12 +44,10 @@ async fn rules_graph(
     }))
 }
 
-async fn rules_conflicts(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-) -> Json<serde_json::Value> {
+async fn rules_conflicts(State(s): State<AppState>, _auth: BearerToken) -> Json<serde_json::Value> {
     let state = state_reader::read_state(&s.root);
-    let conflicts = state.get("rule_conflicts")
+    let conflicts = state
+        .get("rule_conflicts")
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();

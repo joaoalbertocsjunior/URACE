@@ -115,17 +115,15 @@ pub fn no_symlink_path(path: &Path) -> Result<PathBuf, RunnerError> {
     let canonical = path.canonicalize().map_err(|e| {
         RunnerError::PathSecurity(format!("cannot canonicalize {}: {}", path.display(), e))
     })?;
-    let mut current = PathBuf::from(
-        canonical
-            .components()
-            .next()
-            .map(|c| {
-                let mut p = PathBuf::new();
-                p.push(c);
-                p
-            })
-            .unwrap_or_default(),
-    );
+    let mut current = canonical
+        .components()
+        .next()
+        .map(|c| {
+            let mut p = PathBuf::new();
+            p.push(c);
+            p
+        })
+        .unwrap_or_default();
     for component in canonical.components().skip(1) {
         current.push(component);
         if current

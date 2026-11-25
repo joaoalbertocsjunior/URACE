@@ -12,6 +12,12 @@ pub struct GfTables {
     log: [u8; 256],
 }
 
+impl Default for GfTables {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GfTables {
     pub const fn new() -> Self {
         let mut exp = [0u8; 512];

@@ -102,7 +102,7 @@ fn rs_encode(data: &[u8], k: usize, p: usize) -> Vec<Vec<u8>> {
     // Pad so that payload.len() is divisible by k.
     let rem = payload.len() % k;
     if rem != 0 {
-        payload.extend(std::iter::repeat(0u8).take(k - rem));
+        payload.extend(std::iter::repeat_n(0u8, k - rem));
     }
     let chunk_size = payload.len() / k;
 
@@ -114,13 +114,13 @@ fn rs_encode(data: &[u8], k: usize, p: usize) -> Vec<Vec<u8>> {
     // Build p parity chunks (Vandermonde: parity[p_i][pos] = Σ_j α^((p_i+1)*j) * data[j][pos]).
     let mut parity: Vec<Vec<u8>> = vec![vec![0u8; chunk_size]; p];
     for pos in 0..chunk_size {
-        for pi in 0..p {
+        for (pi, parity_row) in parity.iter_mut().enumerate().take(p) {
             let mut s: u8 = 0;
-            for j in 0..k {
+            for (j, chunk_row) in chunks.iter().enumerate().take(k) {
                 let coeff = GF.pow(2, (pi + 1) * j);
-                s ^= GF.mul(coeff, chunks[j][pos]);
+                s ^= GF.mul(coeff, chunk_row[pos]);
             }
-            parity[pi][pos] = s;
+            parity_row[pos] = s;
         }
     }
 
@@ -129,9 +129,16 @@ fn rs_encode(data: &[u8], k: usize, p: usize) -> Vec<Vec<u8>> {
     result
 }
 
-fn rs_decode(available: &HashMap<usize, Vec<u8>>, k: usize, _p: usize) -> Result<Vec<u8>, ChunkError> {
+fn rs_decode(
+    available: &HashMap<usize, Vec<u8>>,
+    k: usize,
+    _p: usize,
+) -> Result<Vec<u8>, ChunkError> {
     if available.len() < k {
-        return Err(ChunkError::InsufficientChunks { have: available.len(), need: k });
+        return Err(ChunkError::InsufficientChunks {
+            have: available.len(),
+            need: k,
+        });
     }
 
     // Pick the first k available indices.
@@ -195,10 +202,12 @@ fn rs_decode(available: &HashMap<usize, Vec<u8>>, k: usize, _p: usize) -> Result
             if factor == 0 {
                 continue;
             }
+            #[allow(clippy::needless_range_loop)]
             for c in 0..k {
                 let m = GF.mul(factor, matrix[col][c]);
                 matrix[row][c] ^= m;
             }
+            #[allow(clippy::needless_range_loop)]
             for pos in 0..chunk_size {
                 let m = GF.mul(factor, rhs[col][pos]);
                 rhs[row][pos] ^= m;
@@ -234,7 +243,9 @@ pub struct ChunkStore {
 
 impl ChunkStore {
     pub fn new(root: &Path) -> Self {
-        Self { root: root.to_path_buf() }
+        Self {
+            root: root.to_path_buf(),
+        }
     }
 
     fn chunk_dir(&self, artifact_sha256: &str) -> PathBuf {
@@ -309,13 +320,15 @@ impl ChunkStore {
         k: usize,
     ) -> Result<Vec<u8>, ChunkError> {
         if chunks.len() < k {
-            return Err(ChunkError::InsufficientChunks { have: chunks.len(), need: k });
+            return Err(ChunkError::InsufficientChunks {
+                have: chunks.len(),
+                need: k,
+            });
         }
         let mut available: HashMap<usize, Vec<u8>> = HashMap::new();
         for chunk in chunks {
             let key = chunk_key(artifact_seed, chunk.index);
-            let pt = aes::decrypt(&key, &chunk.ciphertext)
-                .map_err(|_| ChunkError::DecodeFailed)?;
+            let pt = aes::decrypt(&key, &chunk.ciphertext).map_err(|_| ChunkError::DecodeFailed)?;
             available.insert(chunk.index, pt.to_vec());
         }
         // Determine p from manifest if present (best effort — 0 is safe for decode).
@@ -388,7 +401,9 @@ impl ChunkStore {
         if !mp.exists() {
             return vec![];
         }
-        let Ok(text) = std::fs::read_to_string(&mp) else { return vec![]; };
+        let Ok(text) = std::fs::read_to_string(&mp) else {
+            return vec![];
+        };
         let Ok(manifest): Result<ChunkManifest, _> = serde_json::from_str(&text) else {
             return vec![];
         };
@@ -416,8 +431,7 @@ mod tests {
         let chunks = rs_encode(data, k, p);
         assert_eq!(chunks.len(), k + p);
         // Use only data chunks.
-        let avail: HashMap<usize, Vec<u8>> =
-            (0..k).map(|i| (i, chunks[i].clone())).collect();
+        let avail: HashMap<usize, Vec<u8>> = (0..k).map(|i| (i, chunks[i].clone())).collect();
         let recovered = rs_decode(&avail, k, p).unwrap();
         assert_eq!(recovered, data);
     }
@@ -429,10 +443,14 @@ mod tests {
         let p = 2;
         let chunks = rs_encode(data, k, p);
         // Drop first two data chunks, use parity to recover.
-        let avail: HashMap<usize, Vec<u8>> = [(2, chunks[2].clone()), (3, chunks[3].clone()),
-            (4, chunks[4].clone()), (5, chunks[5].clone())]
-            .into_iter()
-            .collect();
+        let avail: HashMap<usize, Vec<u8>> = [
+            (2, chunks[2].clone()),
+            (3, chunks[3].clone()),
+            (4, chunks[4].clone()),
+            (5, chunks[5].clone()),
+        ]
+        .into_iter()
+        .collect();
         let recovered = rs_decode(&avail, k, p).unwrap();
         assert_eq!(recovered, data);
     }
@@ -490,6 +508,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = ChunkStore::new(dir.path());
         let result = store.decode(seed, &chunks, 4);
-        assert!(matches!(result, Err(ChunkError::InsufficientChunks { have: 1, need: 4 })));
+        assert!(matches!(
+            result,
+            Err(ChunkError::InsufficientChunks { have: 1, need: 4 })
+        ));
     }
 }

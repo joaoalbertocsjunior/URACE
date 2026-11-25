@@ -4,6 +4,7 @@
 //! the handler returns the `cycle_state.html` partial rendered with the last 5
 //! items from each pipeline column; otherwise it returns JSON counts.
 
+use crate::{auth::BearerToken, state_reader, AppState};
 use axum::{
     extract::{Request, State},
     response::{Html, IntoResponse, Response},
@@ -11,17 +12,12 @@ use axum::{
     Json, Router,
 };
 use minijinja::context;
-use crate::{AppState, auth::BearerToken, state_reader};
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/state", get(cycle_state))
 }
 
-async fn cycle_state(
-    State(s): State<AppState>,
-    _auth: BearerToken,
-    req: Request,
-) -> Response {
+async fn cycle_state(State(s): State<AppState>, _auth: BearerToken, req: Request) -> Response {
     let is_htmx = req.headers().get("hx-request").is_some();
     let state = state_reader::read_state(&s.root);
 
@@ -31,9 +27,14 @@ async fn cycle_state(
             .unwrap_or_default()
     }
 
-    let objectives_raw = state.get("objectives").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let objectives_raw = state
+        .get("objectives")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
     // Prefer active objectives; fall back to last 5 of all
-    let active: Vec<serde_json::Value> = objectives_raw.iter()
+    let active: Vec<serde_json::Value> = objectives_raw
+        .iter()
         .filter(|o| o.get("status").and_then(|v| v.as_str()) == Some("active"))
         .cloned()
         .collect();
@@ -47,7 +48,8 @@ async fn cycle_state(
     let decisions = last5(state.get("decision_records"));
     let operations = last5(state.get("operations"));
     let checkpoints = last5(state.get("checkpoints"));
-    let lifecycle_state = state.get("lifecycle_state")
+    let lifecycle_state = state
+        .get("lifecycle_state")
         .and_then(|v| v.as_str())
         .unwrap_or("UNKNOWN")
         .to_string();
@@ -57,14 +59,16 @@ async fn cycle_state(
             Ok(t) => t,
             Err(e) => return Html(format!("<!-- template error: {e} -->")).into_response(),
         };
-        let html = tmpl.render(context! {
-            objectives => objectives,
-            evidence => evidence,
-            decisions => decisions,
-            operations => operations,
-            checkpoints => checkpoints,
-            lifecycle_state => lifecycle_state,
-        }).unwrap_or_else(|e| format!("<!-- render error: {e} -->"));
+        let html = tmpl
+            .render(context! {
+                objectives => objectives,
+                evidence => evidence,
+                decisions => decisions,
+                operations => operations,
+                checkpoints => checkpoints,
+                lifecycle_state => lifecycle_state,
+            })
+            .unwrap_or_else(|e| format!("<!-- render error: {e} -->"));
         Html(html).into_response()
     } else {
         Json(serde_json::json!({

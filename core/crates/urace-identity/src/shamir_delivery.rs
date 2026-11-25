@@ -63,19 +63,20 @@ impl DeliveryTracker {
         for entry in journal.verify_integrity()? {
             match entry.kind.as_str() {
                 "SHARE_DELIVERY_RECORDED" => {
-                    if let Ok(d) =
-                        serde_json::from_value::<ShareDelivery>(entry.payload.clone())
-                    {
+                    if let Ok(d) = serde_json::from_value::<ShareDelivery>(entry.payload.clone()) {
                         let key = (d.share_id.clone(), d.recipient_peer_id.clone());
                         state.insert(key, d);
                     }
                 }
                 "SHARE_DELIVERY_MARKED" => {
                     let share_id = entry.payload["share_id"].as_str().unwrap_or("").to_string();
-                    let recipient_peer_id =
-                        entry.payload["recipient_peer_id"].as_str().unwrap_or("").to_string();
-                    let delivered_at =
-                        entry.payload["delivered_at"].as_str().map(|s| s.to_string());
+                    let recipient_peer_id = entry.payload["recipient_peer_id"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    let delivered_at = entry.payload["delivered_at"]
+                        .as_str()
+                        .map(|s| s.to_string());
                     let key = (share_id, recipient_peer_id);
                     if let Some(rec) = state.get_mut(&key) {
                         rec.delivered = true;
@@ -86,7 +87,10 @@ impl DeliveryTracker {
             }
         }
 
-        Ok(DeliveryTracker { state: Mutex::new(state), journal })
+        Ok(DeliveryTracker {
+            state: Mutex::new(state),
+            journal,
+        })
     }
 
     /// Record that a share `share_id` with Shamir index `x` is destined for `recipient_peer_id`.
@@ -110,8 +114,10 @@ impl DeliveryTracker {
             delivered: false,
             delivered_at: None,
         };
-        self.journal
-            .append("SHARE_DELIVERY_RECORDED", serde_json::to_value(&delivery).unwrap())?;
+        self.journal.append(
+            "SHARE_DELIVERY_RECORDED",
+            serde_json::to_value(&delivery).unwrap(),
+        )?;
         guard.insert(key, delivery);
         Ok(())
     }

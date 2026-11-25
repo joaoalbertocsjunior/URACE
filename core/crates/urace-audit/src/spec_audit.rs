@@ -14,7 +14,10 @@ pub struct SpecAuditor<'a> {
 
 impl<'a> SpecAuditor<'a> {
     pub fn new(ledger: &'a AuditLedger, node_id: impl Into<String>) -> Self {
-        SpecAuditor { ledger, node_id: node_id.into() }
+        SpecAuditor {
+            ledger,
+            node_id: node_id.into(),
+        }
     }
 
     /// Run `check` and emit a spec audit event.

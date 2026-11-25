@@ -44,7 +44,7 @@ impl PeerReputation {
     pub fn new(peer_id: impl Into<String>) -> Self {
         PeerReputation {
             peer_id: peer_id.into(),
-            quality: 0.05,    // cold-start floor
+            quality: 0.05, // cold-start floor
             delivery: 0.05,
             service: 0.0,
             validation: 0.10, // new peers get floor, not zero
@@ -64,7 +64,7 @@ impl PeerReputation {
     }
 
     pub fn set_score(&mut self, cat: ReputationCategory, value: f64) {
-        let v = value.min(1.0).max(0.0);
+        let v = value.clamp(0.0, 1.0);
         match cat {
             ReputationCategory::Quality => self.quality = v,
             ReputationCategory::Delivery => self.delivery = v,
