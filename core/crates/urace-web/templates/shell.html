@@ -6,7 +6,7 @@
   <div class="shell-page-header">
     <div>
       <h1 class="page-title" style="margin-bottom:0.1rem;">Shell</h1>
-      <p class="page-subtitle">URACE commands or natural language</p>
+      <p class="page-subtitle">URACE commands (<code>/cmd</code>) or OS passthrough (<code>! cmd</code>)</p>
     </div>
     <div id="cycle-warning" class="banner banner-warn" style="display:none">
       Cycle active — commands may touch live state
@@ -15,14 +15,14 @@
 
   <div class="shell-container">
     <div id="output" class="shell-output">
-      <div class="shell-welcome">Type a command or describe a task. Try <code>help</code> or <code>daemon status</code>.</div>
+      <div class="shell-welcome">Type <code>/help</code> to list all commands &nbsp;·&nbsp; <code>! ls</code> to run an OS command</div>
     </div>
     <div class="shell-input-wrap">
       <div id="autocomplete" class="autocomplete-dropdown" style="display:none"></div>
       <div class="shell-input-row">
         <span class="shell-prompt-glyph">›</span>
         <input type="text" id="shell-input" class="shell-input"
-               placeholder="daemon start  ·  goals list  ·  or describe a task…"
+               placeholder="/status  ·  /goals list  ·  ! git log"
                autocomplete="off" autofocus>
         <button id="shell-submit" onclick="submitCommand()">Run</button>
       </div>
@@ -33,92 +33,168 @@
 <script>
 const TOKEN = {{ token | tojson }};
 
-// ── Command catalogue ──────────────────────────────────────────────────────
+// ── Command catalogue ──────────────────────────────────────────────────────────
 const COMMANDS = [
-  // daemon
-  { cmd: 'daemon start',    desc: 'Start the URACE daemon' },
-  { cmd: 'daemon stop',     desc: 'Stop the daemon gracefully' },
-  { cmd: 'daemon restart',  desc: 'Restart the daemon' },
-  { cmd: 'daemon status',   desc: 'Show daemon health and uptime' },
-  // cycle
-  { cmd: 'cycle start',     desc: 'Begin a new improvement cycle' },
-  { cmd: 'cycle stop',      desc: 'Halt the current cycle' },
-  { cmd: 'cycle status',    desc: 'Show current cycle state' },
-  { cmd: 'cycle list',      desc: 'List past cycles' },
-  // goals
-  { cmd: 'goals list',      desc: 'List active goals' },
-  { cmd: 'goals create',    desc: 'Create a new goal (requires authority)' },
-  { cmd: 'goals review',    desc: 'Review pending goal proposals' },
-  { cmd: 'goals archive',   desc: 'Archive completed goals' },
-  // inbox
-  { cmd: 'inbox list',      desc: 'List inbox messages' },
-  { cmd: 'inbox mark-read', desc: 'Mark all messages as read' },
-  { cmd: 'inbox clear',     desc: 'Clear resolved messages' },
-  // sources
-  { cmd: 'sources list',    desc: 'List registered data sources' },
-  { cmd: 'sources sync',    desc: 'Trigger an immediate source sync' },
-  { cmd: 'sources add',     desc: 'Register a new source adapter' },
-  { cmd: 'sources status',  desc: 'Show sync status per source' },
-  // wallet
-  { cmd: 'wallet balance',  desc: 'Show UCR balance' },
-  { cmd: 'wallet transfer', desc: 'Transfer UCR to a peer (requires authority)' },
-  { cmd: 'wallet history',  desc: 'Show transaction history' },
-  // exchange
-  { cmd: 'exchange list',   desc: 'List available features on the exchange' },
-  { cmd: 'exchange buy',    desc: 'Purchase a feature (requires authority)' },
-  { cmd: 'exchange sell',   desc: 'List a feature for sale' },
-  // portfolio
-  { cmd: 'portfolio list',  desc: 'Show owned feature portfolio' },
-  { cmd: 'portfolio value', desc: 'Estimate portfolio value' },
-  // fleet
-  { cmd: 'fleet list',      desc: 'List connected fleet nodes' },
-  { cmd: 'fleet add',       desc: 'Add a node to the fleet' },
-  { cmd: 'fleet remove',    desc: 'Remove a node from the fleet' },
-  // products
-  { cmd: 'products list',   desc: 'List registered products' },
-  { cmd: 'products status', desc: 'Show product delivery status' },
-  // audit
-  { cmd: 'audit list',      desc: 'Show recent audit events' },
-  { cmd: 'audit verify',    desc: 'Verify ledger HMAC chain' },
-  { cmd: 'audit export',    desc: 'Export audit log to JSON' },
-  // compliance
-  { cmd: 'compliance check',  desc: 'Run compliance checks' },
-  { cmd: 'compliance report', desc: 'Generate a compliance report' },
-  // rules
-  { cmd: 'rules list',      desc: 'List policy rules' },
-  { cmd: 'rules add',       desc: 'Add a policy rule' },
-  { cmd: 'rules remove',    desc: 'Remove a policy rule' },
-  // config
-  { cmd: 'config get',      desc: 'Get a config value' },
-  { cmd: 'config set',      desc: 'Set a config value' },
-  { cmd: 'config list',     desc: 'List all config keys' },
-  { cmd: 'config reset',    desc: 'Reset config to defaults' },
-  // github
-  { cmd: 'github sync',     desc: 'Sync GitHub source' },
-  { cmd: 'github status',   desc: 'Show GitHub integration status' },
-  { cmd: 'github issues',   desc: 'List open GitHub issues' },
-  // authority
-  { cmd: 'authority status',  desc: 'Show authority decision queue' },
-  { cmd: 'authority approve', desc: 'Approve a pending decision' },
-  { cmd: 'authority deny',    desc: 'Deny a pending decision' },
-  // executor
-  { cmd: 'executor list',   desc: 'List active executor tasks' },
-  { cmd: 'executor cancel', desc: 'Cancel a running task' },
-  // logs
-  { cmd: 'logs tail',       desc: 'Tail the daemon log stream' },
-  { cmd: 'logs search',     desc: 'Search logs by keyword' },
-  // metrics
-  { cmd: 'metrics show',    desc: 'Show runtime metrics snapshot' },
-  // general
-  { cmd: 'help',            desc: 'List all available commands' },
-  { cmd: 'version',         desc: 'Show URACE version' },
-  { cmd: 'status',          desc: 'Overall system status summary' },
+  // ── meta ──────────────────────────────────────────────────────────────────
+  { cmd: '/help',                     desc: 'List all commands' },
+  { cmd: '/version',                  desc: 'Show version info  [-j]' },
+  { cmd: '/status',                   desc: 'Runtime status  [-v] [-j]' },
+
+  // ── daemon ────────────────────────────────────────────────────────────────
+  { cmd: '/run',                      desc: 'Start the daemon loop  [--max-cycles N] [--state-dir DIR]' },
+
+  // ── config ────────────────────────────────────────────────────────────────
+  { cmd: '/config show',              desc: 'Print full config' },
+  { cmd: '/config get ',              desc: 'Get one key  <dotted.path>' },
+  { cmd: '/config set ',              desc: 'Set one key  <dotted.path> <value>  (§62z)' },
+  { cmd: '/config validate',          desc: 'Validate config against schema' },
+  { cmd: '/config path',              desc: 'Print config file path' },
+
+  // ── source ────────────────────────────────────────────────────────────────
+  { cmd: '/source list',              desc: 'List registered source adapters' },
+  { cmd: '/source add',               desc: 'Register source  --kind KIND [--id ID] [--set k=v]' },
+  { cmd: '/source remove ',           desc: 'Remove source  <id>' },
+  { cmd: '/source sync ',             desc: 'Trigger immediate sync  <id>  (needs daemon)' },
+
+  // ── work ──────────────────────────────────────────────────────────────────
+  { cmd: '/work list',                desc: 'List open work items  [--status open|assigned|completed]' },
+  { cmd: '/work bid ',                desc: 'Submit bid  <id> --amount UCR' },
+  { cmd: '/work assign ',             desc: 'Assign work item to self  <id>' },
+
+  // ── evidence ──────────────────────────────────────────────────────────────
+  { cmd: '/evidence list',            desc: 'List evidence records  [--kind KIND] [--limit N]' },
+  { cmd: '/evidence show',            desc: 'Show evidence record  --id ID' },
+
+  // ── blocker ───────────────────────────────────────────────────────────────
+  { cmd: '/blocker list',             desc: 'List active blockers  [--resolved] [--scope S]' },
+  { cmd: '/blocker resolve',          desc: 'Resolve a blocker  --blocker-id ID [--note NOTE]' },
+
+  // ── decision ──────────────────────────────────────────────────────────────
+  { cmd: '/decision list',            desc: 'List decisions  [--scope S] [--stale] [--limit N]' },
+  { cmd: '/decision show',            desc: 'Show decision  --id ID' },
+
+  // ── milestone ─────────────────────────────────────────────────────────────
+  { cmd: '/milestone list',           desc: 'List milestones  [--limit N]' },
+  { cmd: '/milestone show',           desc: 'Show milestone  --id ID' },
+  { cmd: '/milestone add',            desc: 'Add a milestone  (stub)' },
+
+  // ── compliance ────────────────────────────────────────────────────────────
+  { cmd: '/compliance list',          desc: 'List compliance records  [--limit N]' },
+  { cmd: '/compliance domain',        desc: 'Records for a domain  --name DOMAIN' },
+  { cmd: '/compliance history',       desc: 'Compliance history  [--limit N]' },
+
+  // ── rules ─────────────────────────────────────────────────────────────────
+  { cmd: '/rules list',               desc: 'List governance rules  [--limit N]' },
+  { cmd: '/rules show',               desc: 'Show rule  --id ID' },
+  { cmd: '/rules graph',              desc: 'Show dependency graph' },
+  { cmd: '/rules conflicts',          desc: 'Show rule conflicts' },
+
+  // ── inbox ─────────────────────────────────────────────────────────────────
+  { cmd: '/inbox list',               desc: 'List inbox proposals  [--kind KIND] [--limit N]' },
+  { cmd: '/inbox apply',              desc: 'Apply proposal  --id ID  (§62z)' },
+  { cmd: '/inbox reject',             desc: 'Reject proposal  --id ID [--reason R]  (§62z)' },
+  { cmd: '/inbox count',              desc: 'Count pending proposals' },
+
+  // ── metrics ───────────────────────────────────────────────────────────────
+  { cmd: '/vitals',                   desc: 'Show lifecycle, APS score, cycle count' },
+  { cmd: '/audit',                    desc: 'Browse audit log  [decisions|evidence] [--since TS] [--limit N]' },
+  { cmd: '/trace',                    desc: 'Lifecycle audit trace  [--kind CYCLE|OPERATION|DECISION] [--limit N]' },
+
+  // ── goals ─────────────────────────────────────────────────────────────────
+  { cmd: '/goals list',               desc: 'List objectives  [--status STATUS] [--limit N]' },
+  { cmd: '/goals add ',               desc: 'Create goal  <title>  (§62z stub)' },
+  { cmd: '/goals pin',                desc: 'Pin goal  --id ID' },
+  { cmd: '/goals unpin',              desc: 'Unpin goal  --id ID' },
+  { cmd: '/goals defer',              desc: 'Defer goal  --id ID' },
+  { cmd: '/goals cancel',             desc: 'Cancel goal  --id ID' },
+
+  // ── data ──────────────────────────────────────────────────────────────────
+  { cmd: '/data list',                desc: 'List data records  [--limit N]' },
+  { cmd: '/data show',                desc: 'Show data record  --reference REF' },
+  { cmd: '/data status',              desc: 'Summary of all data source statuses' },
+  { cmd: '/data source',              desc: 'Manage sources  --source-action list|show|sync|add|remove [--name N] [--adapter-kind K] [--dsn URI] [--direction read|write|both]' },
+  { cmd: '/data credential',          desc: 'Manage credentials  --credential-action add|remove|inspect --name N [--auth-kind K] [--secret-ref R]' },
+
+  // ── reporting ─────────────────────────────────────────────────────────────
+  { cmd: '/usage summary',            desc: 'Executor usage summary' },
+  { cmd: '/usage patterns',           desc: 'Executor usage patterns  [--limit N]' },
+  { cmd: '/report vitals',            desc: 'Generate vitals report' },
+  { cmd: '/report cycle',             desc: 'Generate cycle report' },
+  { cmd: '/report audit',             desc: 'Generate audit report' },
+
+  // ── exchange ──────────────────────────────────────────────────────────────
+  { cmd: '/exchange status',          desc: 'Exchange peer + feature count' },
+  { cmd: '/exchange list',            desc: 'List feature atoms' },
+  { cmd: '/exchange show ',           desc: 'Show feature atom  <atom_id>' },
+  { cmd: '/exchange rank',            desc: 'Rank features by quality  [--limit N]' },
+  { cmd: '/exchange reputation',      desc: 'Peer reputation summary' },
+  { cmd: '/exchange ledger',          desc: 'Ledger run summary' },
+  { cmd: '/exchange settle',          desc: 'Settlement status (EVM/Lightning stub)' },
+  { cmd: '/exchange asset list',      desc: 'List asset registry' },
+  { cmd: '/exchange asset show ',     desc: 'Show asset  <id>' },
+  { cmd: '/exchange ask ',            desc: 'Place ask order  <atom_id> --price UCR  (§62z)' },
+  { cmd: '/exchange fill ',           desc: 'Fill order  <order_id>  (§62z)' },
+  { cmd: '/exchange cancel ',         desc: 'Cancel order  <order_id>' },
+  { cmd: '/exchange momentum',        desc: 'Market momentum metrics' },
+  { cmd: '/exchange peers list',      desc: 'List exchange peers' },
+  { cmd: '/exchange peers connect ',  desc: 'Connect to peer  <addr>' },
+  { cmd: '/exchange discover',        desc: 'Trigger peer discovery (stub)' },
+
+  // ── github ────────────────────────────────────────────────────────────────
+  { cmd: '/github status',            desc: 'GitHub integration status  [--repo OWNER/REPO] [--token-env VAR]' },
+  { cmd: '/github connect',           desc: 'Connect to repo  --repo OWNER/REPO  (stub)' },
+  { cmd: '/github push-goals',        desc: 'Push open goals as GH issues  [--dry-run]  (stub)' },
+  { cmd: '/github trigger-workflow',  desc: 'Trigger workflow  --workflow FILE [--ref-name REF] [--inputs JSON]' },
+
+  // ── work quality ──────────────────────────────────────────────────────────
+  { cmd: '/plan show',                desc: 'Show work plan' },
+  { cmd: '/plan create',              desc: 'Create work plan' },
+  { cmd: '/plan status',              desc: 'Work plan status' },
+  { cmd: '/check',                    desc: 'Run pre-flight checks' },
+  { cmd: '/quality',                  desc: 'Show or run quality gates' },
+  { cmd: '/context',                  desc: 'Show cognitive context summary' },
+  { cmd: '/classify ',                desc: 'Classify a work item  <input>' },
+  { cmd: '/derive',                   desc: 'Derive system manifest from patterns' },
+  { cmd: '/propose',                  desc: 'Propose a change  (§62z)' },
+
+  // ── runtime / upgrade ─────────────────────────────────────────────────────
+  { cmd: '/trial status',             desc: 'Show qualification trial status' },
+  { cmd: '/trial run',                desc: 'Run qualification trial  (stub)' },
+  { cmd: '/update check',             desc: 'Check for runtime updates' },
+  { cmd: '/update apply',             desc: 'Apply runtime update  (stub)' },
+  { cmd: '/update rollback',          desc: 'Rollback runtime update  (stub)' },
+  { cmd: '/features list',            desc: 'List runtime feature flags' },
+  { cmd: '/features toggle ',         desc: 'Toggle feature flag  <flag>' },
+  { cmd: '/crc',                      desc: 'Content-addressable CRC of runtime state' },
+
+  // ── product ───────────────────────────────────────────────────────────────
+  { cmd: '/product list',             desc: 'List product registry' },
+  { cmd: '/product show',             desc: 'Show product  --name NAME' },
+  { cmd: '/product create',           desc: 'Create product  --name NAME  (§62z)' },
+  { cmd: '/product activate',         desc: 'Activate product  --name NAME  (§62z)' },
+  { cmd: '/product switch',           desc: 'Switch active product  --name NAME  (§62z)' },
+  { cmd: '/product register',         desc: 'Register product  --name NAME  (§62z)' },
+  { cmd: '/product status',           desc: 'Active product status' },
+  { cmd: '/content list',             desc: 'List content store' },
+  { cmd: '/content show',             desc: 'Show content item  --id ID' },
+  { cmd: '/content add',              desc: 'Add content item  (stub)' },
+  { cmd: '/rollback',                 desc: 'Rollback to snapshot  [--to SNAPSHOT]  (§62z)' },
+  { cmd: '/peer-review list',         desc: 'List peer review requests' },
+  { cmd: '/peer-review submit',       desc: 'Submit peer review  (stub)' },
+
+  // ── OS passthrough examples ───────────────────────────────────────────────
+  { cmd: '! ls',                      desc: 'List current directory (OS)' },
+  { cmd: '! pwd',                     desc: 'Print working directory (OS)' },
+  { cmd: '! git log --oneline -10',   desc: 'Recent git commits (OS)' },
+  { cmd: '! git status',              desc: 'Git working tree status (OS)' },
+  { cmd: '! cat ~/.urace/config.json',desc: 'Print config file (OS)' },
+  { cmd: '! env | grep URACE',        desc: 'Show URACE env vars (OS)' },
 ];
 
-// ── Autocomplete ───────────────────────────────────────────────────────────
+// ── Autocomplete ───────────────────────────────────────────────────────────────
 const inputEl = document.getElementById('shell-input');
 const acEl    = document.getElementById('autocomplete');
-let acIdx = -1;
+let acIdx  = -1;
 let acItems = [];
 
 inputEl.addEventListener('input', onInput);
@@ -128,11 +204,15 @@ document.addEventListener('click', e => {
 });
 
 function onInput() {
-  const q = inputEl.value.trim().toLowerCase();
+  const q = inputEl.value;
+  const ql = q.toLowerCase();
   if (!q) { hideAC(); return; }
-  acItems = COMMANDS.filter(c =>
-    c.cmd.toLowerCase().startsWith(q) || c.cmd.toLowerCase().includes(q)
-  ).slice(0, 8);
+
+  acItems = COMMANDS.filter(c => {
+    const cl = c.cmd.toLowerCase();
+    return cl.startsWith(ql) || cl.includes(ql);
+  }).slice(0, 10);
+
   if (!acItems.length) { hideAC(); return; }
   acIdx = -1;
   renderAC();
@@ -143,7 +223,12 @@ function renderAC() {
   acItems.forEach((item, i) => {
     const row = document.createElement('div');
     row.className = 'ac-item' + (i === acIdx ? ' ac-active' : '');
-    row.innerHTML = `<span class="ac-cmd">${escHtml(item.cmd)}</span><span class="ac-desc">${escHtml(item.desc)}</span>`;
+    const isOs = item.cmd.startsWith('!');
+    const prefix = isOs
+      ? '<span class="ac-prefix ac-prefix-os">!</span>'
+      : '<span class="ac-prefix ac-prefix-urace">/</span>';
+    const cmdDisplay = isOs ? item.cmd.slice(1).trim() : item.cmd.slice(1).trim();
+    row.innerHTML = `${prefix}<span class="ac-cmd">${escHtml(cmdDisplay)}</span><span class="ac-desc">${escHtml(item.desc)}</span>`;
     row.addEventListener('mousedown', e => { e.preventDefault(); selectAC(i); });
     acEl.appendChild(row);
   });
@@ -173,7 +258,7 @@ function onKeyDown(e) {
 }
 
 function selectAC(i) {
-  inputEl.value = acItems[i].cmd + ' ';
+  inputEl.value = acItems[i].cmd;
   hideAC();
   inputEl.focus();
 }
@@ -188,7 +273,7 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// ── Submit ─────────────────────────────────────────────────────────────────
+// ── Submit ─────────────────────────────────────────────────────────────────────
 async function submitCommand() {
   hideAC();
   const input = inputEl.value.trim();
@@ -227,8 +312,14 @@ async function submitCommand() {
           const data = line.slice(6);
           if (data === '[DONE]') break;
           const div = document.createElement('div');
-          div.className = 'shell-line';
-          div.textContent = data;
+          // ANSI red escape from stderr → style as error
+          if (data.includes('\x1b[31m')) {
+            div.className = 'shell-line shell-error';
+            div.textContent = data.replace(/\x1b\[[0-9;]*m/g, '');
+          } else {
+            div.className = 'shell-line';
+            div.textContent = data;
+          }
           output.appendChild(div);
           output.scrollTop = output.scrollHeight;
         }
@@ -239,8 +330,8 @@ async function submitCommand() {
     div.className = 'shell-line shell-error';
     div.textContent = 'Error: ' + err.message;
     output.appendChild(div);
-    output.scrollTop = output.scrollHeight;
   }
+  output.scrollTop = output.scrollHeight;
 }
 
 document.body.addEventListener('htmx:afterSwap', function(e) {

@@ -1183,6 +1183,19 @@ code { font-family: var(--mono); }
   transition: background 0.08s;
 }
 .ac-item:hover, .ac-item.ac-active { background: var(--bg-hover); }
+.ac-prefix {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  border-radius: 3px;
+  padding: 0 2px;
+  margin-right: 0.3rem;
+}
+.ac-prefix-urace { color: #818cf8; background: rgba(99,102,241,0.12); }
+.ac-prefix-os    { color: #34d399; background: rgba(52,211,153,0.1); }
 .ac-cmd { color: var(--text); font-family: var(--mono); font-size: 0.8rem; white-space: nowrap; flex-shrink: 0; }
 .ac-desc { color: var(--text-3); font-size: 0.74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
