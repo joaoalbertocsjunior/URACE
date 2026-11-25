@@ -89,7 +89,7 @@ libc              = "0.2"
 sysinfo           = { version = "0.32", default-features = false, features = ["system", "disk"] }
 petgraph          = "0.6"
 axum-extra        = { version = "0.9", features = ["typed-header"] }
-octocrab          = "0.41"
+octocrab          = "0.54"
 notify            = "6"
 git2              = { version = "0.19", default-features = false }
 
