@@ -2,34 +2,198 @@
 {% block title_suffix %} — Shell{% endblock %}
 
 {% block content %}
-<div id="cycle-warning" class="cycle-warning" style="display:none">
-  A cycle is currently active. Commands may interact with live state.
+<div class="page-header">
+  <h1 class="page-title">Shell</h1>
+  <p class="page-subtitle">Run URACE commands or natural language instructions</p>
 </div>
+
+<div id="cycle-warning" class="banner banner-warn" style="display:none">
+  A cycle is currently active — commands may interact with live state.
+</div>
+
 <div class="shell-container">
   <div id="output" class="shell-output"></div>
-  <div class="shell-input-row">
-    <input type="text" id="shell-input" class="shell-input" placeholder="Enter command or natural language..." autocomplete="off" autofocus>
-    <button id="shell-submit" onclick="submitCommand()">Run</button>
+  <div class="shell-input-wrap">
+    <div id="autocomplete" class="autocomplete-dropdown" style="display:none"></div>
+    <div class="shell-input-row">
+      <span class="shell-prompt-glyph">›</span>
+      <input type="text" id="shell-input" class="shell-input"
+             placeholder="daemon start  ·  goals list  ·  or describe a task…"
+             autocomplete="off" autofocus>
+      <button id="shell-submit" class="btn" onclick="submitCommand()">Run</button>
+    </div>
   </div>
 </div>
 
 <script>
 const TOKEN = {{ token | tojson }};
 
-document.getElementById('shell-input').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') submitCommand();
+// ── Command catalogue ──────────────────────────────────────────────────────
+const COMMANDS = [
+  // daemon
+  { cmd: 'daemon start',    desc: 'Start the URACE daemon' },
+  { cmd: 'daemon stop',     desc: 'Stop the daemon gracefully' },
+  { cmd: 'daemon restart',  desc: 'Restart the daemon' },
+  { cmd: 'daemon status',   desc: 'Show daemon health and uptime' },
+  // cycle
+  { cmd: 'cycle start',     desc: 'Begin a new improvement cycle' },
+  { cmd: 'cycle stop',      desc: 'Halt the current cycle' },
+  { cmd: 'cycle status',    desc: 'Show current cycle state' },
+  { cmd: 'cycle list',      desc: 'List past cycles' },
+  // goals
+  { cmd: 'goals list',      desc: 'List active goals' },
+  { cmd: 'goals create',    desc: 'Create a new goal (requires authority)' },
+  { cmd: 'goals review',    desc: 'Review pending goal proposals' },
+  { cmd: 'goals archive',   desc: 'Archive completed goals' },
+  // inbox
+  { cmd: 'inbox list',      desc: 'List inbox messages' },
+  { cmd: 'inbox mark-read', desc: 'Mark all messages as read' },
+  { cmd: 'inbox clear',     desc: 'Clear resolved messages' },
+  // sources
+  { cmd: 'sources list',    desc: 'List registered data sources' },
+  { cmd: 'sources sync',    desc: 'Trigger an immediate source sync' },
+  { cmd: 'sources add',     desc: 'Register a new source adapter' },
+  { cmd: 'sources status',  desc: 'Show sync status per source' },
+  // wallet
+  { cmd: 'wallet balance',  desc: 'Show UCR balance' },
+  { cmd: 'wallet transfer', desc: 'Transfer UCR to a peer (requires authority)' },
+  { cmd: 'wallet history',  desc: 'Show transaction history' },
+  // exchange
+  { cmd: 'exchange list',   desc: 'List available features on the exchange' },
+  { cmd: 'exchange buy',    desc: 'Purchase a feature (requires authority)' },
+  { cmd: 'exchange sell',   desc: 'List a feature for sale' },
+  // portfolio
+  { cmd: 'portfolio list',  desc: 'Show owned feature portfolio' },
+  { cmd: 'portfolio value', desc: 'Estimate portfolio value' },
+  // fleet
+  { cmd: 'fleet list',      desc: 'List connected fleet nodes' },
+  { cmd: 'fleet add',       desc: 'Add a node to the fleet' },
+  { cmd: 'fleet remove',    desc: 'Remove a node from the fleet' },
+  // products
+  { cmd: 'products list',   desc: 'List registered products' },
+  { cmd: 'products status', desc: 'Show product delivery status' },
+  // audit
+  { cmd: 'audit list',      desc: 'Show recent audit events' },
+  { cmd: 'audit verify',    desc: 'Verify ledger HMAC chain' },
+  { cmd: 'audit export',    desc: 'Export audit log to JSON' },
+  // compliance
+  { cmd: 'compliance check',  desc: 'Run compliance checks' },
+  { cmd: 'compliance report', desc: 'Generate a compliance report' },
+  // rules
+  { cmd: 'rules list',      desc: 'List policy rules' },
+  { cmd: 'rules add',       desc: 'Add a policy rule' },
+  { cmd: 'rules remove',    desc: 'Remove a policy rule' },
+  // config
+  { cmd: 'config get',      desc: 'Get a config value' },
+  { cmd: 'config set',      desc: 'Set a config value' },
+  { cmd: 'config list',     desc: 'List all config keys' },
+  { cmd: 'config reset',    desc: 'Reset config to defaults' },
+  // github
+  { cmd: 'github sync',     desc: 'Sync GitHub source' },
+  { cmd: 'github status',   desc: 'Show GitHub integration status' },
+  { cmd: 'github issues',   desc: 'List open GitHub issues' },
+  // authority
+  { cmd: 'authority status',  desc: 'Show authority decision queue' },
+  { cmd: 'authority approve', desc: 'Approve a pending decision' },
+  { cmd: 'authority deny',    desc: 'Deny a pending decision' },
+  // executor
+  { cmd: 'executor list',   desc: 'List active executor tasks' },
+  { cmd: 'executor cancel', desc: 'Cancel a running task' },
+  // logs
+  { cmd: 'logs tail',       desc: 'Tail the daemon log stream' },
+  { cmd: 'logs search',     desc: 'Search logs by keyword' },
+  // metrics
+  { cmd: 'metrics show',    desc: 'Show runtime metrics snapshot' },
+  // general
+  { cmd: 'help',            desc: 'List all available commands' },
+  { cmd: 'version',         desc: 'Show URACE version' },
+  { cmd: 'status',          desc: 'Overall system status summary' },
+];
+
+// ── Autocomplete ───────────────────────────────────────────────────────────
+const inputEl = document.getElementById('shell-input');
+const acEl    = document.getElementById('autocomplete');
+let acIdx = -1;
+let acItems = [];
+
+inputEl.addEventListener('input', onInput);
+inputEl.addEventListener('keydown', onKeyDown);
+document.addEventListener('click', e => {
+  if (!acEl.contains(e.target) && e.target !== inputEl) hideAC();
 });
 
+function onInput() {
+  const q = inputEl.value.trim().toLowerCase();
+  if (!q) { hideAC(); return; }
+  acItems = COMMANDS.filter(c =>
+    c.cmd.toLowerCase().startsWith(q) || c.cmd.toLowerCase().includes(q)
+  ).slice(0, 8);
+  if (!acItems.length) { hideAC(); return; }
+  acIdx = -1;
+  renderAC();
+}
+
+function renderAC() {
+  acEl.innerHTML = '';
+  acItems.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'ac-item' + (i === acIdx ? ' ac-active' : '');
+    row.innerHTML = `<span class="ac-cmd">${escHtml(item.cmd)}</span><span class="ac-desc">${escHtml(item.desc)}</span>`;
+    row.addEventListener('mousedown', e => { e.preventDefault(); selectAC(i); });
+    acEl.appendChild(row);
+  });
+  acEl.style.display = 'block';
+}
+
+function onKeyDown(e) {
+  if (acEl.style.display === 'none') {
+    if (e.key === 'Enter') submitCommand();
+    return;
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    acIdx = Math.min(acIdx + 1, acItems.length - 1);
+    renderAC();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    acIdx = Math.max(acIdx - 1, 0);
+    renderAC();
+  } else if (e.key === 'Tab' || e.key === 'Enter') {
+    e.preventDefault();
+    if (acIdx >= 0) selectAC(acIdx);
+    else if (e.key === 'Enter') { hideAC(); submitCommand(); }
+  } else if (e.key === 'Escape') {
+    hideAC();
+  }
+}
+
+function selectAC(i) {
+  inputEl.value = acItems[i].cmd + ' ';
+  hideAC();
+  inputEl.focus();
+}
+
+function hideAC() {
+  acEl.style.display = 'none';
+  acItems = [];
+  acIdx = -1;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Submit ─────────────────────────────────────────────────────────────────
 async function submitCommand() {
-  const inputEl = document.getElementById('shell-input');
+  hideAC();
   const input = inputEl.value.trim();
   if (!input) return;
   inputEl.value = '';
 
   const output = document.getElementById('output');
   const prompt = document.createElement('div');
-  prompt.className = 'shell-prompt';
-  prompt.textContent = '> ' + input;
+  prompt.className = 'shell-prompt-line';
+  prompt.textContent = '› ' + input;
   output.appendChild(prompt);
   output.scrollTop = output.scrollHeight;
 
@@ -40,7 +204,7 @@ async function submitCommand() {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ' + TOKEN,
       },
-      body: JSON.stringify({input}),
+      body: JSON.stringify({ input }),
     });
 
     const reader = resp.body.getReader();
@@ -48,9 +212,9 @@ async function submitCommand() {
     let buf = '';
 
     while (true) {
-      const {done, value} = await reader.read();
+      const { done, value } = await reader.read();
       if (done) break;
-      buf += decoder.decode(value, {stream: true});
+      buf += decoder.decode(value, { stream: true });
       const lines = buf.split('\n');
       buf = lines.pop();
       for (const line of lines) {
@@ -75,9 +239,9 @@ async function submitCommand() {
 }
 
 document.body.addEventListener('htmx:afterSwap', function(e) {
-  if (e.detail.target.id === 'daemon-bar') {
-    const hasCycleBadge = e.detail.target.querySelector('.cycle-badge') !== null;
-    document.getElementById('cycle-warning').style.display = hasCycleBadge ? 'block' : 'none';
+  if (e.detail.target && e.detail.target.id === 'daemon-bar') {
+    const hasCycle = e.detail.target.querySelector('.cycle-badge') !== null;
+    document.getElementById('cycle-warning').style.display = hasCycle ? 'flex' : 'none';
   }
 });
 </script>

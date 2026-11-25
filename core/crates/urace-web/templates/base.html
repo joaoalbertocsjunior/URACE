@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>URACE{% block title_suffix %}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <link rel="stylesheet" href="/static/style.css">
   <script>window.__URACE_TOKEN__ = {{ token | tojson }};</script>
@@ -13,17 +16,15 @@
   document.addEventListener('htmx:configRequest', function(e) {
     e.detail.headers['Authorization'] = 'Bearer ' + window.__URACE_TOKEN__;
   });
-</script>
-  <script>
   document.addEventListener('htmx:afterRequest', function(e) {
-    if (e.detail.elt && e.detail.elt.id === 'inbox-badge') {
+    if (e.detail.elt && e.detail.elt.id === 'inbox-badge-trigger') {
       try {
         const data = JSON.parse(e.detail.xhr.responseText);
         const badge = document.getElementById('inbox-badge');
         if (badge) {
           if (data.count > 0) {
             badge.textContent = data.count;
-            badge.style.display = 'inline';
+            badge.style.display = 'inline-flex';
           } else {
             badge.style.display = 'none';
           }
@@ -31,40 +32,134 @@
       } catch (_) {}
     }
   });
-  </script>
-  <nav class="topnav">
-    <span class="brand">URACE</span>
-    <div class="nav-links">
-      <a href="/shell" {% if active == 'shell' %}class="active"{% endif %}>Shell</a>
-      <a href="/config" {% if active == 'config' %}class="active"{% endif %}>Config</a>
-      <a href="/vitals" {% if active == 'vitals' %}class="active"{% endif %}>Vitals</a>
-      <a href="/wallet" {% if active == 'wallet' %}class="active"{% endif %}>Wallet</a>
-      <a href="/cycle" {% if active == 'cycle' %}class="active"{% endif %}>Cycle</a>
-      <a href="/goals" {% if active == 'goals' %}class="active"{% endif %}>Goals</a>
-      <a href="/inbox" {% if active == 'inbox' %}class="active"{% endif %}>Inbox<span id="inbox-badge"
-           hx-get="/api/inbox/count"
-           hx-trigger="load, every 30s"
-           hx-swap="none"
-           style="display:none"></span></a>
-      <a href="/audit" {% if active == 'audit' %}class="active"{% endif %}>Audit</a>
-      <a href="/compliance" {% if active == 'compliance' %}class="active"{% endif %}>Compliance</a>
-      <a href="/rules" {% if active == 'rules' %}class="active"{% endif %}>Rules</a>
-      <a href="/github" {% if active == 'github' %}class="active"{% endif %}>GitHub</a>
-      <a href="/exchange" {% if active == 'exchange' %}class="active"{% endif %}>Exchange</a>
-      <a href="/products" {% if active == 'products' %}class="active"{% endif %}>Products</a>
-      <a href="/fleet" {% if active == 'fleet' %}class="active"{% endif %}>Fleet</a>
-      <a href="/portfolio" {% if active == 'portfolio' %}class="active"{% endif %}>Portfolio</a>
-      <a href="/sources" {% if active == 'sources' %}class="active"{% endif %}>Sources</a>
+</script>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <svg class="brand-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="12,2 22,8 22,16 12,22 2,16 2,8" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+      </svg>
+      <span class="brand-name">URACE</span>
     </div>
-    <div class="daemon-controls" id="daemon-bar"
-         hx-get="/api/daemon/status"
-         hx-trigger="load, every 5s"
-         hx-swap="innerHTML">
-      <span class="status-dot unknown"></span> checking...
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <span class="nav-section-label">Overview</span>
+        <a href="/" class="nav-item {% if active == 'index' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M2 6L8 2l6 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z" stroke="currentColor" stroke-width="1.2"/></svg>
+          Dashboard
+        </a>
+        <a href="/shell" class="nav-item {% if active == 'shell' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><polyline points="3,5 7,8 3,11" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><line x1="8" y1="11" x2="13" y2="11" stroke="currentColor" stroke-width="1.2"/></svg>
+          Shell
+        </a>
+        <a href="/vitals" class="nav-item {% if active == 'vitals' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><polyline points="1,8 4,4 7,10 10,6 13,8 15,8" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Vitals
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-section-label">Work</span>
+        <a href="/goals" class="nav-item {% if active == 'goals' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.2"/></svg>
+          Goals
+        </a>
+        <a href="/inbox" class="nav-item {% if active == 'inbox' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><polyline points="2,6 8,9.5 14,6" stroke="currentColor" stroke-width="1.2"/></svg>
+          Inbox
+          <span id="inbox-badge" class="nav-badge" style="display:none"></span>
+          <span id="inbox-badge-trigger"
+               hx-get="/api/inbox/count"
+               hx-trigger="load, every 30s"
+               hx-swap="none"
+               style="display:none"></span>
+        </a>
+        <a href="/sources" class="nav-item {% if active == 'sources' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="4" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.2"/><circle cx="12" cy="12" r="2" stroke="currentColor" stroke-width="1.2"/><line x1="6" y1="7" x2="10" y2="5" stroke="currentColor" stroke-width="1.2"/><line x1="6" y1="9" x2="10" y2="11" stroke="currentColor" stroke-width="1.2"/></svg>
+          Sources
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-section-label">Finance</span>
+        <a href="/wallet" class="nav-item {% if active == 'wallet' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="4" width="14" height="10" rx="1" stroke="currentColor" stroke-width="1.2"/><path d="M1 7h14" stroke="currentColor" stroke-width="1.2"/><circle cx="11.5" cy="10.5" r="1" fill="currentColor"/></svg>
+          Wallet
+        </a>
+        <a href="/exchange" class="nav-item {% if active == 'exchange' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><polyline points="2,10 6,6 9,9 14,4" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/><polyline points="10,4 14,4 14,8" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Exchange
+        </a>
+        <a href="/portfolio" class="nav-item {% if active == 'portfolio' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="9" width="3" height="5" rx="0.5" fill="currentColor" opacity="0.6"/><rect x="6.5" y="6" width="3" height="8" rx="0.5" fill="currentColor" opacity="0.8"/><rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor"/></svg>
+          Portfolio
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-section-label">Network</span>
+        <a href="/fleet" class="nav-item {% if active == 'fleet' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="6" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="6" height="5" rx="1" stroke="currentColor" stroke-width="1.2"/><rect x="5" y="10" width="6" height="4" rx="1" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="7" x2="4" y2="10" stroke="currentColor" stroke-width="1.2"/><line x1="12" y1="7" x2="12" y2="10" stroke="currentColor" stroke-width="1.2"/><line x1="4" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="1.2"/></svg>
+          Fleet
+        </a>
+        <a href="/products" class="nav-item {% if active == 'products' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="5" height="5" rx="0.5" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="2" width="5" height="5" rx="0.5" stroke="currentColor" stroke-width="1.2"/><rect x="2" y="9" width="5" height="5" rx="0.5" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="5" height="5" rx="0.5" stroke="currentColor" stroke-width="1.2"/></svg>
+          Products
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-section-label">Governance</span>
+        <a href="/audit" class="nav-item {% if active == 'audit' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M8 1L2 4v5c0 3.3 2.5 5.7 6 7 3.5-1.3 6-3.7 6-7V4L8 1z" stroke="currentColor" stroke-width="1.2"/></svg>
+          Audit
+        </a>
+        <a href="/compliance" class="nav-item {% if active == 'compliance' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M13 3H3a1 1 0 00-1 1v9l3-2h8a1 1 0 001-1V4a1 1 0 00-1-1z" stroke="currentColor" stroke-width="1.2"/><line x1="5" y1="7" x2="11" y2="7" stroke="currentColor" stroke-width="1.2"/><line x1="5" y1="9.5" x2="9" y2="9.5" stroke="currentColor" stroke-width="1.2"/></svg>
+          Compliance
+        </a>
+        <a href="/rules" class="nav-item {% if active == 'rules' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><line x1="3" y1="4" x2="13" y2="4" stroke="currentColor" stroke-width="1.2"/><line x1="3" y1="8" x2="10" y2="8" stroke="currentColor" stroke-width="1.2"/><line x1="3" y1="12" x2="7" y2="12" stroke="currentColor" stroke-width="1.2"/></svg>
+          Rules
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <span class="nav-section-label">Integrations</span>
+        <a href="/github" class="nav-item {% if active == 'github' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M8 1C4.1 1 1 4.1 1 8c0 3.1 2 5.7 4.8 6.6.4.1.5-.2.5-.4v-1.4c-2 .4-2.4-.5-2.5-.9-.1-.2-.5-.9-.9-1.1-.3-.1-.7-.5 0-.5.7 0 1.1.6 1.3.9.7 1.2 1.9.9 2.3.7.1-.5.3-.9.5-1.1-1.8-.2-3.6-.9-3.6-4 0-.9.3-1.6.9-2.1-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.4.9A8.4 8.4 0 018 3.9c.7 0 1.5.1 2.2.3 1.6-1.1 2.3-.9 2.3-.9.5 1.1.2 1.9.1 2.1.6.5.9 1.2.9 2.1 0 3.1-1.9 3.8-3.7 4 .3.3.6.8.6 1.5v2.2c0 .2.1.5.5.4A7 7 0 0015 8c0-3.9-3.1-7-7-7z" fill="currentColor"/></svg>
+          GitHub
+        </a>
+        <a href="/cycle" class="nav-item {% if active == 'cycle' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M13 8A5 5 0 112 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><polyline points="2,3 2,6 5,6" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+          Cycle
+        </a>
+        <a href="/config" class="nav-item {% if active == 'config' %}active{% endif %}">
+          <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          Config
+        </a>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div id="daemon-bar"
+           hx-get="/api/daemon/status"
+           hx-trigger="load, every 5s"
+           hx-swap="innerHTML">
+        <span class="status-dot unknown"></span>
+        <span class="daemon-label">Checking…</span>
+      </div>
     </div>
-  </nav>
+  </aside>
+
+  <!-- Main content -->
   <main>
     {% block content %}{% endblock %}
   </main>
+</div>
 </body>
 </html>

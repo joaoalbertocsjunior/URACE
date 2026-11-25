@@ -2,53 +2,117 @@
 {% block title_suffix %} — Config{% endblock %}
 
 {% block content %}
-<div class="config-page">
-  <h1>Configuration</h1>
-  <div id="save-msg" class="save-msg" style="display:none"></div>
+<div class="page-header">
+  <h1 class="page-title">Configuration</h1>
+  <p class="page-subtitle">Runtime settings for the URACE daemon</p>
+</div>
 
-  {% set sections = {} %}
-  {% for field in fields %}
-    {% set parts = field.path.split('.') %}
-    {% set section = parts[0] if parts|length > 1 else 'general' %}
-    {% if section not in sections %}
-      {% set _ = sections.update({section: []}) %}
-    {% endif %}
-    {% set _ = sections[section].append(field) %}
-  {% endfor %}
+<div id="save-toast" class="toast" style="display:none"></div>
 
-  {% for section, section_fields in sections.items() %}
-  <div class="config-section">
-    <h2 class="section-title">{{ section }}</h2>
-    {% for field in section_fields %}
-    <div class="field-row" id="field-{{ field.path | replace('.', '-') }}">
-      <label class="field-label">{{ field.path }}</label>
-      {% set current = values.get(field.path, field.default) %}
-      {% if field.type == 'bool' %}
-        <input type="checkbox" class="field-input" data-key="{{ field.path }}"
-               {% if current %}checked{% endif %}>
-      {% elif field.type == 'int' %}
-        <input type="number" class="field-input" data-key="{{ field.path }}"
-               value="{{ current }}">
-      {% elif field.type == 'enum' and field.options %}
-        <select class="field-input" data-key="{{ field.path }}">
-          {% for opt in field.options %}
-          <option value="{{ opt }}" {% if current == opt %}selected{% endif %}>{{ opt }}</option>
-          {% endfor %}
-        </select>
-      {% else %}
-        <input type="text" class="field-input" data-key="{{ field.path }}"
-               value="{{ current if current is not none else '' }}">
-      {% endif %}
-      <small class="field-desc">{{ field.description }}</small>
-      <button class="save-field-btn" onclick="saveField('{{ field.path }}', '{{ field.type }}')">Save</button>
-    </div>
-    {% endfor %}
+<div id="config-body">
+  <div class="empty-state">
+    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="24" cy="24" r="8" stroke="currentColor" stroke-width="2"/>
+      <path d="M24 4v4M24 40v4M4 24h4M40 24h4M8.3 8.3l2.8 2.8M36.9 36.9l2.8 2.8M8.3 39.7l2.8-2.8M36.9 11.1l2.8-2.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <p>Loading configuration…</p>
   </div>
-  {% endfor %}
 </div>
 
 <script>
-window.__URACE_TOKEN__ = {{ token | tojson }};
+const TOKEN = {{ token | tojson }};
+
+const FIELD_SCHEMA = [
+  { path: 'network.port',         type: 'int',    description: 'HTTP port for the web UI', default: '7401' },
+  { path: 'network.bind',         type: 'string', description: 'Bind address', default: '127.0.0.1' },
+  { path: 'network.p2p_port',     type: 'int',    description: 'P2P listen port', default: '7402' },
+  { path: 'daemon.auto_start',    type: 'bool',   description: 'Start daemon on launch', default: 'false' },
+  { path: 'daemon.log_level',     type: 'enum',   description: 'Log verbosity', options: ['error','warn','info','debug','trace'], default: 'info' },
+  { path: 'daemon.max_cycles',    type: 'int',    description: 'Max improvement cycles before pause (0 = unlimited)', default: '0' },
+  { path: 'executor.timeout_secs',type: 'int',    description: 'Executor task timeout in seconds', default: '60' },
+  { path: 'executor.max_retries', type: 'int',    description: 'Max retry attempts per task', default: '3' },
+  { path: 'executor.sandbox',     type: 'bool',   description: 'Enforce sandbox boundary', default: 'true' },
+  { path: 'goals.auto_suggest',   type: 'bool',   description: 'Enable auto goal suggestion', default: 'true' },
+  { path: 'goals.min_score_delta',type: 'int',    description: 'Minimum score delta to trigger mint', default: '1' },
+  { path: 'ledger.hmac_verify',   type: 'bool',   description: 'Verify HMAC chain on startup', default: 'true' },
+  { path: 'ledger.append_only',   type: 'bool',   description: 'Enforce append-only mode', default: 'true' },
+  { path: 'authority.mode',       type: 'enum',   description: 'Authority decision mode', options: ['strict','permissive','audit_only'], default: 'strict' },
+  { path: 'sources.sync_interval_secs', type: 'int', description: 'Source sync interval in seconds', default: '300' },
+  { path: 'sources.circuit_breaker_threshold', type: 'int', description: 'Failures before circuit opens', default: '5' },
+];
+
+async function loadConfig() {
+  let values = {};
+  try {
+    const r = await fetch('/api/config/values', {
+      headers: { 'Authorization': 'Bearer ' + TOKEN }
+    });
+    if (r.ok) values = await r.json();
+  } catch (_) {}
+
+  const sections = {};
+  for (const field of FIELD_SCHEMA) {
+    const parts = field.path.split('.');
+    const section = parts.length > 1 ? parts[0] : 'general';
+    if (!sections[section]) sections[section] = [];
+    sections[section].push(field);
+  }
+
+  const body = document.getElementById('config-body');
+  body.innerHTML = '';
+
+  for (const [section, fields] of Object.entries(sections)) {
+    const sec = document.createElement('div');
+    sec.className = 'config-section';
+    sec.innerHTML = `<h2 class="section-title">${section}</h2>`;
+    for (const field of fields) {
+      const current = getNestedValue(values, field.path) ?? field.default;
+      sec.appendChild(buildFieldRow(field, current));
+    }
+    body.appendChild(sec);
+  }
+}
+
+function getNestedValue(obj, path) {
+  return path.split('.').reduce((o, k) => (o && o[k] !== undefined ? o[k] : undefined), obj);
+}
+
+function buildFieldRow(field, current) {
+  const row = document.createElement('div');
+  row.className = 'field-row';
+  row.id = 'field-' + field.path.replace(/\./g, '-');
+
+  let inputHtml = '';
+  if (field.type === 'bool') {
+    const checked = (current === true || current === 'true') ? 'checked' : '';
+    inputHtml = `<label class="toggle"><input type="checkbox" class="field-input" data-key="${field.path}" data-type="bool" ${checked}><span class="toggle-track"></span></label>`;
+  } else if (field.type === 'int') {
+    inputHtml = `<input type="number" class="field-input" data-key="${field.path}" data-type="int" value="${escHtml(String(current ?? ''))}">`;
+  } else if (field.type === 'enum' && field.options) {
+    const opts = field.options.map(o =>
+      `<option value="${escHtml(o)}" ${current === o ? 'selected' : ''}>${escHtml(o)}</option>`
+    ).join('');
+    inputHtml = `<select class="field-input" data-key="${field.path}" data-type="enum">${opts}</select>`;
+  } else {
+    inputHtml = `<input type="text" class="field-input" data-key="${field.path}" data-type="string" value="${escHtml(String(current ?? ''))}">`;
+  }
+
+  row.innerHTML = `
+    <div class="field-meta">
+      <span class="field-label">${escHtml(field.path)}</span>
+      <span class="field-desc">${escHtml(field.description)}</span>
+    </div>
+    <div class="field-control">
+      ${inputHtml}
+      <button class="btn btn-sm" onclick="saveField('${field.path}', '${field.type}')">Save</button>
+    </div>
+  `;
+  return row;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
 async function saveField(key, type) {
   const row = document.getElementById('field-' + key.replace(/\./g, '-'));
@@ -60,31 +124,31 @@ async function saveField(key, type) {
     value = input.value;
   }
 
-  const msg = document.getElementById('save-msg');
   try {
     const resp = await fetch('/api/config/set', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + window.__URACE_TOKEN__,
+        'Authorization': 'Bearer ' + TOKEN,
       },
-      body: JSON.stringify({key, value}),
+      body: JSON.stringify({ key, value }),
     });
     const data = await resp.json();
-    msg.style.display = 'block';
-    if (resp.ok) {
-      msg.className = 'save-msg save-ok';
-      msg.textContent = key + ' saved.';
-    } else {
-      msg.className = 'save-msg save-error';
-      msg.textContent = data.detail || 'Save failed.';
-    }
+    showToast(resp.ok ? `${key} saved` : (data.detail || 'Save failed'), resp.ok ? 'ok' : 'error');
   } catch (err) {
-    msg.style.display = 'block';
-    msg.className = 'save-msg save-error';
-    msg.textContent = 'Error: ' + err.message;
+    showToast('Error: ' + err.message, 'error');
   }
-  setTimeout(() => { msg.style.display = 'none'; }, 3000);
 }
+
+function showToast(msg, type) {
+  const t = document.getElementById('save-toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+loadConfig();
 </script>
 {% endblock %}
