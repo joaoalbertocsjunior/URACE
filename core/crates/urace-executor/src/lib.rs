@@ -10,6 +10,7 @@
 
 pub mod capabilities;
 pub mod multi_executor;
+pub mod retry_engine;
 pub mod routing;
 
 pub use capabilities::{builtins, select_skill, SkillContract, SKILL_VOCABULARY};
@@ -18,6 +19,7 @@ pub use multi_executor::{
     BudgetSlot, DimensionScores, DiscoverFn, MultiExecutorError, MultiPlanSettings, ScoreWeights,
     ScoredCandidate, SCHEMA as MULTI_PLAN_SCHEMA,
 };
+pub use retry_engine::{parse_retry_after, RetryEngine, RetryOutcome, RetryPolicy};
 pub use routing::{select_provider, ProviderDef, UnavailabilityClass};
 
 use serde::{Deserialize, Serialize};
