@@ -7,7 +7,6 @@
 use crate::matching::{select_best_bid, DemandCounter, WorkBid, WorkTask};
 use crate::work_policy::{PolicyViolation, WorkPolicy};
 use dashmap::DashMap;
-use serde_json::json;
 use thiserror::Error;
 use tracing::{debug, warn};
 

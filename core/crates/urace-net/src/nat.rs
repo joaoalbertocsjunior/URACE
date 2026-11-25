@@ -13,7 +13,7 @@ use std::net::UdpSocket;
 use tokio::net::UdpSocket as TokioUdpSocket;
 use tracing::{debug, warn};
 
-use crate::stun::{parse_stun_response, StunError, STUN_MAGIC_COOKIE};
+use crate::stun::{parse_stun_response, StunError};
 
 /// Bootstrap STUN servers queried during NAT detection.
 pub const DEFAULT_STUN_SERVERS: &[&str] = &[

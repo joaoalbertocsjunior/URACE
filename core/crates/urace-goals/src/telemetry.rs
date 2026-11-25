@@ -6,7 +6,7 @@
 
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use thiserror::Error;
 use urace_ledger::{Journal, JournalError};
 
@@ -104,6 +104,7 @@ impl TelemetryEmitter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use tempfile::tempdir;
 
     const KEY: [u8; 32] = *b"telemetry-key-32bytes-pad-------";

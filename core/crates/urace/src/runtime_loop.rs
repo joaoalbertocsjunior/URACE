@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use urace_audit::{AuditEvent, AuditKind, AuditLedger};
 use urace_goals::{GoalStore, TelemetryEmitter, TelemetryEvent};

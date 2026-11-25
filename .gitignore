@@ -48,12 +48,9 @@
 !/core/crates/urace-types/
 !/core/crates/urace-upgrade/
 !/core/crates/urace-exchange/
-!/core/crates/urace-patterns/
 !/core/crates/urace-primitives/
-!/core/crates/urace-util/
 !/core/crates/urace-web/
 !/core/crates/urace-work/
-!/core/crates/sources/
 !/core/crates/urace/
 
 # Exchange: token contract stub only; initial_ledger published on stable release

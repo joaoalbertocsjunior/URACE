@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-use crate::p2p_pair_protocol::{ARMS, COST_SCHEMA, SCHEMA};
+use crate::p2p_pair_protocol::{ARMS, COST_SCHEMA};
 use crate::p2p_study_plan::{verify_plan, CohortPlan};
 
 // ---------------------------------------------------------------------------

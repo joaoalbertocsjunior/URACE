@@ -10,7 +10,6 @@
 use crate::atomic_write::atomic_append_jsonl;
 use hmac::{Hmac, Mac};
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::Sha256;
 use std::path::{Path, PathBuf};
@@ -146,7 +145,6 @@ impl Journal {
 }
 
 fn constant_time_eq(a: &str, b: &str) -> bool {
-    use hmac::digest::CtOutput;
     if a.len() != b.len() {
         return false;
     }

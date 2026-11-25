@@ -34,7 +34,7 @@ use urace_web;
 #[allow(unused_imports)]
 use urace_tui::{App, Panel, SourceEntry, WorkTask as TuiWorkTask, SettlementEntry};
 use crate::cli::{
-    Cli, Commands, ConfigArgs, ConfigCommands, ExchangeArgs, RunArgs, SourceCommands, StatusArgs,
+    Cli, Commands, ConfigArgs, ConfigCommands, RunArgs, SourceCommands, StatusArgs,
     TuiArgs, WebArgs, WorkCommands,
 };
 use crate::state::RuntimeState;
@@ -564,7 +564,7 @@ async fn handle_work(
 
 async fn handle_tui(root: &std::path::Path, _args: TuiArgs) -> Result<()> {
     use crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event},
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     };

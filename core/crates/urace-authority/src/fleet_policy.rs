@@ -10,7 +10,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::sync::Arc;
 use parking_lot::RwLock;
 use thiserror::Error;
 use urace_crypto::ed25519::{verify as ed25519_verify, Keypair, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};

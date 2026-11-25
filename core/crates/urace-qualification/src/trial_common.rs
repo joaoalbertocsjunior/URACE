@@ -102,7 +102,7 @@ pub fn trial_identifier() -> String {
 
 /// Convert days since the Unix epoch to (year, month, day) in the proleptic
 /// Gregorian calendar. This avoids pulling in `chrono` for a simple timestamp.
-fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
+fn days_to_ymd(days: u64) -> (u64, u64, u64) {
     // Algorithm: https://www.researchgate.net/publication/316558298
     // Adapted from Howard Hinnant's civil-from-days.
     let days = days as i64 + 719_468; // shift to 1 Mar 0000

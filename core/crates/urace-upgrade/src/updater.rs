@@ -6,7 +6,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Debug, Error)]
 pub enum UpdateError {

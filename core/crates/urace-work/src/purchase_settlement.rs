@@ -4,7 +4,6 @@
 //! never modified. `SettlementStore` provides a running total query.
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use thiserror::Error;
 use urace_ledger::{Journal, JournalError};
 

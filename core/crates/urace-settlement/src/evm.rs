@@ -96,7 +96,7 @@ impl EvmSettlementAdapter {
     }
 
     /// Simulate cartel penalty submission (stub).
-    pub fn submit_cartel_penalty(&self, peer_id: &str, evidence: &str) -> SettlementResult {
+    pub fn submit_cartel_penalty(&self, peer_id: &str, _evidence: &str) -> SettlementResult {
         SettlementResult {
             status: "simulated".into(),
             tx_hash: Some(format!("0xpenalty-{}", &peer_id[..peer_id.len().min(8)])),

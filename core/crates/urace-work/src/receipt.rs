@@ -4,7 +4,6 @@
 //! signed, append-only JSONL rows. Receipts are never modified after issuance.
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use thiserror::Error;
 use urace_ledger::{Journal, JournalError};
 

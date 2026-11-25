@@ -35,6 +35,7 @@ pub fn load_state_json(root: &Path) -> Result<Value> {
 
 /// Save state JSON back to whichever path already exists (or creates the
 /// nested path).  Uses an atomic tmp-then-rename write.
+#[allow(dead_code)]
 fn save_state_json(root: &Path, v: &Value) -> Result<()> {
     let path = if root.join("state").join("state.json").exists() {
         root.join("state").join("state.json")

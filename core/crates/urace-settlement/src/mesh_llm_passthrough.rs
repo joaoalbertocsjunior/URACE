@@ -10,7 +10,7 @@
 //! Config: `settlement_rail = "mesh_llm_passthrough"`, `executor_endpoint = "http://…"`.
 //! The executor must be a mesh-llm node registered as `ai_executor` in the source registry.
 
-use crate::{SettlementError, SettlementRail, SettlementResult};
+use crate::{SettlementRail, SettlementResult};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;

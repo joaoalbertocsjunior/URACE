@@ -4,7 +4,6 @@
 //! Canonical control state never depends on this module; it is observational only.
 
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::collections::HashMap;
 use thiserror::Error;
 use urace_ledger::{Journal, JournalError};
