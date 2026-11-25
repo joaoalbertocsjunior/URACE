@@ -94,7 +94,7 @@ notify            = "6"
 git2              = { version = "0.19", default-features = false }
 
 # Web UI (urace-web)
-axum           = { version = "0.7", features = ["json", "macros"] }
+axum           = { version = "0.8", features = ["json", "macros"] }
 tower-http     = { version = "0.5", features = ["fs", "cors", "trace"] }
 minijinja      = { version = "2", features = ["loader"] }
 futures        = "0.3"
