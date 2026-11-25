@@ -28,7 +28,6 @@ members = [
     "crates/urace-exchange",
     "crates/urace-patterns",
     "crates/urace-util",
-    "crates/sources",
 ]
 
 [workspace.package]
@@ -39,6 +38,9 @@ authors     = ["URACE Contributors"]
 repository  = "https://github.com/urace/urace"
 
 [workspace.dependencies]
+# Sources
+sources        = { git = "https://github.com/joaoalbertocsjunior/sources" }
+
 # Serialization
 serde          = { version = "1", features = ["derive"] }
 serde_json     = "1"
