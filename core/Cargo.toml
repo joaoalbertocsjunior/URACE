@@ -50,7 +50,7 @@ sha2           = "0.10"
 aes-gcm        = "0.10"
 ed25519-dalek  = { version = "2", features = ["rand_core"] }
 rand           = "0.8"
-rand_core      = "0.6"
+rand_core      = "0.10"
 getrandom      = "0.2"
 zeroize        = { version = "1", features = ["derive"] }
 hex            = "0.4"
