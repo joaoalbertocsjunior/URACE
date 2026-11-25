@@ -54,7 +54,7 @@ rand_core      = "0.6"
 getrandom      = "0.2"
 zeroize        = { version = "1", features = ["derive"] }
 hex            = "0.4"
-hkdf           = "0.12"
+hkdf           = "0.13"
 
 # Error handling
 thiserror      = "1"
