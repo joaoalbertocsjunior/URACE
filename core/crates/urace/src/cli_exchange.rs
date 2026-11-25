@@ -891,7 +891,7 @@ fn handle_discover(json_mode: bool) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clap::CommandFactory;
+    use clap::{CommandFactory, Parser};
 
     // Build a minimal CLI wrapper so clap can verify the structure.
     #[derive(clap::Parser)]

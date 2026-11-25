@@ -15,12 +15,32 @@
 //! - Only called from CLI commands, never from the hot execution path.
 
 use std::time::{Duration, Instant};
+use urace_executor::routing::UnavailabilityClass;
 
 /// Number of consecutive failures that trip the breaker (§spec default).
 pub const DEFAULT_FAILURE_THRESHOLD: u32 = 5;
 
 /// Seconds in Open state before moving to HalfOpen.
 pub const DEFAULT_RESET_TIMEOUT_SECS: u64 = 60;
+
+/// Compute exponential backoff duration for a given `UnavailabilityClass` and attempt count.
+///
+/// Each class carries its own base, max, and multiplier so that rate-limit errors
+/// get longer cooling-off periods than transient network errors.
+/// Jitter is deterministic (no rand dep): `attempt * 7 % 20` seconds.
+pub fn backoff_secs(class: &UnavailabilityClass, attempt: u32) -> u64 {
+    let (base, max, multiplier): (f64, f64, f64) = match class {
+        UnavailabilityClass::RateLimit            => (120.0, 1800.0, 2.0),
+        UnavailabilityClass::NetworkError         => (30.0,  300.0,  2.0),
+        UnavailabilityClass::AuthFailure          => (3600.0, 3600.0, 1.0),
+        UnavailabilityClass::ExecutionEnvironment => (300.0, 1800.0, 1.5),
+        UnavailabilityClass::Unknown              => (60.0,  300.0,  2.0),
+    };
+    let raw = base * multiplier.powi(attempt as i32);
+    let capped = raw.min(max) as u64;
+    let jitter = (attempt * 7 % 20) as u64;
+    capped.saturating_add(jitter).min(max as u64)
+}
 
 /// Circuit breaker state machine states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +115,22 @@ impl CircuitBreaker {
             self.state = BreakerState::Open;
             self.opened_at = Some(Instant::now());
         }
+    }
+
+    /// Record a failure with an explicit unavailability class.
+    ///
+    /// Extends `record_failure` with class-based exponential backoff: the
+    /// reset timeout is overridden to `backoff_secs(class, consecutive_failures)`
+    /// so that rate-limit events cool off much longer than transient network blips.
+    pub fn record_failure_classified(&mut self, class: &UnavailabilityClass) {
+        self.record_failure();
+        let secs = backoff_secs(class, self.consecutive_failures);
+        self.reset_timeout = Duration::from_secs(secs);
+    }
+
+    /// Current reset timeout in seconds (useful for status display).
+    pub fn retry_in_secs(&self) -> u64 {
+        self.reset_timeout.as_secs()
     }
 
     /// Force reset to Closed (operator action — mirrors Python `reset()`).
@@ -222,6 +258,21 @@ mod tests {
         cb.reset();
         assert_eq!(cb.state(), BreakerState::Closed);
         assert!(cb.allow_request());
+    }
+
+    #[test]
+    fn rate_limit_backoff_grows_with_attempts() {
+        let delays: Vec<u64> = (0..4).map(|a| backoff_secs(&UnavailabilityClass::RateLimit, a)).collect();
+        for w in delays.windows(2) {
+            assert!(w[1] >= w[0], "backoff must be non-decreasing: {:?}", delays);
+        }
+    }
+
+    #[test]
+    fn classified_failure_sets_longer_timeout_than_default() {
+        let mut cb = CircuitBreaker::with_config(1, DEFAULT_RESET_TIMEOUT_SECS);
+        cb.record_failure_classified(&UnavailabilityClass::RateLimit);
+        assert!(cb.retry_in_secs() > DEFAULT_RESET_TIMEOUT_SECS);
     }
 
     #[test]

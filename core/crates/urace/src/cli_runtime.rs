@@ -380,7 +380,7 @@ mod tests {
     #[tokio::test]
     async fn test_trial_status_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = TrialArgs { action: "status".into() };
         handle_trial(dir.path(), &args, false).await.unwrap();
     }
@@ -388,7 +388,7 @@ mod tests {
     #[tokio::test]
     async fn test_trial_run_stub() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = TrialArgs { action: "run".into() };
         handle_trial(dir.path(), &args, true).await.unwrap();
     }
@@ -396,7 +396,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_dry_run() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({"spec_version": "v1.2.3"}));
+        write_state(&dir, serde_json::json!({"spec_version": "v1.2.3"}));
         let args = UpdateArgs { dry_run: true, source: None };
         handle_update(dir.path(), &args, true).await.unwrap();
     }
@@ -404,7 +404,7 @@ mod tests {
     #[tokio::test]
     async fn test_features_list_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = FeaturesArgs {
             action: "list".into(),
             id: None,
@@ -419,7 +419,7 @@ mod tests {
     async fn test_features_summary() {
         let dir = TempDir::new().unwrap();
         write_state(
-            dir,
+            &dir,
             serde_json::json!({
                 "runtime_features": [
                     {"id": "feat-1", "name": "Alpha", "status": "active", "test_coverage": "90%"},
@@ -440,7 +440,7 @@ mod tests {
     #[tokio::test]
     async fn test_crc_status_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = CrcArgs { action: "status".into() };
         handle_crc(dir.path(), &args, false).await.unwrap();
     }

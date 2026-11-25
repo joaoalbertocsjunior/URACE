@@ -175,6 +175,17 @@ fn tasks_digest(tasks: &[Task]) -> Result<String, SequenceError> {
     Ok(hex::encode(hash))
 }
 
+// ── Planning context ──────────────────────────────────────────────────────────
+
+/// Optional overrides passed into [`plan`] and the [`Planner`] trait.
+#[derive(Debug, Default, Clone)]
+pub struct PlanningContext {
+    /// Per-task priority score overrides.
+    pub scores: Option<HashMap<String, f64>>,
+    /// Per-task eligibility gates (false = treat as blocked).
+    pub eligible: Option<HashMap<String, bool>>,
+}
+
 // ── Core plan algorithm ───────────────────────────────────────────────────────
 
 /// Compute a dependency-respecting execution sequence for `tasks`.

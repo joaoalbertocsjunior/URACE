@@ -22,7 +22,10 @@ use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use urace_audit::{AuditEvent, AuditKind, AuditLedger};
 use urace_goals::{GoalStore, TelemetryEmitter, TelemetryEvent};
-use urace_work::{WorkMarket, WorkPolicy, WorkTask};
+use urace_work::{
+    implementation_sequence::{Task as PlanTask, TaskStatus},
+    AutoPlanner, PlanningContext, WorkMarket, WorkPolicy, WorkTask,
+};
 
 /// A snapshot of the runtime loop status (read by `urace status`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -77,6 +80,8 @@ pub struct LoopContext {
     pub goal_store: Arc<GoalStore>,
     pub telemetry: Arc<TelemetryEmitter>,
     pub audit: Arc<AuditLedger>,
+    /// Interval-gated auto-planner; replans every `sources.auto_sync_interval_s * 10` cycles.
+    pub auto_planner: Arc<AutoPlanner>,
 }
 
 impl LoopContext {
@@ -100,6 +105,10 @@ impl LoopContext {
         let audit =
             AuditLedger::open(state_dir.join("audit.jsonl"), hmac_key).expect("audit ledger open");
 
+        // Auto-planner interval: 10× the source sync interval (at most every ~10 cycles).
+        let replan_secs = config.sources.auto_sync_interval_s.max(1) * 10;
+        let auto_planner = Arc::new(AutoPlanner::new(replan_secs));
+
         let mut initial_status = LoopStatus::default();
         initial_status.running = true;
 
@@ -113,6 +122,7 @@ impl LoopContext {
             goal_store: Arc::new(goal_store),
             telemetry: Arc::new(telemetry),
             audit: Arc::new(audit),
+            auto_planner,
         }
     }
 }
@@ -176,9 +186,12 @@ pub async fn run_loop(
     Ok(())
 }
 
-/// Execute one cycle: poll sources, dispatch work, persist status.
+/// Execute one cycle: poll sources, run auto-plan, dispatch work, persist status.
 async fn run_one_cycle(ctx: &Arc<LoopContext>) -> Result<String> {
     let outcome = poll_sources(ctx).await;
+
+    // Auto-plan: convert active goals → tasks; post ready tasks to work market.
+    run_auto_plan(ctx).await;
 
     // Dispatch work in a separate task (non-blocking invariant)
     let ctx_clone = Arc::clone(ctx);
@@ -240,6 +253,67 @@ async fn poll_sources(ctx: &Arc<LoopContext>) -> String {
     }
 
     "sources_polled".to_string()
+}
+
+/// Run the auto-planner against active goals; post newly-ready tasks to the work market.
+///
+/// No-op when no active goals exist or the replan interval has not elapsed.
+/// Never panics — planning errors are logged and skipped.
+async fn run_auto_plan(ctx: &Arc<LoopContext>) {
+    let goals = ctx.goal_store.active_goals();
+    if goals.is_empty() {
+        return;
+    }
+
+    let tasks: Vec<PlanTask> = goals
+        .into_iter()
+        .map(|g| PlanTask {
+            id: g.goal_id.clone(),
+            status: format!("{:?}", g.status).to_lowercase(),
+            dependencies: vec![],
+            execution_kind: Some("executor_candidate".into()),
+            controller_action: None,
+            priority: g.score_delta.map(|d| d as f64),
+            uncertainty_reduction: None,
+            bottleneck_id: None,
+            expected_benefit: None,
+            expected_benefit_score: None,
+            benefit_score_verified: None,
+            action_recommendation: None,
+            title: Some(g.title.clone()),
+            estimate: None,
+        })
+        .collect();
+
+    let Some(result) = ctx.auto_planner.maybe_plan(tasks, &PlanningContext::default()) else {
+        return; // interval not elapsed
+    };
+
+    match result {
+        Err(e) => warn!(error = %e, "auto-plan error"),
+        Ok(plan) => {
+            let ready: Vec<&str> = plan
+                .tasks
+                .iter()
+                .filter(|t| t.status == TaskStatus::Ready)
+                .map(|t| t.id.as_str())
+                .collect();
+
+            debug!(ready = ready.len(), "auto-plan ready tasks");
+
+            for task_id in ready {
+                let task = WorkTask {
+                    task_id: format!("goal-{task_id}"),
+                    required_capabilities: vec!["planning".into()],
+                    budget_ucr: 0,
+                    posted_at: utc_now(),
+                    poster_peer_id: "daemon".into(),
+                };
+                // Ignore duplicate-post errors (task may already be queued).
+                let _ = ctx.work_market.post_task(task, true);
+            }
+        }
+    }
 }
 
 /// Dispatch work items — runs in a separate tokio task (non-blocking).

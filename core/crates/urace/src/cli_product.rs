@@ -544,7 +544,7 @@ mod tests {
     #[tokio::test]
     async fn test_product_list_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = ProductArgs {
             action: "list".into(),
             name: None,
@@ -556,11 +556,11 @@ mod tests {
     async fn test_product_status() {
         let dir = TempDir::new().unwrap();
         write_state(
-            dir,
+            &dir,
             serde_json::json!({"lifecycle_state": "RUNNING"}),
         );
         write_config(
-            dir,
+            &dir,
             serde_json::json!({
                 "active_product": "myapp",
                 "product_registry": [{"name": "myapp", "status": "ACTIVE"}]
@@ -576,7 +576,7 @@ mod tests {
     #[tokio::test]
     async fn test_content_list_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = ContentArgs {
             action: "list".into(),
             ref_id: None,
@@ -588,7 +588,7 @@ mod tests {
     #[tokio::test]
     async fn test_rollback_no_snapshot() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = RollbackArgs {
             target: None,
             dry_run: true,
@@ -599,7 +599,7 @@ mod tests {
     #[tokio::test]
     async fn test_peer_review_list_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = PeerReviewArgs {
             action: "list".into(),
             bundle_id: None,

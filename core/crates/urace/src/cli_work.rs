@@ -782,7 +782,7 @@ mod tests {
     #[tokio::test]
     async fn test_github_status_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = GithubArgs {
             action: "status".into(),
             repo: None,
@@ -798,7 +798,7 @@ mod tests {
     #[tokio::test]
     async fn test_plan_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = PlanArgs { scope: None, limit: 20 };
         handle_plan(dir.path(), &args, false).await.unwrap();
     }
@@ -806,7 +806,7 @@ mod tests {
     #[tokio::test]
     async fn test_check_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = CheckArgs { blockers_only: false };
         handle_check(dir.path(), &args, true).await.unwrap();
     }
@@ -814,7 +814,7 @@ mod tests {
     #[tokio::test]
     async fn test_quality_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = QualityArgs { history: false, limit: 20 };
         handle_quality(dir.path(), &args, false).await.unwrap();
     }
@@ -823,7 +823,7 @@ mod tests {
     async fn test_context_view() {
         let dir = TempDir::new().unwrap();
         write_state(
-            dir,
+            &dir,
             serde_json::json!({
                 "objectives": [{"id": "obj-1", "text": "improve quality", "status": "PLANNED"}]
             }),
@@ -839,7 +839,7 @@ mod tests {
     #[tokio::test]
     async fn test_classify_no_match() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = ClassifyArgs {
             text: "some random text".into(),
             scope: None,
@@ -850,7 +850,7 @@ mod tests {
     #[tokio::test]
     async fn test_derive_empty() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({}));
+        write_state(&dir, serde_json::json!({}));
         let args = DeriveArgs {
             intent: Some("resilience".into()),
             constructs: None,

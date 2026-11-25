@@ -806,7 +806,7 @@ mod tests {
     #[test]
     fn test_load_state_json_root_level() {
         let dir = TempDir::new().unwrap();
-        write_state(dir, serde_json::json!({"evidence": [{"id": "ev-001"}]}));
+        write_state(&dir, serde_json::json!({"evidence": [{"id": "ev-001"}]}));
         let v = load_state_json(dir.path()).unwrap();
         assert_eq!(
             v.get("evidence")

@@ -19,6 +19,7 @@
 pub mod exchange_endpoint;
 pub mod implementation_sequence;
 pub mod matching;
+pub mod planner;
 pub mod purchase_settlement;
 pub mod receipt;
 pub mod work_market;
@@ -28,7 +29,9 @@ pub use exchange_endpoint::{
     build_settlement_router, handle_credit_settlement, SettlementEndpointError,
     SettlementPayload, SettlementResponse, SettlementRouterConfig, SCHEMA as CREDIT_SETTLEMENT_SCHEMA,
 };
+pub use implementation_sequence::PlanningContext;
 pub use matching::{match_score, select_best_bid, DemandCounter, WorkBid, WorkTask};
+pub use planner::{AutoPlanner, Planner, TopologicalPlanner};
 pub use purchase_settlement::{PurchaseSettlement, SettlementError, SettlementStore};
 pub use receipt::{ReceiptError, ReceiptStore, WorkReceipt};
 pub use work_market::{WorkError, WorkMarket};
