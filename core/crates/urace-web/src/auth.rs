@@ -4,10 +4,10 @@
 //! Page routes do NOT require this extractor — the token is embedded in the
 //! HTML via the template so the browser-side JS can include it.
 
-use axum::{
-    async_trait,
-    extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
+use axum::{async_trait, extract::FromRequestParts, http::{request::Parts, StatusCode}};
+use axum_extra::{
+    headers::{authorization::Bearer, Authorization},
+    TypedHeader,
 };
 use crate::AppState;
 
@@ -20,13 +20,11 @@ impl FromRequestParts<AppState> for BearerToken {
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, StatusCode> {
-        let header = parts
-            .headers
-            .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-        let expected = format!("Bearer {}", state.token);
-        if header == expected {
+        let TypedHeader(Authorization(bearer)) =
+            TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
+                .await
+                .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        if bearer.token() == state.token {
             Ok(BearerToken)
         } else {
             Err(StatusCode::UNAUTHORIZED)

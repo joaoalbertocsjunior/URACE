@@ -3,6 +3,8 @@
 //! Local controller actions route to `LOCAL_CONTROLLER`; all others are `EXECUTOR_CANDIDATE`.
 //! Never dispatch speculative work — recheck authority and acceptance before each dispatch.
 
+use petgraph::algo::toposort;
+use petgraph::graph::DiGraph;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -215,18 +217,6 @@ pub fn plan(
         .map(|(k, v)| (k.clone(), v))
         .collect();
 
-    let mut pending: HashSet<String> = active.keys().cloned().collect();
-    let mut resolved: HashSet<String> = by_id
-        .iter()
-        .filter(|(_, t)| {
-            matches!(
-                t.status.to_ascii_lowercase().as_str(),
-                "completed" | "achieved" | "superseded"
-            )
-        })
-        .map(|(k, _)| k.clone())
-        .collect();
-
     // Pre-compute unknown-dependency blocks.
     let blocked_reasons: HashMap<String, Vec<String>> = active
         .iter()
@@ -241,6 +231,75 @@ pub fn plan(
         })
         .collect();
 
+    // ── petgraph-based topological phase computation ───────────────────────
+    //
+    // Only include active tasks that have no unknown-dep blocks and are not
+    // in a skip status. Edges go from dependency → task (dependency first).
+    // Tasks with unknown deps or in skip status are treated as blocked and
+    // excluded from the graph so they don't infect the topo sort.
+
+    let schedulable: HashSet<String> = active
+        .keys()
+        .filter(|k| blocked_reasons[*k].is_empty() && !is_skip(&active[*k].status))
+        .cloned()
+        .collect();
+
+    // Build DiGraph over schedulable tasks only.
+    let mut graph: DiGraph<String, ()> = DiGraph::new();
+    // Map task id -> NodeIndex
+    let mut node_map: HashMap<String, petgraph::graph::NodeIndex> = HashMap::new();
+    for id in &schedulable {
+        let idx = graph.add_node(id.clone());
+        node_map.insert(id.clone(), idx);
+    }
+    for id in &schedulable {
+        let task = active[id];
+        for dep in &task.dependencies {
+            // Only add edge if dep is also schedulable (active, known, not skip).
+            if let (Some(&dep_idx), Some(&task_idx)) = (node_map.get(dep), node_map.get(id)) {
+                graph.add_edge(dep_idx, task_idx, ());
+            }
+        }
+    }
+
+    // Run petgraph toposort. Err means a cycle exists among schedulable nodes.
+    let (topo_order, cyclic_ids): (Vec<String>, HashSet<String>) = match toposort(&graph, None) {
+        Ok(indices) => {
+            let order = indices
+                .into_iter()
+                .map(|idx| graph[idx].clone())
+                .collect();
+            (order, HashSet::new())
+        }
+        Err(_cycle_err) => {
+            // All schedulable nodes are potentially cyclic — mark them all blocked.
+            // A finer-grained SCC analysis is possible but overkill for this use-case;
+            // the invariant is "no speculative dispatch", so conservative blocking is correct.
+            let cyclic = schedulable.clone();
+            (Vec::new(), cyclic)
+        }
+    };
+
+    // Assign integer phases from topo order:
+    //   phase[n] = 1 + max(phase[dep] for dep in deps), or 1 if no deps.
+    // This is equivalent to the wave-front (BFS level) in the old Kahn loop.
+    let mut phase_of: HashMap<String, usize> = HashMap::new();
+    for id in &topo_order {
+        let task = active[id];
+        let max_dep_phase = task
+            .dependencies
+            .iter()
+            .filter_map(|d| phase_of.get(d))
+            .copied()
+            .max()
+            .unwrap_or(0);
+        phase_of.insert(id.clone(), max_dep_phase + 1);
+    }
+
+    // Collect maximum phase number to build groups array.
+    let max_phase = phase_of.values().copied().max().unwrap_or(0);
+
+    // Build groups: groups[i] holds task ids with phase == i+1, sorted by ordering key.
     let ordering = |k: &str| -> (i64, bool, bool, bool, f64, usize) {
         let task = &active[k];
         let raw_score = scores.get(k).copied().or(task.priority).unwrap_or(50.0);
@@ -261,35 +320,27 @@ pub fn plan(
         )
     };
 
-    let mut rows: Vec<SequencedTask> = Vec::new();
-    let mut groups: Vec<Vec<String>> = Vec::new();
-    let mut rank_counter = 0usize;
-
-    while !pending.is_empty() {
-        let mut ready: Vec<String> = pending
-            .iter()
-            .filter(|k| {
-                let t = &active[*k];
-                let no_unknown_blocks = blocked_reasons[*k].is_empty();
-                let all_deps_resolved = t.dependencies.iter().all(|d| resolved.contains(d));
-                let not_skip = !is_skip(&t.status);
-                no_unknown_blocks && all_deps_resolved && not_skip
-            })
-            .cloned()
-            .collect();
-
-        if ready.is_empty() {
-            break;
-        }
-
-        ready.sort_by(|a, b| {
+    let mut groups: Vec<Vec<String>> = vec![Vec::new(); max_phase];
+    for id in &topo_order {
+        let p = phase_of[id];
+        groups[p - 1].push(id.clone());
+    }
+    // Sort each group by the ordering key (matches the old per-wave sort).
+    for group in &mut groups {
+        group.sort_by(|a, b| {
             ordering(a)
                 .partial_cmp(&ordering(b))
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        groups.push(ready.clone());
+    }
 
-        for key in &ready {
+    // Build SequencedTask rows from groups (ranked tasks first).
+    let mut rows: Vec<SequencedTask> = Vec::new();
+    let mut rank_counter = 0usize;
+
+    for (phase_idx, group) in groups.iter().enumerate() {
+        let phase_num = phase_idx + 1;
+        for key in group {
             let task = &active[key];
             rank_counter += 1;
 
@@ -329,7 +380,7 @@ pub fn plan(
             rows.push(SequencedTask {
                 id: key.clone(),
                 rank: Some(rank_counter),
-                phase: Some(groups.len()),
+                phase: Some(phase_num),
                 status: if is_eligible {
                     TaskStatus::Ready
                 } else {
@@ -349,19 +400,27 @@ pub fn plan(
                 estimated_cost: task.estimate.clone(),
                 authority: "Recheck existing authority and acceptance before dispatch".into(),
             });
-
-            pending.remove(key);
-            resolved.insert(key.clone());
         }
     }
 
-    // Remaining pending tasks are blocked or cyclic.
-    let mut blocked_keys: Vec<String> = pending.iter().cloned().collect();
+    // Remaining active tasks that are blocked: unknown deps, skip-status, or cyclic.
+    let ranked_ids: HashSet<String> = rows.iter().filter_map(|r| r.rank.map(|_| r.id.clone())).collect();
+    let mut blocked_keys: Vec<String> = active
+        .keys()
+        .filter(|k| !ranked_ids.contains(*k))
+        .cloned()
+        .collect();
     blocked_keys.sort();
+
     for key in blocked_keys {
         let task = &active[&key];
         let reasons = if !blocked_reasons[&key].is_empty() {
             blocked_reasons[&key].clone()
+        } else if cyclic_ids.contains(&key) {
+            vec![
+                "Blocked/cyclic or unresolved predecessor chain; explicit owner/action review required"
+                    .into(),
+            ]
         } else {
             vec![
                 "Blocked/cyclic or unresolved predecessor chain; explicit owner/action review required"

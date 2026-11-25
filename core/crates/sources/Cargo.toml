@@ -1,0 +1,22 @@
+[package]
+name        = "sources"
+description = "Source adapters, registry, M2M bridge, and HTTP control server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository        = "https://github.com/joaoalbertocsjunior/sources"
+
+[dependencies]
+axum.workspace        = true
+reqwest.workspace     = true
+octocrab.workspace    = true
+notify.workspace      = true
+git2.workspace        = true
+tokio.workspace       = true
+serde.workspace       = true
+serde_json.workspace  = true
+thiserror.workspace   = true
+tracing.workspace     = true
+async-trait.workspace = true
+uuid.workspace        = true

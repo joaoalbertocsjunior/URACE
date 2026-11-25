@@ -11,7 +11,10 @@
 //! propagating.  This matches the Python `survey_hardware` contract
 //! ("Never raises; falls back to zeros").
 
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
+
+use sysinfo::{Disks, System};
 
 // ---------------------------------------------------------------------------
 // HardwareInfo
@@ -37,11 +40,26 @@ pub struct HardwareInfo {
 
 /// Perform a best-effort hardware survey.  Never panics or propagates errors.
 pub fn collect() -> HardwareInfo {
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    let cpu_count = sys.cpus().len().max(1);
+    let memory_mb = sys.total_memory() / 1024 / 1024;
+    let hostname = System::host_name().unwrap_or_default();
+    let disk_free_mb = {
+        let disks = Disks::new_with_refreshed_list();
+        disks
+            .iter()
+            .find(|d| d.mount_point() == Path::new("/"))
+            .map(|d| d.available_space() / 1024 / 1024)
+            .unwrap_or(0)
+    };
+
     HardwareInfo {
-        cpu_count: read_cpu_count(),
-        memory_mb: read_memory_mb(),
-        disk_free_mb: read_disk_free_mb(),
-        hostname: read_hostname(),
+        cpu_count,
+        memory_mb,
+        disk_free_mb,
+        hostname,
     }
 }
 
@@ -82,155 +100,6 @@ pub fn hardware_gossip_payload() -> serde_json::Value {
         "disk_free_mb": hw.disk_free_mb,
         "hostname":     hw.hostname,
     })
-}
-
-// ---------------------------------------------------------------------------
-// Platform-specific readers
-// ---------------------------------------------------------------------------
-
-#[cfg(target_os = "linux")]
-fn read_cpu_count() -> usize {
-    // Count "processor\t:" lines in /proc/cpuinfo.
-    std::fs::read_to_string("/proc/cpuinfo")
-        .unwrap_or_default()
-        .lines()
-        .filter(|l| l.starts_with("processor"))
-        .count()
-        .max(1) // at least 1
-}
-
-#[cfg(not(target_os = "linux"))]
-fn read_cpu_count() -> usize {
-    // Fallback: use the standard available_parallelism if the platform
-    // exposes it; otherwise 1.
-    std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1)
-}
-
-#[cfg(target_os = "linux")]
-fn read_memory_mb() -> u64 {
-    // Parse MemTotal from /proc/meminfo.
-    // Format: "MemTotal:       16384000 kB"
-    std::fs::read_to_string("/proc/meminfo")
-        .unwrap_or_default()
-        .lines()
-        .find(|l| l.starts_with("MemTotal:"))
-        .and_then(|line| {
-            line.split_whitespace()
-                .nth(1)
-                .and_then(|v| v.parse::<u64>().ok())
-        })
-        .map(|kb| kb / 1024)
-        .unwrap_or(0)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn read_memory_mb() -> u64 {
-    0
-}
-
-fn read_disk_free_mb() -> u64 {
-    // Use statvfs-equivalent via /proc/mounts on Linux by calling
-    // std::fs::metadata on the cwd, then reading /proc/mounts for the mount
-    // point, then reading /proc/diskstats.
-    //
-    // Because we cannot add `nix` / `libc` as new dependencies, we fall back
-    // to reading /proc/self/mountinfo and parsing free blocks from
-    // /proc/diskstats — which does NOT carry free space.
-    //
-    // The only portable zero-dep way is a statfs(2) syscall.  We issue it
-    // directly on Linux via inline assembly-free libc wrapper using the
-    // `std::os::unix` extension, which is available without extra crates.
-    //
-    // On other platforms we return 0 (documented contract).
-    disk_free_mb_impl()
-}
-
-#[cfg(target_os = "linux")]
-fn disk_free_mb_impl() -> u64 {
-    // Safe statfs via /proc/self/statm is not useful here.
-    // We read /proc/mounts to find the cwd mount-point, then parse
-    // /sys/fs/... — but that is unreliable too.
-    //
-    // The cleanest zero-new-dep approach on Linux is to read the statvfs
-    // result directly.  std::fs does not expose statvfs, but we can read
-    // `df --output=avail .` via /proc only if present.  Since we cannot
-    // spawn processes (too heavy for a utility module) we use a direct
-    // `statvfs` libc call through `unsafe`.
-    //
-    // This is the only `unsafe` block in urace-util; the safety argument is:
-    //   - `buf` is stack-allocated and large enough for `libc::statvfs64`.
-    //   - `path` is a valid C string (".").
-    //   - `statvfs64` is documented as async-signal-safe on Linux.
-    //
-    // If the call fails we return 0 per the documented fallback contract.
-    use std::mem::MaybeUninit;
-
-    // statvfs64 layout on Linux x86-64 and aarch64 (glibc):
-    // We reproduce the struct manually to avoid the libc crate.
-    // All fields are u64 on 64-bit platforms.
-    #[repr(C)]
-    struct Statvfs64 {
-        f_bsize:   u64,
-        f_frsize:  u64,
-        f_blocks:  u64,
-        f_bfree:   u64,
-        f_bavail:  u64,
-        f_files:   u64,
-        f_ffree:   u64,
-        f_favail:  u64,
-        f_fsid:    u64,
-        f_flag:    u64,
-        f_namemax: u64,
-        _spare:    [i32; 6],
-    }
-
-    let path = b".\0";
-    let mut buf: MaybeUninit<Statvfs64> = MaybeUninit::uninit();
-
-    // SAFETY: buf is uninit storage of the right size; path is a valid C string.
-    let ret = unsafe {
-        libc_statvfs64(path.as_ptr() as *const i8, buf.as_mut_ptr() as *mut std::ffi::c_void)
-    };
-
-    if ret != 0 {
-        return 0;
-    }
-
-    // SAFETY: ret == 0 means the kernel filled buf.
-    let stat = unsafe { buf.assume_init() };
-    // f_bavail * f_frsize gives bytes available to non-root.
-    (stat.f_bavail.saturating_mul(stat.f_frsize)) / (1024 * 1024)
-}
-
-#[cfg(target_os = "linux")]
-unsafe fn libc_statvfs64(path: *const i8, buf: *mut std::ffi::c_void) -> i32 {
-    // Syscall number for statfs64 on x86-64 is 137; on aarch64 it is not
-    // available as a direct syscall (use statfs instead, nr 43).
-    // Rather than writing arch-specific inline asm, we link against the
-    // system libc via `extern "C"`.
-    extern "C" {
-        fn statvfs64(path: *const i8, buf: *mut std::ffi::c_void) -> i32;
-    }
-    statvfs64(path, buf)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn disk_free_mb_impl() -> u64 {
-    0
-}
-
-fn read_hostname() -> String {
-    // Try /proc/sys/kernel/hostname first (Linux only, no allocation overhead).
-    #[cfg(target_os = "linux")]
-    if let Ok(h) = std::fs::read_to_string("/proc/sys/kernel/hostname") {
-        return h.trim().to_string();
-    }
-
-    // Fallback: gethostname via std — not available in std directly, so we
-    // read the environment variable HOSTNAME as a last resort.
-    std::env::var("HOSTNAME").unwrap_or_default()
 }
 
 #[cfg(test)]

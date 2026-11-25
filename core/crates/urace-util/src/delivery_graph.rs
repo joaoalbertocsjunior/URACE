@@ -7,9 +7,15 @@
 //! purely over slices of ledger rows and carry no internal state, so they
 //! are modelled here as free functions alongside the stateful `DeliveryGraph`
 //! struct that tracks per-task delivery status.
+//!
+//! Graph internals use `petgraph::graph::DiGraph` with cycle detection via
+//! `petgraph::algo::is_cyclic_directed`.
 
 use std::collections::{HashMap, HashSet};
 use thiserror::Error;
+
+use petgraph::algo::is_cyclic_directed;
+use petgraph::graph::{DiGraph, NodeIndex};
 
 /// Errors returned by graph operations.
 #[derive(Debug, Error, PartialEq)]
@@ -33,16 +39,21 @@ pub struct DeliveryNode {
     pub status: String,
 }
 
-impl DeliveryNode {
-    fn is_delivered(&self) -> bool {
-        self.status == "delivered"
-    }
-}
-
 /// Directed acyclic graph that tracks task delivery order.
+///
+/// Internally backed by a `petgraph::graph::DiGraph<String, ()>`.
+/// Edges run dep → dependent (i.e. an edge A→B means "A must be
+/// delivered before B is ready").
 #[derive(Debug, Default)]
 pub struct DeliveryGraph {
-    pub nodes: HashMap<String, DeliveryNode>,
+    /// petgraph backing store; node weight is the task_id string.
+    graph: DiGraph<String, ()>,
+    /// Maps task_id → NodeIndex for O(1) lookup.
+    index_map: HashMap<String, NodeIndex>,
+    /// Delivery status per task_id: `"pending"` or `"delivered"`.
+    status: HashMap<String, String>,
+    /// Declared dependencies per task_id (preserved for `DeliveryNode` access).
+    deps: HashMap<String, Vec<String>>,
 }
 
 impl DeliveryGraph {
@@ -61,23 +72,31 @@ impl DeliveryGraph {
 
         // All declared dependencies must already be registered.
         for dep in &deps {
-            if !self.nodes.contains_key(dep) {
+            if !self.index_map.contains_key(dep) {
                 return Err(GraphError::NotFound(dep.clone()));
             }
         }
 
-        let node = DeliveryNode {
-            task_id: task_id.clone(),
-            deps,
-            status: "pending".to_string(),
-        };
-        self.nodes.insert(task_id.clone(), node);
+        // Add the node to the petgraph.
+        let nx = self.graph.add_node(task_id.clone());
+        self.index_map.insert(task_id.clone(), nx);
 
-        // Cycle check via DFS from the new node.
-        if self.has_cycle(&task_id) {
-            self.nodes.remove(&task_id);
+        // Add edges: dep → new_node (dep must come before new_node).
+        for dep in &deps {
+            let dep_nx = self.index_map[dep];
+            self.graph.add_edge(dep_nx, nx, ());
+        }
+
+        // Cycle check using petgraph.
+        if is_cyclic_directed(&self.graph) {
+            // Roll back: remove node (petgraph removes its incident edges too).
+            self.graph.remove_node(nx);
+            self.index_map.remove(&task_id);
             return Err(GraphError::CycleDetected);
         }
+
+        self.status.insert(task_id.clone(), "pending".to_string());
+        self.deps.insert(task_id, deps);
 
         Ok(())
     }
@@ -86,10 +105,11 @@ impl DeliveryGraph {
     ///
     /// Returns `GraphError::NotFound` if the task has not been registered.
     pub fn mark_delivered(&mut self, task_id: &str) -> Result<(), GraphError> {
-        self.nodes
+        let entry = self
+            .status
             .get_mut(task_id)
-            .ok_or_else(|| GraphError::NotFound(task_id.to_string()))?
-            .status = "delivered".to_string();
+            .ok_or_else(|| GraphError::NotFound(task_id.to_string()))?;
+        *entry = "delivered".to_string();
         Ok(())
     }
 
@@ -97,58 +117,41 @@ impl DeliveryGraph {
     /// and that are not yet delivered themselves.
     pub fn ready_nodes(&self) -> Vec<String> {
         let mut ready: Vec<String> = self
-            .nodes
-            .values()
-            .filter(|n| {
-                !n.is_delivered()
-                    && n.deps.iter().all(|dep| {
-                        self.nodes
-                            .get(dep)
-                            .map(|d| d.is_delivered())
-                            .unwrap_or(false)
-                    })
+            .index_map
+            .keys()
+            .filter(|id| {
+                // Must be pending.
+                self.status.get(id.as_str()).map(|s| s == "pending").unwrap_or(false)
+                    // All deps must be delivered.
+                    && self
+                        .deps
+                        .get(id.as_str())
+                        .map(|dep_list| {
+                            dep_list.iter().all(|dep| {
+                                self.status
+                                    .get(dep.as_str())
+                                    .map(|s| s == "delivered")
+                                    .unwrap_or(false)
+                            })
+                        })
+                        .unwrap_or(true)
             })
-            .map(|n| n.task_id.clone())
+            .cloned()
             .collect();
         // Deterministic ordering for testability.
         ready.sort();
         ready
     }
 
-    // --- internal helpers ---
-
-    /// DFS cycle detection from `start`.
-    fn has_cycle(&self, start: &str) -> bool {
-        let mut visited = HashSet::new();
-        let mut stack = HashSet::new();
-        self.dfs_has_cycle(start, &mut visited, &mut stack)
-    }
-
-    fn dfs_has_cycle(
-        &self,
-        node_id: &str,
-        visited: &mut HashSet<String>,
-        stack: &mut HashSet<String>,
-    ) -> bool {
-        if stack.contains(node_id) {
-            return true;
-        }
-        if visited.contains(node_id) {
-            return false;
-        }
-        visited.insert(node_id.to_string());
-        stack.insert(node_id.to_string());
-
-        if let Some(node) = self.nodes.get(node_id) {
-            for dep in &node.deps {
-                if self.dfs_has_cycle(dep, visited, stack) {
-                    stack.remove(node_id);
-                    return true;
-                }
-            }
-        }
-        stack.remove(node_id);
-        false
+    /// Expose a node as a `DeliveryNode` view (convenience accessor).
+    ///
+    /// Returns `None` if the task is not registered.
+    pub fn get_node(&self, task_id: &str) -> Option<DeliveryNode> {
+        self.index_map.get(task_id).map(|_| DeliveryNode {
+            task_id: task_id.to_string(),
+            deps: self.deps.get(task_id).cloned().unwrap_or_default(),
+            status: self.status.get(task_id).cloned().unwrap_or_else(|| "pending".to_string()),
+        })
     }
 }
 
