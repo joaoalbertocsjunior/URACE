@@ -73,6 +73,14 @@ pub async fn serve(root: PathBuf, port: u16, bind: &str, token: String) -> Resul
 
 fn build_env() -> Environment<'static> {
     let mut env = Environment::new();
+
+    // `tojson` is not built into minijinja — register it so templates can safely
+    // embed Rust values into <script> blocks (e.g. `window.__URACE_TOKEN__ = {{ token | tojson }}`).
+    env.add_filter("tojson", |value: minijinja::Value| -> minijinja::Value {
+        let s = value.to_string();
+        let json = serde_json::to_string(&s).unwrap_or_else(|_| "null".to_string());
+        minijinja::Value::from_safe_string(json)
+    });
     env.add_template("base.html", include_str!("../templates/base.html"))
         .unwrap();
     env.add_template("shell.html", include_str!("../templates/shell.html"))
