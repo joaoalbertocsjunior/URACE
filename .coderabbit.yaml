@@ -11,7 +11,7 @@ reviews:
 
   instructions: |
     URACE is a governance-first P2P runtime written in Rust (workspace under `core/`).
-    External source adapter library: sources-lib (git dep, joaoalbertocsjunior/sources-lib).
+    External source adapter library: `sources` crate (git dep, joaoalbertocsjunior/sources).
 
     Hard invariants — flag any violation:
     - §62z: no automated path takes a qualifying action (spend, transfer, goal creation)

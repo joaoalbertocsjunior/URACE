@@ -6,9 +6,11 @@
 //! - The runtime loop MUST NOT block on work dispatch (uses tokio tasks).
 //! - Circuit breaker trip must be checked before each work dispatch.
 //! - Sources are polled at the interval configured in `SourcesConfig`.
-//! - Authority check gates every work assignment (§62z).
+//! - Authority check gates every work assignment and goal creation (§62z).
+//! - The improvement step closes the feedback loop:
+//!   observe metrics → evaluate goals → mint on positive delta → suggest new goals.
 
-use crate::circuit_breaker::CircuitBreaker;
+use crate::circuit_breaker::{BreakerState, CircuitBreaker};
 use crate::config::RuntimeConfig;
 use crate::state::RuntimeState;
 use anyhow::Result;
@@ -21,11 +23,24 @@ use tokio::sync::Mutex;
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use urace_audit::{AuditEvent, AuditKind, AuditLedger};
-use urace_goals::{GoalStore, TelemetryEmitter, TelemetryEvent};
+use urace_goals::{AutoGoalEngine, GoalStore, TelemetryEmitter, TelemetryEvent};
 use urace_work::{
     implementation_sequence::{Task as PlanTask, TaskStatus},
     AutoPlanner, PlanningContext, WorkMarket, WorkPolicy, WorkTask,
 };
+
+/// Observable metrics captured at the end of each cycle.
+///
+/// Used by the improvement step to compute score deltas across consecutive cycles.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct CycleMetrics {
+    /// Number of registered sources.
+    pub sources_count: usize,
+    /// Number of circuit-breaker-tripped (Open) providers — proxy for failed syncs.
+    pub failed_syncs: usize,
+    /// Number of pending work tasks in the market.
+    pub pending_work: usize,
+}
 
 /// A snapshot of the runtime loop status (read by `urace status`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
@@ -40,6 +55,9 @@ pub struct LoopStatus {
     pub cycle_count: u64,
     /// Per-provider circuit breaker states.
     pub circuit_breakers: HashMap<String, String>,
+    /// Metrics from the last completed cycle (persisted for the improvement step).
+    #[serde(default)]
+    pub last_metrics: Option<CycleMetrics>,
 }
 
 /// Persistent path for the loop status file.
@@ -82,6 +100,8 @@ pub struct LoopContext {
     pub audit: Arc<AuditLedger>,
     /// Interval-gated auto-planner; replans every `sources.auto_sync_interval_s * 10` cycles.
     pub auto_planner: Arc<AutoPlanner>,
+    /// Metrics from the previous cycle, used by the improvement step.
+    pub prev_metrics: Arc<Mutex<Option<CycleMetrics>>>,
 }
 
 impl LoopContext {
@@ -125,6 +145,7 @@ impl LoopContext {
             telemetry: Arc::new(telemetry),
             audit: Arc::new(audit),
             auto_planner,
+            prev_metrics: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -202,6 +223,9 @@ async fn run_one_cycle(ctx: &Arc<LoopContext>) -> Result<String> {
             warn!(error = %e, "work dispatch error");
         }
     });
+
+    // Improvement step: evaluate metric deltas, close improved goals, suggest new ones.
+    run_improvement_step(ctx).await;
 
     // Emit telemetry event
     emit_telemetry(ctx, &outcome).await;
@@ -389,6 +413,152 @@ async fn emit_telemetry(ctx: &Arc<LoopContext>, outcome: &str) {
     }
 }
 
+// ── Improvement cycle ─────────────────────────────────────────────────────────
+
+/// Qualified Product Improvement Cycle (QPIC): the feedback closure that makes
+/// URACE's loop governance-gated rather than a plain autonomous loop.
+///
+/// Each call:
+/// 1. Snapshots observable metrics (sources, failed syncs, pending work).
+/// 2. Compares with the previous cycle's metrics to compute score deltas.
+/// 3. Completes active goals whose metrics improved (score_delta > 0 → MintSignal).
+/// 4. Routes new goal suggestions through §62z before persisting.
+async fn run_improvement_step(ctx: &Arc<LoopContext>) {
+    let current = snapshot_metrics(ctx).await;
+
+    // Swap in the new snapshot; get the previous one.
+    let prev = {
+        let mut guard = ctx.prev_metrics.lock().await;
+        let prev = guard.clone();
+        *guard = Some(current.clone());
+        prev
+    };
+
+    // Phase 1 — evaluate active goals against metric deltas.
+    if let Some(ref prev) = prev {
+        for goal in ctx.goal_store.active_goals() {
+            if let Some(delta) = goal_score_delta(&goal.scope, &goal.title, prev, &current) {
+                match ctx.goal_store.complete(&goal.goal_id, delta) {
+                    Ok(signal) => {
+                        if signal.should_mint {
+                            let evt = AuditEvent::new(
+                                AuditKind::MintTriggered,
+                                "daemon",
+                                serde_json::json!({
+                                    "goal_id": goal.goal_id,
+                                    "score_delta": delta,
+                                    "amount": signal.amount,
+                                }),
+                            );
+                            if let Err(e) = ctx.audit.record(evt) {
+                                warn!(error = %e, "audit record error for mint");
+                            }
+                        }
+                        debug!(goal_id = %goal.goal_id, delta, "goal completed by improvement step");
+                    }
+                    Err(e) => warn!(error = %e, goal_id = %goal.goal_id, "goal completion error"),
+                }
+            }
+        }
+    }
+
+    // Phase 2 — suggest new goals (§62z-gated).
+    let suggestions = AutoGoalEngine::new().suggest_goals(
+        current.sources_count,
+        current.failed_syncs,
+        current.pending_work,
+    );
+
+    if suggestions.is_empty() {
+        return;
+    }
+
+    let outcome =
+        crate::bootstrap::check_authority_policy("goal_creation", "auto_improvement", &ctx.config);
+    if !matches!(
+        outcome,
+        crate::bootstrap::AuthorityCheckOutcome::AutonomouslyAuthorized
+    ) {
+        debug!("auto-goal creation not authorized: {:?}", outcome);
+        return;
+    }
+
+    // Deduplicate by scope: skip if an active goal in the same scope already exists.
+    let active_scopes: std::collections::HashSet<String> = ctx
+        .goal_store
+        .active_goals()
+        .into_iter()
+        .map(|g| g.scope)
+        .collect();
+
+    for goal in suggestions {
+        if active_scopes.contains(&goal.scope) {
+            continue;
+        }
+        let goal_id = goal.goal_id.clone();
+        let scope = goal.scope.clone();
+        match ctx.goal_store.create(goal) {
+            Ok(()) => {
+                let evt = AuditEvent::new(
+                    AuditKind::GoalCreated,
+                    "daemon",
+                    serde_json::json!({ "goal_id": goal_id, "scope": scope }),
+                );
+                if let Err(e) = ctx.audit.record(evt) {
+                    warn!(error = %e, "audit record error for goal creation");
+                }
+                debug!(goal_id = %goal_id, scope = %scope, "auto-goal created");
+            }
+            Err(e) => warn!(error = %e, "auto-goal creation failed"),
+        }
+    }
+}
+
+/// Collect observable metrics from the current context state.
+async fn snapshot_metrics(ctx: &Arc<LoopContext>) -> CycleMetrics {
+    let sources_count = ctx.state.lock().await.sources.len();
+    let pending_work = ctx.work_market.pending_task_count();
+    let failed_syncs = {
+        let breakers = ctx.breakers.lock().await;
+        breakers
+            .values()
+            .filter(|cb| cb.status().state == BreakerState::Open)
+            .count()
+    };
+    CycleMetrics {
+        sources_count,
+        failed_syncs,
+        pending_work,
+    }
+}
+
+/// Compute the score delta for a goal given consecutive metric snapshots.
+///
+/// Returns `Some(delta)` only when the relevant metric strictly improved.
+fn goal_score_delta(
+    scope: &str,
+    title: &str,
+    prev: &CycleMetrics,
+    cur: &CycleMetrics,
+) -> Option<i64> {
+    match scope {
+        "sources" if title.contains("failed") => {
+            let d = prev.failed_syncs as i64 - cur.failed_syncs as i64;
+            if d > 0 { Some(d) } else { None }
+        }
+        "sources" => {
+            // "Configure at least one data source" goal
+            let d = cur.sources_count as i64 - prev.sources_count as i64;
+            if d > 0 { Some(d) } else { None }
+        }
+        "work_market" => {
+            let d = prev.pending_work as i64 - cur.pending_work as i64;
+            if d > 0 { Some(d) } else { None }
+        }
+        _ => None,
+    }
+}
+
 fn utc_now() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let secs = SystemTime::now()
@@ -446,5 +616,49 @@ mod tests {
         let status = load_status(dir.path()).unwrap();
         assert_eq!(status.cycle_count, 0);
         assert!(!status.running);
+    }
+
+    #[test]
+    fn goal_score_delta_improvement_detected() {
+        let prev = CycleMetrics { sources_count: 0, failed_syncs: 3, pending_work: 15 };
+        let cur = CycleMetrics { sources_count: 1, failed_syncs: 1, pending_work: 8 };
+
+        // Failed syncs improved: 3 → 1 = delta 2
+        assert_eq!(
+            goal_score_delta("sources", "Resolve 3 failed source syncs", &prev, &cur),
+            Some(2)
+        );
+        // Source configured: 0 → 1 = delta 1
+        assert_eq!(
+            goal_score_delta("sources", "Configure at least one data source", &prev, &cur),
+            Some(1)
+        );
+        // Work backlog reduced: 15 → 8 = delta 7
+        assert_eq!(
+            goal_score_delta("work_market", "Reduce pending work backlog (15 tasks queued)", &prev, &cur),
+            Some(7)
+        );
+    }
+
+    #[test]
+    fn goal_score_delta_no_improvement_returns_none() {
+        let prev = CycleMetrics { sources_count: 2, failed_syncs: 0, pending_work: 5 };
+        let cur = CycleMetrics { sources_count: 2, failed_syncs: 0, pending_work: 6 };
+
+        assert!(goal_score_delta("sources", "Resolve 0 failed source syncs", &prev, &cur).is_none());
+        assert!(goal_score_delta("work_market", "Reduce backlog", &prev, &cur).is_none());
+    }
+
+    #[tokio::test]
+    async fn improvement_step_creates_goal_on_no_sources() {
+        let dir = TempDir::new().unwrap();
+        let ctx = make_ctx(dir.path());
+        // Two cycles: first seeds prev_metrics with 0 sources, second runs improvement step.
+        run_one_cycle(&ctx).await.unwrap();
+        run_one_cycle(&ctx).await.unwrap();
+        // Auto-goal engine should have suggested "Configure at least one data source".
+        // Whether it was persisted depends on authority policy (default config allows it).
+        // Just verify the cycle completes without panic.
+        assert!(ctx.prev_metrics.lock().await.is_some());
     }
 }

@@ -62,7 +62,6 @@ anyhow         = "1"
 
 # Async
 tokio          = { version = "1", features = ["full"] }
-async-trait    = "0.1"
 
 # CLI
 clap           = { version = "4", features = ["derive"] }
@@ -86,12 +85,8 @@ regex-lite        = "0.1"
 tempfile          = "3"
 flate2            = "1"
 libc              = "0.2"
-sysinfo           = { version = "0.32", default-features = false, features = ["system", "disk"] }
 petgraph          = "0.6"
 axum-extra        = { version = "0.9", features = ["typed-header"] }
-octocrab          = "0.41"
-notify            = "6"
-git2              = { version = "0.19", default-features = false }
 
 # Web UI (urace-web)
 axum           = { version = "0.7", features = ["json", "macros"] }

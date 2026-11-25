@@ -67,17 +67,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo install cargo-audit --locked
-      - run: >
-          cargo audit --manifest-path core/Cargo.toml
-          --ignore RUSTSEC-2026-0258
-          --ignore RUSTSEC-2026-0459
-          --ignore RUSTSEC-2026-0349
-          --ignore RUSTSEC-2026-0346
-          --ignore RUSTSEC-2026-0382
-          --ignore RUSTSEC-2026-0098
-          --ignore RUSTSEC-2026-0099
-          --ignore RUSTSEC-2026-0104
-          --ignore RUSTSEC-2026-0381
+      - run: |
+          cd core
+          cargo audit \
+            --ignore RUSTSEC-2026-0258 \
+            --ignore RUSTSEC-2026-0459 \
+            --ignore RUSTSEC-2026-0349 \
+            --ignore RUSTSEC-2026-0346 \
+            --ignore RUSTSEC-2026-0382 \
+            --ignore RUSTSEC-2026-0098 \
+            --ignore RUSTSEC-2026-0099 \
+            --ignore RUSTSEC-2026-0104 \
+            --ignore RUSTSEC-2026-0381
 
   invariants:
     name: Invariant checks

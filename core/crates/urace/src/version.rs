@@ -53,6 +53,6 @@ mod tests {
 
     #[test]
     fn format_versions_consistent() {
-        assert!(MIN_FORMAT_VERSION <= FORMAT_VERSION);
+        const { assert!(MIN_FORMAT_VERSION <= FORMAT_VERSION) };
     }
 }

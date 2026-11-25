@@ -400,10 +400,7 @@ mod tests {
             "intent-source-coverage-v1"
         );
         assert!(result.get("source_sha256").is_some());
-        assert_eq!(
-            result["semantic_completeness_proven"].as_bool().unwrap(),
-            false
-        );
+        assert!(!result["semantic_completeness_proven"].as_bool().unwrap());
         // SHA-256 is 64 hex chars
         assert_eq!(result["source_sha256"].as_str().unwrap().len(), 64);
     }
@@ -499,15 +496,11 @@ mod tests {
             result["schema"].as_str().unwrap(),
             "request-claim-evidence-trace-v1"
         );
-        assert_eq!(
-            result["complete_assessment_proven"].as_bool().unwrap(),
-            false
-        );
-        assert_eq!(
-            result["evidence_truth_independently_verified"]
+        assert!(!result["complete_assessment_proven"].as_bool().unwrap());
+        assert!(
+            !result["evidence_truth_independently_verified"]
                 .as_bool()
-                .unwrap(),
-            false
+                .unwrap()
         );
     }
 
