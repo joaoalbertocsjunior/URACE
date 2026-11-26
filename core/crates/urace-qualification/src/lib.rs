@@ -7,6 +7,7 @@
 //! - Mint triggers only on qualified acceptance — never on zero or negative score_delta.
 
 pub mod accounting;
+pub mod appeal;
 pub mod benchmark_corpus;
 pub mod benchmark_performance;
 pub mod benchmark_product;
@@ -14,13 +15,17 @@ pub mod benchmark_qualification;
 pub mod benchmark_regression;
 pub mod benchmark_reports;
 pub mod benchmark_runner;
+pub mod delivery_proof;
+pub mod multi_evaluator;
 pub mod outcome_verification;
 pub mod p2p_cost_qualification;
 pub mod p2p_pair_protocol;
 pub mod p2p_study_plan;
 pub mod p2p_study_runner;
+pub mod post_delivery;
 pub mod preflight;
 pub mod project_work;
+pub mod quality_floor;
 pub mod qualification;
 pub mod receipt_handler;
 pub mod runtime_regression_guard;
@@ -71,6 +76,17 @@ pub use spec_trial::{
 pub use trial::{Trial, TrialConfig, TrialResult, TrialStore};
 pub use trial_common::{now_iso, trial_identifier, TrialContext};
 pub use trial_receipt::{ReceiptStore, TrialReceipt};
+
+// M31 — quality floor
+pub use quality_floor::{QualityFloor, QualityFloorError, QualityGateResult, DEFAULT_QUALITY_FLOOR};
+// M44 — delivery proof
+pub use delivery_proof::{DeliveryProof, DeliveryProofError, DeliveryProofRegistry};
+// M45 — post-delivery gate
+pub use post_delivery::{PostDeliveryError, PostDeliveryGate, PostDeliveryOutcome};
+// M46 — multi-evaluator consensus
+pub use multi_evaluator::{ConsensusResult, EvaluatorError, EvaluatorVote, MultiEvaluatorRound};
+// M49 — appeal window
+pub use appeal::{Appeal, AppealRegistry, AppealStatus, DEFAULT_APPEAL_WINDOW_SECS};
 
 /// 1 UCR = 100_000_000 base units (10^8, satoshi-style).
 pub const UNIT: u64 = 100_000_000;
