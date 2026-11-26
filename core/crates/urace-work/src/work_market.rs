@@ -139,6 +139,14 @@ impl WorkMarket {
         }
     }
 
+    /// Return all tasks currently listed in the pending market (open for bidding).
+    pub fn list_active(&self) -> Vec<WorkTask> {
+        self.pending_tasks
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
+    }
+
     pub fn pending_task_count(&self) -> usize {
         self.pending_tasks.len()
     }
@@ -220,5 +228,32 @@ mod tests {
             market.submit_bid(bid("b1", "ghost")),
             Err(WorkError::TaskNotFound { .. })
         ));
+    }
+
+    #[test]
+    fn list_active_returns_pending_tasks() {
+        let market = WorkMarket::new(open_policy());
+        assert!(market.list_active().is_empty(), "empty market must return empty list");
+
+        market.post_task(task("t1"), false).unwrap();
+        market.post_task(task("t2"), false).unwrap();
+
+        let active = market.list_active();
+        assert_eq!(active.len(), 2);
+        let ids: std::collections::HashSet<&str> =
+            active.iter().map(|t| t.task_id.as_str()).collect();
+        assert!(ids.contains("t1"));
+        assert!(ids.contains("t2"));
+    }
+
+    #[test]
+    fn list_active_excludes_won_tasks() {
+        let market = WorkMarket::new(open_policy());
+        market.post_task(task("t1"), false).unwrap();
+        market.submit_bid(bid("b1", "t1")).unwrap();
+        market.select_winner("t1").unwrap();
+
+        // After winner selected, t1 is removed from pending.
+        assert!(market.list_active().is_empty());
     }
 }

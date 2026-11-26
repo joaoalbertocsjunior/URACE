@@ -6,10 +6,14 @@
 //! - [`session_dek`] — Session DEK: random generation and HKDF-SHA256 derivation.
 //! - [`shamir_delivery`] — Share delivery tracking (in-memory + append-only Journal).
 //! - [`crypto_wallet`] — Ed25519 wallet: sign, verify, secure Debug.
+//! - [`multisig`] — M68: threshold-of-N multi-party signing coordinator.
+//! - [`key_ceremony`] — M61: verifiable key-ceremony records with integrity hashing.
 
 pub mod crypto_wallet;
+pub mod key_ceremony;
 pub mod key_lifecycle;
 pub mod mesh_identity;
+pub mod multisig;
 pub mod session_dek;
 pub mod shamir_delivery;
 
@@ -21,3 +25,5 @@ pub use mesh_identity::{
 };
 pub use session_dek::{DekError, SessionDek};
 pub use shamir_delivery::{DeliveryError, DeliveryTracker, ShareDelivery};
+pub use key_ceremony::CeremonyRecord;
+pub use multisig::{MultisigCoordinator, MultisigError, MultisigOperation};
