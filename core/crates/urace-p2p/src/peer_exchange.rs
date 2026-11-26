@@ -8,6 +8,61 @@ use crate::kademlia::{KademliaTable, NodeInfo};
 use crate::peer_discovery::AdmissionGate;
 use ed25519_dalek::{Signer, SigningKey};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+
+// ── M71: Gossip flood protection ──────────────────────────────────────────────
+
+/// Default maximum gossip messages accepted from a single peer per window.
+pub const GOSSIP_THROTTLE_DEFAULT_MAX: usize = 20;
+/// Default rolling window length in seconds.
+pub const GOSSIP_THROTTLE_DEFAULT_WINDOW_SECS: u64 = 60;
+
+/// Rolling-window per-peer gossip rate limiter.
+///
+/// Tracks message timestamps per peer_id in a sliding window.
+/// If a peer sends more than `max_per_window` messages within
+/// `window_secs`, `should_accept` returns `false` and the message
+/// must be dropped.
+pub struct GossipThrottle {
+    windows: HashMap<String, VecDeque<u64>>, // peer_id → timestamps (secs)
+    window_secs: u64,
+    max_per_window: usize,
+}
+
+impl GossipThrottle {
+    /// Create a new throttle with the given window and limit.
+    pub fn new(window_secs: u64, max_per_window: usize) -> Self {
+        GossipThrottle {
+            windows: HashMap::new(),
+            window_secs,
+            max_per_window,
+        }
+    }
+
+    /// Returns `true` if the message from `peer_id` at `now_secs` should be
+    /// accepted; `false` if the peer has exceeded its rate limit.
+    ///
+    /// When accepted, the timestamp is recorded for future checks.
+    pub fn should_accept(&mut self, peer_id: &str, now_secs: u64) -> bool {
+        self.prune(now_secs);
+        let queue = self.windows.entry(peer_id.to_string()).or_default();
+        if queue.len() >= self.max_per_window {
+            return false;
+        }
+        queue.push_back(now_secs);
+        true
+    }
+
+    /// Remove timestamps older than `window_secs` from all queues.
+    fn prune(&mut self, now_secs: u64) {
+        let cutoff = now_secs.saturating_sub(self.window_secs);
+        for queue in self.windows.values_mut() {
+            while queue.front().map_or(false, |&t| t <= cutoff) {
+                queue.pop_front();
+            }
+        }
+    }
+}
 
 /// Wire messages for the URACE peer exchange protocol.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -104,6 +159,41 @@ mod tests {
     use crate::peer_discovery::AdmissionGate;
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
+
+    // ── M71 throttle tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn throttle_blocks_at_limit() {
+        let mut throttle = GossipThrottle::new(60, 3);
+        let peer = "peer-flood";
+        let now = 1_000_000u64;
+        assert!(throttle.should_accept(peer, now), "1st message accepted");
+        assert!(throttle.should_accept(peer, now), "2nd message accepted");
+        assert!(throttle.should_accept(peer, now), "3rd message accepted");
+        assert!(
+            !throttle.should_accept(peer, now),
+            "4th message must be blocked (limit=3)"
+        );
+    }
+
+    #[test]
+    fn throttle_allows_after_window() {
+        let mut throttle = GossipThrottle::new(60, 3);
+        let peer = "peer-window";
+        let t0 = 1_000_000u64;
+        // Fill the window.
+        for _ in 0..3 {
+            throttle.should_accept(peer, t0);
+        }
+        assert!(!throttle.should_accept(peer, t0), "still blocked at t0");
+
+        // Advance time past the window (61 seconds later).
+        let t1 = t0 + 61;
+        assert!(
+            throttle.should_accept(peer, t1),
+            "must be accepted after window expires"
+        );
+    }
 
     fn make_node(id: &str) -> NodeInfo {
         NodeInfo::new(id, "127.0.0.1:0")
