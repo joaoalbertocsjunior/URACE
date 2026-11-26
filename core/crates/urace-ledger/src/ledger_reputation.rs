@@ -129,6 +129,51 @@ impl ReputationStore {
     }
 }
 
+// ---------------------------------------------------------------------------
+// M13 — Reputation decay
+// ---------------------------------------------------------------------------
+
+/// Default fraction of the current score removed per daemon cycle (1 %).
+pub const DEFAULT_DECAY_RATE: f64 = 0.01;
+
+impl ReputationStore {
+    /// Append a negative delta equal to `decay_rate × current_score` for
+    /// `peer_id`.
+    ///
+    /// Returns the appended `ReputationEntry`, or `None` if the peer's score
+    /// is already ≤ 0 or the computed decay is negligibly small (< 1e-9).
+    pub fn apply_decay(
+        &self,
+        peer_id: &str,
+        decay_rate: f64,
+    ) -> Result<Option<ReputationEntry>, ReputationError> {
+        let current = self.score(peer_id)?;
+        if current <= 0.0 {
+            return Ok(None);
+        }
+        let decay_amount = current * decay_rate.abs();
+        if decay_amount < 1e-9 {
+            return Ok(None);
+        }
+        let entry = self.update(peer_id, -decay_amount, "decay")?;
+        Ok(Some(entry))
+    }
+
+    /// Apply decay to every peer with a positive score.
+    ///
+    /// Returns the number of peers whose score was reduced.
+    pub fn apply_decay_all(&self, decay_rate: f64) -> Result<usize, ReputationError> {
+        let peers = self.all_peers()?;
+        let mut count = 0usize;
+        for peer_id in &peers {
+            if self.apply_decay(peer_id, decay_rate)?.is_some() {
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+}
+
 /// Apply a cross-network reputation discount.
 ///
 /// Used for federation cross-network comparisons where the remote network
@@ -237,5 +282,68 @@ mod tests {
     fn discount_floors_at_zero() {
         // negative score × positive factor → still floored at 0
         assert!((discount(-5.0, 0.5) - 0.0).abs() < 1e-9);
+    }
+
+    // M13 — decay tests
+
+    #[test]
+    fn decay_reduces_positive_score() {
+        let dir = tempdir().unwrap();
+        let store = open(&dir);
+        store.update("peer-d", 10.0, "initial").unwrap();
+        let entry = store
+            .apply_decay("peer-d", DEFAULT_DECAY_RATE)
+            .unwrap()
+            .expect("should produce a decay entry");
+        // decay delta should be –0.1 (1 % of 10.0)
+        assert!((entry.delta - (-0.1)).abs() < 1e-9, "delta = {}", entry.delta);
+        let score = store.score("peer-d").unwrap();
+        // 10.0 – 0.1 = 9.9
+        assert!((score - 9.9).abs() < 1e-9, "score = {score}");
+    }
+
+    #[test]
+    fn decay_no_effect_on_zero() {
+        let dir = tempdir().unwrap();
+        let store = open(&dir);
+        // peer with no entries → score 0
+        let result = store.apply_decay("peer-e", DEFAULT_DECAY_RATE).unwrap();
+        assert!(result.is_none(), "no decay entry expected for zero score");
+
+        // explicitly set to zero via cancelling entries
+        store.update("peer-f", 5.0, "up").unwrap();
+        store.update("peer-f", -5.0, "down").unwrap();
+        let result = store.apply_decay("peer-f", DEFAULT_DECAY_RATE).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn decay_all_applies_to_all_peers() {
+        let dir = tempdir().unwrap();
+        let store = open(&dir);
+        store.update("alpha", 10.0, "r").unwrap();
+        store.update("beta", 20.0, "r").unwrap();
+        store.update("gamma", -5.0, "r").unwrap(); // negative — should not decay
+
+        let count = store.apply_decay_all(DEFAULT_DECAY_RATE).unwrap();
+        assert_eq!(count, 2, "only alpha and beta have positive scores");
+
+        let s_alpha = store.score("alpha").unwrap();
+        let s_beta = store.score("beta").unwrap();
+        assert!((s_alpha - 9.9).abs() < 1e-9, "alpha = {s_alpha}");
+        assert!((s_beta - 19.8).abs() < 1e-9, "beta = {s_beta}");
+    }
+
+    #[test]
+    fn decay_rate_clamp_uses_abs() {
+        let dir = tempdir().unwrap();
+        let store = open(&dir);
+        store.update("peer-g", 10.0, "initial").unwrap();
+        // passing a negative rate: abs() is applied, so result is same as +0.1
+        let entry = store
+            .apply_decay("peer-g", -0.1)
+            .unwrap()
+            .expect("should decay");
+        assert!((entry.delta - (-1.0)).abs() < 1e-9, "delta = {}", entry.delta);
     }
 }

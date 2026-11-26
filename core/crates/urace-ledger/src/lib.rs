@@ -1,4 +1,5 @@
 pub mod atomic_write;
+pub mod burn_schedule;
 pub mod compaction;
 pub mod credit_ledger;
 pub mod escrow;
@@ -7,6 +8,7 @@ pub mod ledger_compaction;
 pub mod ledger_economics;
 pub mod ledger_reputation;
 pub mod ledger_sync;
+pub mod mint_rate;
 pub mod schema_version;
 pub mod signed_ledger;
 pub mod token_ledger;
@@ -14,6 +16,7 @@ pub mod tokenomics;
 pub mod units;
 
 pub use atomic_write::{atomic_append_jsonl, atomic_write};
+pub use burn_schedule::{apply_burn, burn_amount, burn_tiers, BurnTier};
 pub use compaction::{
     check_retention_violations, get_compaction_status, load_amendments, load_index, load_manifest,
     verify_manifest_on_startup, ArchiveAmendment, CompactionEngine, CompactionEvent,
@@ -29,7 +32,12 @@ pub use ledger_economics::{
     feature_borrow_cost_with_rep, feature_complexity_score, feature_earn_cap_units,
     supply_pressure_multiplier, wilson_lower, LedgerEconomics,
 };
-pub use ledger_reputation::{discount, ReputationEntry, ReputationError, ReputationStore};
+pub use ledger_reputation::{
+    discount, ReputationEntry, ReputationError, ReputationStore, DEFAULT_DECAY_RATE,
+};
+pub use mint_rate::{
+    MintRateWindow, HONEST_PEER_FRACTION, RATE_MULTIPLIER, WINDOW_SECS,
+};
 pub use ledger_sync::{
     apply_tail_payload, balance_from_seal, build_sync_attestation, build_sync_payload,
     exchange_checkpoint, fork_resolution_policy, latest_seal, prune_to_window, row_sha256,
@@ -46,8 +54,8 @@ pub use signed_ledger::{
 };
 pub use token_ledger::{TokenLedger, TokenLedgerError, DEFAULT_BASELINE_GRANT};
 pub use tokenomics::{
-    mint_amount, mint_on_qualified_acceptance, PEER_CAP as TOKEN_PEER_CAP, UCR_TO_SAT,
-    UNIT as TOKEN_UNIT,
+    mint_amount, mint_on_qualified_acceptance, within_epoch_supply_cap, within_peer_cap,
+    DEFAULT_EPOCH_SUPPLY_CAP, PEER_CAP as TOKEN_PEER_CAP, UCR_TO_SAT, UNIT as TOKEN_UNIT,
 };
 pub use units::{
     earn_units as units_earn, from_chain_units, from_display, spend_units as units_spend,

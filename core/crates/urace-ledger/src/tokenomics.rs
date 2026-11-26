@@ -46,6 +46,31 @@ pub fn mint_amount(score_delta: i64) -> Option<i64> {
     Some(amount)
 }
 
+// ---------------------------------------------------------------------------
+// M41 — Supply schedule enforcement
+// ---------------------------------------------------------------------------
+
+/// Maximum total UCR that may be minted across all peers in a single epoch.
+///
+/// `0` means uncapped (default during bootstrap). Set via governance vote.
+pub const DEFAULT_EPOCH_SUPPLY_CAP: i64 = 0;
+
+/// Returns `true` if minting `amount` more UCR would not breach `epoch_cap`.
+///
+/// If `epoch_cap == 0` the protocol is uncapped and this always returns `true`.
+pub fn within_epoch_supply_cap(epoch_minted_so_far: i64, amount: i64, epoch_cap: i64) -> bool {
+    if epoch_cap == 0 {
+        return true;
+    }
+    epoch_minted_so_far + amount <= epoch_cap
+}
+
+/// Returns `true` iff crediting `amount` to a peer with `balance` would not
+/// exceed `PEER_CAP`.
+pub fn within_peer_cap(balance: i64, amount: i64) -> bool {
+    balance + amount <= PEER_CAP
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -89,5 +114,35 @@ mod tests {
     #[test]
     fn mint_amount_clamped_to_peer_cap() {
         assert_eq!(mint_amount(PEER_CAP + 1), Some(PEER_CAP));
+    }
+
+    // M41 tests
+
+    #[test]
+    fn epoch_cap_zero_always_allowed() {
+        assert!(within_epoch_supply_cap(0, 1_000_000, 0));
+        assert!(within_epoch_supply_cap(i64::MAX - 1, 1, 0));
+    }
+
+    #[test]
+    fn epoch_cap_enforced_when_nonzero() {
+        let cap = 500 * UNIT;
+        // Right at the cap: allowed
+        assert!(within_epoch_supply_cap(400 * UNIT, 100 * UNIT, cap));
+        // One base unit over: denied
+        assert!(!within_epoch_supply_cap(400 * UNIT, 100 * UNIT + 1, cap));
+        // Already at cap, any further mint denied
+        assert!(!within_epoch_supply_cap(cap, 1, cap));
+    }
+
+    #[test]
+    fn peer_cap_enforcement() {
+        // Balance + amount exactly equals PEER_CAP: allowed
+        assert!(within_peer_cap(0, PEER_CAP));
+        // One over: denied
+        assert!(!within_peer_cap(0, PEER_CAP + 1));
+        assert!(!within_peer_cap(PEER_CAP, 1));
+        // Zero mint always allowed (vacuously)
+        assert!(within_peer_cap(PEER_CAP, 0));
     }
 }
