@@ -12,4 +12,6 @@ serde.workspace      = true
 serde_json.workspace = true
 thiserror.workspace  = true
 regex-lite.workspace = true
+sha2.workspace       = true
+hex.workspace        = true
 urace-types          = { path = "../urace-types" }

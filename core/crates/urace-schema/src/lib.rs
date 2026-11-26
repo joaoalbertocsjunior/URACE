@@ -6,6 +6,7 @@
 pub mod mime_policy;
 pub mod rules;
 pub mod schema_export;
+pub mod spec_hash;
 pub mod validation;
 
 pub use mime_policy::MimePolicy;

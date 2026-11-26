@@ -102,6 +102,99 @@ fn resolution(
     }
 }
 
+/// Operations classified as "high-value" require a time-lock check.
+/// The lock delay is in seconds; the caller must track when the operation was first requested.
+pub const HIGH_VALUE_TIMELOCK_SECS: u64 = 300; // 5 minutes
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum OperationClass {
+    Standard,   // No time-lock required
+    HighValue,  // Requires HIGH_VALUE_TIMELOCK_SECS to elapse before execution
+    Critical,   // Requires governance vote (not handled here — returns RequiresAuthoritativeDecision)
+}
+
+/// Classify an objective's scope into an OperationClass.
+pub fn classify_operation(scope: &str) -> OperationClass {
+    match scope.to_lowercase().as_str() {
+        "implementation" | "documentation" | "metrics" => OperationClass::Standard,
+        "runtime" | "rebootstrap" => OperationClass::HighValue,
+        _ => OperationClass::Critical,
+    }
+}
+
+/// Check whether a time-lock has elapsed.
+/// `first_requested_secs`: Unix timestamp when operation was first requested.
+/// `now_secs`: Current Unix timestamp.
+pub fn timelock_elapsed(first_requested_secs: u64, now_secs: u64, lock_secs: u64) -> bool {
+    now_secs >= first_requested_secs + lock_secs
+}
+
+/// Tracks the total "authority budget" consumed in a session.
+/// Each AUTONOMOUSLY_AUTHORIZED resolution consumes 1 unit.
+/// When budget is exhausted, further resolutions return RequiresAuthoritativeDecision.
+#[derive(Debug, Clone)]
+pub struct SessionBudget {
+    max_ops: u64,
+    consumed: u64,
+    session_id: String,
+}
+
+impl SessionBudget {
+    pub fn new(max_ops: u64, session_id: impl Into<String>) -> Self {
+        SessionBudget { max_ops, consumed: 0, session_id: session_id.into() }
+    }
+
+    /// Returns true if budget is not yet exhausted.
+    pub fn has_capacity(&self) -> bool {
+        self.consumed < self.max_ops
+    }
+
+    /// Consume 1 unit. Returns Err if already exhausted.
+    pub fn consume(&mut self) -> Result<u64, &'static str> {
+        if !self.has_capacity() {
+            return Err("session budget exhausted");
+        }
+        self.consumed += 1;
+        Ok(self.consumed)
+    }
+
+    pub fn remaining(&self) -> u64 {
+        self.max_ops.saturating_sub(self.consumed)
+    }
+
+    pub fn consumed(&self) -> u64 { self.consumed }
+    pub fn max_ops(&self) -> u64 { self.max_ops }
+    pub fn session_id(&self) -> &str { &self.session_id }
+}
+
+/// Resolve with session budget enforcement.
+/// If budget is provided and exhausted, returns RequiresAuthoritativeDecision.
+/// If resolve returns AutonomouslyAuthorized and budget is provided, consumes 1 unit.
+pub fn resolve_with_budget(
+    objective: &Objective,
+    authority_config: &HashMap<String, Value>,
+    self_evolution_policy: Option<&HashMap<String, Value>>,
+    constraints: &[String],
+    budget: Option<&mut SessionBudget>,
+) -> AuthorityResolution {
+    if let Some(ref b) = budget {
+        if !b.has_capacity() {
+            return resolution(
+                AuthorityOutcome::RequiresAuthoritativeDecision,
+                "Session budget exhausted; further operations require authoritative decision",
+                "session_budget",
+            );
+        }
+    }
+    let result = resolve(objective, authority_config, self_evolution_policy, constraints);
+    if result.outcome == AuthorityOutcome::AutonomouslyAuthorized {
+        if let Some(b) = budget {
+            let _ = b.consume();
+        }
+    }
+    result
+}
+
 /// Evaluate whether an Objective is within the delegated Authority boundary.
 pub fn resolve(
     objective: &Objective,
@@ -356,5 +449,51 @@ mod tests {
         let cfg = authority_config(&["local implementation changes"], &[]);
         let r = resolve(&obj("unknown_scope_xyz", "do something"), &cfg, None, &[]);
         assert_eq!(r.outcome, AuthorityOutcome::Unresolved);
+    }
+
+    #[test]
+    fn session_budget_exhausted_returns_decision() {
+        let cfg = authority_config(&["local implementation changes"], &[]);
+        let mut budget = SessionBudget::new(2, "test-session");
+
+        // First two succeed
+        let r1 = resolve_with_budget(&obj("implementation", "task one"), &cfg, None, &[], Some(&mut budget));
+        assert_eq!(r1.outcome, AuthorityOutcome::AutonomouslyAuthorized);
+        let r2 = resolve_with_budget(&obj("implementation", "task two"), &cfg, None, &[], Some(&mut budget));
+        assert_eq!(r2.outcome, AuthorityOutcome::AutonomouslyAuthorized);
+
+        // Third is blocked by budget
+        let r3 = resolve_with_budget(&obj("implementation", "task three"), &cfg, None, &[], Some(&mut budget));
+        assert_eq!(r3.outcome, AuthorityOutcome::RequiresAuthoritativeDecision);
+        assert_eq!(r3.gate, "session_budget");
+    }
+
+    #[test]
+    fn session_budget_not_consumed_on_denied() {
+        let cfg = authority_config(&["local implementation changes"], &["spend money"]);
+        let mut budget = SessionBudget::new(5, "test-session");
+
+        // Denied resolution — budget should not be decremented
+        let r = resolve_with_budget(
+            &obj("implementation", "spend money on infra"),
+            &cfg,
+            None,
+            &[],
+            Some(&mut budget),
+        );
+        assert_eq!(r.outcome, AuthorityOutcome::Denied);
+        assert_eq!(budget.consumed(), 0);
+        assert_eq!(budget.remaining(), 5);
+    }
+
+    #[test]
+    fn timelock_elapsed_check() {
+        assert!(timelock_elapsed(100, 405, 300));
+        assert!(!timelock_elapsed(100, 399, 300));
+    }
+
+    #[test]
+    fn classify_runtime_is_high_value() {
+        assert_eq!(classify_operation("runtime"), OperationClass::HighValue);
     }
 }

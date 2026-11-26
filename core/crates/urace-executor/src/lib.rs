@@ -9,7 +9,10 @@
 //! - Parent process environment variables are NEVER forwarded to child processes.
 
 pub mod capabilities;
+pub mod context_guard;
 pub mod multi_executor;
+pub mod output_validator;
+pub mod prompt_sandbox;
 pub mod retry_engine;
 pub mod routing;
 
@@ -19,8 +22,11 @@ pub use multi_executor::{
     BudgetSlot, DimensionScores, DiscoverFn, MultiExecutorError, MultiPlanSettings, ScoreWeights,
     ScoredCandidate, SCHEMA as MULTI_PLAN_SCHEMA,
 };
+pub use context_guard::{is_safe_context, scan_context, ContextGuardResult};
+pub use output_validator::{validate_output, OutputSchema, ValidationError, MAX_OUTPUT_BYTES};
+pub use prompt_sandbox::{safe_prompt, sanitise_prompt, SandboxResult};
 pub use retry_engine::{parse_retry_after, RetryEngine, RetryOutcome, RetryPolicy};
-pub use routing::{select_provider, ProviderDef, UnavailabilityClass};
+pub use routing::{select_provider, version_satisfies, ProviderDef, UnavailabilityClass};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

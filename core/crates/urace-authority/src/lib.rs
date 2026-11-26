@@ -5,7 +5,10 @@ pub mod fleet_policy;
 pub mod intent_trace;
 pub mod policy_store;
 
-pub use authority::{resolve, Objective};
+pub use authority::{
+    classify_operation, resolve, resolve_with_budget, timelock_elapsed, HIGH_VALUE_TIMELOCK_SECS,
+    Objective, OperationClass, SessionBudget,
+};
 pub use destination::{anchor_from_config, drift_score, DriftOutcome, DRIFT_BLOCK, DRIFT_FLAG};
 pub use fleet_policy::{FleetPolicy, FleetPolicyError, PolicyRule, PolicyStore};
 pub use policy_store::{

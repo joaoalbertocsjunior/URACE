@@ -341,6 +341,48 @@ pub fn select_provider<'a>(
         .max_by_key(|p| p.capability_priority(&task.capability))
 }
 
+// ── M75: Version pinning ──────────────────────────────────────────────────────
+
+/// Return `true` if `executor_version` satisfies the `required_version`
+/// constraint.
+///
+/// Supported constraint prefixes:
+/// - `""` (empty) — no constraint; always satisfied.
+/// - `">=X.Y.Z"` — executor version must be ≥ X.Y.Z.
+/// - `"=X.Y.Z"` — executor version must equal X.Y.Z exactly.
+/// - Bare `"X.Y.Z"` (no prefix) — treated as an exact-match constraint.
+pub fn version_satisfies(executor_version: &str, required_version: &str) -> bool {
+    if required_version.is_empty() {
+        return true;
+    }
+    if let Some(min_ver) = required_version.strip_prefix(">=") {
+        return semver_gte(executor_version, min_ver.trim());
+    }
+    if let Some(exact) = required_version.strip_prefix('=') {
+        return executor_version.trim() == exact.trim();
+    }
+    // Default: exact match.
+    executor_version.trim() == required_version.trim()
+}
+
+/// Return `true` if semver string `a` is ≥ semver string `b`.
+///
+/// Parses `"X.Y.Z"` triples; non-numeric parts parse as 0.
+fn semver_gte(a: &str, b: &str) -> bool {
+    let parse = |s: &str| -> (u64, u64, u64) {
+        let parts: Vec<u64> = s
+            .splitn(3, '.')
+            .map(|p| p.parse().unwrap_or(0))
+            .collect();
+        (
+            parts.first().copied().unwrap_or(0),
+            parts.get(1).copied().unwrap_or(0),
+            parts.get(2).copied().unwrap_or(0),
+        )
+    };
+    parse(a) >= parse(b)
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -535,5 +577,39 @@ mod tests {
         let defs = routed_provider_definitions(&config);
         assert!(defs.iter().any(|p| p.id == "enabled-one"));
         assert!(!defs.iter().any(|p| p.id == "disabled-one"));
+    }
+
+    // ── M75: version_satisfies ────────────────────────────────────────────────
+
+    #[test]
+    fn empty_constraint_always_satisfied() {
+        assert!(version_satisfies("1.0.0", ""));
+        assert!(version_satisfies("0.0.1", ""));
+        assert!(version_satisfies("99.99.99", ""));
+    }
+
+    #[test]
+    fn exact_version_match() {
+        assert!(version_satisfies("1.2.3", "=1.2.3"));
+        assert!(version_satisfies("1.2.3", "1.2.3"));
+        assert!(!version_satisfies("1.2.4", "=1.2.3"));
+        assert!(!version_satisfies("1.2.4", "1.2.3"));
+        assert!(!version_satisfies("2.0.0", "=1.2.3"));
+    }
+
+    #[test]
+    fn gte_satisfied() {
+        assert!(version_satisfies("1.2.3", ">=1.2.3")); // equal
+        assert!(version_satisfies("1.2.4", ">=1.2.3")); // patch higher
+        assert!(version_satisfies("1.3.0", ">=1.2.3")); // minor higher
+        assert!(version_satisfies("2.0.0", ">=1.2.3")); // major higher
+        assert!(version_satisfies("10.0.0", ">=2.0.0")); // large jump
+    }
+
+    #[test]
+    fn gte_not_satisfied() {
+        assert!(!version_satisfies("1.2.2", ">=1.2.3")); // patch lower
+        assert!(!version_satisfies("1.1.9", ">=1.2.0")); // minor lower
+        assert!(!version_satisfies("0.9.9", ">=1.0.0")); // major lower
     }
 }

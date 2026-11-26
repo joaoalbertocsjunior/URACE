@@ -263,6 +263,138 @@ mod tests {
 
 // ── RuleConflict ──────────────────────────────────────────────────────────────
 
+// ── M07: Governance binary floors ────────────────────────────────────────────
+
+/// Hard-coded minimum values for governance-settable parameters.
+/// These are code constants — they cannot be changed via governance.
+pub struct GovernanceFloor {
+    pub parameter: &'static str,
+    pub min_value: f64,
+    pub description: &'static str,
+}
+
+pub static GOVERNANCE_FLOORS: &[GovernanceFloor] = &[
+    GovernanceFloor {
+        parameter: "quorum_threshold",
+        min_value: 0.51,
+        description: "Minimum quorum fraction for governance votes",
+    },
+    GovernanceFloor {
+        parameter: "supermajority_threshold",
+        min_value: 0.66,
+        description: "Minimum supermajority fraction for high-value governance changes",
+    },
+    GovernanceFloor {
+        parameter: "time_lock_secs",
+        min_value: 60.0,
+        description: "Minimum time-lock delay for high-value operations (seconds)",
+    },
+    GovernanceFloor {
+        parameter: "reputation_decay_rate",
+        min_value: 0.001,
+        description: "Minimum reputation decay rate per cycle",
+    },
+    GovernanceFloor {
+        parameter: "inbox_rate_limit",
+        min_value: 1.0,
+        description: "Minimum inbox messages per peer per cycle (must be at least 1)",
+    },
+];
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FloorCheckResult {
+    Valid,
+    BelowFloor { parameter: String, proposed: f64, floor: f64 },
+    UnknownParameter,
+}
+
+/// Check if a proposed governance change respects hard-coded floors.
+pub fn check_governance_floor(parameter: &str, proposed_value: f64) -> FloorCheckResult {
+    for floor in GOVERNANCE_FLOORS {
+        if floor.parameter == parameter {
+            if proposed_value < floor.min_value {
+                return FloorCheckResult::BelowFloor {
+                    parameter: parameter.to_string(),
+                    proposed: proposed_value,
+                    floor: floor.min_value,
+                };
+            }
+            return FloorCheckResult::Valid;
+        }
+    }
+    FloorCheckResult::UnknownParameter
+}
+
+/// Validate a batch of governance changes.
+/// Returns Err with the first violation found.
+pub fn validate_governance_changes(
+    changes: &HashMap<String, f64>,
+) -> Result<(), FloorCheckResult> {
+    for (param, &value) in changes {
+        match check_governance_floor(param, value) {
+            FloorCheckResult::Valid | FloorCheckResult::UnknownParameter => {}
+            violation => return Err(violation),
+        }
+    }
+    Ok(())
+}
+
+// ── M53: Uncontested quorum spec ──────────────────────────────────────────────
+
+/// Conditions for a governance change to qualify as "uncontested" (can proceed with lower quorum).
+/// ALL conditions must be met simultaneously.
+#[derive(Debug, Clone)]
+pub struct UncontestedQuorumSpec {
+    pub min_wait_secs: u64,            // Minimum 7 days = 604800 seconds
+    pub operation_class: &'static str, // "operational" only (not economic, not identity)
+    pub min_reviewer_signoffs: usize,  // >= 3
+    pub anti_gaming_clause: bool,      // Must be true to prevent staged weakening
+}
+
+impl UncontestedQuorumSpec {
+    pub fn default_spec() -> Self {
+        UncontestedQuorumSpec {
+            min_wait_secs: 7 * 24 * 3600, // 7 days
+            operation_class: "operational",
+            min_reviewer_signoffs: 3,
+            anti_gaming_clause: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum UncontestedEligibility {
+    Eligible,
+    TooSoon { waited_secs: u64, required_secs: u64 },
+    WrongClass { got: String },
+    InsufficientSignoffs { got: usize, required: usize },
+    AntiGamingClauseNotSatisfied,
+}
+
+pub fn check_uncontested_eligible(
+    waited_secs: u64,
+    operation_class: &str,
+    reviewer_signoffs: usize,
+    anti_gaming_satisfied: bool,
+    spec: &UncontestedQuorumSpec,
+) -> UncontestedEligibility {
+    if waited_secs < spec.min_wait_secs {
+        return UncontestedEligibility::TooSoon { waited_secs, required_secs: spec.min_wait_secs };
+    }
+    if operation_class != spec.operation_class {
+        return UncontestedEligibility::WrongClass { got: operation_class.to_string() };
+    }
+    if reviewer_signoffs < spec.min_reviewer_signoffs {
+        return UncontestedEligibility::InsufficientSignoffs { got: reviewer_signoffs, required: spec.min_reviewer_signoffs };
+    }
+    if spec.anti_gaming_clause && !anti_gaming_satisfied {
+        return UncontestedEligibility::AntiGamingClauseNotSatisfied;
+    }
+    UncontestedEligibility::Eligible
+}
+
+// ── RuleConflict ──────────────────────────────────────────────────────────────
+
 /// A detected contradiction between two active rules.
 ///
 /// Returned by [`detect_conflicts`].
@@ -488,6 +620,107 @@ fn significant_words(text: &str) -> Vec<&str> {
     words.sort_unstable();
     words.dedup();
     words
+}
+
+// ── M07 governance floor tests ────────────────────────────────────────────────
+
+#[cfg(test)]
+mod governance_floor_tests {
+    use super::*;
+
+    #[test]
+    fn quorum_below_floor_rejected() {
+        let result = check_governance_floor("quorum_threshold", 0.4);
+        assert!(matches!(result, FloorCheckResult::BelowFloor { .. }));
+    }
+
+    #[test]
+    fn supermajority_at_floor_accepted() {
+        let result = check_governance_floor("supermajority_threshold", 0.66);
+        assert_eq!(result, FloorCheckResult::Valid);
+    }
+
+    #[test]
+    fn batch_validation_stops_at_first_violation() {
+        let mut changes = HashMap::new();
+        changes.insert("quorum_threshold".to_string(), 0.3); // below floor
+        changes.insert("time_lock_secs".to_string(), 120.0); // valid
+        let result = validate_governance_changes(&changes);
+        assert!(result.is_err());
+        if let Err(FloorCheckResult::BelowFloor { parameter, .. }) = result {
+            assert_eq!(parameter, "quorum_threshold");
+        } else {
+            // The only Err variant is BelowFloor (UnknownParameter is treated as valid)
+        }
+    }
+
+    #[test]
+    fn unknown_parameter_treated_as_valid() {
+        let result = check_governance_floor("nonexistent_param", 0.0);
+        assert_eq!(result, FloorCheckResult::UnknownParameter);
+
+        // validate_governance_changes treats UnknownParameter as valid (no error)
+        let mut changes = HashMap::new();
+        changes.insert("nonexistent_param".to_string(), 0.0);
+        assert!(validate_governance_changes(&changes).is_ok());
+    }
+}
+
+// ── M53 uncontested quorum tests ──────────────────────────────────────────────
+
+#[cfg(test)]
+mod uncontested_quorum_tests {
+    use super::*;
+
+    fn default_spec() -> UncontestedQuorumSpec {
+        UncontestedQuorumSpec::default_spec()
+    }
+
+    #[test]
+    fn all_conditions_met_eligible() {
+        let spec = default_spec();
+        let result = check_uncontested_eligible(
+            spec.min_wait_secs,     // exactly at the threshold
+            "operational",
+            3,
+            true,
+            &spec,
+        );
+        assert_eq!(result, UncontestedEligibility::Eligible);
+    }
+
+    #[test]
+    fn too_soon_rejected() {
+        let spec = default_spec();
+        let result = check_uncontested_eligible(100, "operational", 3, true, &spec);
+        assert!(matches!(result, UncontestedEligibility::TooSoon { .. }));
+    }
+
+    #[test]
+    fn wrong_class_rejected() {
+        let spec = default_spec();
+        let result = check_uncontested_eligible(
+            spec.min_wait_secs,
+            "economic",
+            3,
+            true,
+            &spec,
+        );
+        assert!(matches!(result, UncontestedEligibility::WrongClass { .. }));
+    }
+
+    #[test]
+    fn insufficient_signoffs_rejected() {
+        let spec = default_spec();
+        let result = check_uncontested_eligible(
+            spec.min_wait_secs,
+            "operational",
+            2, // below the required 3
+            true,
+            &spec,
+        );
+        assert!(matches!(result, UncontestedEligibility::InsufficientSignoffs { .. }));
+    }
 }
 
 // ── RuleStore tests ───────────────────────────────────────────────────────────
