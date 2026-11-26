@@ -16,15 +16,20 @@
 //! - `WorkPolicy::default()` has `max_budget_ucr=0` and `require_authority_check=true`;
 //!   any leniency must be explicitly configured.
 
+pub mod commit_reveal;
 pub mod exchange_endpoint;
 pub mod implementation_sequence;
 pub mod matching;
 pub mod planner;
+pub mod price_history;
 pub mod purchase_settlement;
 pub mod receipt;
 pub mod work_market;
 pub mod work_policy;
 
+pub use commit_reveal::{
+    BidCommitment, BidReveal, CommitRevealError, CommitRevealStore, NO_REVEAL_PENALTY_UCR,
+};
 pub use exchange_endpoint::{
     build_settlement_router, handle_credit_settlement, SettlementEndpointError, SettlementPayload,
     SettlementResponse, SettlementRouterConfig, SCHEMA as CREDIT_SETTLEMENT_SCHEMA,
@@ -32,6 +37,7 @@ pub use exchange_endpoint::{
 pub use implementation_sequence::PlanningContext;
 pub use matching::{match_score, select_best_bid, DemandCounter, WorkBid, WorkTask};
 pub use planner::{AutoPlanner, Planner, TopologicalPlanner};
+pub use price_history::{PriceEntry, PriceHistory, PriceHistoryError};
 pub use purchase_settlement::{PurchaseSettlement, SettlementError, SettlementStore};
 pub use receipt::{ReceiptError, ReceiptStore, WorkReceipt};
 pub use work_market::{WorkError, WorkMarket};
