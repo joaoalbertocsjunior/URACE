@@ -8,10 +8,14 @@
 
 pub mod audit_kinds;
 pub mod audit_ledger;
+pub mod chain_integrity;
 pub mod governance_audit;
 pub mod spec_audit;
 
 pub use audit_kinds::AuditKind;
 pub use audit_ledger::{AuditError, AuditEvent, AuditLedger};
+pub use chain_integrity::{verify_audit_chain, ChainIntegrityReport};
 pub use governance_audit::GovernanceAuditor;
-pub use spec_audit::SpecAuditor;
+pub use spec_audit::{
+    detect_siphon_anomalies, MintRecord, SpecAuditor, SIPHON_MAX_SHARE_FRACTION,
+};

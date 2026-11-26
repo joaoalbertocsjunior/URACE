@@ -15,7 +15,7 @@ pub mod workflow_state;
 
 pub use asset_registry::{Asset, AssetError, AssetRegistry};
 pub use decision_record::{DecisionRecord, DecisionStore, ProvenanceStatus};
-pub use inbox::{Inbox, InboxError, Message};
+pub use inbox::{Inbox, InboxError, InboxRateGuard, InboxRateResult, Message, INBOX_MICRO_BURN_UCR, INBOX_RATE_LIMIT_PER_MIN};
 pub use reputation_categories::{
     ConsensusProfile, PeerReputation, ReputationCategories, ReputationStore,
 };

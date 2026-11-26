@@ -22,6 +22,34 @@ pub enum PolicyViolation {
     TooManyConcurrentJobs { count: usize, max: usize },
 }
 
+// ── M08 — Off-graph participation cost ───────────────────────────────────────
+
+/// Extra cost (in UCR base units) for peers participating in jobs outside
+/// their registered capability graph (0.1 UNIT).
+pub const OFF_GRAPH_COST_UCR: i64 = 10_000_000;
+
+/// Returns the participation cost for a job attempt.
+///
+/// Peers within the capability graph (`is_in_graph = true`) pay nothing.
+/// Out-of-graph participation incurs `OFF_GRAPH_COST_UCR`.
+pub fn participation_cost(is_in_graph: bool) -> i64 {
+    if is_in_graph { 0 } else { OFF_GRAPH_COST_UCR }
+}
+
+// ── M19 — Market floor constraint ────────────────────────────────────────────
+
+/// Minimum bid amount in UCR base units (0.01 UNIT).
+pub const MARKET_FLOOR_UCR: i64 = 1_000_000;
+
+/// Returns `Err` if `amount_ucr` is below the market floor.
+pub fn check_market_floor(amount_ucr: i64) -> Result<(), &'static str> {
+    if amount_ucr < MARKET_FLOOR_UCR {
+        Err("bid below market floor")
+    } else {
+        Ok(())
+    }
+}
+
 /// Contract-bound execution policy for the work market.
 ///
 /// Conservative defaults: max_budget=0 (must be raised explicitly),
@@ -141,6 +169,29 @@ mod tests {
             Err(PolicyViolation::ScopeNotAllowed { .. })
         ));
         assert!(policy.check(100, "documentation", false, 0).is_ok());
+    }
+
+    // M08 tests
+    #[test]
+    fn in_graph_participation_cost_is_zero() {
+        assert_eq!(participation_cost(true), 0);
+    }
+
+    #[test]
+    fn off_graph_participation_cost_nonzero() {
+        assert_eq!(participation_cost(false), OFF_GRAPH_COST_UCR);
+    }
+
+    // M19 tests
+    #[test]
+    fn market_floor_at_minimum_accepted() {
+        assert!(check_market_floor(MARKET_FLOOR_UCR).is_ok());
+    }
+
+    #[test]
+    fn market_floor_below_minimum_rejected() {
+        assert!(check_market_floor(MARKET_FLOOR_UCR - 1).is_err());
+        assert!(check_market_floor(0).is_err());
     }
 
     #[test]

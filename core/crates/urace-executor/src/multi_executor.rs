@@ -333,6 +333,63 @@ pub fn generate_and_select(
     Ok(winner.proposal.clone())
 }
 
+// ── M78 — Multi-model consensus ───────────────────────────────────────────────
+
+/// M78 — Multi-model consensus: verify that the top-scoring candidates agree
+/// closely enough to be considered a consensus result.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ConsensusVerdict {
+    /// All top candidates agree within the threshold.
+    Consensus { mean_score: f64, spread: f64 },
+    /// Top candidates diverge — human review may be needed.
+    Divergent {
+        max_score: f64,
+        min_score: f64,
+        spread: f64,
+    },
+}
+
+/// Check whether the top `quorum_size` candidates from `scored` agree within `max_spread`.
+///
+/// `quorum_size` = how many top candidates to consider (minimum 2).
+/// `max_spread`  = maximum allowed difference between max and min score in the quorum.
+pub fn check_model_consensus(
+    scored: &[ScoredCandidate],
+    quorum_size: usize,
+    max_spread: f64,
+) -> ConsensusVerdict {
+    if scored.is_empty() {
+        return ConsensusVerdict::Divergent {
+            max_score: 0.0,
+            min_score: 0.0,
+            spread: 0.0,
+        };
+    }
+
+    // Sort descending by total score to pick the top-N.
+    let mut sorted: Vec<f64> = scored.iter().map(|c| c.score.total).collect();
+    sorted.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Use all available candidates if quorum_size exceeds the slice length.
+    let effective_quorum = quorum_size.max(2).min(sorted.len());
+    let quorum_scores = &sorted[..effective_quorum];
+
+    let max_score = quorum_scores[0];
+    let min_score = quorum_scores[effective_quorum - 1];
+    let spread = max_score - min_score;
+    let mean_score = quorum_scores.iter().sum::<f64>() / effective_quorum as f64;
+
+    if spread <= max_spread {
+        ConsensusVerdict::Consensus { mean_score, spread }
+    } else {
+        ConsensusVerdict::Divergent {
+            max_score,
+            min_score,
+            spread,
+        }
+    }
+}
+
 // ── Budget allocation helpers ─────────────────────────────────────────────────
 
 /// Per-provider budget slot.
@@ -464,5 +521,73 @@ mod tests {
         let state: HashMap<String, Value> = HashMap::new();
         let result = generate_and_select(&config, &state, &|_, _| None);
         assert!(matches!(result, Err(MultiExecutorError::Disabled)));
+    }
+
+    // ── M78 tests ─────────────────────────────────────────────────────────────
+
+    fn make_candidate(provider_id: &str, total: f64) -> ScoredCandidate {
+        ScoredCandidate {
+            schema: SCHEMA.to_string(),
+            provider_id: provider_id.to_string(),
+            proposal: json!({}),
+            score: DimensionScores {
+                constraint_compliance: total,
+                goal_alignment: total,
+                cost_estimate: total,
+                novelty: total,
+                total,
+            },
+        }
+    }
+
+    #[test]
+    fn consensus_when_scores_close() {
+        let candidates = vec![
+            make_candidate("a", 0.90),
+            make_candidate("b", 0.88),
+            make_candidate("c", 0.87),
+        ];
+        let verdict = check_model_consensus(&candidates, 3, 0.05);
+        assert!(
+            matches!(verdict, ConsensusVerdict::Consensus { .. }),
+            "expected Consensus, got {:?}",
+            verdict
+        );
+    }
+
+    #[test]
+    fn divergent_when_scores_spread() {
+        let candidates = vec![make_candidate("a", 0.95), make_candidate("b", 0.40)];
+        let verdict = check_model_consensus(&candidates, 2, 0.10);
+        assert!(
+            matches!(verdict, ConsensusVerdict::Divergent { .. }),
+            "expected Divergent, got {:?}",
+            verdict
+        );
+    }
+
+    #[test]
+    fn single_candidate_still_produces_verdict() {
+        // quorum_size 2 is requested but only 1 candidate available — uses all available.
+        let candidates = vec![make_candidate("a", 0.75)];
+        let verdict = check_model_consensus(&candidates, 2, 0.10);
+        // Spread of a single value is 0.0, which is ≤ max_spread → Consensus.
+        assert!(
+            matches!(verdict, ConsensusVerdict::Consensus { spread, .. } if spread == 0.0),
+            "expected Consensus with spread 0.0, got {:?}",
+            verdict
+        );
+    }
+
+    #[test]
+    fn consensus_spread_at_boundary() {
+        // spread exactly equals max_spread should count as Consensus.
+        let candidates = vec![make_candidate("a", 0.90), make_candidate("b", 0.80)];
+        let verdict = check_model_consensus(&candidates, 2, 0.10);
+        assert!(
+            matches!(verdict, ConsensusVerdict::Consensus { .. }),
+            "expected Consensus at boundary spread, got {:?}",
+            verdict
+        );
     }
 }

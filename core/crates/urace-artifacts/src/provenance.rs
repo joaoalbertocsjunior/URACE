@@ -105,6 +105,48 @@ impl ProvenanceGraph {
         visited.into_iter().collect()
     }
 
+    /// M10 — Genesis check: returns `true` if `node_id` is a provenance root
+    /// (exists in the graph and has no incoming `from → to` edges where it is `to`).
+    ///
+    /// A genesis node is one that no other node was derived from, i.e. it has no
+    /// predecessors in the reverse adjacency.  Used to assert that an artifact's
+    /// provenance chain is properly anchored.
+    pub fn is_genesis(&self, node_id: &str) -> bool {
+        self.nodes.contains_key(node_id)
+            && self.adjacency.get(node_id).map(|v| v.is_empty()).unwrap_or(true)
+    }
+
+    /// M15 — Chain completeness gate: return a list of node IDs that appear in
+    /// edges but are missing from the node registry.
+    ///
+    /// An empty return value means every node referenced by any edge is present —
+    /// the provenance chain is complete and consistent.
+    pub fn missing_nodes(&self) -> Vec<String> {
+        let mut missing: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (from_id, succs) in &self.adjacency {
+            if !self.nodes.contains_key(from_id) {
+                missing.insert(from_id.clone());
+            }
+            for (to_id, _) in succs {
+                if !self.nodes.contains_key(to_id) {
+                    missing.insert(to_id.clone());
+                }
+            }
+        }
+        missing.into_iter().collect()
+    }
+
+    /// M15 — Returns `Ok(())` when `missing_nodes()` is empty, otherwise
+    /// `Err(ProvenanceError::NodeNotFound(comma-separated list))`.
+    pub fn assert_chain_complete(&self) -> Result<(), ProvenanceError> {
+        let missing = self.missing_nodes();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(ProvenanceError::NodeNotFound(missing.join(", ")))
+        }
+    }
+
     /// Return `true` if the graph contains a cycle (DFS-based).
     pub fn is_cyclic(&self) -> bool {
         let mut colour: HashMap<&str, u8> = HashMap::new(); // 0=white,1=grey,2=black
@@ -378,6 +420,42 @@ mod tests {
         let mut g = ProvenanceGraph::new();
         g.add_node(node("X", "peer"));
         assert!(g.ancestors("X").is_empty());
+    }
+
+    #[test]
+    fn genesis_check_root_node() {
+        let mut g = ProvenanceGraph::new();
+        g.add_node(node("root", "artifact"));
+        g.add_node(node("child", "artifact"));
+        g.add_edge(edge("child", "root", "derived_from"));
+        assert!(g.is_genesis("root"), "root has no predecessors — is genesis");
+        assert!(!g.is_genesis("child"), "child has a predecessor");
+    }
+
+    #[test]
+    fn genesis_check_missing_node_returns_false() {
+        let g = ProvenanceGraph::new();
+        assert!(!g.is_genesis("nonexistent"));
+    }
+
+    #[test]
+    fn chain_complete_when_all_nodes_registered() {
+        let mut g = ProvenanceGraph::new();
+        g.add_node(node("A", "artifact"));
+        g.add_node(node("B", "artifact"));
+        g.add_edge(edge("A", "B", "derived_from"));
+        assert!(g.assert_chain_complete().is_ok());
+    }
+
+    #[test]
+    fn chain_incomplete_when_node_missing() {
+        let mut g = ProvenanceGraph::new();
+        g.add_node(node("A", "artifact"));
+        // Edge references "B" but "B" is not in the node registry.
+        g.add_edge(edge("A", "ghost", "derived_from"));
+        let missing = g.missing_nodes();
+        assert!(missing.contains(&"ghost".to_owned()));
+        assert!(g.assert_chain_complete().is_err());
     }
 
     #[test]

@@ -17,6 +17,7 @@
 //!   any leniency must be explicitly configured.
 
 pub mod commit_reveal;
+pub mod escrow_guard;
 pub mod exchange_endpoint;
 pub mod implementation_sequence;
 pub mod matching;
@@ -24,11 +25,13 @@ pub mod planner;
 pub mod price_history;
 pub mod purchase_settlement;
 pub mod receipt;
+pub mod task_rate;
 pub mod work_market;
 pub mod work_policy;
 
 pub use commit_reveal::{
-    BidCommitment, BidReveal, CommitRevealError, CommitRevealStore, NO_REVEAL_PENALTY_UCR,
+    is_bid_valid, BidCommitment, BidReveal, CommitRevealError, CommitRevealStore,
+    BID_VALIDITY_WINDOW_SECS, NO_REVEAL_PENALTY_UCR,
 };
 pub use exchange_endpoint::{
     build_settlement_router, handle_credit_settlement, SettlementEndpointError, SettlementPayload,
@@ -40,5 +43,10 @@ pub use planner::{AutoPlanner, Planner, TopologicalPlanner};
 pub use price_history::{PriceEntry, PriceHistory, PriceHistoryError};
 pub use purchase_settlement::{PurchaseSettlement, SettlementError, SettlementStore};
 pub use receipt::{ReceiptError, ReceiptStore, WorkReceipt};
-pub use work_market::{WorkError, WorkMarket};
-pub use work_policy::{PolicyViolation, WorkPolicy};
+pub use work_market::{PriceAttestation, WorkError, WorkMarket};
+pub use work_policy::{
+    check_market_floor, participation_cost, PolicyViolation, WorkPolicy, MARKET_FLOOR_UCR,
+    OFF_GRAPH_COST_UCR,
+};
+pub use escrow_guard::{EscrowError, EscrowRecord, EscrowState, ESCROW_TIMEOUT_SECS};
+pub use task_rate::{TaskRateGuard, TaskRateResult, TASK_RATE_LIMIT_PER_MIN};

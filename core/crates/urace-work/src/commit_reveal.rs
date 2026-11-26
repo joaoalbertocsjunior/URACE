@@ -14,6 +14,16 @@ use thiserror::Error;
 /// 100 000 base units = 0.001 UNIT.
 pub const NO_REVEAL_PENALTY_UCR: i64 = 100_000;
 
+// ── M30 — Bid validity window ─────────────────────────────────────────────────
+
+/// Default bid validity window in seconds (1 hour).
+pub const BID_VALIDITY_WINDOW_SECS: u64 = 3_600;
+
+/// Returns `true` iff the bid is still within its validity window at `now_secs`.
+pub fn is_bid_valid(commitment: &BidCommitment, now_secs: u64) -> bool {
+    now_secs <= commitment.committed_at_secs + commitment.reveal_window_secs
+}
+
 #[derive(Debug, Error)]
 pub enum CommitRevealError {
     #[error("commitment not found for work_id '{0}' peer '{1}'")]
@@ -91,7 +101,13 @@ impl CommitRevealStore {
     /// Store a bid commitment.  If the same `(work_id, bidder_id)` pair has
     /// already committed, the new commitment silently replaces it (allowing
     /// correction before the reveal phase opens).
-    pub fn commit(&mut self, commitment: BidCommitment) {
+    ///
+    /// M30: If `commitment.reveal_window_secs == 0`, it is set to
+    /// `BID_VALIDITY_WINDOW_SECS` before storing.
+    pub fn commit(&mut self, mut commitment: BidCommitment) {
+        if commitment.reveal_window_secs == 0 {
+            commitment.reveal_window_secs = BID_VALIDITY_WINDOW_SECS;
+        }
         self.commitments
             .entry(commitment.work_id.clone())
             .or_default()
@@ -324,6 +340,40 @@ mod tests {
         assert_eq!(penalties.len(), 1, "only Bob should be penalised");
         assert_eq!(penalties[0].0, peer2);
         assert_eq!(penalties[0].1, NO_REVEAL_PENALTY_UCR);
+    }
+
+    // M30 bid validity tests
+
+    #[test]
+    fn bid_valid_within_window() {
+        let c = make_commitment();
+        assert!(is_bid_valid(&c, COMMIT_TIME + WINDOW - 1));
+        assert!(is_bid_valid(&c, COMMIT_TIME)); // start of window
+    }
+
+    #[test]
+    fn bid_expired_outside_window() {
+        let c = make_commitment();
+        assert!(!is_bid_valid(&c, COMMIT_TIME + WINDOW + 1));
+    }
+
+    #[test]
+    fn commit_with_zero_window_uses_default() {
+        let mut store = CommitRevealStore::new();
+        // A zero reveal_window_secs should be replaced with BID_VALIDITY_WINDOW_SECS.
+        // We verify indirectly: is_expired at committed_at + BID_VALIDITY_WINDOW_SECS + 1
+        // must return true, but at committed_at + BID_VALIDITY_WINDOW_SECS - 1 must return false.
+        let hash = BidCommitment::compute_hash(100, "p", "w", "nonce00");
+        let c = BidCommitment {
+            work_id: "w".to_owned(),
+            bidder_peer_id: "p".to_owned(),
+            commitment_hash: hash,
+            committed_at_secs: 1000,
+            reveal_window_secs: 0, // should become BID_VALIDITY_WINDOW_SECS
+        };
+        store.commit(c);
+        assert!(!store.is_expired("w", "p", 1000 + BID_VALIDITY_WINDOW_SECS - 1));
+        assert!(store.is_expired("w", "p", 1000 + BID_VALIDITY_WINDOW_SECS + 1));
     }
 
     #[test]

@@ -178,6 +178,72 @@ pub fn select_skill(task_description: &str, available: &[&str]) -> Option<String
     })
 }
 
+// ── M33 — Per-job capability attestation ─────────────────────────────────────
+
+/// Attestation that an executor claims to satisfy a job's required capabilities.
+///
+/// Before a job is dispatched the executor must attest its capabilities.  If
+/// any required capability is absent, the job is rejected.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CapabilityAttestation {
+    pub executor_id: String,
+    pub job_id: String,
+    /// Capabilities the executor claims to possess for this job.
+    pub attested_capabilities: Vec<String>,
+    /// SHA-256 of `executor_id || job_id || sorted(attested_capabilities).join(",")`.
+    pub attestation_hash: String,
+}
+
+impl CapabilityAttestation {
+    pub fn new(
+        executor_id: impl Into<String>,
+        job_id: impl Into<String>,
+        capabilities: Vec<String>,
+    ) -> Self {
+        let executor_id = executor_id.into();
+        let job_id = job_id.into();
+        let hash = Self::compute_hash(&executor_id, &job_id, &capabilities);
+        CapabilityAttestation {
+            executor_id,
+            job_id,
+            attested_capabilities: capabilities,
+            attestation_hash: hash,
+        }
+    }
+
+    pub fn compute_hash(executor_id: &str, job_id: &str, capabilities: &[String]) -> String {
+        let mut sorted = capabilities.to_vec();
+        sorted.sort();
+        let mut h = Sha256::new();
+        h.update(executor_id.as_bytes());
+        h.update(job_id.as_bytes());
+        h.update(sorted.join(",").as_bytes());
+        hex::encode(h.finalize())
+    }
+
+    pub fn verify(&self) -> bool {
+        let expected = Self::compute_hash(
+            &self.executor_id,
+            &self.job_id,
+            &self.attested_capabilities,
+        );
+        self.attestation_hash == expected
+    }
+
+    /// Returns `Err` if any capability in `required` is absent from the attestation.
+    pub fn satisfies(&self, required: &[String]) -> Result<(), String> {
+        let attested: std::collections::HashSet<&str> =
+            self.attested_capabilities.iter().map(|s| s.as_str()).collect();
+        let missing: Vec<&str> =
+            required.iter().filter(|r| !attested.contains(r.as_str())).map(|s| s.as_str()).collect();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(format!("missing capabilities: {:?}", missing))
+        }
+    }
+}
+
 // ── Canonical digest ──────────────────────────────────────────────────────────
 
 /// Return the SHA-256 hex digest of the canonical JSON encoding of `v`.
@@ -365,5 +431,40 @@ mod tests {
         // We verify it is deterministic and 64 hex chars; exact value tested
         // by round-tripping through the same call twice.
         assert_eq!(got, digest(&v));
+    }
+
+    // ── M33 — capability attestation tests ───────────────────────────────────
+
+    #[test]
+    fn capability_attestation_valid() {
+        let att = CapabilityAttestation::new(
+            "executor-1",
+            "job-42",
+            vec!["rust".into(), "testing".into()],
+        );
+        assert!(att.verify(), "freshly created attestation must verify");
+    }
+
+    #[test]
+    fn capability_attestation_satisfies_required() {
+        let att = CapabilityAttestation::new(
+            "executor-1",
+            "job-42",
+            vec!["rust".into(), "testing".into(), "docs".into()],
+        );
+        assert!(att.satisfies(&["rust".to_owned(), "testing".to_owned()]).is_ok());
+        let err = att.satisfies(&["rust".to_owned(), "ml".to_owned()]).unwrap_err();
+        assert!(err.contains("ml"), "error should name missing capability");
+    }
+
+    #[test]
+    fn tampered_attestation_rejected() {
+        let mut att = CapabilityAttestation::new(
+            "executor-1",
+            "job-42",
+            vec!["rust".into()],
+        );
+        att.attested_capabilities.push("admin".into()); // tamper
+        assert!(!att.verify(), "tampered attestation must not verify");
     }
 }

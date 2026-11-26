@@ -44,6 +44,9 @@ pub enum AuditKind {
     // Governance
     PolicyUpdated,
     PolicyViolation,
+    // Routing (M03)
+    RoutingDecision,
+    RoutingRejected,
     // Spec
     SpecCheckPassed,
     SpecCheckFailed,

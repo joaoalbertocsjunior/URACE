@@ -3,9 +3,12 @@
 //! Thread-safe via `DashMap` for tasks/bids and the `DemandCounter`'s
 //! internal `Mutex`. All operations check the active `WorkPolicy` before
 //! mutating state.
+//!
+//! M18: `PriceAttestation` provides cryptographic binding of (task_id, amount, attester).
 
 use crate::matching::{select_best_bid, DemandCounter, WorkBid, WorkTask};
 use crate::work_policy::{PolicyViolation, WorkPolicy};
+use sha2::{Digest, Sha256};
 use dashmap::DashMap;
 use thiserror::Error;
 use tracing::{debug, warn};
@@ -23,6 +26,46 @@ pub enum WorkError {
 
     #[error("journal error: {0}")]
     Journal(#[from] urace_ledger::JournalError),
+}
+
+// ── M18 — Price attestation ───────────────────────────────────────────────────
+
+/// A price attestation: cryptographic binding of (task_id, amount_ucr, attester_peer_id).
+///
+/// The `attestation_hash` is SHA-256 of `task_id || amount_ucr_le_bytes || attester_peer_id`.
+/// This prevents post-hoc price manipulation.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PriceAttestation {
+    pub task_id: String,
+    pub amount_ucr: i64,
+    pub attester_peer_id: String,
+    pub attestation_hash: String,
+}
+
+impl PriceAttestation {
+    pub fn new(
+        task_id: impl Into<String>,
+        amount_ucr: i64,
+        attester_peer_id: impl Into<String>,
+    ) -> Self {
+        let task_id = task_id.into();
+        let attester = attester_peer_id.into();
+        let hash = Self::compute_hash(&task_id, amount_ucr, &attester);
+        PriceAttestation { task_id, amount_ucr, attester_peer_id: attester, attestation_hash: hash }
+    }
+
+    pub fn compute_hash(task_id: &str, amount_ucr: i64, attester_peer_id: &str) -> String {
+        let mut h = Sha256::new();
+        h.update(task_id.as_bytes());
+        h.update(&amount_ucr.to_le_bytes());
+        h.update(attester_peer_id.as_bytes());
+        hex::encode(h.finalize())
+    }
+
+    pub fn verify(&self) -> bool {
+        let expected = Self::compute_hash(&self.task_id, self.amount_ucr, &self.attester_peer_id);
+        self.attestation_hash == expected
+    }
 }
 
 /// The work market: a concurrent registry of tasks and bids.
@@ -255,5 +298,20 @@ mod tests {
 
         // After winner selected, t1 is removed from pending.
         assert!(market.list_active().is_empty());
+    }
+
+    // ── M18 price attestation tests ───────────────────────────────────────────
+
+    #[test]
+    fn attestation_hash_valid() {
+        let att = PriceAttestation::new("task-42", 500_000, "peer-alice");
+        assert!(att.verify(), "freshly created attestation must verify");
+    }
+
+    #[test]
+    fn tampered_attestation_rejected() {
+        let mut att = PriceAttestation::new("task-42", 500_000, "peer-alice");
+        att.amount_ucr = 999_999; // tamper with amount
+        assert!(!att.verify(), "tampered attestation must not verify");
     }
 }

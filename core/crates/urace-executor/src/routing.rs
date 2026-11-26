@@ -341,6 +341,47 @@ pub fn select_provider<'a>(
         .max_by_key(|p| p.capability_priority(&task.capability))
 }
 
+// ── M51 — Executor rotation enforcement ──────────────────────────────────────
+
+/// Maximum number of consecutive jobs a single executor may run before
+/// mandatory rotation (default: 10 jobs).
+pub const MAX_CONSECUTIVE_JOBS: u64 = 10;
+
+/// Tracks per-executor job counts for rotation enforcement.
+pub struct RotationTracker {
+    counts: HashMap<String, u64>,
+}
+
+impl RotationTracker {
+    pub fn new() -> Self {
+        RotationTracker { counts: HashMap::new() }
+    }
+
+    /// Record a job completed by `executor_id`.
+    pub fn record_job(&mut self, executor_id: &str) {
+        *self.counts.entry(executor_id.to_owned()).or_insert(0) += 1;
+    }
+
+    /// Returns `true` iff `executor_id` has exceeded `MAX_CONSECUTIVE_JOBS`
+    /// without rotation, and must be rotated before the next job.
+    pub fn rotation_required(&self, executor_id: &str) -> bool {
+        self.counts.get(executor_id).copied().unwrap_or(0) >= MAX_CONSECUTIVE_JOBS
+    }
+
+    /// Reset the job count for `executor_id` (called after rotation).
+    pub fn reset(&mut self, executor_id: &str) {
+        self.counts.remove(executor_id);
+    }
+
+    pub fn job_count(&self, executor_id: &str) -> u64 {
+        self.counts.get(executor_id).copied().unwrap_or(0)
+    }
+}
+
+impl Default for RotationTracker {
+    fn default() -> Self { Self::new() }
+}
+
 // ── M75: Version pinning ──────────────────────────────────────────────────────
 
 /// Return `true` if `executor_version` satisfies the `required_version`
@@ -577,6 +618,38 @@ mod tests {
         let defs = routed_provider_definitions(&config);
         assert!(defs.iter().any(|p| p.id == "enabled-one"));
         assert!(!defs.iter().any(|p| p.id == "disabled-one"));
+    }
+
+    // ── M51 rotation tracker tests ────────────────────────────────────────────
+
+    #[test]
+    fn rotation_not_required_below_limit() {
+        let mut tracker = RotationTracker::new();
+        for _ in 0..MAX_CONSECUTIVE_JOBS - 1 {
+            tracker.record_job("exec-1");
+        }
+        assert!(!tracker.rotation_required("exec-1"));
+    }
+
+    #[test]
+    fn rotation_required_at_limit() {
+        let mut tracker = RotationTracker::new();
+        for _ in 0..MAX_CONSECUTIVE_JOBS {
+            tracker.record_job("exec-1");
+        }
+        assert!(tracker.rotation_required("exec-1"));
+    }
+
+    #[test]
+    fn rotation_reset_clears_count() {
+        let mut tracker = RotationTracker::new();
+        for _ in 0..MAX_CONSECUTIVE_JOBS {
+            tracker.record_job("exec-1");
+        }
+        assert!(tracker.rotation_required("exec-1"));
+        tracker.reset("exec-1");
+        assert!(!tracker.rotation_required("exec-1"));
+        assert_eq!(tracker.job_count("exec-1"), 0);
     }
 
     // ── M75: version_satisfies ────────────────────────────────────────────────

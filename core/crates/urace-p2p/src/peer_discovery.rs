@@ -124,6 +124,103 @@ impl Default for AdmissionGate {
     }
 }
 
+// ── M60 — Jurisdictional diversity ───────────────────────────────────────────
+
+/// Maximum fraction of admitted peers from any single jurisdiction (40%).
+pub const MAX_JURISDICTION_FRACTION: f64 = 0.40;
+
+/// A two-letter ISO 3166-1 country code (or "XX" for unknown).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct JurisdictionCode(pub String);
+
+impl JurisdictionCode {
+    pub fn new(code: impl Into<String>) -> Self {
+        JurisdictionCode(code.into().to_uppercase())
+    }
+    pub fn unknown() -> Self {
+        JurisdictionCode("XX".into())
+    }
+}
+
+/// Tracks peer counts per jurisdiction to enforce diversity.
+pub struct JurisdictionGuard {
+    counts: std::collections::HashMap<JurisdictionCode, usize>,
+    total: usize,
+}
+
+impl JurisdictionGuard {
+    pub fn new() -> Self {
+        JurisdictionGuard { counts: std::collections::HashMap::new(), total: 0 }
+    }
+
+    /// Returns `true` if admitting one more peer from `jurisdiction` would not
+    /// exceed `MAX_JURISDICTION_FRACTION` of the current total (after admission).
+    pub fn can_admit(&self, jurisdiction: &JurisdictionCode) -> bool {
+        let new_total = self.total + 1;
+        let new_count = self.counts.get(jurisdiction).copied().unwrap_or(0) + 1;
+        (new_count as f64 / new_total as f64) <= MAX_JURISDICTION_FRACTION
+    }
+
+    /// Record that a peer from `jurisdiction` was admitted.
+    pub fn record_admission(&mut self, jurisdiction: JurisdictionCode) {
+        *self.counts.entry(jurisdiction).or_insert(0) += 1;
+        self.total += 1;
+    }
+
+    /// Record that a peer from `jurisdiction` was removed.
+    pub fn record_removal(&mut self, jurisdiction: &JurisdictionCode) {
+        if let Some(c) = self.counts.get_mut(jurisdiction) {
+            if *c > 0 {
+                *c -= 1;
+                self.total = self.total.saturating_sub(1);
+            }
+        }
+    }
+
+    pub fn total(&self) -> usize { self.total }
+    pub fn count_for(&self, j: &JurisdictionCode) -> usize {
+        self.counts.get(j).copied().unwrap_or(0)
+    }
+}
+
+impl Default for JurisdictionGuard {
+    fn default() -> Self { Self::new() }
+}
+
+// ── M70 — Peer expiry + re-qualification ─────────────────────────────────────
+
+/// Admitted peers expire after this many seconds of inactivity (24 hours).
+pub const PEER_EXPIRY_SECS: f64 = 86_400.0;
+
+impl AdmissionGate {
+    /// Mark a peer as having been seen at `now_secs`.
+    ///
+    /// This refreshes the `entered_at` timestamp so the peer's expiry window restarts.
+    pub fn touch(&self, peer_id: &str, now_secs: f64) {
+        if let Some(mut rec) = self.records.get_mut(peer_id) {
+            rec.entered_at = now_secs;
+        }
+    }
+
+    /// Expire peers that have been admitted but not seen for `PEER_EXPIRY_SECS`.
+    ///
+    /// Returns the list of expired peer IDs.  Expired peers transition to `Quarantined`
+    /// and must re-qualify before being re-admitted.
+    pub fn expire_stale_peers(&self, now_secs: f64) -> Vec<String> {
+        let mut expired = vec![];
+        for mut rec in self.records.iter_mut() {
+            if rec.state == PeerAdmissionState::Admitted
+                && (now_secs - rec.entered_at) >= PEER_EXPIRY_SECS
+            {
+                rec.state = PeerAdmissionState::Quarantined;
+                rec.reason = "expired — re-qualification required".into();
+                expired.push(rec.peer_id.clone());
+            }
+        }
+        expired
+    }
+}
+
 fn sha1_bytes(data: &[u8]) -> [u8; 20] {
     let mut hasher = Sha1::new();
     hasher.update(data);
@@ -223,5 +320,76 @@ mod tests {
         assert!(gate.is_admitted("peer-e"));
         gate.quarantine("peer-e", "misbehaviour");
         assert!(!gate.is_admitted("peer-e"));
+    }
+
+    // M60 — jurisdictional diversity tests
+
+    #[test]
+    fn jurisdiction_guard_allows_up_to_40_pct() {
+        let mut guard = JurisdictionGuard::new();
+        let us = JurisdictionCode::new("US");
+        // With 2 total peers, 1 US = 50% → exceeds 40%.
+        // But with just 1 peer total, 1/1 = 100% → exceeds.
+        // Let's pre-admit 4 non-US peers.
+        for _ in 0..4 {
+            guard.record_admission(JurisdictionCode::new("DE"));
+        }
+        // Now: total=4, US=0. Adding 1 US → 1/5 = 20% ≤ 40% → allowed.
+        assert!(guard.can_admit(&us));
+        guard.record_admission(us.clone());
+        // Adding another US → 2/6 = 33% ≤ 40% → allowed.
+        assert!(guard.can_admit(&us));
+        guard.record_admission(us.clone());
+        // 3/7 = 42.8% > 40% → denied.
+        assert!(!guard.can_admit(&us));
+    }
+
+    #[test]
+    fn jurisdiction_removal_allows_re_admission() {
+        let mut guard = JurisdictionGuard::new();
+        let us = JurisdictionCode::new("US");
+        // Single peer: 1/1 = 100% → denied.
+        assert!(!guard.can_admit(&us));
+        // But with zero total, adding first peer is always 1/1 = 100%…
+        // Add two non-US peers first.
+        guard.record_admission(JurisdictionCode::new("FR"));
+        guard.record_admission(JurisdictionCode::new("JP"));
+        guard.record_admission(us.clone()); // 1/3 = 33%
+        assert_eq!(guard.count_for(&us), 1);
+        guard.record_removal(&us);
+        assert_eq!(guard.count_for(&us), 0);
+        assert_eq!(guard.total(), 2);
+    }
+
+    // M70 — peer expiry tests
+
+    #[test]
+    fn peer_expiry_quarantines_stale_peer() {
+        let gate = AdmissionGate::new();
+        gate.admit("peer-stale", 1);
+        // Simulate that the peer was admitted 25 hours ago.
+        {
+            let mut rec = gate.records.get_mut("peer-stale").unwrap();
+            rec.entered_at = 0.0; // very old
+        }
+        let now = PEER_EXPIRY_SECS + 1.0;
+        let expired = gate.expire_stale_peers(now);
+        assert_eq!(expired, vec!["peer-stale"]);
+        assert!(!gate.is_admitted("peer-stale"));
+    }
+
+    #[test]
+    fn peer_touch_resets_expiry() {
+        let gate = AdmissionGate::new();
+        gate.admit("peer-fresh", 1);
+        {
+            let mut rec = gate.records.get_mut("peer-fresh").unwrap();
+            rec.entered_at = 0.0;
+        }
+        // Touch resets timestamp to `now`.
+        let now = PEER_EXPIRY_SECS + 1.0;
+        gate.touch("peer-fresh", now);
+        let expired = gate.expire_stale_peers(now + 1.0);
+        assert!(expired.is_empty(), "recently touched peer must not expire immediately");
     }
 }

@@ -130,6 +130,59 @@ impl Default for Inbox {
     }
 }
 
+// ── M14 — Inbox rate-limit + micro-burn ──────────────────────────────────────
+
+/// Maximum messages per sender per 60-second window before micro-burn applies.
+pub const INBOX_RATE_LIMIT_PER_MIN: usize = 60;
+
+/// Cost in UCR base units charged per message beyond the rate limit (0.00001 UNIT).
+pub const INBOX_MICRO_BURN_UCR: i64 = 1_000;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum InboxRateResult {
+    Allowed,
+    RateLimited { micro_burn_ucr: i64 },
+}
+
+/// Per-sender sliding-window rate guard.
+///
+/// Tracks the timestamp of each received message per sender over a 60-second
+/// rolling window.  When a sender exceeds `INBOX_RATE_LIMIT_PER_MIN` messages
+/// in the window, subsequent messages return `RateLimited` with the micro-burn
+/// fee the caller should deduct from the sender's balance.
+pub struct InboxRateGuard {
+    counts: std::collections::HashMap<String, VecDeque<u64>>,
+}
+
+impl InboxRateGuard {
+    pub fn new() -> Self {
+        InboxRateGuard { counts: std::collections::HashMap::new() }
+    }
+
+    /// Record a message from `sender` at `now_secs`.
+    ///
+    /// Returns `Allowed` if the sender is within the rate limit, or
+    /// `RateLimited { micro_burn_ucr }` if they have exceeded it.
+    pub fn check_and_record(&mut self, sender: &str, now_secs: u64) -> InboxRateResult {
+        let window = self.counts.entry(sender.to_owned()).or_default();
+        // Drop entries older than 60 seconds.
+        while window.front().map(|&t| now_secs.saturating_sub(t) >= 60).unwrap_or(false) {
+            window.pop_front();
+        }
+        if window.len() >= INBOX_RATE_LIMIT_PER_MIN {
+            return InboxRateResult::RateLimited { micro_burn_ucr: INBOX_MICRO_BURN_UCR };
+        }
+        window.push_back(now_secs);
+        InboxRateResult::Allowed
+    }
+}
+
+impl Default for InboxRateGuard {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,5 +249,27 @@ mod tests {
         assert_eq!(inbox.unread_count(), 1);
         inbox.mark_read(&id).unwrap();
         assert_eq!(inbox.unread_count(), 0);
+    }
+
+    // ── M14 rate-guard tests ──────────────────────────────────────────────────
+
+    #[test]
+    fn rate_guard_within_limit_allowed() {
+        let mut guard = InboxRateGuard::new();
+        let now = 1_000_000u64;
+        for _ in 0..INBOX_RATE_LIMIT_PER_MIN {
+            assert_eq!(guard.check_and_record("peer-a", now), InboxRateResult::Allowed);
+        }
+    }
+
+    #[test]
+    fn rate_guard_over_limit_returns_micro_burn() {
+        let mut guard = InboxRateGuard::new();
+        let now = 1_000_000u64;
+        for _ in 0..INBOX_RATE_LIMIT_PER_MIN {
+            guard.check_and_record("peer-b", now);
+        }
+        let result = guard.check_and_record("peer-b", now);
+        assert_eq!(result, InboxRateResult::RateLimited { micro_burn_ucr: INBOX_MICRO_BURN_UCR });
     }
 }

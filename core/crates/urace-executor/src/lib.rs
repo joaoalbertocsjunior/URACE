@@ -10,23 +10,38 @@
 
 pub mod capabilities;
 pub mod context_guard;
+pub mod determinism_guard;
+pub mod model_fingerprint;
 pub mod multi_executor;
 pub mod output_validator;
 pub mod prompt_sandbox;
 pub mod retry_engine;
 pub mod routing;
+pub mod seccomp;
 
-pub use capabilities::{builtins, select_skill, SkillContract, SKILL_VOCABULARY};
+pub use capabilities::{
+    builtins, select_skill, CapabilityAttestation, SkillContract, SKILL_VOCABULARY,
+};
+pub use determinism_guard::{check_determinism, output_hash, DeterminismResult, MAX_DIVERGENCE_FRACTION};
+pub use routing::{select_provider, version_satisfies, ProviderDef, RotationTracker, UnavailabilityClass, MAX_CONSECUTIVE_JOBS};
 pub use multi_executor::{
-    allocate_budget, generate_and_select, score_proposal, select_best, settings as multi_settings,
-    BudgetSlot, DimensionScores, DiscoverFn, MultiExecutorError, MultiPlanSettings, ScoreWeights,
-    ScoredCandidate, SCHEMA as MULTI_PLAN_SCHEMA,
+    allocate_budget, check_model_consensus, generate_and_select, score_proposal, select_best,
+    settings as multi_settings, BudgetSlot, ConsensusVerdict, DimensionScores, DiscoverFn,
+    MultiExecutorError, MultiPlanSettings, ScoreWeights, ScoredCandidate,
+    SCHEMA as MULTI_PLAN_SCHEMA,
 };
 pub use context_guard::{is_safe_context, scan_context, ContextGuardResult};
-pub use output_validator::{validate_output, OutputSchema, ValidationError, MAX_OUTPUT_BYTES};
+pub use output_validator::{
+    assert_output_clean, scan_output_for_injections, validate_output, OutputSchema, ValidationError,
+    MAX_OUTPUT_BYTES,
+};
 pub use prompt_sandbox::{safe_prompt, sanitise_prompt, SandboxResult};
 pub use retry_engine::{parse_retry_after, RetryEngine, RetryOutcome, RetryPolicy};
-pub use routing::{select_provider, version_satisfies, ProviderDef, UnavailabilityClass};
+pub use seccomp::{
+    assert_dangerous_blocked, SeccompAction, SeccompFilter, DEFAULT_ALLOWLIST,
+};
+// M79 — model provider fingerprinting
+pub use model_fingerprint::{FingerprintChange, FingerprintRegistry, ModelFingerprint};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

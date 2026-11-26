@@ -115,6 +115,68 @@ pub fn combined_rep_score(
     (1.0 + beta2) * (d * q) / denom
 }
 
+// ── M12 — Auditor incentive payment ──────────────────────────────────────────
+
+/// Compute the reward for an auditor proportional to their audit score.
+///
+/// `audit_score` ∈ [0.0, 1.0]; scores ≤ 0 yield 0.
+/// Returns the number of base units to credit the auditor.
+pub fn auditor_reward(audit_score: f64, base_reward_ucr: i64) -> i64 {
+    if audit_score <= 0.0 {
+        return 0;
+    }
+    (audit_score.clamp(0.0, 1.0) * base_reward_ucr as f64) as i64
+}
+
+// ── M17 — Economic circuit breakers ──────────────────────────────────────────
+
+/// Maximum UCR minted in any 24-hour window before circuit trips (500 UNIT).
+pub const MINT_VOLUME_CAP_24H: i64 = 500 * 100_000_000;
+
+/// Price spike threshold relative to 7-day average (3×).
+pub const PRICE_SPIKE_THRESHOLD: f64 = 3.0;
+
+/// Peer exodus threshold — fraction of peers that left in 1 hour.
+pub const PEER_EXODUS_THRESHOLD: f64 = 0.20;
+
+/// Current snapshot of economic health indicators.
+pub struct CircuitBreakerState {
+    pub mint_volume_24h: i64,
+    pub price_spike_factor: f64,
+    pub peer_exit_rate_1h: f64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CircuitBreakerTrip {
+    None,
+    MintVolumeCap { volume: i64, cap: i64 },
+    PriceSpike { factor: f64, threshold: f64 },
+    PeerExodusRate { rate: f64, threshold: f64 },
+}
+
+/// Check all circuit breakers. Returns the first tripped breaker (priority: volume → price → exodus).
+pub fn check_circuit_breakers(state: &CircuitBreakerState) -> CircuitBreakerTrip {
+    if state.mint_volume_24h > MINT_VOLUME_CAP_24H {
+        return CircuitBreakerTrip::MintVolumeCap {
+            volume: state.mint_volume_24h,
+            cap: MINT_VOLUME_CAP_24H,
+        };
+    }
+    if state.price_spike_factor >= PRICE_SPIKE_THRESHOLD {
+        return CircuitBreakerTrip::PriceSpike {
+            factor: state.price_spike_factor,
+            threshold: PRICE_SPIKE_THRESHOLD,
+        };
+    }
+    if state.peer_exit_rate_1h >= PEER_EXODUS_THRESHOLD {
+        return CircuitBreakerTrip::PeerExodusRate {
+            rate: state.peer_exit_rate_1h,
+            threshold: PEER_EXODUS_THRESHOLD,
+        };
+    }
+    CircuitBreakerTrip::None
+}
+
 /// Central economics struct (stateless — all methods are functions).
 pub struct LedgerEconomics;
 
@@ -210,5 +272,76 @@ mod tests {
     fn supply_pressure_at_zero() {
         let m = supply_pressure_multiplier(0, 1);
         assert!((m - 1.0).abs() < 1e-6);
+    }
+
+    // ── M12 auditor reward tests ──────────────────────────────────────────────
+
+    #[test]
+    fn auditor_reward_full_score() {
+        let reward = auditor_reward(1.0, 1_000_000);
+        assert_eq!(reward, 1_000_000);
+    }
+
+    #[test]
+    fn auditor_reward_partial_score() {
+        let reward = auditor_reward(0.5, 1_000_000);
+        assert_eq!(reward, 500_000);
+    }
+
+    #[test]
+    fn auditor_reward_zero_score() {
+        assert_eq!(auditor_reward(0.0, 1_000_000), 0);
+        assert_eq!(auditor_reward(-1.0, 1_000_000), 0);
+    }
+
+    // ── M17 circuit breaker tests ─────────────────────────────────────────────
+
+    #[test]
+    fn circuit_breakers_clean_state() {
+        let state = CircuitBreakerState {
+            mint_volume_24h: 0,
+            price_spike_factor: 1.0,
+            peer_exit_rate_1h: 0.0,
+        };
+        assert_eq!(check_circuit_breakers(&state), CircuitBreakerTrip::None);
+    }
+
+    #[test]
+    fn circuit_breaker_mint_volume_trips() {
+        let state = CircuitBreakerState {
+            mint_volume_24h: MINT_VOLUME_CAP_24H + 1,
+            price_spike_factor: 1.0,
+            peer_exit_rate_1h: 0.0,
+        };
+        assert!(matches!(
+            check_circuit_breakers(&state),
+            CircuitBreakerTrip::MintVolumeCap { .. }
+        ));
+    }
+
+    #[test]
+    fn circuit_breaker_price_spike_trips() {
+        let state = CircuitBreakerState {
+            mint_volume_24h: 0,
+            price_spike_factor: 3.5,
+            peer_exit_rate_1h: 0.0,
+        };
+        assert!(matches!(
+            check_circuit_breakers(&state),
+            CircuitBreakerTrip::PriceSpike { .. }
+        ));
+    }
+
+    #[test]
+    fn circuit_breaker_exodus_trips() {
+        let state = CircuitBreakerState {
+            mint_volume_24h: 0,
+            price_spike_factor: 1.0,
+            peer_exit_rate_1h: 0.25,
+        };
+        assert!(matches!(
+            check_circuit_breakers(&state),
+            CircuitBreakerTrip::PeerExodusRate { .. }
+        ));
     }
 }

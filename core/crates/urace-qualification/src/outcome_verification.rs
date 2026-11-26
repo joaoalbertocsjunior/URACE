@@ -423,6 +423,63 @@ pub fn verify(
 }
 
 // ---------------------------------------------------------------------------
+// M39 — Multi-evaluator scoring integration
+// ---------------------------------------------------------------------------
+
+/// Outcome of combining a standard `verify()` result with multi-evaluator consensus.
+///
+/// An outcome is considered fully verified only when both the statistical
+/// verification *and* the multi-evaluator consensus agree.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MultiEvaluatorOutcome {
+    pub verification: OutcomeVerificationResult,
+    /// Mean score produced by the evaluator panel (None when consensus is pending).
+    pub evaluator_mean_score: Option<f64>,
+    pub evaluator_vote_count: usize,
+    /// True only when verification is verified AND evaluator consensus approves.
+    pub jointly_verified: bool,
+}
+
+/// M39 — Combine a standard verification result with evaluator votes.
+///
+/// `evaluator_scores` is a slice of `(evaluator_id, score)` pairs supplied by
+/// independent evaluators.  Requires at least `min_evaluators` approval votes
+/// (all scores treated as approvals) with mean score above `min_evaluator_score`.
+///
+/// Returns `jointly_verified = true` only when:
+/// 1. `verification.status.is_verified()` is true, AND
+/// 2. At least `min_evaluators` distinct evaluators voted, AND
+/// 3. The mean evaluator score exceeds `min_evaluator_score`.
+pub fn verify_with_evaluators(
+    verification: OutcomeVerificationResult,
+    evaluator_scores: &[(&str, f64)],
+    min_evaluators: usize,
+    min_evaluator_score: f64,
+) -> MultiEvaluatorOutcome {
+    if evaluator_scores.is_empty() || evaluator_scores.len() < min_evaluators {
+        return MultiEvaluatorOutcome {
+            verification,
+            evaluator_mean_score: None,
+            evaluator_vote_count: evaluator_scores.len(),
+            jointly_verified: false,
+        };
+    }
+
+    let mean: f64 = evaluator_scores.iter().map(|(_, s)| *s).sum::<f64>()
+        / evaluator_scores.len() as f64;
+
+    let stat_ok = verification.status.is_verified();
+    let eval_ok = mean > min_evaluator_score;
+
+    MultiEvaluatorOutcome {
+        verification,
+        evaluator_mean_score: Some(mean),
+        evaluator_vote_count: evaluator_scores.len(),
+        jointly_verified: stat_ok && eval_ok,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -506,5 +563,77 @@ mod tests {
         ];
         let result = verify(&contract, "op-5", &observations, 10, 1);
         assert!(result.is_err(), "duplicate observation id must be rejected");
+    }
+
+    // ── M39: multi-evaluator integration ─────────────────────────────────────
+
+    fn verified_result() -> OutcomeVerificationResult {
+        OutcomeVerificationResult {
+            status: OutcomeStatus::OutcomeVerified,
+            evidence_kind: EvidenceKind::Engineering,
+            attribution: "INDEPENDENT_MEASUREMENT".into(),
+            net_value_delta: 0.15,
+            real_user_value_verified: false,
+            reason: "ok".into(),
+            windows: 1,
+        }
+    }
+
+    fn pending_result() -> OutcomeVerificationResult {
+        OutcomeVerificationResult {
+            status: OutcomeStatus::PendingOutcome,
+            evidence_kind: EvidenceKind::Engineering,
+            attribution: "UNATTRIBUTED".into(),
+            net_value_delta: 0.0,
+            real_user_value_verified: false,
+            reason: "pending".into(),
+            windows: 0,
+        }
+    }
+
+    #[test]
+    fn jointly_verified_when_stat_and_evaluators_pass() {
+        let result = verify_with_evaluators(
+            verified_result(),
+            &[("e1", 0.9), ("e2", 0.85), ("e3", 0.80)],
+            3,
+            0.70,
+        );
+        assert!(result.jointly_verified);
+        assert!(result.evaluator_mean_score.unwrap() > 0.70);
+    }
+
+    #[test]
+    fn not_jointly_verified_when_stat_pending() {
+        let result = verify_with_evaluators(
+            pending_result(),
+            &[("e1", 0.9), ("e2", 0.85), ("e3", 0.80)],
+            3,
+            0.70,
+        );
+        assert!(!result.jointly_verified);
+    }
+
+    #[test]
+    fn not_jointly_verified_when_too_few_evaluators() {
+        let result = verify_with_evaluators(
+            verified_result(),
+            &[("e1", 0.9), ("e2", 0.9)],
+            3,
+            0.70,
+        );
+        assert!(!result.jointly_verified);
+        assert_eq!(result.evaluator_mean_score, None);
+    }
+
+    #[test]
+    fn not_jointly_verified_when_mean_score_too_low() {
+        let result = verify_with_evaluators(
+            verified_result(),
+            &[("e1", 0.5), ("e2", 0.4), ("e3", 0.3)],
+            3,
+            0.70,
+        );
+        assert!(!result.jointly_verified);
     }
 }

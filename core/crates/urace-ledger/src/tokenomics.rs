@@ -71,6 +71,31 @@ pub fn within_peer_cap(balance: i64, amount: i64) -> bool {
     balance + amount <= PEER_CAP
 }
 
+// ── M42 — Peer-cap cliff smoothing ───────────────────────────────────────────
+
+/// Soft-capped mint amount with linear tapering in the top 20% of PEER_CAP.
+///
+/// - Below 80% of PEER_CAP: returns `requested_amount` clamped to remaining headroom.
+/// - 80–100%: applies a linear taper from 100% → 50% of requested amount.
+/// - At or beyond PEER_CAP: returns 0.
+pub fn soft_capped_mint(balance_ucr: i64, requested_amount: i64) -> i64 {
+    if balance_ucr >= PEER_CAP {
+        return 0;
+    }
+    let headroom = PEER_CAP - balance_ucr;
+    let threshold = PEER_CAP * 4 / 5; // 80%
+    if balance_ucr < threshold {
+        return requested_amount.min(headroom).max(0);
+    }
+    // In the top 20%: taper linearly from 1.0 at threshold to 0.5 at PEER_CAP.
+    let top_band = (PEER_CAP - threshold) as f64; // = PEER_CAP / 5
+    let pos_in_band = (balance_ucr - threshold) as f64;
+    let fraction_used = (pos_in_band / top_band).min(1.0);
+    let taper = (1.0 - fraction_used * 0.5).max(0.0);
+    let tapered = (requested_amount as f64 * taper) as i64;
+    tapered.min(headroom).max(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,6 +158,33 @@ mod tests {
         assert!(!within_epoch_supply_cap(400 * UNIT, 100 * UNIT + 1, cap));
         // Already at cap, any further mint denied
         assert!(!within_epoch_supply_cap(cap, 1, cap));
+    }
+
+    // M42 — soft cap tests
+
+    #[test]
+    fn soft_cap_below_80_percent_full_amount() {
+        // Balance at 50% of PEER_CAP — no taper
+        let balance = PEER_CAP / 2;
+        let result = soft_capped_mint(balance, 1_000_000);
+        assert_eq!(result, 1_000_000);
+    }
+
+    #[test]
+    fn soft_cap_at_90_percent_tapered() {
+        // Balance at 90% — fraction_used = 0.5, taper = 0.75
+        let balance = PEER_CAP * 9 / 10;
+        let requested = 1_000_000i64;
+        let result = soft_capped_mint(balance, requested);
+        // taper = 1 - 0.5*0.5 = 0.75; tapered = 750000; headroom = PEER_CAP/10
+        assert!(result > 0 && result < requested, "result {result} should be between 0 and {requested}");
+        assert!(result <= PEER_CAP - balance);
+    }
+
+    #[test]
+    fn soft_cap_at_100_percent_zero() {
+        assert_eq!(soft_capped_mint(PEER_CAP, 1_000_000), 0);
+        assert_eq!(soft_capped_mint(PEER_CAP + 1, 1_000_000), 0);
     }
 
     #[test]

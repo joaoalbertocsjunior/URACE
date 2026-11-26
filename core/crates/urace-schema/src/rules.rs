@@ -622,6 +622,50 @@ fn significant_words(text: &str) -> Vec<&str> {
     words
 }
 
+// ── M54 — Jurisdictional compliance logging ───────────────────────────────────
+
+/// A jurisdictional compliance advisory — logged when a network action may
+/// be subject to jurisdiction-specific regulation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JurisdictionalAdvisory {
+    pub peer_id: String,
+    pub jurisdiction_code: String,
+    pub action: String,
+    pub advisory_text: String,
+    pub at_unix: u64,
+}
+
+/// Advisory issued when a peer from a regulated jurisdiction attempts an action
+/// that may require local compliance verification.
+static REGULATED_JURISDICTIONS: &[&str] = &["US", "EU", "GB", "CN", "JP", "KR", "SG", "AU"];
+
+/// Returns `Some(advisory_text)` if `jurisdiction_code` is in the regulated list
+/// and the `action` is one of the high-risk categories.
+pub fn check_jurisdictional_compliance(
+    peer_id: &str,
+    jurisdiction_code: &str,
+    action: &str,
+    now_unix: u64,
+) -> Option<JurisdictionalAdvisory> {
+    let high_risk_actions = ["token_transfer", "settlement", "governance_vote", "key_ceremony"];
+    let jc = jurisdiction_code.to_uppercase();
+    if !REGULATED_JURISDICTIONS.contains(&jc.as_str()) {
+        return None;
+    }
+    if !high_risk_actions.iter().any(|a| action.contains(a)) {
+        return None;
+    }
+    Some(JurisdictionalAdvisory {
+        peer_id: peer_id.to_owned(),
+        jurisdiction_code: jc.clone(),
+        action: action.to_owned(),
+        advisory_text: format!(
+            "Peer '{peer_id}' in jurisdiction '{jc}' performed '{action}' — local compliance verification may be required."
+        ),
+        at_unix: now_unix,
+    })
+}
+
 // ── M07 governance floor tests ────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -934,5 +978,28 @@ mod store_tests {
         let mut r = Rule::new("child", RuleKind::Policy, "derived rule");
         r.parent_id = Some("parent-rule".to_owned());
         assert_eq!(r.parent_id.as_deref(), Some("parent-rule"));
+    }
+
+    // M54 — jurisdictional compliance logging tests
+
+    #[test]
+    fn regulated_jurisdiction_high_risk_action_flagged() {
+        let advisory = check_jurisdictional_compliance("peer-1", "US", "token_transfer", 1000);
+        assert!(advisory.is_some());
+        let adv = advisory.unwrap();
+        assert_eq!(adv.jurisdiction_code, "US");
+        assert!(adv.advisory_text.contains("token_transfer"));
+    }
+
+    #[test]
+    fn unregulated_jurisdiction_not_flagged() {
+        let advisory = check_jurisdictional_compliance("peer-2", "ZZ", "token_transfer", 1000);
+        assert!(advisory.is_none());
+    }
+
+    #[test]
+    fn low_risk_action_not_flagged() {
+        let advisory = check_jurisdictional_compliance("peer-3", "US", "ping", 1000);
+        assert!(advisory.is_none());
     }
 }

@@ -7,6 +7,7 @@
 //! - Mint triggers only on qualified acceptance — never on zero or negative score_delta.
 
 pub mod accounting;
+pub mod score_discount;
 pub mod appeal;
 pub mod benchmark_corpus;
 pub mod benchmark_performance;
@@ -36,8 +37,9 @@ pub mod trial_receipt;
 
 pub use accounting::{within_budget, ResourceAccount, ResourceBudget};
 pub use outcome_verification::{
-    verify as verify_outcome, EvidenceKind, MetricDirection, OutcomeContract, OutcomeObservation,
-    OutcomeStatus, OutcomeVerificationError, OutcomeVerificationResult,
+    verify as verify_outcome, verify_with_evaluators, EvidenceKind, MetricDirection,
+    MultiEvaluatorOutcome, OutcomeContract, OutcomeObservation, OutcomeStatus,
+    OutcomeVerificationError, OutcomeVerificationResult,
 };
 pub use p2p_cost_qualification::{P2PCostQualifier, QualificationReceipt};
 pub use p2p_pair_protocol::{
@@ -70,8 +72,9 @@ pub use runtime_regression_guard::{
 };
 pub use spec_trial::{
     digest_text, extract_headings, normative_sentences, review_passes, validate_patch,
-    AuthorityGate, AuthorityOutcome, Proposal, QualityScores, ResourceMetrics, ReviewResult,
-    ScoreComparison, SpecTrialError, VersionManifest,
+    AuthorityGate, AuthorityOutcome, PeerReview, PeerReviewGate, Proposal, QualityScores,
+    ResourceMetrics, ReviewResult, ScoreComparison, SpecTrialError, VersionManifest,
+    MIN_PEER_REVIEWERS,
 };
 pub use trial::{Trial, TrialConfig, TrialResult, TrialStore};
 pub use trial_common::{now_iso, trial_identifier, TrialContext};
@@ -79,6 +82,9 @@ pub use trial_receipt::{ReceiptStore, TrialReceipt};
 
 // M31 — quality floor
 pub use quality_floor::{QualityFloor, QualityFloorError, QualityGateResult, DEFAULT_QUALITY_FLOOR};
+// M32 — mint gate bypass detection
+pub mod mint_gate_proof;
+pub use mint_gate_proof::{MintGateError, MintGateProof, MINT_GATE_MIN_SCORE_DELTA};
 // M44 — delivery proof
 pub use delivery_proof::{DeliveryProof, DeliveryProofError, DeliveryProofRegistry};
 // M45 — post-delivery gate
@@ -87,6 +93,8 @@ pub use post_delivery::{PostDeliveryError, PostDeliveryGate, PostDeliveryOutcome
 pub use multi_evaluator::{ConsensusResult, EvaluatorError, EvaluatorVote, MultiEvaluatorRound};
 // M49 — appeal window
 pub use appeal::{Appeal, AppealRegistry, AppealStatus, DEFAULT_APPEAL_WINDOW_SECS};
+// M50 — score discounting
+pub use score_discount::{apply_discounts, ScoreDiscountFlags};
 
 /// 1 UCR = 100_000_000 base units (10^8, satoshi-style).
 pub const UNIT: u64 = 100_000_000;

@@ -60,6 +60,43 @@ impl<'a> GovernanceAuditor<'a> {
         );
         self.ledger.record(evt)
     }
+
+    /// M03 — record that a routing decision was taken for `job_id`.
+    pub fn record_routing_decision(
+        &self,
+        job_id: &str,
+        selected_provider: &str,
+        candidates_considered: usize,
+        reason: &str,
+    ) -> Result<(), AuditError> {
+        let evt = AuditEvent::new(
+            AuditKind::RoutingDecision,
+            &self.node_id,
+            json!({
+                "job_id": job_id,
+                "selected_provider": selected_provider,
+                "candidates_considered": candidates_considered,
+                "reason": reason,
+            }),
+        )
+        .with_target(job_id);
+        self.ledger.record(evt)
+    }
+
+    /// M03 — record that a routing attempt was rejected.
+    pub fn record_routing_rejected(
+        &self,
+        job_id: &str,
+        reason: &str,
+    ) -> Result<(), AuditError> {
+        let evt = AuditEvent::new(
+            AuditKind::RoutingRejected,
+            &self.node_id,
+            json!({ "job_id": job_id, "reason": reason }),
+        )
+        .with_target(job_id);
+        self.ledger.record(evt)
+    }
 }
 
 #[cfg(test)]
@@ -93,5 +130,30 @@ mod tests {
             .unwrap();
         let events = ledger.all_events().unwrap();
         assert_eq!(events[0].kind, AuditKind::PolicyViolation);
+    }
+
+    #[test]
+    fn record_routing_decision_logged() {
+        let dir = tempfile::tempdir().unwrap();
+        let ledger = AuditLedger::open(dir.path().join("route.jsonl"), KEY).unwrap();
+        let auditor = GovernanceAuditor::new(&ledger, "node-b");
+        auditor
+            .record_routing_decision("job-1", "provider-anthropic", 3, "highest score")
+            .unwrap();
+        let events = ledger.all_events().unwrap();
+        assert_eq!(events[0].kind, AuditKind::RoutingDecision);
+        assert_eq!(events[0].target.as_deref(), Some("job-1"));
+    }
+
+    #[test]
+    fn record_routing_rejected_logged() {
+        let dir = tempfile::tempdir().unwrap();
+        let ledger = AuditLedger::open(dir.path().join("route-rej.jsonl"), KEY).unwrap();
+        let auditor = GovernanceAuditor::new(&ledger, "node-b");
+        auditor
+            .record_routing_rejected("job-2", "no available providers")
+            .unwrap();
+        let events = ledger.all_events().unwrap();
+        assert_eq!(events[0].kind, AuditKind::RoutingRejected);
     }
 }

@@ -160,6 +160,29 @@ impl Default for VoteCollector {
     }
 }
 
+// ── M23 — Fork selection after partition ─────────────────────────────────────
+
+/// A candidate fork, characterised by its tip hash and the number of committed rows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ForkCandidate {
+    pub seal_hash: String,
+    pub row_count: usize,
+    pub proposer_peer_id: String,
+}
+
+/// Select the canonical fork from a set of candidates after a network partition.
+///
+/// **Rule**: choose the candidate with the highest `row_count` (longest chain).
+/// Tie-breaking: lexicographically smallest `seal_hash` (deterministic).
+/// Returns `None` if `candidates` is empty.
+pub fn select_canonical_fork(candidates: &[ForkCandidate]) -> Option<&ForkCandidate> {
+    candidates.iter().max_by(|a, b| {
+        a.row_count
+            .cmp(&b.row_count)
+            .then_with(|| b.seal_hash.cmp(&a.seal_hash)) // smaller hash wins tie
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,5 +242,39 @@ mod tests {
     fn test_seal_proposal_schema() {
         let p = SealProposal::new("abc", 10, "sha", "proposer");
         assert_eq!(p.schema, "urace-consensus-v1");
+    }
+
+    // M23 — fork selection tests
+
+    #[test]
+    fn fork_selection_longest_chain_wins() {
+        let forks = vec![
+            ForkCandidate { seal_hash: "aaa".into(), row_count: 100, proposer_peer_id: "p1".into() },
+            ForkCandidate { seal_hash: "bbb".into(), row_count: 200, proposer_peer_id: "p2".into() },
+            ForkCandidate { seal_hash: "ccc".into(), row_count: 150, proposer_peer_id: "p3".into() },
+        ];
+        let winner = select_canonical_fork(&forks).unwrap();
+        assert_eq!(winner.row_count, 200);
+        assert_eq!(winner.seal_hash, "bbb");
+    }
+
+    #[test]
+    fn fork_selection_tie_broken_by_hash() {
+        let forks = vec![
+            ForkCandidate { seal_hash: "zzz".into(), row_count: 50, proposer_peer_id: "p1".into() },
+            ForkCandidate { seal_hash: "aaa".into(), row_count: 50, proposer_peer_id: "p2".into() },
+        ];
+        // Tie-breaking: `b.seal_hash.cmp(&a.seal_hash)` in max_by.
+        // When a="zzz", b="aaa": "aaa".cmp("zzz") = Less → a wins → "aaa" (second element).
+        // When a="aaa", b="zzz": "zzz".cmp("aaa") = Greater → b wins → "zzz".
+        // max_by iterates and keeps the last element that is >= previous.
+        // For determinism we just assert the result is consistent (always "aaa" wins iteration).
+        let winner = select_canonical_fork(&forks).unwrap();
+        assert_eq!(winner.seal_hash, "aaa");
+    }
+
+    #[test]
+    fn fork_selection_empty_returns_none() {
+        assert!(select_canonical_fork(&[]).is_none());
     }
 }

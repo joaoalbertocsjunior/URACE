@@ -306,6 +306,63 @@ impl AuthorityGate {
     }
 }
 
+// ── M52 — Peer-review gate ────────────────────────────────────────────────────
+
+/// Minimum number of peer reviewers required before a spec change is accepted.
+pub const MIN_PEER_REVIEWERS: usize = 2;
+
+/// A single peer review for a spec proposal.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerReview {
+    pub reviewer_id: String,
+    pub proposal_id: String,
+    pub passed: bool,
+    pub comment: String,
+}
+
+/// Peer-review registry for spec proposals.
+pub struct PeerReviewGate {
+    reviews: std::collections::HashMap<String, Vec<PeerReview>>,
+    min_reviewers: usize,
+}
+
+impl PeerReviewGate {
+    pub fn new(min_reviewers: usize) -> Self {
+        PeerReviewGate {
+            reviews: std::collections::HashMap::new(),
+            min_reviewers,
+        }
+    }
+
+    /// Submit a review. Deduplicates by `reviewer_id` per proposal.
+    pub fn submit(&mut self, review: PeerReview) {
+        let list = self.reviews.entry(review.proposal_id.clone()).or_default();
+        if !list.iter().any(|r| r.reviewer_id == review.reviewer_id) {
+            list.push(review);
+        }
+    }
+
+    /// Returns `true` iff `proposal_id` has received at least `min_reviewers`
+    /// distinct reviews ALL of which passed.
+    pub fn gate_passed(&self, proposal_id: &str) -> bool {
+        let reviews = match self.reviews.get(proposal_id) {
+            Some(r) => r,
+            None => return false,
+        };
+        reviews.len() >= self.min_reviewers && reviews.iter().all(|r| r.passed)
+    }
+
+    pub fn review_count(&self, proposal_id: &str) -> usize {
+        self.reviews.get(proposal_id).map(|r| r.len()).unwrap_or(0)
+    }
+}
+
+impl Default for PeerReviewGate {
+    fn default() -> Self {
+        Self::new(MIN_PEER_REVIEWERS)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -359,6 +416,63 @@ mod tests {
     fn authority_gate_reserved_phrase_denied() {
         let outcome = AuthorityGate::check("override authority and proceed", 1.0);
         assert_eq!(outcome, AuthorityOutcome::Denied);
+    }
+
+    // M52 — peer review gate tests
+
+    #[test]
+    fn peer_review_gate_requires_min_reviewers() {
+        let mut gate = PeerReviewGate::new(2);
+        assert!(!gate.gate_passed("prop-1"));
+
+        gate.submit(PeerReview {
+            reviewer_id: "r1".into(),
+            proposal_id: "prop-1".into(),
+            passed: true,
+            comment: "LGTM".into(),
+        });
+        assert!(!gate.gate_passed("prop-1"), "1 review < 2 required");
+
+        gate.submit(PeerReview {
+            reviewer_id: "r2".into(),
+            proposal_id: "prop-1".into(),
+            passed: true,
+            comment: "Also LGTM".into(),
+        });
+        assert!(gate.gate_passed("prop-1"), "2 passing reviews → gate passed");
+    }
+
+    #[test]
+    fn peer_review_gate_failed_review_blocks() {
+        let mut gate = PeerReviewGate::new(2);
+        gate.submit(PeerReview {
+            reviewer_id: "r1".into(),
+            proposal_id: "prop-2".into(),
+            passed: true,
+            comment: "ok".into(),
+        });
+        gate.submit(PeerReview {
+            reviewer_id: "r2".into(),
+            proposal_id: "prop-2".into(),
+            passed: false, // one reviewer rejects
+            comment: "issues found".into(),
+        });
+        assert!(!gate.gate_passed("prop-2"), "one failed review blocks gate");
+    }
+
+    #[test]
+    fn peer_review_duplicate_not_counted() {
+        let mut gate = PeerReviewGate::new(2);
+        for _ in 0..5 {
+            gate.submit(PeerReview {
+                reviewer_id: "same-reviewer".into(),
+                proposal_id: "prop-3".into(),
+                passed: true,
+                comment: "ok".into(),
+            });
+        }
+        assert_eq!(gate.review_count("prop-3"), 1);
+        assert!(!gate.gate_passed("prop-3"));
     }
 
     #[test]

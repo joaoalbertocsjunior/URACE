@@ -276,6 +276,45 @@ impl KademliaTable {
         self.buckets.iter().map(|b| b.len()).sum()
     }
 
+    /// M24 — Eclipse-resistant diverse peer selection.
+    ///
+    /// Returns up to `k` peers drawn from at most `max_buckets` different k-buckets.
+    /// By spreading selection across buckets, this prevents an adversary controlling a
+    /// single XOR-distance region from eclipsing the node's view.
+    ///
+    /// At most `ceil(k / max_buckets)` peers are drawn from each contributing bucket.
+    pub fn diverse_closest(
+        &self,
+        target_id: &[u8; 32],
+        k: usize,
+        max_buckets: usize,
+    ) -> Vec<&NodeInfo> {
+        let max_b = max_buckets.max(1);
+        let per_bucket = (k + max_b - 1) / max_b; // ceil(k / max_buckets)
+
+        // Collect all nodes sorted by XOR distance.
+        let mut all: Vec<&NodeInfo> =
+            self.buckets.iter().flat_map(|b| b.nodes().iter()).collect();
+        all.sort_by_key(|n| xor_distance(&n.node_id, target_id));
+
+        let mut result: Vec<&NodeInfo> = Vec::with_capacity(k);
+        let mut bucket_seen: std::collections::HashMap<usize, usize> =
+            std::collections::HashMap::new();
+
+        for node in all {
+            if result.len() >= k {
+                break;
+            }
+            let bidx = bucket_index(&self.own_id, &node.node_id);
+            let count = bucket_seen.entry(bidx).or_insert(0);
+            if *count < per_bucket {
+                *count += 1;
+                result.push(node);
+            }
+        }
+        result
+    }
+
     /// M22: Returns the ratio of unique /24 subnets to total peers across all buckets.
     /// Returns 0.0 if the table is empty.
     pub fn subnet_diversity_ratio(&self) -> f64 {
@@ -366,6 +405,24 @@ mod tests {
             ));
         }
         assert_eq!(bucket.len(), 5, "one peer per distinct /24 should all be accepted");
+    }
+
+    // M24 — eclipse-resistant diverse selection test
+
+    #[test]
+    fn diverse_closest_spreads_across_buckets() {
+        let mut table = KademliaTable::new("self-peer");
+        // Add 20 peers with distinct peer IDs.
+        for i in 0..20u32 {
+            table.add(NodeInfo::new(
+                format!("peer-diverse-{i}"),
+                format!("{}.0.0.1:9000", i + 1),
+            ));
+        }
+        let target = peer_id_to_node_id("peer-diverse-5");
+        // With max_buckets=4, k=8, at most ceil(8/4)=2 per bucket.
+        let diverse = table.diverse_closest(&target, 8, 4);
+        assert_eq!(diverse.len(), 8.min(table.total_nodes()));
     }
 
     #[test]

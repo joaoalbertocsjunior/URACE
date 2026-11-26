@@ -10,12 +10,14 @@
 //! - [`key_ceremony`] — M61: verifiable key-ceremony records with integrity hashing.
 
 pub mod crypto_wallet;
+pub mod hsm;
 pub mod key_ceremony;
 pub mod key_lifecycle;
 pub mod mesh_identity;
 pub mod multisig;
 pub mod session_dek;
 pub mod shamir_delivery;
+pub mod tpm;
 
 // Convenience re-exports.
 pub use crypto_wallet::{Wallet, WalletError};
@@ -27,3 +29,5 @@ pub use session_dek::{DekError, SessionDek};
 pub use shamir_delivery::{DeliveryError, DeliveryTracker, ShareDelivery};
 pub use key_ceremony::CeremonyRecord;
 pub use multisig::{MultisigCoordinator, MultisigError, MultisigOperation};
+pub use hsm::{HsmBackend, HsmError, HsmKeyHandle, SoftwareHsm};
+pub use tpm::{AttestationReport, SoftwareTpm, TpmBackend, TpmError};
