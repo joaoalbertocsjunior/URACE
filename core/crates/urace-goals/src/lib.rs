@@ -11,6 +11,7 @@ pub mod external_metrics;
 pub mod goal;
 pub mod goal_selector;
 pub mod telemetry;
+pub mod work_prioritizer;
 
 pub use analytics::{AnalyticsError, Metric, MetricStore};
 pub use auto_goals::AutoGoalEngine;
@@ -21,3 +22,4 @@ pub use external_metrics::{
 pub use goal::{Goal, GoalError, GoalStatus, GoalStore};
 pub use goal_selector::{DefaultGoalSelector, GoalSelector, SelectedGoal};
 pub use telemetry::{TelemetryEmitter, TelemetryError, TelemetryEvent, BUFFER_LIMIT};
+pub use work_prioritizer::{ActiveGoal, GoalAlignment, WorkPrioritizer, WorkPriorityScore};

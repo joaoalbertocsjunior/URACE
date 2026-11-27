@@ -23,6 +23,7 @@ pub mod implementation_sequence;
 pub mod matching;
 pub mod planner;
 pub mod price_history;
+pub mod skill_match;
 pub mod purchase_settlement;
 pub mod receipt;
 pub mod task_rate;
@@ -50,3 +51,9 @@ pub use work_policy::{
 };
 pub use escrow_guard::{EscrowError, EscrowRecord, EscrowState, ESCROW_TIMEOUT_SECS};
 pub use task_rate::{TaskRateGuard, TaskRateResult, TASK_RATE_LIMIT_PER_MIN};
+pub use skill_match::{
+    SkillClaim, SkillClaimError, SkillConcentrationGuard, SkillMatchResult, SkillRegistry,
+    SkillRouter, DomainConcentrationStatus,
+    SKILL_MATCH_BONUS, SKILL_VERIFICATION_THRESHOLD, MAX_SKILLS_PER_EXECUTOR,
+    SKILL_CODE_REVIEW, SKILL_NLP, SKILL_MATH, SKILL_SECURITY, SKILL_DATA,
+};
