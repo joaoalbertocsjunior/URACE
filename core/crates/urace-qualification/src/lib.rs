@@ -8,6 +8,7 @@
 
 pub mod accounting;
 pub mod fast_path;
+pub mod skill_exporter;
 pub mod outcome_signal;
 pub mod score_discount;
 pub mod appeal;

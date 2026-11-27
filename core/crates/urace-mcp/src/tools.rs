@@ -63,6 +63,7 @@ impl ToolRegistry {
     pub fn new() -> Self {
         Self {
             tools: vec![
+                // ── URACE-internal tools ─────────────────────────────────────
                 McpTool::read_only(
                     "list_sources",
                     "List all registered URACE sources and their current sync status.",
@@ -158,6 +159,136 @@ impl ToolRegistry {
                         "additionalProperties": false,
                     }),
                 ),
+                // ── GitHub tools (read-only) ──────────────────────────────────
+                McpTool::read_only(
+                    "github_read_agents_md",
+                    "Read AGENTS.md from a registered GitHub source.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."}
+                        },
+                        "required": ["source_id"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::read_only(
+                    "github_read_skill_md",
+                    "Read SKILL.md from a registered GitHub source.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."}
+                        },
+                        "required": ["source_id"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::read_only(
+                    "github_list_issues",
+                    "List open issues from a registered GitHub source.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."}
+                        },
+                        "required": ["source_id"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::read_only(
+                    "github_list_prs",
+                    "List open pull requests from a registered GitHub source.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."}
+                        },
+                        "required": ["source_id"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                // ── GitHub tools (mutating — §62z required) ───────────────────
+                McpTool::mutating(
+                    "github_create_issue",
+                    "Create a new GitHub issue. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."},
+                            "title": {"type": "string", "description": "Issue title."},
+                            "body": {"type": "string", "description": "Issue body (Markdown)."},
+                            "labels": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Optional labels to apply."
+                            }
+                        },
+                        "required": ["source_id", "title", "body"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::mutating(
+                    "github_close_issue",
+                    "Close a GitHub issue by number. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."},
+                            "issue_number": {"type": "integer", "description": "Issue number to close."},
+                            "reason": {"type": "string", "description": "Optional reason for closing."}
+                        },
+                        "required": ["source_id", "issue_number"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::mutating(
+                    "github_create_pr",
+                    "Create a pull request. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."},
+                            "title": {"type": "string", "description": "PR title."},
+                            "body": {"type": "string", "description": "PR description (Markdown)."},
+                            "head": {"type": "string", "description": "Head branch name."},
+                            "base": {"type": "string", "description": "Base branch name."}
+                        },
+                        "required": ["source_id", "title", "body", "head", "base"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::mutating(
+                    "github_trigger_workflow",
+                    "Trigger a GitHub Actions workflow. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."},
+                            "workflow_id": {"type": "string", "description": "Workflow filename or ID."},
+                            "ref": {"type": "string", "description": "Git ref to run the workflow on."},
+                            "inputs": {"type": "object", "description": "Optional workflow input parameters."}
+                        },
+                        "required": ["source_id", "workflow_id", "ref"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::mutating(
+                    "github_update_file",
+                    "Create or update a file in a GitHub repository. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."},
+                            "path": {"type": "string", "description": "File path in the repository."},
+                            "content": {"type": "string", "description": "New file content (plain text or base64)."},
+                            "message": {"type": "string", "description": "Commit message."},
+                            "branch": {"type": "string", "description": "Optional branch name (defaults to repo default)."}
+                        },
+                        "required": ["source_id", "path", "content", "message"],
+                        "additionalProperties": false,
+                    }),
+                ),
             ],
         }
     }
@@ -191,9 +322,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_eight_tools() {
+    fn registry_has_seventeen_tools() {
         let reg = ToolRegistry::new();
-        assert_eq!(reg.all().len(), 8);
+        assert_eq!(reg.all().len(), 17);
     }
 
     #[test]

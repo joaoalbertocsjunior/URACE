@@ -38,7 +38,7 @@ pub use crate::cli_reporting::{ReportArgs, UsageArgs};
 pub use crate::cli_runtime::{CrcArgs, FeaturesArgs, TrialArgs, UpdateArgs};
 pub use crate::cli_work::{
     CheckArgs, ClassifyArgs, ContextArgs, DeriveArgs, GithubArgs, PlanArgs, ProposeArgs,
-    QualityArgs,
+    QualityArgs, SkillsArgs,
 };
 
 // ── Top-level CLI ─────────────────────────────────────────────────────────────
@@ -166,6 +166,8 @@ pub enum Commands {
     Derive(DeriveArgs),
     /// Propose a change (requires authority)
     Propose(ProposeArgs),
+    /// Export qualified capabilities as SKILL.md
+    Skills(SkillsArgs),
 
     // ── Runtime / trial / upgrade ─────────────────────────────────────────────
     /// Run qualification trial or show trial status

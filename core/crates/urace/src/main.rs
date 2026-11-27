@@ -164,6 +164,7 @@ async fn main() -> Result<()> {
         Commands::Classify(args) => cli_work::handle_classify(&root, &args, cli.json).await?,
         Commands::Derive(args) => cli_work::handle_derive(&root, &args, cli.json).await?,
         Commands::Propose(args) => cli_work::handle_propose(&root, &args, cli.json).await?,
+        Commands::Skills(args) => cli_work::handle_skills(&root, &args, cli.json).await?,
 
         // ── Runtime / trial / upgrade ─────────────────────────────────────────
         Commands::Trial(args) => cli_runtime::handle_trial(&root, &args, cli.json).await?,

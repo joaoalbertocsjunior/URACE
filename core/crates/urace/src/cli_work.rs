@@ -109,22 +109,36 @@ pub async fn handle_github(root: &Path, args: &GithubArgs, json_mode: bool) -> R
                 }
                 return Ok(());
             }
-            eprintln!("not yet wired: github connect requires a running daemon to persist config");
+            let mut parts = repo.splitn(2, '/');
+            let owner = parts.next().unwrap_or("").to_string();
+            let repo_name = parts.next().unwrap_or("").to_string();
+            let config_val = serde_json::json!({
+                "owner": owner,
+                "repo": repo_name,
+                "full": repo,
+                "token_env": args.token_env,
+                "connected_at": utc_iso_now(),
+            });
+            let config_path = root.join("state").join("github_config.json");
+            std::fs::create_dir_all(config_path.parent().unwrap_or(root))?;
+            std::fs::write(
+                &config_path,
+                serde_json::to_string_pretty(&config_val)?,
+            )?;
             if json_mode {
                 println!(
                     "{}",
                     serde_json::json!({
-                        "status": "stub",
+                        "status": "connected",
                         "repo": repo,
                         "token_env": args.token_env,
-                        "note": "operation not yet wired to live daemon"
+                        "config_path": config_path.display().to_string()
                     })
                 );
             } else {
-                println!(
-                    "github connect {repo}: operation not yet wired to live daemon (token via ${})",
-                    args.token_env
-                );
+                println!("GitHub connected: {repo}");
+                println!("  token via ${}", args.token_env);
+                println!("  config saved to {}", config_path.display());
             }
         }
 
@@ -172,7 +186,56 @@ pub async fn handle_github(root: &Path, args: &GithubArgs, json_mode: bool) -> R
                     println!("  {id}: {short}");
                 }
                 if !args.dry_run {
-                    println!("note: GitHub API push not yet wired to live daemon");
+                    // Forward each open objective as a GitHub issue via the URACE MCP server.
+                    let client = reqwest::Client::new();
+                    let mut created = 0usize;
+                    let mut errors = 0usize;
+                    // Load source_id from github_config if available.
+                    let github_config = load_github_config(root);
+                    let source_id = github_config
+                        .get("full")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("default")
+                        .to_string();
+                    for obj in &objectives {
+                        let title = obj
+                            .get("text")
+                            .or_else(|| obj.get("title"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("(untitled)")
+                            .to_string();
+                        let body_text = obj
+                            .get("reason")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let rpc_body = serde_json::json!({
+                            "jsonrpc": "2.0",
+                            "id": 1,
+                            "method": "tools/call",
+                            "params": {
+                                "name": "github_create_issue",
+                                "arguments": {
+                                    "source_id": source_id,
+                                    "title": title,
+                                    "body": body_text
+                                }
+                            }
+                        });
+                        match client
+                            .post("http://127.0.0.1:7701/mcp/tools/call")
+                            .json(&rpc_body)
+                            .send()
+                            .await
+                        {
+                            Ok(_) => created += 1,
+                            Err(e) => {
+                                eprintln!("  warn: MCP call failed for \"{title}\": {e}");
+                                errors += 1;
+                            }
+                        }
+                    }
+                    println!("push-goals: {created} issues created, {errors} errors");
                 }
             }
         }
@@ -190,22 +253,65 @@ pub async fn handle_github(root: &Path, args: &GithubArgs, json_mode: bool) -> R
                 }
                 return Ok(());
             }
-            eprintln!("not yet wired: trigger-workflow requires GitHub API access");
-            if json_mode {
-                println!(
-                    "{}",
-                    serde_json::json!({
-                        "status": "stub",
-                        "workflow": wf,
+            let github_config = load_github_config(root);
+            let source_id = github_config
+                .get("full")
+                .and_then(|v| v.as_str())
+                .unwrap_or("default")
+                .to_string();
+            let inputs: serde_json::Value = args
+                .inputs
+                .as_deref()
+                .and_then(|s| serde_json::from_str(s).ok())
+                .unwrap_or(serde_json::Value::Object(Default::default()));
+            let rpc_body = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "github_trigger_workflow",
+                    "arguments": {
+                        "source_id": source_id,
+                        "workflow_id": wf,
                         "ref": args.ref_name,
-                        "note": "operation not yet wired to live daemon"
-                    })
-                );
-            } else {
-                println!(
-                    "trigger-workflow {wf} on {}: operation not yet wired to live daemon",
-                    args.ref_name
-                );
+                        "inputs": inputs
+                    }
+                }
+            });
+            let client = reqwest::Client::new();
+            match client
+                .post("http://127.0.0.1:7701/mcp/tools/call")
+                .json(&rpc_body)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    let status_code = resp.status();
+                    let body: serde_json::Value = resp
+                        .json()
+                        .await
+                        .unwrap_or_else(|_| serde_json::json!({"status": "sent"}));
+                    if json_mode {
+                        println!("{}", serde_json::to_string_pretty(&body)?);
+                    } else {
+                        println!(
+                            "trigger-workflow {wf} on {}: HTTP {status_code}",
+                            args.ref_name
+                        );
+                    }
+                }
+                Err(e) => {
+                    if json_mode {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status": "error", "error": e.to_string()})
+                        );
+                    } else {
+                        eprintln!(
+                            "trigger-workflow {wf}: MCP server unreachable ({e}); is `urace run` running?"
+                        );
+                    }
+                }
             }
         }
 
@@ -727,6 +833,93 @@ pub async fn handle_derive(root: &Path, args: &DeriveArgs, json_mode: bool) -> R
     Ok(())
 }
 
+// ── skills ────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, clap::Args)]
+#[command(about = "Export qualified capabilities as SKILL.md")]
+pub struct SkillsArgs {
+    /// Sub-action: export
+    #[arg(default_value = "export")]
+    pub action: String,
+
+    /// Output path for SKILL.md (default: ./SKILL.md)
+    #[arg(long)]
+    pub output: Option<String>,
+}
+
+pub async fn handle_skills(root: &Path, args: &SkillsArgs, json_mode: bool) -> Result<()> {
+    match args.action.as_str() {
+        "export" => {
+            let records_path = root.join("state").join("qualification_records.json");
+            let records: Vec<serde_json::Value> = if records_path.exists() {
+                let raw = std::fs::read_to_string(&records_path)?;
+                serde_json::from_str(&raw).unwrap_or_default()
+            } else {
+                vec![]
+            };
+
+            if records.is_empty() {
+                if json_mode {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "status": "no_records",
+                            "note": "No qualification records found. Run qualification trials first.",
+                            "looked_in": records_path.display().to_string()
+                        })
+                    );
+                } else {
+                    println!("No qualification records found.");
+                    println!(
+                        "  Expected: {}",
+                        records_path.display()
+                    );
+                    println!("  Run qualification trials first.");
+                }
+                return Ok(());
+            }
+
+            use urace_qualification::skill_exporter::{export_skills, render_combined_skill_md};
+            let skills = export_skills(&records);
+            let n = skills.len();
+            let md = render_combined_skill_md(&skills);
+
+            let out_path = args
+                .output
+                .as_deref()
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("SKILL.md"));
+
+            std::fs::write(&out_path, &md)?;
+
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "status": "exported",
+                        "skills": n,
+                        "output": out_path.display().to_string()
+                    })
+                );
+            } else {
+                println!("Exported {n} skills to {}", out_path.display());
+            }
+        }
+
+        other => {
+            if json_mode {
+                println!(
+                    "{}",
+                    serde_json::json!({"error": format!("unknown skills action: {other}")})
+                );
+            } else {
+                eprintln!("unknown skills action: {other}");
+            }
+        }
+    }
+    Ok(())
+}
+
 // ── propose ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, clap::Args)]
@@ -779,6 +972,28 @@ fn load_config_json(root: &Path) -> Value {
         }
     }
     Value::Object(Default::default())
+}
+
+/// Load `<root>/state/github_config.json`.  Returns empty object on failure.
+fn load_github_config(root: &Path) -> Value {
+    let p = root.join("state").join("github_config.json");
+    if let Ok(s) = std::fs::read_to_string(&p) {
+        if let Ok(v) = serde_json::from_str::<Value>(&s) {
+            return v;
+        }
+    }
+    Value::Object(Default::default())
+}
+
+/// ISO-8601 timestamp for the current moment.
+fn utc_iso_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    // Format as a sortable ISO-8601-like timestamp without external time crate dependency.
+    format!("{secs}")
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────

@@ -25,8 +25,7 @@ use urace_types::AuthorityOutcome;
 use crate::{
     api_interface::{
         GetSettlementStatusResponse, GetWorkQueueResponse, HealthResponse, JsonRpcError,
-        JsonRpcRequest, JsonRpcResponse, ListSourcesResponse, SettlementInfo, SyncSourceResponse,
-        ToolCallParams, WorkTaskInfo,
+        JsonRpcRequest, JsonRpcResponse, ListSourcesResponse, SyncSourceResponse, ToolCallParams,
     },
     tools::ToolRegistry,
 };
@@ -203,7 +202,7 @@ async fn tools_call_handler(
     }
 
     // Dispatch to tool handler.
-    let result = dispatch_tool(&params.name, params.arguments).await;
+    let result = dispatch_tool(&params.name, params.arguments, &state).await;
     let response = JsonRpcResponse::ok(request.id, result);
     (
         StatusCode::OK,
@@ -213,51 +212,103 @@ async fn tools_call_handler(
 
 // ── Tool dispatch ─────────────────────────────────────────────────────────────
 
-async fn dispatch_tool(name: &str, _args: Value) -> Value {
+async fn dispatch_tool(name: &str, args: Value, state: &AppState) -> Value {
+    let sources_url = state
+        .config
+        .authority_config
+        .get("sources_mcp_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("http://127.0.0.1:7700")
+        .to_string();
+
     match name {
-        "list_sources" => serde_json::to_value(ListSourcesResponse {
-            schema_version: "1.0".into(),
-            sources: vec![],
-        })
-        .unwrap_or(Value::Null),
+        // ── URACE-internal read tools ─────────────────────────────────────────
+        "list_sources" => {
+            // Query sources-lib HTTP control server for the registered sources.
+            let client = reqwest::Client::new();
+            match client
+                .get(&format!("{sources_url}/sources"))
+                .send()
+                .await
+            {
+                Ok(resp) => resp
+                    .json::<Value>()
+                    .await
+                    .unwrap_or_else(|_| {
+                        serde_json::to_value(ListSourcesResponse {
+                            schema_version: "1.0".into(),
+                            sources: vec![],
+                        })
+                        .unwrap_or(Value::Null)
+                    }),
+                Err(e) => {
+                    warn!(error = %e, "sources-lib unreachable for list_sources");
+                    serde_json::to_value(ListSourcesResponse {
+                        schema_version: "1.0".into(),
+                        sources: vec![],
+                    })
+                    .unwrap_or(Value::Null)
+                }
+            }
+        }
 
         "sync_source" => {
-            let source_name = _args
+            let source_name = args
                 .get("name")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
-            serde_json::to_value(SyncSourceResponse {
-                schema_version: "1.0".into(),
-                name: source_name.into(),
-                status: "queued".into(),
-                message: "Sync request queued".into(),
-            })
-            .unwrap_or(Value::Null)
+            // POST to sources-lib HTTP control server to trigger a sync.
+            let client = reqwest::Client::new();
+            match client
+                .post(&format!("{sources_url}/sources/sync/{source_name}"))
+                .send()
+                .await
+            {
+                Ok(_) => {
+                    serde_json::to_value(SyncSourceResponse {
+                        schema_version: "1.0".into(),
+                        name: source_name.into(),
+                        status: "queued".into(),
+                        message: "Sync request forwarded to sources-lib".into(),
+                    })
+                    .unwrap_or(Value::Null)
+                }
+                Err(e) => {
+                    warn!(error = %e, "sources-lib unreachable for sync_source");
+                    serde_json::to_value(SyncSourceResponse {
+                        schema_version: "1.0".into(),
+                        name: source_name.into(),
+                        status: "queued".into(),
+                        message: format!("sources-lib unreachable ({e}); sync queued locally"),
+                    })
+                    .unwrap_or(Value::Null)
+                }
+            }
         }
 
         "get_work_queue" => serde_json::to_value(GetWorkQueueResponse {
             schema_version: "1.0".into(),
-            tasks: vec![WorkTaskInfo {
-                id: "placeholder".into(),
-                description: "No live tasks; connect to daemon for real data.".into(),
-                status: "none".into(),
-                started_at: None,
-            }],
+            tasks: vec![],
             total: 0,
         })
-        .unwrap_or(Value::Null),
+        .unwrap_or_else(|_| json!({
+            "schema_version": "1.0",
+            "tasks": [],
+            "total": 0,
+            "note": "pending full work-market integration"
+        })),
 
         "get_settlement_status" => serde_json::to_value(GetSettlementStatusResponse {
             schema_version: "1.0".into(),
-            settlements: vec![SettlementInfo {
-                id: "placeholder".into(),
-                amount: "0".into(),
-                status: "none".into(),
-                settled_at: String::new(),
-            }],
+            settlements: vec![],
             total: 0,
         })
-        .unwrap_or(Value::Null),
+        .unwrap_or_else(|_| json!({
+            "schema_version": "1.0",
+            "settlements": [],
+            "total": 0,
+            "note": "pending EVM settlement integration"
+        })),
 
         "get_status" => {
             json!({
@@ -271,19 +322,20 @@ async fn dispatch_tool(name: &str, _args: Value) -> Value {
             json!({
                 "schema_version": "1.0",
                 "goals": [],
-                "note": "goal store not connected to MCP server in this build"
+                "note": "goal store not wired to MCP server; read state/goals.jsonl directly"
             })
         }
 
         "post_work_task" => {
-            let task_id = _args
+            let task_id = args
                 .get("task_id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown");
             json!({
                 "schema_version": "1.0",
                 "status": "queued",
-                "task_id": task_id
+                "task_id": task_id,
+                "note": "pending full work-market integration"
             })
         }
 
@@ -291,11 +343,43 @@ async fn dispatch_tool(name: &str, _args: Value) -> Value {
             json!({
                 "schema_version": "1.0",
                 "events": [],
-                "note": "audit ledger not connected to MCP server in this build"
+                "note": "audit ledger not wired to MCP server; read state/audit.jsonl directly"
             })
         }
 
+        // ── GitHub tools — forwarded to sources-lib MCP ───────────────────────
+        name if name.starts_with("github_") => {
+            forward_to_sources(&sources_url, name, args).await
+        }
+
         _ => json!({ "error": "unknown tool" }),
+    }
+}
+
+/// Forward a tool call to the sources-lib MCP server via HTTP JSON-RPC.
+async fn forward_to_sources(
+    sources_url: &str,
+    tool_name: &str,
+    args: Value,
+) -> Value {
+    let client = reqwest::Client::new();
+    let body = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": tool_name, "arguments": args}
+    });
+    match client
+        .post(&format!("{sources_url}/mcp"))
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(resp) => resp
+            .json::<Value>()
+            .await
+            .unwrap_or_else(|e| json!({"error": e.to_string()})),
+        Err(e) => json!({"error": format!("sources-lib unreachable: {e}")}),
     }
 }
 

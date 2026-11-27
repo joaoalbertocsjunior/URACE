@@ -34,11 +34,13 @@ urace-cost            = { path = "../urace-cost" }
 urace-work            = { path = "../urace-work" }
 urace-goals           = { path = "../urace-goals" }
 urace-audit           = { path = "../urace-audit" }
+urace-qualification   = { path = "../urace-qualification" }
 urace-tui             = { path = "../urace-tui" }
 urace-mcp             = { path = "../urace-mcp" }
 sha2.workspace        = true
 uuid.workspace        = true
 time.workspace        = true
+reqwest.workspace     = true
 crossterm             = "0.28"
 ratatui               = "0.29"
 urace-web             = { path = "../urace-web" }
