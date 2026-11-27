@@ -1,0 +1,21 @@
+[package]
+name        = "urace-project-work"
+description = "Spec trial verification, project work governance, and runtime regression guard"
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+serde_json.workspace = true
+thiserror.workspace  = true
+sha2.workspace       = true
+hex.workspace        = true
+uuid.workspace       = true
+tracing.workspace    = true
+urace-qualification  = { path = "../urace-qualification" }
+
+[dev-dependencies]
+tempfile = "3"

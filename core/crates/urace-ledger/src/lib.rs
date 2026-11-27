@@ -61,12 +61,11 @@ pub use signed_ledger::{
 pub use token_ledger::{TokenLedger, TokenLedgerError, DEFAULT_BASELINE_GRANT};
 pub use tokenomics::{
     mint_amount, mint_on_qualified_acceptance, soft_capped_mint, within_epoch_supply_cap,
-    within_peer_cap, DEFAULT_EPOCH_SUPPLY_CAP, PEER_CAP as TOKEN_PEER_CAP, UCR_TO_SAT,
-    UNIT as TOKEN_UNIT,
+    within_peer_cap, DEFAULT_EPOCH_SUPPLY_CAP, UCR_TO_SAT,
 };
 pub use units::{
     earn_units as units_earn, from_chain_units, from_display, spend_units as units_spend,
-    to_chain_units, to_display, UnitsError, UNIT as UCR_UNIT,
+    to_chain_units, to_display, UnitsError,
 };
 pub use stake_slash::{
     apply_slash, compute_slash, SlashReason, SlashRecord,

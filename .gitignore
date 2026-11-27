@@ -42,6 +42,9 @@
 !/core/crates/urace-economics/
 !/core/crates/urace-audit-types/
 !/core/crates/urace-p2p/
+!/core/crates/urace-p2p-analysis/
+!/core/crates/urace-benchmarking/
+!/core/crates/urace-project-work/
 !/core/crates/urace-product/
 !/core/crates/urace-qualification/
 !/core/crates/urace-schema/
