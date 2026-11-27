@@ -19,6 +19,7 @@ hex.workspace         = true
 urace-ledger          = { path = "../urace-ledger" }
 urace-authority       = { path = "../urace-authority" }
 urace-work            = { path = "../urace-work" }
+urace-work-types      = { path = "../urace-work-types" }
 urace-cost            = { path = "../urace-cost" }
 
 [dev-dependencies]

@@ -39,11 +39,12 @@ pub use exchange_endpoint::{
     SettlementResponse, SettlementRouterConfig, SCHEMA as CREDIT_SETTLEMENT_SCHEMA,
 };
 pub use implementation_sequence::PlanningContext;
-pub use matching::{match_score, select_best_bid, DemandCounter, WorkBid, WorkTask};
+pub use urace_work_types::{WorkBid, WorkReceipt, WorkTask};
+pub use matching::{match_score, select_best_bid, DemandCounter};
 pub use planner::{AutoPlanner, Planner, TopologicalPlanner};
 pub use price_history::{PriceEntry, PriceHistory, PriceHistoryError};
 pub use purchase_settlement::{PurchaseSettlement, SettlementError, SettlementStore};
-pub use receipt::{ReceiptError, ReceiptStore, WorkReceipt};
+pub use receipt::{ReceiptError, ReceiptStore};
 pub use work_market::{PriceAttestation, WorkError, WorkMarket};
 pub use work_policy::{
     check_market_floor, participation_cost, PolicyViolation, WorkPolicy, MARKET_FLOOR_UCR,

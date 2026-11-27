@@ -1,0 +1,12 @@
+[package]
+name        = "urace-economics"
+description = "Token economics constants and unit arithmetic — UNIT, PEER_CAP, UCR arithmetic. No ledger engine dependency."
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace     = true

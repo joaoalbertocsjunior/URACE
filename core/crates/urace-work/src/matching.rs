@@ -7,31 +7,9 @@
 //! on `DemandCounter`.
 
 use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-// ── Data types ───────────────────────────────────────────────────────────────
-
-/// A bid submitted by an executor peer for a specific task.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkBid {
-    pub bid_id: String,
-    pub executor_peer_id: String,
-    pub task_id: String,
-    pub bid_price_ucr: i64,
-    pub capabilities: Vec<String>,
-    pub submitted_at: String,
-}
-
-/// A work task posted to the market.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkTask {
-    pub task_id: String,
-    pub required_capabilities: Vec<String>,
-    pub budget_ucr: i64,
-    pub posted_at: String,
-    pub poster_peer_id: String,
-}
+pub use urace_work_types::{WorkBid, WorkTask};
 
 // ── Scoring ──────────────────────────────────────────────────────────────────
 

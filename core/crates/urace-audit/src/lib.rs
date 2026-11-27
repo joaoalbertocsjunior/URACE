@@ -12,8 +12,8 @@ pub mod chain_integrity;
 pub mod governance_audit;
 pub mod spec_audit;
 
-pub use audit_kinds::AuditKind;
-pub use audit_ledger::{AuditError, AuditEvent, AuditLedger};
+pub use urace_audit_types::{AuditEvent, AuditKind};
+pub use audit_ledger::{AuditError, AuditLedger};
 pub use chain_integrity::{verify_audit_chain, ChainIntegrityReport};
 pub use governance_audit::GovernanceAuditor;
 pub use spec_audit::{

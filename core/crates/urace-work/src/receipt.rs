@@ -9,10 +9,11 @@
 //! - **M43** — Receipt chain validation: each receipt references the SHA-256
 //!   hash of its predecessor, enabling a verifiable chain per task.
 
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use urace_ledger::{Journal, JournalError};
+
+pub use urace_work_types::WorkReceipt;
 
 #[derive(Debug, Error)]
 pub enum ReceiptError {
@@ -31,39 +32,6 @@ pub enum ReceiptError {
     ChainBroken { expected: String, got: String },
 }
 
-/// An immutable record that a task was completed and payment is due.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WorkReceipt {
-    pub receipt_id: String,
-    pub task_id: String,
-    pub executor_peer_id: String,
-    /// M04: the peer that submitted this receipt for mint; must equal
-    /// `executor_peer_id` for `validate_authorship` to pass.
-    pub submitter_peer_id: String,
-    pub amount_ucr: i64,
-    pub completed_at: String,
-    /// SHA-256 hash of the delivered artefact.
-    pub delivery_hash: String,
-    /// M43: SHA-256 of the previous receipt in this task's chain, or empty
-    /// string for the genesis (first) receipt of a task.
-    pub previous_receipt_hash: String,
-}
-
-impl WorkReceipt {
-    /// M04 — Verify that the submitter is the same peer as the executor.
-    ///
-    /// Must be called before a receipt is accepted for mint.
-    pub fn validate_authorship(&self) -> Result<(), ReceiptError> {
-        if self.executor_peer_id != self.submitter_peer_id {
-            return Err(ReceiptError::AuthorshipMismatch {
-                executor: self.executor_peer_id.clone(),
-                submitter: self.submitter_peer_id.clone(),
-            });
-        }
-        Ok(())
-    }
-}
-
 /// Append-only store for work receipts backed by a signed JSONL journal.
 pub struct ReceiptStore {
     journal: Journal,
@@ -80,11 +48,15 @@ impl ReceiptStore {
 
     /// Issue (append) a new receipt.
     ///
-    /// Applies the M04 authorship gate before persisting. If
-    /// `executor_peer_id != submitter_peer_id` the call returns
-    /// `ReceiptError::AuthorshipMismatch` and nothing is written.
+    /// M04 authorship gate: rejects if executor_peer_id ≠ submitter_peer_id.
     pub fn issue(&self, receipt: WorkReceipt) -> Result<(), ReceiptError> {
-        receipt.validate_authorship()?;
+        // M04 — authorship gate
+        if receipt.executor_peer_id != receipt.submitter_peer_id {
+            return Err(ReceiptError::AuthorshipMismatch {
+                executor: receipt.executor_peer_id.clone(),
+                submitter: receipt.submitter_peer_id.clone(),
+            });
+        }
         let payload = serde_json::to_value(&receipt)?;
         self.journal.append("WORK_RECEIPT", payload)?;
         Ok(())

@@ -24,3 +24,4 @@ flate2.workspace     = true
 libc.workspace       = true
 urace-crypto         = { path = "../urace-crypto" }
 urace-types          = { path = "../urace-types" }
+urace-economics      = { path = "../urace-economics" }

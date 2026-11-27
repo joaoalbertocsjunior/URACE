@@ -3,11 +3,11 @@
 //! Rust port of `audit_ledger.py`.
 //! All writes go through `urace-ledger::Journal` (atomic, HMAC-signed).
 
-use crate::audit_kinds::AuditKind;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use thiserror::Error;
 use urace_ledger::{Journal, JournalError};
+
+pub use urace_audit_types::AuditEvent;
 
 #[derive(Debug, Error)]
 pub enum AuditError {
@@ -16,37 +16,6 @@ pub enum AuditError {
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuditEvent {
-    pub event_id: String,
-    pub kind: AuditKind,
-    pub actor: String,
-    pub target: Option<String>,
-    pub details: Value,
-    pub timestamp_ms: u64,
-}
-
-impl AuditEvent {
-    pub fn new(kind: AuditKind, actor: impl Into<String>, details: Value) -> Self {
-        AuditEvent {
-            event_id: uuid::Uuid::new_v4().to_string(),
-            kind,
-            actor: actor.into(),
-            target: None,
-            details,
-            timestamp_ms: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0),
-        }
-    }
-
-    pub fn with_target(mut self, target: impl Into<String>) -> Self {
-        self.target = Some(target.into());
-        self
-    }
 }
 
 /// Append-only audit ledger backed by `Journal`.

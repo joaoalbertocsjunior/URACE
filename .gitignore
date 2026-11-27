@@ -39,6 +39,8 @@
 !/core/crates/urace-mcp/
 !/core/crates/urace-net/
 !/core/crates/urace-net-types/
+!/core/crates/urace-economics/
+!/core/crates/urace-audit-types/
 !/core/crates/urace-p2p/
 !/core/crates/urace-product/
 !/core/crates/urace-qualification/
@@ -52,6 +54,7 @@
 !/core/crates/urace-primitives/
 !/core/crates/urace-web/
 !/core/crates/urace-work/
+!/core/crates/urace-work-types/
 !/core/crates/urace/
 
 # Exchange: token contract stub only; initial_ledger published on stable release
