@@ -17,6 +17,7 @@ members = [
     "crates/urace-work",
     "crates/urace-goals",
     "crates/urace-net",
+    "crates/urace-net-types",
     "crates/urace-upgrade",
     "crates/urace-audit",
     "crates/urace",

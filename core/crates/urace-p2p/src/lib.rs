@@ -17,6 +17,8 @@
 //! M71 — Gossip flood throttle (in peer_exchange)
 
 pub mod cartel_guard;
+pub mod domain_concentration;
+pub mod gossip_registry;
 pub mod net_rate_limit;
 pub mod replay_guard;
 pub mod state_root;
@@ -38,6 +40,17 @@ pub mod peer_selection;
 pub mod reputation_diversity;
 
 pub use cartel_guard::{check_chunk_concentration, CartelCheckResult, IpBucketGuard};
+pub use domain_concentration::{
+    DomainConcentrationError, DomainConcentrationGuard, DomainConcentrationResult, DomainSlot,
+    DOMAIN_CONCENTRATION_THRESHOLD, MAX_DOMAIN_SLOTS_PER_PEER,
+};
+pub use gossip_registry::{
+    validate_envelope_structural, validate_envelope_with_key, GossipEnvelope, GossipMessageKind,
+    GossipRegistryError, MAX_GOSSIP_PAYLOAD_BYTES,
+};
+pub use gossip_integrity::{
+    verify_gossip, verify_typed_gossip, GossipVerifyResult, SignedGossip, GOSSIP_MAX_AGE_SECS,
+};
 pub use consensus::{
     consensus_threshold, select_canonical_fork, ForkCandidate, SealProposal, SealVote,
     VoteCollector,

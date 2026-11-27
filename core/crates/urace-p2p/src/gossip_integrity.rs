@@ -3,6 +3,11 @@
 //! Structural validation of signed gossip messages. Full Ed25519 signature
 //! verification is performed at the call site using `urace_crypto::verify_signature`;
 //! this module enforces non-empty hex signature and freshness requirements.
+//!
+//! For typed envelopes (`GossipEnvelope`) use `verify_typed_gossip` which
+//! delegates to `gossip_registry::validate_envelope_structural`.
+
+use crate::gossip_registry::{validate_envelope_structural, GossipEnvelope};
 
 /// Maximum age of a gossip message before it is considered expired.
 pub const GOSSIP_MAX_AGE_SECS: u64 = 300; // 5 minutes
@@ -18,6 +23,8 @@ pub enum GossipVerifyResult {
     InvalidSignature,
     /// Message timestamp is older than `GOSSIP_MAX_AGE_SECS`.
     Expired { age_secs: u64 },
+    /// Message kind does not match the expected kind at this endpoint.
+    WrongMessageKind,
 }
 
 /// A gossip message with an Ed25519 signature.
@@ -60,6 +67,24 @@ pub fn verify_gossip(msg: &SignedGossip, now_secs: u64) -> GossipVerifyResult {
     }
 
     GossipVerifyResult::Valid
+}
+
+/// Verify a typed `GossipEnvelope` structurally (freshness, payload size, hex format).
+///
+/// This wraps `gossip_registry::validate_envelope_structural` and translates errors
+/// into `GossipVerifyResult`.  Full Ed25519 key verification is left to the call site
+/// via `gossip_registry::validate_envelope_with_key`.
+pub fn verify_typed_gossip(env: &GossipEnvelope, now_secs: u64) -> GossipVerifyResult {
+    use crate::gossip_registry::GossipRegistryError;
+    match validate_envelope_structural(env, now_secs) {
+        Ok(()) => GossipVerifyResult::Valid,
+        Err(GossipRegistryError::Expired { age_secs }) => {
+            GossipVerifyResult::Expired { age_secs }
+        }
+        Err(GossipRegistryError::SignatureInvalid) => GossipVerifyResult::InvalidSignature,
+        Err(GossipRegistryError::PayloadTooLarge { .. }) => GossipVerifyResult::InvalidSignature,
+        Err(GossipRegistryError::UnknownKind(_)) => GossipVerifyResult::WrongMessageKind,
+    }
 }
 
 #[cfg(test)]

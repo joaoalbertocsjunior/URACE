@@ -38,6 +38,7 @@
 !/core/crates/urace-ledger/
 !/core/crates/urace-mcp/
 !/core/crates/urace-net/
+!/core/crates/urace-net-types/
 !/core/crates/urace-p2p/
 !/core/crates/urace-product/
 !/core/crates/urace-qualification/

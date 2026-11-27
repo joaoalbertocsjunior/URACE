@@ -1,0 +1,16 @@
+[package]
+name        = "urace-net-types"
+description = "Shared P2P message types: gossip envelope, message kinds, errors. Boundary crate — no P2P routing logic, no crypto."
+version.workspace    = true
+edition.workspace    = true
+license.workspace    = true
+authors.workspace    = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace      = true
+thiserror.workspace  = true
+hex.workspace        = true
+
+[dev-dependencies]
+serde_json.workspace = true

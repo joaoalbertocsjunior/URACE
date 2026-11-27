@@ -7,6 +7,8 @@
 //! - Mint triggers only on qualified acceptance — never on zero or negative score_delta.
 
 pub mod accounting;
+pub mod fast_path;
+pub mod outcome_signal;
 pub mod score_discount;
 pub mod appeal;
 pub mod benchmark_corpus;
@@ -95,6 +97,15 @@ pub use multi_evaluator::{ConsensusResult, EvaluatorError, EvaluatorVote, MultiE
 pub use appeal::{Appeal, AppealRegistry, AppealStatus, DEFAULT_APPEAL_WINDOW_SECS};
 // M50 — score discounting
 pub use score_discount::{apply_discounts, ScoreDiscountFlags};
+
+pub use fast_path::{
+    FastPathBudget, FastPathDecision, FastPathError, FastPathRegistry, QualificationPathKind,
+    FAST_PATH_CHAIN_RESET_SECS, FAST_PATH_MAX_CHAIN_DEPTH, FAST_PATH_MAX_DIFF_BYTES,
+};
+pub use outcome_signal::{
+    reputation_delta_from_signal, validate_signal, OutcomeKind, OutcomeSignal, OutcomeSignalError,
+    OutcomeSignalStore, MINIMUM_CORROBORATING_PEERS, OUTCOME_SIGNAL_MAX_AGE_SECS,
+};
 
 /// 1 UCR = 100_000_000 base units (10^8, satoshi-style).
 pub const UNIT: u64 = 100_000_000;
