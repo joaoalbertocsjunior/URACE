@@ -115,6 +115,42 @@ pub struct ExecutionResult {
     pub output: Option<String>,
     pub error: Option<String>,
     pub duration_ms: u64,
+    /// M20 — SHA-256 hash of the sandbox configuration used for this execution.
+    /// Required for ledger admission; `None` means the record was produced outside
+    /// a sandbox and must be rejected at the ledger admission gate.
+    pub sandbox_hash: Option<String>,
+}
+
+/// M20 — Sandbox-hash admission gate.
+///
+/// Rejects any `ExecutionResult` whose `sandbox_hash` is `None`.
+/// A missing hash means the executor did not report sandbox configuration,
+/// which is treated as a sandbox boundary violation at the ledger level.
+#[derive(Debug, Error)]
+pub enum SandboxAdmissionError {
+    #[error("ledger admission denied: execution result for '{0}' has no sandbox_hash")]
+    MissingSandboxHash(String),
+}
+
+pub fn assert_sandbox_hash_present(result: &ExecutionResult) -> Result<(), SandboxAdmissionError> {
+    if result.sandbox_hash.is_none() {
+        return Err(SandboxAdmissionError::MissingSandboxHash(
+            result.executor_id.clone(),
+        ));
+    }
+    Ok(())
+}
+
+/// Compute a deterministic sandbox hash from `SandboxConfig`.
+/// Hash is SHA-256 of `"cpu_ms={cpu_ms};memory_mb={memory_mb};timeout_secs={timeout_secs}"`.
+pub fn compute_sandbox_hash(config: &SandboxConfig) -> String {
+    use sha2::{Digest, Sha256};
+    let payload = format!(
+        "cpu_ms={};memory_mb={};timeout_secs={}",
+        config.cpu_ms, config.memory_mb, config.timeout_secs
+    );
+    let hash = Sha256::digest(payload.as_bytes());
+    hex::encode(hash)
 }
 
 // ── Sandbox backend ───────────────────────────────────────────────────────────
@@ -178,6 +214,12 @@ impl SandboxBackend for StubBackend {
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
+        // Derive sandbox_hash from limits so every real backend can do the same.
+        let cfg = SandboxConfig {
+            cpu_ms: limits.cpu_ms,
+            memory_mb: limits.memory_mb,
+            timeout_secs: limits.timeout_secs,
+        };
         Ok(ExecutionResult {
             executor_id: "stub".into(),
             success: output.status.success(),
@@ -188,6 +230,7 @@ impl SandboxBackend for StubBackend {
                 Some(String::from_utf8_lossy(&output.stderr).to_string())
             },
             duration_ms,
+            sandbox_hash: Some(compute_sandbox_hash(&cfg)),
         })
     }
 
@@ -432,5 +475,61 @@ mod tests {
     fn executor_pool_uses_backend() {
         let pool = ExecutorPool::new(HashMap::new(), vec!["allow_all".into()]);
         assert_eq!(pool.backend.name(), "stub");
+    }
+
+    // ── M20 sandbox hash admission gate tests ─────────────────────────────────
+
+    #[test]
+    fn stub_backend_populates_sandbox_hash() {
+        let backend = StubBackend;
+        let result = backend
+            .execute("x = 1", &ResourceLimits::default())
+            .unwrap();
+        assert!(result.sandbox_hash.is_some());
+    }
+
+    #[test]
+    fn admission_gate_passes_with_hash() {
+        let result = ExecutionResult {
+            executor_id: "e1".into(),
+            success: true,
+            output: None,
+            error: None,
+            duration_ms: 1,
+            sandbox_hash: Some("deadbeef".into()),
+        };
+        assert!(assert_sandbox_hash_present(&result).is_ok());
+    }
+
+    #[test]
+    fn admission_gate_rejects_missing_hash() {
+        let result = ExecutionResult {
+            executor_id: "e2".into(),
+            success: true,
+            output: None,
+            error: None,
+            duration_ms: 1,
+            sandbox_hash: None,
+        };
+        assert!(matches!(
+            assert_sandbox_hash_present(&result),
+            Err(SandboxAdmissionError::MissingSandboxHash(_))
+        ));
+    }
+
+    #[test]
+    fn compute_sandbox_hash_is_deterministic() {
+        let cfg = SandboxConfig::default();
+        let h1 = compute_sandbox_hash(&cfg);
+        let h2 = compute_sandbox_hash(&cfg);
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64); // hex-encoded SHA-256
+    }
+
+    #[test]
+    fn compute_sandbox_hash_differs_on_config_change() {
+        let cfg1 = SandboxConfig::default();
+        let cfg2 = SandboxConfig { cpu_ms: 1000, ..cfg1.clone() };
+        assert_ne!(compute_sandbox_hash(&cfg1), compute_sandbox_hash(&cfg2));
     }
 }

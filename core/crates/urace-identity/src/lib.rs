@@ -11,6 +11,7 @@
 
 pub mod crypto_wallet;
 pub mod hsm;
+pub mod identity_continuity;
 pub mod key_ceremony;
 pub mod key_lifecycle;
 pub mod mesh_identity;
@@ -30,4 +31,8 @@ pub use shamir_delivery::{DeliveryError, DeliveryTracker, ShareDelivery};
 pub use key_ceremony::CeremonyRecord;
 pub use multisig::{MultisigCoordinator, MultisigError, MultisigOperation};
 pub use hsm::{HsmBackend, HsmError, HsmKeyHandle, SoftwareHsm};
+pub use identity_continuity::{
+    build_migration_claim, canonical_payload, verify_migration, ContinuityError, MigrationClaim,
+    MIGRATION_CLAIM_MAX_AGE_SECS,
+};
 pub use tpm::{AttestationReport, SoftwareTpm, TpmBackend, TpmError};

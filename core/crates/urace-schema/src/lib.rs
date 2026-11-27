@@ -3,6 +3,7 @@
 //! Corresponds to `schema_export.py`, `validation.py`, `config_schema.py`,
 //! `mime_policy.py`, `mime_validator.py`, and `rules.py`.
 
+pub mod adaptive_params;
 pub mod compliance_export;
 pub mod emergency_vote;
 pub mod governance_veto;
@@ -14,6 +15,12 @@ pub mod schema_export;
 pub mod spec_hash;
 pub mod validation;
 
+pub use adaptive_params::{
+    market_param_bounds, AdaptiveParam, AdaptiveParamError, AdaptiveParamRegistry,
+    ParamHistoryEntry, DEFAULT_GOVERNANCE_QUORUM, DEFAULT_INBOX_RATE_PER_HOUR,
+    DEFAULT_MARKET_FLOOR_UCR, DEFAULT_MINT_RATE_CIRCUIT_THRESHOLD, DEFAULT_TASK_RATE_PER_MIN,
+    DEFAULT_TIMELOCK_SECS,
+};
 pub use compliance_export::{
     generate_compliance_report, ComplianceEvent, ComplianceEventKind, ComplianceReport,
 };
