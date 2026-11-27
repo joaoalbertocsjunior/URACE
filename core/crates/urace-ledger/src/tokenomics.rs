@@ -25,6 +25,12 @@ pub const UCR_TO_SAT: i64 = 1;
 /// Schema label — mirrors `token_ledger.py`'s `SCHEMA`.
 pub const SCHEMA: &str = "urace-tokenomics-v1";
 
+/// Absolute hard cap on epoch supply — governance may set a lower target but never exceed this (10 M UCR).
+pub const ABSOLUTE_MAX_EPOCH_SUPPLY_CAP: i64 = 1_000_000_000_000_000;
+
+/// Default epoch supply cap at bootstrap (0 = intentionally uncapped until governance sets a target).
+pub const DEFAULT_EPOCH_SUPPLY_CAP: i64 = 0;
+
 /// Returns `true` iff `score_delta > 0` — the **only** valid mint condition.
 ///
 /// Called at quality gate pass. Any path that mints without a positive
@@ -49,11 +55,6 @@ pub fn mint_amount(score_delta: i64) -> Option<i64> {
 // ---------------------------------------------------------------------------
 // M41 — Supply schedule enforcement
 // ---------------------------------------------------------------------------
-
-/// Maximum total UCR that may be minted across all peers in a single epoch.
-///
-/// `0` means uncapped (default during bootstrap). Set via governance vote.
-pub const DEFAULT_EPOCH_SUPPLY_CAP: i64 = 0;
 
 /// Returns `true` if minting `amount` more UCR would not breach `epoch_cap`.
 ///
