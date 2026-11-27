@@ -289,6 +289,36 @@ impl ToolRegistry {
                         "additionalProperties": false,
                     }),
                 ),
+                McpTool::mutating(
+                    "github_create_release",
+                    "Create a GitHub release for a registered source repository. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."},
+                            "tag": {"type": "string", "description": "Git tag for the release."},
+                            "name": {"type": "string", "description": "Release name/title."},
+                            "body": {"type": "string", "description": "Release notes (Markdown)."},
+                            "draft": {"type": "boolean", "description": "Whether to create as a draft (default false)."}
+                        },
+                        "required": ["source_id", "tag", "name", "body"],
+                        "additionalProperties": false,
+                    }),
+                ),
+                McpTool::mutating(
+                    "github_comment_on_issue",
+                    "Post a comment on a GitHub issue or pull request. Requires §62z authority confirmation.",
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "source_id": {"type": "string", "description": "The registered source ID for the GitHub repo."},
+                            "issue_number": {"type": "integer", "description": "Issue or PR number to comment on."},
+                            "body": {"type": "string", "description": "Comment body (Markdown)."}
+                        },
+                        "required": ["source_id", "issue_number", "body"],
+                        "additionalProperties": false,
+                    }),
+                ),
             ],
         }
     }
@@ -322,9 +352,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_has_seventeen_tools() {
+    fn registry_has_nineteen_tools() {
         let reg = ToolRegistry::new();
-        assert_eq!(reg.all().len(), 17);
+        assert_eq!(reg.all().len(), 19);
     }
 
     #[test]

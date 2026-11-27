@@ -165,6 +165,8 @@ pub struct SourcesConfig {
     pub allow_act: bool,
     /// Log every act() call regardless of outcome.
     pub act_audit_all: bool,
+    /// URL of the sources-lib MCP server (default: http://127.0.0.1:7700).
+    pub sources_mcp_url: Option<String>,
 }
 
 impl Default for SourcesConfig {
@@ -173,6 +175,7 @@ impl Default for SourcesConfig {
             auto_sync_interval_s: 300,
             allow_act: false,
             act_audit_all: true,
+            sources_mcp_url: None,
         }
     }
 }

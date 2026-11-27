@@ -264,6 +264,7 @@ async fn handle_run(
             .unwrap_or_else(|_| "127.0.0.1:7399".parse().unwrap());
         let mcp_server = McpServer::new(McpServerConfig {
             bind_addr: mcp_addr,
+            goal_store: Some(Arc::clone(&ctx.goal_store)),
             ..Default::default()
         });
         tokio::spawn(async move {

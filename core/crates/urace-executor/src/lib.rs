@@ -89,6 +89,9 @@ pub struct ExecutionRequest {
     pub scope: String,
     pub code: String,
     pub resource_limits: ResourceLimits,
+    /// Optional context prepended to execution input (e.g. AGENTS.md content).
+    #[serde(default)]
+    pub context_prefix: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,6 +278,7 @@ impl ExecutorPool {
     ///
     /// Step 1: authority gate check (§62z).
     /// Step 2: resource limit validation against SandboxConfig.
+    /// Step 2b: prepend context_prefix to code if provided.
     /// Step 3: credential leak detection.
     /// Step 4: execute via the configured sandbox backend.
     pub fn submit(&self, request: ExecutionRequest) -> Result<ExecutionResult, ExecutorError> {
@@ -284,8 +288,19 @@ impl ExecutorPool {
         // Step 2: resource limits.
         self.validate_limits(&request.resource_limits)?;
 
+        // Step 2b: Prepend context prefix to code if provided.
+        let effective_code = if let Some(prefix) = &request.context_prefix {
+            if !prefix.is_empty() {
+                format!("# Context\n{}\n\n# Task\n{}", prefix, request.code)
+            } else {
+                request.code.clone()
+            }
+        } else {
+            request.code.clone()
+        };
+
         // Step 3: credential leak detection.
-        if let Some(leak) = detect_credential_leak(&request.code) {
+        if let Some(leak) = detect_credential_leak(&effective_code) {
             return Err(ExecutorError::CredentialLeak(leak));
         }
 
@@ -293,7 +308,7 @@ impl ExecutorPool {
         let exec_start = Instant::now();
         let mut result = self
             .backend
-            .execute(&request.code, &request.resource_limits)?;
+            .execute(&effective_code, &request.resource_limits)?;
         result.executor_id = request.executor_id.clone();
         result.duration_ms = exec_start.elapsed().as_millis() as u64;
         Ok(result)
@@ -454,6 +469,7 @@ mod tests {
             scope: "test".into(),
             code: "Bearer abc123".into(),
             resource_limits: ResourceLimits::default(),
+            context_prefix: None,
         };
         // Authority will likely deny this too, but we specifically check the
         // credential leak path would trigger if authority passed.

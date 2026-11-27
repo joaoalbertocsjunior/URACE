@@ -15,9 +15,9 @@ use crate::cli_governance::load_state_json;
 // ── github ────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, clap::Args)]
-#[command(about = "GitHub integration (status / connect / push-goals / trigger-workflow)")]
+#[command(about = "GitHub integration (status / connect / push-goals / trigger-workflow / maintain-agents-md)")]
 pub struct GithubArgs {
-    /// Action: status | connect | push-goals | trigger-workflow
+    /// Action: status | connect | push-goals | trigger-workflow | maintain-agents-md
     #[arg(default_value = "status")]
     pub action: String,
 
@@ -310,6 +310,77 @@ pub async fn handle_github(root: &Path, args: &GithubArgs, json_mode: bool) -> R
                         eprintln!(
                             "trigger-workflow {wf}: MCP server unreachable ({e}); is `urace run` running?"
                         );
+                    }
+                }
+            }
+        }
+
+        "maintain-agents-md" => {
+            let repo_str = args.repo.as_deref().unwrap_or("");
+            if repo_str.is_empty() {
+                if json_mode {
+                    println!(
+                        "{}",
+                        serde_json::json!({"status": "error", "error": "--repo owner/repo required"})
+                    );
+                } else {
+                    eprintln!("error: --repo owner/repo required");
+                }
+                return Ok(());
+            }
+            // Load connected source_id from github_config.json
+            let config_path = root.join("state").join("github_config.json");
+            let source_id = load_github_source_id(&config_path)?;
+
+            // Generate AGENTS.md content
+            let agents_md = generate_agents_md_content(repo_str);
+
+            // Call github_update_file tool on URACE MCP server (§62z gated)
+            let client = reqwest::Client::new();
+            let body = serde_json::json!({
+                "jsonrpc": "2.0", "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "github_update_file",
+                    "arguments": {
+                        "source_id": source_id,
+                        "path": "AGENTS.md",
+                        "content": agents_md,
+                        "message": "chore: maintain AGENTS.md via urace"
+                    }
+                }
+            });
+            match client
+                .post("http://127.0.0.1:7701/mcp/tools/call")
+                .json(&body)
+                .send()
+                .await
+            {
+                Ok(resp) => {
+                    let val: serde_json::Value = resp.json().await.unwrap_or_default();
+                    if let Some(err) = val.get("error") {
+                        if json_mode {
+                            println!("{}", serde_json::json!({"status": "error", "error": err}));
+                        } else {
+                            eprintln!("error: {err}");
+                        }
+                    } else if json_mode {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status": "updated", "repo": repo_str, "path": "AGENTS.md"})
+                        );
+                    } else {
+                        println!("AGENTS.md updated in {repo_str}");
+                    }
+                }
+                Err(e) => {
+                    if json_mode {
+                        println!(
+                            "{}",
+                            serde_json::json!({"status": "error", "error": format!("daemon unreachable: {e}")})
+                        );
+                    } else {
+                        eprintln!("error: daemon unreachable: {e}");
                     }
                 }
             }
@@ -962,6 +1033,62 @@ pub async fn handle_propose(_root: &Path, args: &ProposeArgs, json_mode: bool) -
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Load source_id from a github_config.json file.
+/// Returns the `full` (owner/repo) field, or an error if the file is missing/malformed.
+fn load_github_source_id(config_path: &std::path::Path) -> Result<String> {
+    if !config_path.exists() {
+        anyhow::bail!(
+            "GitHub not connected. Run: urace github connect owner/repo (config not found at {})",
+            config_path.display()
+        );
+    }
+    let raw = std::fs::read_to_string(config_path)?;
+    let val: Value = serde_json::from_str(&raw)
+        .map_err(|e| anyhow::anyhow!("malformed github_config.json: {e}"))?;
+    val.get("full")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow::anyhow!("github_config.json missing 'full' field"))
+}
+
+/// Generate a standard AGENTS.md template for a given repository.
+fn generate_agents_md_content(repo: &str) -> String {
+    format!(
+        r#"# AGENTS.md — {repo}
+
+This file provides context for AI agents (including URACE executors) working in this repository.
+
+## Project
+
+Repository: {repo}
+
+## Build & Test
+
+> Fill in the build and test commands for this project.
+
+```
+# Example — replace with actual commands:
+# cargo build
+# cargo test
+```
+
+## Authority boundary (§62z)
+
+All write actions (commits, PRs, releases, goal creation) require `authority::resolve()` to
+return `AutonomouslyAuthorized` before proceeding. Treat `Unresolved` as `Denied`.
+
+Do not bypass, override, or ignore the authority gate.
+
+## Conventions
+
+- Follow existing code style and naming conventions.
+- Prefer small, reviewable changes over large refactors.
+- Document any new public API in the same commit.
+- Never commit secrets, credentials, or `.env` files.
+"#
+    )
+}
 
 /// Load config.json from `<root>/config.json`.  Returns empty object on failure.
 fn load_config_json(root: &Path) -> Value {

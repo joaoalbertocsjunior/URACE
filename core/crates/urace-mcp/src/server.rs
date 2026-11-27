@@ -4,14 +4,15 @@
 //! (via `urace_authority::resolve`) before execution.
 //!
 //! Routes:
-//!   POST /mcp/tools/list   — list available tools
-//!   POST /mcp/tools/call   — invoke a tool (authority-gated for mutations)
-//!   GET  /mcp/health       — liveness probe
+//!   POST /mcp/tools/list      — list available tools
+//!   POST /mcp/tools/call      — invoke a tool (authority-gated for mutations)
+//!   GET  /mcp/health          — liveness probe
+//!   POST /webhooks/github     — inbound GitHub webhook → goal creation (§62z gated)
 
 use axum::{
     extract::State,
     http::StatusCode,
-    response::Json,
+    response::{IntoResponse, Json},
     routing::{get, post},
     Router,
 };
@@ -33,7 +34,7 @@ use crate::{
 // ── Server configuration ──────────────────────────────────────────────────────
 
 /// Configuration for the MCP server.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct McpServerConfig {
     /// TCP address the server should bind to.
     pub bind_addr: std::net::SocketAddr,
@@ -43,6 +44,20 @@ pub struct McpServerConfig {
     pub self_evolution_policy: Option<HashMap<String, Value>>,
     /// Retained constraints from the authority boundary.
     pub constraints: Vec<String>,
+    /// Optional goal store for webhook-driven goal creation. None = webhooks return 503.
+    pub goal_store: Option<Arc<urace_goals::GoalStore>>,
+}
+
+impl std::fmt::Debug for McpServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("McpServerConfig")
+            .field("bind_addr", &self.bind_addr)
+            .field("authority_config", &self.authority_config)
+            .field("self_evolution_policy", &self.self_evolution_policy)
+            .field("constraints", &self.constraints)
+            .field("goal_store", &self.goal_store.as_ref().map(|_| "<GoalStore>"))
+            .finish()
+    }
 }
 
 impl Default for McpServerConfig {
@@ -52,6 +67,7 @@ impl Default for McpServerConfig {
             authority_config: HashMap::new(),
             self_evolution_policy: None,
             constraints: vec![],
+            goal_store: None,
         }
     }
 }
@@ -62,6 +78,7 @@ impl Default for McpServerConfig {
 struct AppState {
     registry: Arc<ToolRegistry>,
     config: Arc<McpServerConfig>,
+    goal_store: Option<Arc<urace_goals::GoalStore>>,
 }
 
 // ── McpServer ─────────────────────────────────────────────────────────────────
@@ -85,12 +102,14 @@ impl McpServer {
         let state = AppState {
             registry: Arc::new(self.registry.clone()),
             config: Arc::new(self.config.clone()),
+            goal_store: self.config.goal_store.clone(),
         };
 
         Router::new()
             .route("/mcp/health", get(health_handler))
             .route("/mcp/tools/list", post(tools_list_handler))
             .route("/mcp/tools/call", post(tools_call_handler))
+            .route("/webhooks/github", post(handle_github_webhook))
             .with_state(state)
     }
 
@@ -112,6 +131,153 @@ async fn health_handler() -> Json<HealthResponse> {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
     })
+}
+
+// ── GitHub webhook handler ────────────────────────────────────────────────────
+
+async fn handle_github_webhook(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    Json(payload): Json<Value>,
+) -> impl IntoResponse {
+    let goal_store = match &state.goal_store {
+        Some(gs) => Arc::clone(gs),
+        None => return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "goal store not wired"})),
+        ).into_response(),
+    };
+
+    let event_type = headers
+        .get("x-github-event")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .to_owned();
+
+    // Map GitHub event to a Goal
+    let maybe_goal = github_event_to_goal(&event_type, &payload);
+
+    let goal = match maybe_goal {
+        Some(g) => g,
+        None => return (
+            StatusCode::OK,
+            Json(json!({"status": "skipped", "reason": "event type not mapped"})),
+        ).into_response(),
+    };
+
+    // §62z authority gate before creating any goal
+    let objective = Objective {
+        id: Some(goal.goal_id.clone()),
+        scope: goal.scope.clone(),
+        title: goal.title.clone(),
+        reason: Some(format!("github webhook: {}", event_type)),
+        necessity_evidence: None,
+        lower_impact_route_sufficient: Some(true),
+    };
+    let resolution = authority_resolve(
+        &objective,
+        &state.config.authority_config,
+        state.config.self_evolution_policy.as_ref(),
+        &state.config.constraints,
+    );
+
+    if !resolution.outcome.may_proceed() {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": "authority gate denied",
+                "outcome": format!("{:?}", resolution.outcome),
+                "basis": resolution.basis,
+            })),
+        ).into_response();
+    }
+
+    match goal_store.create(goal) {
+        Ok(()) => (
+            StatusCode::OK,
+            Json(json!({"status": "goal_created"})),
+        ).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        ).into_response(),
+    }
+}
+
+fn github_event_to_goal(event_type: &str, payload: &Value) -> Option<urace_goals::Goal> {
+    use urace_goals::{Goal, GoalStatus};
+    let now = chrono::Utc::now().to_rfc3339();
+    let id = uuid::Uuid::new_v4().to_string();
+
+    match event_type {
+        "issues" => {
+            let action = payload["action"].as_str()?;
+            if action != "opened" { return None; }
+            let number = payload["issue"]["number"].as_u64()?;
+            let title = payload["issue"]["title"].as_str().unwrap_or("untitled");
+            Some(Goal {
+                goal_id: id,
+                title: format!("Resolve GitHub issue #{number}: {title}"),
+                scope: "implementation".into(),
+                status: GoalStatus::Pending,
+                created_at: now,
+                completed_at: None,
+                score_delta: None,
+            })
+        }
+        "pull_request" => {
+            let action = payload["action"].as_str()?;
+            match action {
+                "opened" => {
+                    let number = payload["pull_request"]["number"].as_u64()?;
+                    let title = payload["pull_request"]["title"].as_str().unwrap_or("untitled");
+                    Some(Goal {
+                        goal_id: id,
+                        title: format!("Review PR #{number}: {title}"),
+                        scope: "documentation".into(),
+                        status: GoalStatus::Pending,
+                        created_at: now,
+                        completed_at: None,
+                        score_delta: None,
+                    })
+                }
+                _ => None,
+            }
+        }
+        "push" => {
+            let commits = payload["commits"].as_array()?;
+            if commits.is_empty() { return None; }
+            let msg = commits[0]["message"].as_str().unwrap_or("commit");
+            let branch = payload["ref"].as_str().unwrap_or("unknown");
+            if !branch.ends_with("main") && !branch.ends_with("master") { return None; }
+            Some(Goal {
+                goal_id: id,
+                title: format!("Assess push impact on {branch}: {}", &msg[..msg.len().min(60)]),
+                scope: "metrics".into(),
+                status: GoalStatus::Pending,
+                created_at: now,
+                completed_at: None,
+                score_delta: None,
+            })
+        }
+        "workflow_run" => {
+            let action = payload["action"].as_str()?;
+            if action != "completed" { return None; }
+            let conclusion = payload["workflow_run"]["conclusion"].as_str()?;
+            if conclusion == "success" { return None; }
+            let name = payload["workflow_run"]["name"].as_str().unwrap_or("workflow");
+            Some(Goal {
+                goal_id: id,
+                title: format!("Fix failed workflow: {name} ({conclusion})"),
+                scope: "implementation".into(),
+                status: GoalStatus::Pending,
+                created_at: now,
+                completed_at: None,
+                score_delta: None,
+            })
+        }
+        _ => None,
+    }
 }
 
 async fn tools_list_handler(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
@@ -401,6 +567,7 @@ mod tests {
 
         McpServer::new(McpServerConfig {
             authority_config,
+            goal_store: None,
             ..Default::default()
         })
     }

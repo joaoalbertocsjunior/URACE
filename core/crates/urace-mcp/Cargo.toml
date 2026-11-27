@@ -17,6 +17,9 @@ axum           = "0.7"
 reqwest.workspace    = true
 urace-types    = { path = "../urace-types" }
 urace-authority = { path = "../urace-authority" }
+urace-goals    = { path = "../urace-goals" }
+uuid           = { workspace = true }
+chrono         = "0.4"
 
 [dev-dependencies]
 tower = "0.5"

@@ -345,6 +345,34 @@ async fn run_auto_plan(ctx: &Arc<LoopContext>) {
     }
 }
 
+/// Fetch AGENTS.md from sources-lib MCP for a given source_id.
+/// Returns empty string on any failure (non-blocking best-effort).
+async fn fetch_agents_md(source_id: &str, sources_url: &str) -> String {
+    let client = reqwest::Client::new();
+    let body = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1,
+        "method": "resources/read",
+        "params": {"uri": format!("sources://{}/agents-md", source_id)}
+    });
+    let resp = match client
+        .post(&format!("{}/mcp", sources_url))
+        .json(&body)
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(_) => return String::new(),
+    };
+    let val = match resp.json::<serde_json::Value>().await {
+        Ok(v) => v,
+        Err(_) => return String::new(),
+    };
+    val["result"]["contents"][0]["text"]
+        .as_str()
+        .unwrap_or("")
+        .to_string()
+}
+
 /// Dispatch work items — runs in a separate tokio task (non-blocking).
 async fn dispatch_work(ctx: &Arc<LoopContext>) -> Result<()> {
     use crate::bootstrap::check_authority_policy;
@@ -366,12 +394,26 @@ async fn dispatch_work(ctx: &Arc<LoopContext>) -> Result<()> {
         return Ok(());
     }
 
+    // Derive sources MCP URL from config (falls back to default).
+    let sources_url = ctx
+        .config
+        .sources
+        .sources_mcp_url
+        .as_deref()
+        .unwrap_or("http://127.0.0.1:7700")
+        .to_string();
+
     let mut posted = 0usize;
     for (source_id, record) in &sources {
         let kind = record
             .get("kind")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
+
+        // Fetch AGENTS.md context for this source (best-effort; empty on failure).
+        let agents_md = fetch_agents_md(source_id, &sources_url).await;
+        let context_prefix = if agents_md.is_empty() { None } else { Some(agents_md) };
+
         let task = WorkTask {
             task_id: format!("sync-{source_id}"),
             required_capabilities: vec![kind.to_string()],
@@ -382,6 +424,11 @@ async fn dispatch_work(ctx: &Arc<LoopContext>) -> Result<()> {
         // Ignore errors — task may already be posted from a prior cycle
         if ctx.work_market.post_task(task, true).is_ok() {
             posted += 1;
+        }
+        // Log the context availability for observability; the ExecutionRequest
+        // is constructed by the executor when it picks up the task.
+        if context_prefix.is_some() {
+            debug!(source_id = %source_id, "AGENTS.md context fetched for work dispatch");
         }
     }
 
