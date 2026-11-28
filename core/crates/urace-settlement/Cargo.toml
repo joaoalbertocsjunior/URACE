@@ -18,7 +18,10 @@ tracing.workspace        = true
 tokio.workspace          = true
 reqwest          = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
 sha2.workspace           = true
+k256                     = { version = "0.13", features = ["ecdsa"] }
+sha3                     = "0.10"
+hex.workspace            = true
 urace-ledger             = { path = "../urace-ledger" }
 urace-types              = { path = "../urace-types" }
-ldk-node                 = { version = "0.3", optional = true }
+ldk-node                 = { version = "0.4", optional = true }
 lightning-invoice        = { version = "0.32", optional = true }

@@ -74,6 +74,21 @@ pub enum KademliaMessage {
         value: Option<serde_json::Value>,
         nodes: Vec<NodeContact>,
     },
+    /// Broadcast a bid request for a task to candidate peers (Phase 2).
+    TaskBidRequest {
+        node_id: String,
+        task_id: String,
+        value: serde_json::Value,
+        transaction_id: String,
+    },
+    /// Response from a peer willing to execute the task (Phase 2).
+    TaskBidResponse {
+        node_id: String,
+        task_id: String,
+        transaction_id: String,
+        /// `Some(bid_json)` when the peer accepts; `None` when it declines.
+        value: Option<serde_json::Value>,
+    },
 }
 
 /// A node contact record for routing table exchange.
@@ -93,6 +108,8 @@ impl KademliaMessage {
             KademliaMessage::StoreValue { transaction_id, .. } => transaction_id,
             KademliaMessage::FindValue { transaction_id, .. } => transaction_id,
             KademliaMessage::FindValueResponse { transaction_id, .. } => transaction_id,
+            KademliaMessage::TaskBidRequest { transaction_id, .. } => transaction_id,
+            KademliaMessage::TaskBidResponse { transaction_id, .. } => transaction_id,
         }
     }
 }

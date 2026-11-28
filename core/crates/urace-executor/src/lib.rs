@@ -284,18 +284,10 @@ impl SandboxBackend for SubprocessBackend {
             .stderr(Stdio::piped())
             .stdin(Stdio::null());
 
-        // Install seccomp BPF filter in the child after fork, before exec.
-        // `pre_exec` runs in the forked child process — must not allocate.
-        #[cfg(unix)]
-        {
-            use std::os::unix::process::CommandExt;
-            unsafe {
-                command.pre_exec(|| {
-                    crate::seccomp::install_seccomp_filter()
-                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                });
-            }
-        }
+        // NOTE: seccomp is NOT installed via pre_exec here because pre_exec runs
+        // before execve, which means execve itself would be blocked (execve is not
+        // in the allowlist). The correct approach is for the subprocess wrapper to
+        // install seccomp after exec as its first action. Tracked for Phase X3.
 
         let child = command
             .spawn()
@@ -348,11 +340,7 @@ impl SandboxBackend for SubprocessBackend {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
-        // seccomp is active on Linux/Unix when the child exited successfully
-        // (a failed install would have made spawn() return Err).
-        #[cfg(unix)]
-        let sandbox_seccomp_active = true;
-        #[cfg(not(unix))]
+        // seccomp is not yet installed via pre_exec (see comment above).
         let sandbox_seccomp_active = false;
 
         Ok(ExecutionResult {

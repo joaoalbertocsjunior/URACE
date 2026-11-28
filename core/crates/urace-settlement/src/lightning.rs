@@ -1,5 +1,9 @@
 //! Lightning Network settlement rail — R-11 addition from mesh-llm pattern.
 //!
+//! Two types live here:
+//! - `LightningRail` — always compiled, stub returns structured results.
+//! - `LightningSettlementAdapter` — feature-gated (`lightning`), wires ldk-node.
+//!
 //! ldk-node crate (MIT) is listed in Cargo.toml as optional.
 //! Full wiring deferred to when feature = "lightning" is activated in production.
 //! Stub returns structured results without panicking.
@@ -78,6 +82,114 @@ impl LightningRail {
         Err(SettlementError::NotConfigured(
             "ldk-node not configured; activate feature = lightning to enable Lightning Network rail".into(),
         ))
+    }
+}
+
+// ── LightningSettlementAdapter (feature = "lightning") ───────────────────────
+
+/// Full Lightning Network settlement adapter backed by ldk-node.
+///
+/// Activate with: `cargo build --features lightning -p urace-settlement`
+#[cfg(feature = "lightning")]
+pub struct LightningSettlementAdapter {
+    pub node_dir: String,
+    pub network: ldk_node::bitcoin::Network,
+    node: ldk_node::Node,
+}
+
+#[cfg(feature = "lightning")]
+impl LightningSettlementAdapter {
+    /// Create and start an ldk-node instance at `node_dir` using Regtest by default.
+    ///
+    /// The node is started immediately; call `node.stop()` on drop if needed.
+    pub fn new(node_dir: &str) -> Result<Self, SettlementError> {
+        Self::new_with_network(node_dir, ldk_node::bitcoin::Network::Regtest)
+    }
+
+    /// Create and start a node for an explicit network.
+    pub fn new_with_network(
+        node_dir: &str,
+        network: ldk_node::bitcoin::Network,
+    ) -> Result<Self, SettlementError> {
+        let mut builder = ldk_node::Builder::new();
+        builder.set_storage_dir_path(node_dir.to_owned());
+        builder.set_network(network);
+
+        let node = builder
+            .build()
+            .map_err(|e| SettlementError::NotConfigured(format!("ldk-node build failed: {e}")))?;
+
+        node.start()
+            .map_err(|e| SettlementError::NotConfigured(format!("ldk-node start failed: {e}")))?;
+
+        Ok(LightningSettlementAdapter {
+            node_dir: node_dir.to_owned(),
+            network,
+            node,
+        })
+    }
+
+    /// Generate a BOLT11 invoice for `amount_sats`.
+    ///
+    /// Returns the BOLT11 string on success.
+    pub fn create_invoice(
+        &self,
+        amount_sats: u64,
+        description: &str,
+    ) -> Result<String, SettlementError> {
+        let amount_msat = amount_sats
+            .checked_mul(1000)
+            .ok_or_else(|| SettlementError::Rpc("amount overflow".into()))?;
+
+        let invoice = self
+            .node
+            .bolt11_payment()
+            .receive(
+                amount_msat,
+                description,
+                3600, // expiry 1 hour
+            )
+            .map_err(|e| SettlementError::Rpc(format!("create_invoice failed: {e}")))?;
+
+        Ok(invoice.to_string())
+    }
+
+    /// Pay a BOLT11 invoice.
+    ///
+    /// Returns the hex-encoded PaymentId on success (use `check_payment` to poll for completion).
+    pub fn pay_invoice(&self, invoice: &str) -> Result<String, SettlementError> {
+        use std::str::FromStr;
+        let bolt11 = ldk_node::lightning_invoice::Bolt11Invoice::from_str(invoice)
+            .map_err(|e| SettlementError::Rpc(format!("invalid invoice: {e}")))?;
+
+        let payment_id = self
+            .node
+            .bolt11_payment()
+            .send(&bolt11, None)
+            .map_err(|e| SettlementError::Rpc(format!("pay_invoice failed: {e}")))?;
+
+        Ok(hex::encode(payment_id.0))
+    }
+
+    /// Check whether a payment identified by its hex-encoded `PaymentId` (from `pay_invoice`)
+    /// has succeeded.
+    pub fn check_payment(&self, payment_id_hex: &str) -> bool {
+        let id_bytes = match hex::decode(payment_id_hex) {
+            Ok(b) if b.len() == 32 => b,
+            _ => return false,
+        };
+        let mut arr = [0u8; 32];
+        arr.copy_from_slice(&id_bytes);
+        let payment_id = ldk_node::lightning::ln::channelmanager::PaymentId(arr);
+        self.node
+            .payment(&payment_id)
+            .map(|p| {
+                matches!(
+                    p.status,
+                    ldk_node::payment::PaymentStatus::Succeeded
+                )
+            })
+            .unwrap_or(false)
     }
 }
 

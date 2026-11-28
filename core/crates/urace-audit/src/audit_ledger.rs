@@ -42,12 +42,41 @@ impl AuditLedger {
         Ok(())
     }
 
+    /// Write an arbitrary-kind entry directly to the underlying journal.
+    ///
+    /// Used for internal system entries (e.g. `"epoch_anchor"`) that do not map
+    /// to a typed `AuditEvent`.  The entry is HMAC-signed and append-only like
+    /// all other journal entries.
+    pub fn record_raw(
+        &self,
+        kind: &str,
+        payload: serde_json::Value,
+    ) -> Result<(), AuditError> {
+        self.journal.append(kind, payload)?;
+        Ok(())
+    }
+
+    /// Verify HMAC chain integrity and return the count of all raw journal entries,
+    /// regardless of their `kind` field.  Unlike `all_events`, this does not
+    /// require each entry to conform to the `AuditEvent` schema, so system
+    /// entries (e.g. `"epoch_anchor"`) are counted without error.
+    ///
+    /// Returns `Err(AuditError::Journal)` if the HMAC chain is broken.
+    pub fn verify_chain_raw(&self) -> Result<usize, AuditError> {
+        let entries = self.journal.verify_integrity()?;
+        Ok(entries.len())
+    }
+
     pub fn all_events(&self) -> Result<Vec<AuditEvent>, AuditError> {
         let entries = self.journal.verify_integrity()?;
         let mut events = Vec::with_capacity(entries.len());
         for entry in entries {
-            let evt: AuditEvent = serde_json::from_value(entry.payload)?;
-            events.push(evt);
+            // Skip non-AuditEvent entries (e.g. epoch_anchor system rows) so
+            // the HMAC chain can include system entries without breaking replay.
+            if entry.kind == "audit_event" {
+                let evt: AuditEvent = serde_json::from_value(entry.payload)?;
+                events.push(evt);
+            }
         }
         Ok(events)
     }

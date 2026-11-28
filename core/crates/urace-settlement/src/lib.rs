@@ -80,3 +80,8 @@ pub use chain_anchor::{
     AnchorReceipt, AnchorStatus, AssetEarning, AssetTransfer, ChainAnchorAdapter,
     ChainAnchorConfig, ChainAnchorError, SealRow, StakeEvent, StakeKind,
 };
+pub use evm::{build_signed_erc20_tx, EvmConfig, EvmSettlementAdapter};
+pub use lightning::LightningRail;
+
+#[cfg(feature = "lightning")]
+pub use lightning::LightningSettlementAdapter;

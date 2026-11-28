@@ -51,14 +51,22 @@ pub struct Goal {
     pub score_delta: Option<i64>,
 }
 
-/// Returned by `GoalStore::complete`.
+/// Returned by `GoalStore::complete` and surfaced by `GoalStore::pending_mint_signals`.
 ///
 /// `should_mint` is `true` only when `score_delta > 0`
 /// (qualified acceptance only — no negative or zero deltas trigger mint).
-#[derive(Debug, Clone)]
+///
+/// When `should_mint` is `true`, a `"mint_signal"` entry is written to the journal.
+/// Settlement picks up these entries via `GoalStore::pending_mint_signals()`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MintSignal {
     pub should_mint: bool,
     pub amount: i64,
+    pub goal_id: String,
+    pub executor_id: String,
+    /// Whether settlement has confirmed this mint (updated externally).
+    #[serde(default)]
+    pub settlement_confirmed: bool,
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
@@ -98,7 +106,23 @@ impl GoalStore {
     /// Mark a goal as completed with a `score_delta`.
     ///
     /// Returns a `MintSignal` with `should_mint=true` only if `score_delta > 0`.
+    ///
+    /// When `should_mint` is true, a `"mint_signal"` entry is also written to the journal
+    /// so that settlement can pick it up via `pending_mint_signals()`.
     pub fn complete(&self, goal_id: &str, score_delta: i64) -> Result<MintSignal, GoalError> {
+        self.complete_with_executor(goal_id, score_delta, "")
+    }
+
+    /// Mark a goal as completed with a `score_delta` and an `executor_id`.
+    ///
+    /// Identical to `complete` but also records the executor that produced the work.
+    /// When `should_mint` is true, a `"mint_signal"` entry is written to the journal.
+    pub fn complete_with_executor(
+        &self,
+        goal_id: &str,
+        score_delta: i64,
+        executor_id: &str,
+    ) -> Result<MintSignal, GoalError> {
         let mut goal = self
             .goals
             .get_mut(goal_id)
@@ -128,13 +152,79 @@ impl GoalStore {
                 "score_delta": score_delta,
                 "completed_at": completed_at,
                 "mint_triggered": should_mint,
+                "executor_id": executor_id,
             }),
         )?;
+
+        // Write a separate mint_signal entry that settlement polls.
+        if should_mint {
+            self.journal.append(
+                "mint_signal",
+                json!({
+                    "goal_id": goal_id,
+                    "amount": score_delta,
+                    "executor_id": executor_id,
+                    "should_settle": true,
+                    "settlement_confirmed": false,
+                }),
+            )?;
+        }
 
         Ok(MintSignal {
             should_mint,
             amount: if should_mint { score_delta } else { 0 },
+            goal_id: goal_id.to_owned(),
+            executor_id: executor_id.to_owned(),
+            settlement_confirmed: false,
         })
+    }
+
+    /// Return all `mint_signal` journal entries where `settlement_confirmed` is false.
+    ///
+    /// Settlement adapters call this to discover pending mints and initiate EVM/Lightning
+    /// transactions. After confirming, the caller writes a `"mint_settlement_confirmed"`
+    /// entry (settlement does not mutate existing rows — append-only invariant).
+    pub fn pending_mint_signals(&self) -> Result<Vec<MintSignal>, GoalError> {
+        // Collect all confirmed goal IDs first.
+        let entries = self.journal.verify_integrity()?;
+        let mut confirmed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for entry in &entries {
+            if entry.kind == "mint_settlement_confirmed" {
+                if let Some(goal_id) = entry.payload.get("goal_id").and_then(|v| v.as_str()) {
+                    confirmed.insert(goal_id.to_owned());
+                }
+            }
+        }
+
+        let mut signals = Vec::new();
+        for entry in &entries {
+            if entry.kind != "mint_signal" {
+                continue;
+            }
+            let p = &entry.payload;
+            let goal_id = p
+                .get("goal_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
+            if confirmed.contains(&goal_id) {
+                continue;
+            }
+            let amount = p.get("amount").and_then(|v| v.as_i64()).unwrap_or(0);
+            let executor_id = p
+                .get("executor_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_owned();
+            signals.push(MintSignal {
+                should_mint: true,
+                amount,
+                goal_id,
+                executor_id,
+                settlement_confirmed: false,
+            });
+        }
+        Ok(signals)
     }
 
     /// Cancel a goal.

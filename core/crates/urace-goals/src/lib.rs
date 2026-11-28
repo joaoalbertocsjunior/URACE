@@ -21,7 +21,7 @@ pub use external_metrics::{
     collect, export_metrics_sink, score_delta_from_external, CollectResult, ExportResult,
     ExternalEvent, ExternalMetricsError, Observation, SourceError,
 };
-pub use goal::{Goal, GoalError, GoalStatus, GoalStore};
+pub use goal::{Goal, GoalError, GoalStatus, GoalStore, MintSignal};
 pub use goal_selector::{DefaultGoalSelector, GoalSelector, SelectedGoal};
 pub use planner_model::{PlannerModel, PlannerModelError, TaskTypeStats, PCS_WINDOW};
 pub use product_goal::{GoalDirection, ProductDeltaRecord, ProductGoal, ProductGoalError};

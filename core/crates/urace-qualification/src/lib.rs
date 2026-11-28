@@ -7,6 +7,7 @@
 //! - Mint triggers only on qualified acceptance — never on zero or negative score_delta.
 
 pub mod accounting;
+pub mod distributed_evaluator;
 pub mod fast_path;
 pub mod skill_exporter;
 pub mod outcome_signal;
@@ -64,6 +65,8 @@ pub use outcome_signal::{
     reputation_delta_from_signal, validate_signal, OutcomeKind, OutcomeSignal, OutcomeSignalError,
     OutcomeSignalStore, MINIMUM_CORROBORATING_PEERS, OUTCOME_SIGNAL_MAX_AGE_SECS,
 };
+
+pub use distributed_evaluator::{DistributedEvaluator, EvaluationVerdict};
 
 /// 1 UCR = 100_000_000 base units (10^8, satoshi-style).
 pub const UNIT: u64 = 100_000_000;

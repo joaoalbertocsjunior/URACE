@@ -35,6 +35,8 @@ pub mod peer_address_book;
 pub mod peer_discovery;
 pub mod peer_exchange;
 pub mod peer_selection;
+pub mod peer_task_router;
+pub mod pattern_registry;
 
 pub use cartel_guard::{check_chunk_concentration, CartelCheckResult, IpBucketGuard};
 pub use domain_concentration::{
@@ -65,6 +67,9 @@ pub use peer_discovery::{
     PeerAdmissionState, MAX_JURISDICTION_FRACTION, PEER_EXPIRY_SECS,
 };
 pub use peer_selection::{PeerCandidate, PeerSelector, ScoringParams, SelectionStatus};
+pub use peer_task_router::{PeerTaskRouter, TaskBid, TaskBidRequest};
+pub use pattern_registry::{PatternRegistry, TaskPatternRecord};
+pub use federation::{build_signed_proof, validate_signed_authority_proof};
 
 // M25 — Sybil admission gate
 pub use sybil_gate::{

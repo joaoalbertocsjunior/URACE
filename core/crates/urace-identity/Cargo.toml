@@ -23,6 +23,8 @@ uuid.workspace        = true
 time.workspace        = true
 urace-crypto          = { path = "../urace-crypto" }
 urace-ledger          = { path = "../urace-ledger" }
+k256                  = { version = "0.13", features = ["ecdsa"] }
+sha3                  = "0.10"
 
 [dev-dependencies]
 rand         = { version = "0.8", features = ["std"] }

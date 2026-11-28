@@ -1,5 +1,11 @@
 //! EVM settlement — Rust port of `eth_settlement_adapter.py`.
 //!
+//! ## build_signed_erc20_tx
+//! A standalone helper (no key management in this crate) that builds and signs
+//! an EIP-155 legacy transaction for an ERC-20 transfer.  Callers supply the
+//! raw private key bytes; they are never stored.  The returned hex string is
+//! ready for `eth_sendRawTransaction`.
+//!
 //! All methods return structured results on failure — never panic.
 //! Gas simulation is required before any transaction submission.
 //! ABI address checksum validation is enforced.
@@ -218,5 +224,227 @@ impl EvmSettlementAdapter {
             error: None,
             rail: SettlementRail::Evm,
         }
+    }
+}
+
+// ── Standalone tx-building helper ─────────────────────────────────────────────
+
+/// Build and sign an EIP-155 legacy ERC-20 transfer transaction.
+///
+/// Returns the RLP-encoded signed tx as a `0x`-prefixed hex string, ready for
+/// `eth_sendRawTransaction`.
+///
+/// # Parameters
+/// - `from_private_key_bytes`: 32-byte secp256k1 private scalar. **Never stored.**
+/// - `to`: ERC-20 recipient address (`0x` + 40 hex chars).
+/// - `amount`: Token amount in the token's smallest unit.
+/// - `contract_address`: ERC-20 contract address.
+/// - `chain_id`: EIP-155 chain identifier (e.g. 1 = mainnet, 11155111 = Sepolia).
+/// - `nonce`: Account transaction nonce.
+/// - `gas_price_gwei`: Gas price in Gwei.
+///
+/// # Note
+/// This is a simplified EIP-155 legacy (Type 0) RLP encoder.
+/// Production deployments should use `alloy` or `ethers` for full EIP-1559 support.
+pub fn build_signed_erc20_tx(
+    from_private_key_bytes: &[u8],
+    to: &str,
+    amount: u128,
+    contract_address: &str,
+    chain_id: u64,
+    nonce: u64,
+    gas_price_gwei: u64,
+) -> Result<String, SettlementError> {
+    use k256::ecdsa::{RecoveryId, SigningKey};
+    use k256::ecdsa::signature::hazmat::PrehashSigner;
+    use sha3::{Digest, Keccak256};
+
+    // ── 1. Validate addresses ─────────────────────────────────────────────────
+    let clean_contract = contract_address.trim();
+    let clean_to = to.trim();
+    for (label, addr) in [("contract_address", clean_contract), ("to", clean_to)] {
+        if !addr.starts_with("0x") || addr.len() != 42 {
+            return Err(SettlementError::Rpc(format!(
+                "invalid {label} format: {addr}"
+            )));
+        }
+    }
+    let contract_bytes = hex::decode(&clean_contract[2..])
+        .map_err(|_| SettlementError::Rpc(format!("non-hex contract address: {clean_contract}")))?;
+    let to_bytes = hex::decode(&clean_to[2..])
+        .map_err(|_| SettlementError::Rpc(format!("non-hex to address: {clean_to}")))?;
+
+    // ── 2. Build ERC-20 calldata ──────────────────────────────────────────────
+    // selector = keccak256("transfer(address,uint256)")[0..4] = 0xa9059cbb
+    let selector = {
+        let mut h = Keccak256::new();
+        h.update(b"transfer(address,uint256)");
+        let hash = h.finalize();
+        [hash[0], hash[1], hash[2], hash[3]]
+    };
+    let mut data = Vec::with_capacity(4 + 32 + 32);
+    data.extend_from_slice(&selector);
+    data.extend_from_slice(&[0u8; 12]);
+    data.extend_from_slice(&to_bytes);
+    data.extend_from_slice(&[0u8; 16]);
+    data.extend_from_slice(&amount.to_be_bytes());
+
+    // ── 3. Build unsigned RLP fields ──────────────────────────────────────────
+    // EIP-155 unsigned fields: [nonce, gas_price, gas_limit, to, value, data, chain_id, 0, 0]
+    let gas_price_wei: u128 = (gas_price_gwei as u128) * 1_000_000_000;
+    let gas_limit: u64 = 100_000; // conservative for ERC-20 transfer
+
+    let unsigned_rlp = rlp_encode_list(&[
+        rlp_encode_uint64(nonce),
+        rlp_encode_uint128(gas_price_wei),
+        rlp_encode_uint64(gas_limit),
+        rlp_encode_bytes(&contract_bytes),
+        rlp_encode_uint64(0), // value = 0 (token transfer)
+        rlp_encode_bytes(&data),
+        // EIP-155 replay-protection suffix
+        rlp_encode_uint64(chain_id),
+        rlp_encode_bytes(&[]), // r = 0
+        rlp_encode_bytes(&[]), // s = 0
+    ]);
+
+    // ── 4. Hash and sign ──────────────────────────────────────────────────────
+    let tx_hash: [u8; 32] = {
+        let mut h = Keccak256::new();
+        h.update(&unsigned_rlp);
+        h.finalize().into()
+    };
+
+    let signing_key = SigningKey::from_bytes(from_private_key_bytes.into())
+        .map_err(|e| SettlementError::Rpc(format!("invalid private key: {e}")))?;
+
+    let (sig, recid): (k256::ecdsa::Signature, RecoveryId) = signing_key
+        .sign_prehash(&tx_hash)
+        .map_err(|e| SettlementError::Rpc(format!("signing failed: {e}")))?;
+
+    let sig_bytes = sig.to_bytes();
+    let r = &sig_bytes[..32];
+    let s = &sig_bytes[32..];
+    // EIP-155 v: recovery_id + chain_id * 2 + 35
+    let v: u64 = recid.to_byte() as u64 + chain_id * 2 + 35;
+
+    // ── 5. Build signed RLP ───────────────────────────────────────────────────
+    let signed_rlp = rlp_encode_list(&[
+        rlp_encode_uint64(nonce),
+        rlp_encode_uint128(gas_price_wei),
+        rlp_encode_uint64(gas_limit),
+        rlp_encode_bytes(&contract_bytes),
+        rlp_encode_uint64(0),
+        rlp_encode_bytes(&data),
+        rlp_encode_uint64(v),
+        rlp_encode_bytes(r),
+        rlp_encode_bytes(s),
+    ]);
+
+    Ok(format!("0x{}", hex::encode(signed_rlp)))
+}
+
+// ── Minimal RLP encoder ───────────────────────────────────────────────────────
+
+fn rlp_encode_bytes(b: &[u8]) -> Vec<u8> {
+    if b.is_empty() {
+        // empty string = 0x80
+        return vec![0x80];
+    }
+    if b.len() == 1 && b[0] < 0x80 {
+        return b.to_vec();
+    }
+    let mut out = rlp_length_prefix(b.len(), 0x80);
+    out.extend_from_slice(b);
+    out
+}
+
+fn rlp_encode_uint64(val: u64) -> Vec<u8> {
+    if val == 0 {
+        return vec![0x80];
+    }
+    let bytes = val.to_be_bytes();
+    let start = bytes.iter().position(|&b| b != 0).unwrap_or(7);
+    rlp_encode_bytes(&bytes[start..])
+}
+
+fn rlp_encode_uint128(val: u128) -> Vec<u8> {
+    if val == 0 {
+        return vec![0x80];
+    }
+    let bytes = val.to_be_bytes();
+    let start = bytes.iter().position(|&b| b != 0).unwrap_or(15);
+    rlp_encode_bytes(&bytes[start..])
+}
+
+fn rlp_encode_list(items: &[Vec<u8>]) -> Vec<u8> {
+    let payload: Vec<u8> = items.iter().flat_map(|v| v.iter().copied()).collect();
+    let mut out = rlp_length_prefix(payload.len(), 0xc0);
+    out.extend_from_slice(&payload);
+    out
+}
+
+fn rlp_length_prefix(len: usize, offset: u8) -> Vec<u8> {
+    if len < 56 {
+        vec![offset + len as u8]
+    } else {
+        let len_bytes = (len as u64).to_be_bytes();
+        let start = len_bytes.iter().position(|&b| b != 0).unwrap_or(7);
+        let len_bytes = &len_bytes[start..];
+        let mut out = Vec::with_capacity(1 + len_bytes.len());
+        out.push(offset + 55 + len_bytes.len() as u8);
+        out.extend_from_slice(len_bytes);
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn submit_transfer_no_rpc_returns_stub_ok() {
+        let adapter = EvmSettlementAdapter::new(EvmConfig {
+            rpc_url: None,
+            chain_id: 1,
+            contract_address: Some("0xdAC17F958D2ee523a2206206994597C13D831ec7".into()),
+            token_settlement: true,
+        });
+        let result =
+            adapter.submit_transfer("0xdAC17F958D2ee523a2206206994597C13D831ec7", 100);
+        assert_eq!(result.status, "rpc_error");
+    }
+
+    #[test]
+    fn build_signed_erc20_tx_produces_0x_hex() {
+        // Use a known deterministic key for testing (all 0x01 bytes = valid secp256k1 scalar).
+        let key = [1u8; 32];
+        let result = build_signed_erc20_tx(
+            &key,
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            1_000_000_u128,
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            1,    // mainnet
+            0,    // nonce 0
+            20,   // 20 gwei
+        );
+        assert!(result.is_ok(), "build failed: {:?}", result);
+        let hex = result.unwrap();
+        assert!(hex.starts_with("0x"));
+        assert!(hex.len() > 2);
+    }
+
+    #[test]
+    fn build_signed_erc20_tx_bad_contract_address_errors() {
+        let key = [1u8; 32];
+        let result = build_signed_erc20_tx(
+            &key,
+            "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            100,
+            "not-an-address",
+            1,
+            0,
+            20,
+        );
+        assert!(matches!(result, Err(SettlementError::Rpc(_))));
     }
 }

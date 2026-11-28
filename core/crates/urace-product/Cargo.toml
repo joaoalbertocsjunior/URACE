@@ -22,6 +22,7 @@ urace-ledger    = { path = "../urace-ledger" }
 urace-goals     = { path = "../urace-goals" }
 urace-executor  = { path = "../urace-executor" }
 urace-types     = { path = "../urace-types" }
+tempfile = "3"
+libc     = "0.2"
 
 [dev-dependencies]
-tempfile = "3"

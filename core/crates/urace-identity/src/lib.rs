@@ -10,6 +10,7 @@
 //! - [`key_ceremony`] — M61: verifiable key-ceremony records with integrity hashing.
 
 pub mod crypto_wallet;
+pub mod evm_keypair;
 pub mod hsm;
 pub mod identity_continuity;
 pub mod key_ceremony;
@@ -36,3 +37,4 @@ pub use identity_continuity::{
     MIGRATION_CLAIM_MAX_AGE_SECS,
 };
 pub use tpm::{AttestationReport, SoftwareTpm, TpmBackend, TpmError};
+pub use evm_keypair::{EvmKeypair, EvmKeypairError};

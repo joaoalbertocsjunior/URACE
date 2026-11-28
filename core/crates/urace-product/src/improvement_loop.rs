@@ -14,8 +14,11 @@
 //! - Goal threshold met (`ProductGoal::threshold_met`)
 //! - Session budget exhausted → caller must obtain new authorisation
 
+use crate::watchdog::LoopWatchdog;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Instant;
 use thiserror::Error;
 use urace_authority::authority::{resolve_with_budget, Objective, SessionBudget};
 use urace_executor::{ExecutionRequest, ExecutorPool, ResourceLimits};
@@ -36,6 +39,8 @@ pub enum LoopError {
     Journal(#[from] JournalError),
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    #[error("stall detected: no cycle completed in {0} seconds")]
+    StallDetected(u64),
 }
 
 /// A single improvement cycle result.
@@ -83,6 +88,8 @@ pub struct ImprovementLoop {
     pub goal: ProductGoal,
     executor_pool: ExecutorPool,
     journal: Journal,
+    /// Optional stall watchdog. When set, the loop checks for stalls after each cycle.
+    pub watchdog: Option<Arc<LoopWatchdog>>,
 }
 
 impl ImprovementLoop {
@@ -97,6 +104,24 @@ impl ImprovementLoop {
             goal,
             executor_pool,
             journal,
+            watchdog: None,
+        }
+    }
+
+    /// Construct a loop with a watchdog attached.
+    pub fn with_watchdog(
+        product_id: impl Into<String>,
+        goal: ProductGoal,
+        executor_pool: ExecutorPool,
+        journal: Journal,
+        watchdog: Arc<LoopWatchdog>,
+    ) -> Self {
+        ImprovementLoop {
+            product_id: product_id.into(),
+            goal,
+            executor_pool,
+            journal,
+            watchdog: Some(watchdog),
         }
     }
 
@@ -117,7 +142,27 @@ impl ImprovementLoop {
         let mut cycle = 0u64;
 
         while cycle < config.max_cycles {
+            // Check for stall before attempting the next cycle.
+            if let Some(ref wd) = self.watchdog {
+                if let Some(crate::watchdog::WatchdogEvent::StallDetected {
+                    secs_since_last_cycle,
+                    ..
+                }) = wd.check_stall()
+                {
+                    self.journal.append(
+                        "watchdog_stall",
+                        serde_json::json!({
+                            "product_id": self.product_id,
+                            "secs_since_last_cycle": secs_since_last_cycle,
+                            "cycle": cycle,
+                        }),
+                    )?;
+                    return Err(LoopError::StallDetected(secs_since_last_cycle));
+                }
+            }
+
             cycle += 1;
+            let cycle_start = Instant::now();
 
             // Authority gate for this execution cycle (scope = implementation).
             let objective = Objective {
@@ -197,6 +242,12 @@ impl ImprovementLoop {
                 "improvement_cycle",
                 serde_json::to_value(&outcome)?,
             )?;
+
+            // Record cycle completion with the watchdog.
+            if let Some(ref wd) = self.watchdog {
+                let duration_ms = cycle_start.elapsed().as_millis() as u64;
+                wd.record_cycle_completed(cycle, duration_ms);
+            }
 
             let threshold_met = self.goal.threshold_met(current);
             outcomes.push(outcome);

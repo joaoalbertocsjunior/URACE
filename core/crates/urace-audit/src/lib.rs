@@ -14,7 +14,9 @@ pub mod spec_audit;
 
 pub use urace_audit_types::{AuditEvent, AuditKind};
 pub use audit_ledger::{AuditError, AuditLedger};
-pub use chain_integrity::{verify_audit_chain, ChainIntegrityReport};
+pub use chain_integrity::{
+    anchor_epoch, verify_audit_chain, ChainAnchorError, ChainIntegrityReport, EpochAnchor,
+};
 pub use governance_audit::GovernanceAuditor;
 pub use spec_audit::{
     detect_siphon_anomalies, MintRecord, SpecAuditor, SIPHON_MAX_SHARE_FRACTION,

@@ -14,8 +14,14 @@ thiserror.workspace  = true
 tracing.workspace    = true
 time.workspace       = true
 uuid.workspace       = true
+sha2.workspace       = true
+hex.workspace        = true
 urace-ledger         = { path = "../urace-ledger" }
 urace-audit-types    = { path = "../urace-audit-types" }
+urace-settlement     = { path = "../urace-settlement", optional = true }
+
+[features]
+chain-anchor = ["dep:urace-settlement"]
 
 [dev-dependencies]
 tempfile = "3"
