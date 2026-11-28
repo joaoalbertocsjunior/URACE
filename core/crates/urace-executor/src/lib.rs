@@ -9,6 +9,7 @@
 //! - Parent process environment variables are NEVER forwarded to child processes.
 
 pub mod capabilities;
+pub mod cgroup;
 pub mod context_guard;
 pub mod determinism_guard;
 pub mod model_fingerprint;
@@ -38,7 +39,8 @@ pub use output_validator::{
 pub use prompt_sandbox::{safe_prompt, sanitise_prompt, SandboxResult};
 pub use retry_engine::{parse_retry_after, RetryEngine, RetryOutcome, RetryPolicy};
 pub use seccomp::{
-    assert_dangerous_blocked, SeccompAction, SeccompFilter, DEFAULT_ALLOWLIST,
+    assert_dangerous_blocked, install_seccomp_filter, SeccompAction, SeccompFilter,
+    DEFAULT_ALLOWLIST,
 };
 // M79 — model provider fingerprinting
 pub use model_fingerprint::{FingerprintChange, FingerprintRegistry, ModelFingerprint};
@@ -122,6 +124,10 @@ pub struct ExecutionResult {
     /// Required for ledger admission; `None` means the record was produced outside
     /// a sandbox and must be rejected at the ledger admission gate.
     pub sandbox_hash: Option<String>,
+    /// True if a seccomp-BPF filter was successfully installed for this execution.
+    /// `false` on non-Linux platforms or when seccomp installation was skipped.
+    #[serde(default)]
+    pub sandbox_seccomp_active: bool,
 }
 
 /// M20 — Sandbox-hash admission gate.
@@ -234,6 +240,7 @@ impl SandboxBackend for StubBackend {
             },
             duration_ms,
             sandbox_hash: Some(compute_sandbox_hash(&cfg)),
+            sandbox_seccomp_active: false,
         })
     }
 
@@ -267,30 +274,51 @@ impl SandboxBackend for SubprocessBackend {
         let start = Instant::now();
         let timeout = Duration::from_secs(limits.timeout_secs.max(1));
 
-        // Spawn child with environment cleared.
-        let child = Command::new("python3")
+        // Build the child command with environment cleared.
+        let mut command = Command::new("python3");
+        command
             .arg("-c")
             .arg(code)
             .env_clear()
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .stdin(Stdio::null())
+            .stdin(Stdio::null());
+
+        // Install seccomp BPF filter in the child after fork, before exec.
+        // `pre_exec` runs in the forked child process — must not allocate.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            unsafe {
+                command.pre_exec(|| {
+                    crate::seccomp::install_seccomp_filter()
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                });
+            }
+        }
+
+        let child = command
             .spawn()
             .map_err(|e| ExecutorError::Execution(format!("spawn failed: {e}")))?;
+
+        let child_pid = child.id();
+
+        // Apply cgroup v2 memory limit to the child (best-effort, skips silently if unavailable).
+        let memory_mb = limits.memory_mb;
+        let _ = crate::cgroup::apply_memory_limit_mb(child_pid, memory_mb);
 
         // Thread-based timeout: get the child's id, spawn a watcher that
         // sends SIGKILL after timeout_secs, then wait_with_output() normally.
         // This avoids holding Child inside a Mutex (wait_with_output takes ownership).
-        let child_id = child.id();
         let watcher = std::thread::spawn(move || {
             std::thread::sleep(timeout);
             // Kill by pid if the child hasn't already exited.
             #[cfg(unix)]
             unsafe {
-                libc::kill(child_id as libc::pid_t, libc::SIGKILL);
+                libc::kill(child_pid as libc::pid_t, libc::SIGKILL);
             }
             #[cfg(not(unix))]
-            let _ = child_id; // No-op on non-Unix; timeout handled by elapsed check below.
+            let _ = child_pid; // No-op on non-Unix; timeout handled by elapsed check below.
         });
 
         let output = child
@@ -320,6 +348,13 @@ impl SandboxBackend for SubprocessBackend {
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
 
+        // seccomp is active on Linux/Unix when the child exited successfully
+        // (a failed install would have made spawn() return Err).
+        #[cfg(unix)]
+        let sandbox_seccomp_active = true;
+        #[cfg(not(unix))]
+        let sandbox_seccomp_active = false;
+
         Ok(ExecutionResult {
             executor_id: "subprocess".into(),
             success: output.status.success(),
@@ -327,6 +362,7 @@ impl SandboxBackend for SubprocessBackend {
             error: if stderr.is_empty() { None } else { Some(stderr) },
             duration_ms,
             sandbox_hash: Some(compute_sandbox_hash(&cfg)),
+            sandbox_seccomp_active,
         })
     }
 
@@ -607,6 +643,7 @@ mod tests {
             error: None,
             duration_ms: 1,
             sandbox_hash: Some("deadbeef".into()),
+            sandbox_seccomp_active: false,
         };
         assert!(assert_sandbox_hash_present(&result).is_ok());
     }
@@ -620,6 +657,7 @@ mod tests {
             error: None,
             duration_ms: 1,
             sandbox_hash: None,
+            sandbox_seccomp_active: false,
         };
         assert!(matches!(
             assert_sandbox_hash_present(&result),

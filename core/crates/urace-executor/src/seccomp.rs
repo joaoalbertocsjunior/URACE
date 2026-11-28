@@ -3,12 +3,15 @@
 //! Defines the minimal allowed syscall set for URACE executor child processes
 //! and a `SeccompFilter` struct that validates or generates a filter profile.
 //!
-//! **Platform note**: actual `seccomp(2)` / `prctl(PR_SET_SECCOMP)` calls
-//! require Linux + the `libseccomp` crate or inline BPF assembly.  This module
-//! provides the allowlist data structure and profile-validation logic.
-//! Real enforcement is wired via the `linux-sandbox` feature flag when the
-//! `libseccomp` crate is available.
+//! On Linux, `install_seccomp_filter()` builds and installs a real BPF program
+//! via `seccompiler::apply_filter()`, which calls `prctl(PR_SET_SECCOMP)`.
+//! On other platforms the function is a no-op that returns `Ok(())`.
+//!
+//! The function is designed to be called from `Command::pre_exec` (after fork,
+//! before exec), so it must not allocate or call async code.
 
+#[cfg(target_os = "linux")]
+use libc;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -110,6 +113,118 @@ impl SeccompFilter {
     pub fn deny(&mut self, syscall: &str) {
         self.allowed_syscalls.remove(syscall);
     }
+}
+
+// ── Live BPF installation (Linux only) ───────────────────────────────────────
+
+/// Install the default seccomp allowlist as a BPF filter in the calling thread.
+///
+/// Must be called after `fork()` but before `exec()` — typically from
+/// `std::os::unix::process::CommandExt::pre_exec`.
+///
+/// Returns `Ok(())` on success or if seccomp is not available on this platform.
+/// Returns `Err(description)` only when the filter was attempted and failed.
+#[cfg(target_os = "linux")]
+pub fn install_seccomp_filter() -> Result<(), String> {
+    use seccompiler::{
+        BpfProgram, SeccompAction, SeccompFilter as BpfFilter, SeccompRule, TargetArch,
+    };
+    use std::collections::BTreeMap;
+    use std::convert::TryInto;
+
+    // Build an allowlist: each syscall in DEFAULT_ALLOWLIST maps to an empty
+    // rule-vector (unconditional allow on match).  Any syscall not listed
+    // triggers the mismatch action (KillProcess).
+    let syscall_numbers: &[(i64, &str)] = &[
+        (libc::SYS_read,              "read"),
+        (libc::SYS_write,             "write"),
+        (libc::SYS_exit,              "exit"),
+        (libc::SYS_exit_group,        "exit_group"),
+        (libc::SYS_brk,               "brk"),
+        (libc::SYS_mmap,              "mmap"),
+        (libc::SYS_munmap,            "munmap"),
+        (libc::SYS_mprotect,          "mprotect"),
+        (libc::SYS_futex,             "futex"),
+        (libc::SYS_clone,             "clone"),
+        (libc::SYS_clone3,            "clone3"),
+        (libc::SYS_set_tid_address,   "set_tid_address"),
+        (libc::SYS_set_robust_list,   "set_robust_list"),
+        (libc::SYS_clock_gettime,     "clock_gettime"),
+        (libc::SYS_clock_nanosleep,   "clock_nanosleep"),
+        (libc::SYS_nanosleep,         "nanosleep"),
+        (libc::SYS_rt_sigaction,      "rt_sigaction"),
+        (libc::SYS_rt_sigprocmask,    "rt_sigprocmask"),
+        (libc::SYS_rt_sigreturn,      "rt_sigreturn"),
+        (libc::SYS_close,             "close"),
+        (libc::SYS_fstat,             "fstat"),
+        (libc::SYS_lseek,             "lseek"),
+        (libc::SYS_pread64,           "pread64"),
+        (libc::SYS_pipe2,             "pipe2"),
+        (libc::SYS_dup2,              "dup2"),
+        (libc::SYS_arch_prctl,        "arch_prctl"),
+        (libc::SYS_uname,             "uname"),
+        // Additional syscalls Python and glibc need at startup:
+        (libc::SYS_openat,            "openat"),
+        (libc::SYS_newfstatat,        "newfstatat"),
+        (libc::SYS_getdents64,        "getdents64"),
+        (libc::SYS_fcntl,             "fcntl"),
+        (libc::SYS_ioctl,             "ioctl"),
+        (libc::SYS_getcwd,            "getcwd"),
+        (libc::SYS_sigaltstack,       "sigaltstack"),
+        (libc::SYS_prctl,             "prctl"),
+        (libc::SYS_getrandom,         "getrandom"),
+        (libc::SYS_madvise,           "madvise"),
+        (libc::SYS_mremap,            "mremap"),
+        (libc::SYS_getuid,            "getuid"),
+        (libc::SYS_getgid,            "getgid"),
+        (libc::SYS_geteuid,           "geteuid"),
+        (libc::SYS_getegid,           "getegid"),
+        (libc::SYS_getpid,            "getpid"),
+        (libc::SYS_getppid,           "getppid"),
+        (libc::SYS_gettid,            "gettid"),
+        (libc::SYS_tgkill,            "tgkill"),
+        (libc::SYS_restart_syscall,   "restart_syscall"),
+        (libc::SYS_wait4,             "wait4"),
+        (libc::SYS_prlimit64,         "prlimit64"),
+        (libc::SYS_sysinfo,           "sysinfo"),
+        (libc::SYS_times,             "times"),
+        (libc::SYS_readlink,          "readlink"),
+        (libc::SYS_readlinkat,        "readlinkat"),
+        (libc::SYS_statfs,            "statfs"),
+        (libc::SYS_access,            "access"),
+        (libc::SYS_faccessat,         "faccessat"),
+        (libc::SYS_faccessat2,        "faccessat2"),
+    ];
+
+    let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
+    for (nr, _name) in syscall_numbers {
+        rules.insert(*nr, vec![]);
+    }
+
+    let arch: TargetArch = std::env::consts::ARCH
+        .try_into()
+        .map_err(|e| format!("unsupported architecture for seccomp: {:?}", e))?;
+
+    let filter = BpfFilter::new(
+        rules,
+        SeccompAction::KillProcess,
+        SeccompAction::Allow,
+        arch,
+    )
+    .map_err(|e| format!("seccomp filter build failed: {e}"))?;
+
+    let bpf_prog: BpfProgram = filter
+        .try_into()
+        .map_err(|e| format!("seccomp BPF compile failed: {e}"))?;
+
+    seccompiler::apply_filter(&bpf_prog)
+        .map_err(|e| format!("seccomp apply_filter failed: {e}"))
+}
+
+/// No-op on non-Linux platforms.
+#[cfg(not(target_os = "linux"))]
+pub fn install_seccomp_filter() -> Result<(), String> {
+    Ok(())
 }
 
 /// Verify that dangerous syscalls are not in the given filter's allowlist.

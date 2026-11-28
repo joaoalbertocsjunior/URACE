@@ -20,3 +20,6 @@ parking_lot.workspace = true
 urace-types           = { path = "../urace-types" }
 urace-authority       = { path = "../urace-authority" }
 libc                  = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+seccompiler = "0.3"
