@@ -10,6 +10,12 @@ use serde::{Deserialize, Serialize};
 
 // ── ChainIntegrityReport ──────────────────────────────────────────────────────
 
+/// Maximum acceptable lag between an event occurring and its audit entry being written (24 h).
+pub const MAX_AUDIT_LAG_SECS: u64 = 86_400;
+
+/// If more than this fraction of chain entries are broken, trigger a chain anomaly alert (1%).
+pub const CHAIN_ANOMALY_ALERT_THRESHOLD: f64 = 0.01;
+
 /// Summary of an audit chain integrity check.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainIntegrityReport {

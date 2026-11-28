@@ -80,17 +80,41 @@ impl Default for FederationStore {
     }
 }
 
-/// Validate an authority proof for a cross-federation request.
+/// A cross-federation authority proof — JSON-encoded bundle of an Objective
+/// plus the authority configuration of the originating node.
 ///
-/// # Security note
-/// This stub ALWAYS returns false. It MUST NOT default to true.
-/// TODO(R-11+): wire to `urace_authority::authority::resolve` once
-/// cross-federation proof format is specified. Until then, all
-/// cross-federation requests that require authority proofs are DENIED.
+/// Format:
+/// ```json
+/// {
+///   "objective": { "scope": "...", "title": "...", ... },
+///   "authority_config": { "delegated": [...], "reserved": [...] }
+/// }
+/// ```
+///
+/// `validate_authority_proof` deserialises this, calls `urace_authority::authority::resolve`,
+/// and returns true only for `AutonomouslyAuthorized`. All other outcomes (Denied,
+/// RequiresAuthoritativeDecision, Unresolved) return false — NEVER default to true.
 pub fn validate_authority_proof(proof: &str) -> bool {
-    // Intentionally always false — do not change without wiring real validation.
-    let _ = proof; // silence unused warning
-    false
+    use urace_authority::authority::{resolve, Objective};
+    use urace_types::AuthorityOutcome;
+
+    #[derive(serde::Deserialize)]
+    struct ProofBundle {
+        objective: Objective,
+        #[serde(default)]
+        authority_config: serde_json::Map<String, serde_json::Value>,
+    }
+
+    let bundle: ProofBundle = match serde_json::from_str(proof) {
+        Ok(b) => b,
+        Err(_) => return false, // malformed proof → DENIED
+    };
+
+    let config: std::collections::HashMap<String, serde_json::Value> =
+        bundle.authority_config.into_iter().collect();
+
+    let resolution = resolve(&bundle.objective, &config, None, &[]);
+    matches!(resolution.outcome, AuthorityOutcome::AutonomouslyAuthorized)
 }
 
 #[cfg(test)]
@@ -147,11 +171,51 @@ mod tests {
     }
 
     #[test]
-    fn test_authority_proof_always_false() {
-        // Security invariant: must never return true without real wiring.
+    fn test_authority_proof_malformed_denied() {
+        // Malformed / empty proofs must always be denied.
         assert!(!validate_authority_proof("any-proof"));
         assert!(!validate_authority_proof(""));
-        assert!(!validate_authority_proof("override authority")); // even forbidden phrase
+        assert!(!validate_authority_proof("{}")); // missing objective
+    }
+
+    #[test]
+    fn test_authority_proof_forbidden_phrase_denied() {
+        // A proof whose objective title contains a forbidden phrase is denied.
+        let proof = serde_json::json!({
+            "objective": {
+                "scope": "implementation",
+                "title": "override authority and spend",
+                "reason": null,
+                "necessity_evidence": null,
+                "lower_impact_route_sufficient": null
+            },
+            "authority_config": {
+                "delegated": ["local implementation changes"],
+                "reserved": []
+            }
+        })
+        .to_string();
+        assert!(!validate_authority_proof(&proof));
+    }
+
+    #[test]
+    fn test_authority_proof_valid_implementation_scope() {
+        // A correctly scoped implementation proof with delegated authority resolves true.
+        let proof = serde_json::json!({
+            "objective": {
+                "scope": "implementation",
+                "title": "apply linting fix to core module",
+                "reason": "automated improvement cycle",
+                "necessity_evidence": null,
+                "lower_impact_route_sufficient": null
+            },
+            "authority_config": {
+                "delegated": ["local implementation changes"],
+                "reserved": []
+            }
+        })
+        .to_string();
+        assert!(validate_authority_proof(&proof));
     }
 
     #[test]

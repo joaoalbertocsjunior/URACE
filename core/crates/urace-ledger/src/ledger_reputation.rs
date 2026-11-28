@@ -17,6 +17,15 @@ use serde_json::json;
 use std::path::Path;
 use thiserror::Error;
 
+/// Maximum achievable reputation score per peer (prevents unbounded growth).
+pub const MAX_REPUTATION_SCORE: f64 = 10_000.0;
+
+/// Reputation ejection threshold — peers at or below this score are flagged for removal.
+pub const REPUTATION_EJECTION_THRESHOLD: f64 = -500.0;
+
+/// Interval between automatic reputation decay cycles (7 days).
+pub const REPUTATION_DECAY_INTERVAL_SECS: u64 = 604_800;
+
 /// A single reputation update.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReputationEntry {

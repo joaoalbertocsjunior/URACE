@@ -18,6 +18,10 @@ use thiserror::Error;
 pub enum SettlementError {
     #[error("RPC error: {0}")]
     Rpc(String),
+    #[error("RPC call failed: {0}")]
+    RpcError(String),
+    #[error("network error: {0}")]
+    NetworkError(String),
     #[error("settlement rail not configured: {0}")]
     NotConfigured(String),
     #[error("transaction simulation failed: {0}")]

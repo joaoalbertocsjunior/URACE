@@ -45,5 +45,7 @@ crossterm             = "0.28"
 ratatui               = "0.29"
 urace-web             = { path = "../urace-web" }
 
+urace-product         = { path = "../urace-product" }
+
 [dev-dependencies]
 tempfile = "3"

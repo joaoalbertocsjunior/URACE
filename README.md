@@ -17,6 +17,16 @@ Documentation is out-of-date. Full documentation will follow once the project re
 
 ---
 
+## Conceptual Preview
+
+<p align="center">
+  <img src="docs/images/preview.webp" alt="Conceptual Preview" width="100%" />
+</p>
+
+This will change. It is a high level intent preview.
+
+---
+
 Deferred - UX, non-p2p scopes
 
 Last Changes - [LATEST](docs/LATEST.md)

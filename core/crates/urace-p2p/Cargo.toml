@@ -23,6 +23,7 @@ ed25519-dalek.workspace = true
 urace-crypto          = { path = "../urace-crypto" }
 urace-net-types       = { path = "../urace-net-types" }
 urace-types           = { path = "../urace-types" }
+urace-authority       = { path = "../urace-authority" }
 
 [dev-dependencies]
 rand.workspace = true

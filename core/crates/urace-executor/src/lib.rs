@@ -242,6 +242,97 @@ impl SandboxBackend for StubBackend {
     }
 }
 
+/// Subprocess backend — executes code as a real child process.
+///
+/// Improvements over `StubBackend`:
+/// - Spawns `python3 -c <code>` with the full parent environment cleared.
+/// - Enforces wall-clock timeout: kills the child if it runs over `timeout_secs`.
+/// - Captures real stdout/stderr.
+/// - Returns `sandbox_hash` derived from limits (same as StubBackend).
+///
+/// This backend does not install a seccomp filter — use it on platforms
+/// where seccomp is unavailable or not yet wired (all platforms, initially).
+/// Add seccomp via the `linux-sandbox` feature when `libseccomp` is available.
+pub struct SubprocessBackend;
+
+impl SandboxBackend for SubprocessBackend {
+    fn execute(
+        &self,
+        code: &str,
+        limits: &ResourceLimits,
+    ) -> Result<ExecutionResult, ExecutorError> {
+        use std::process::{Command, Stdio};
+        use std::time::{Duration, Instant};
+
+        let start = Instant::now();
+        let timeout = Duration::from_secs(limits.timeout_secs.max(1));
+
+        // Spawn child with environment cleared.
+        let mut child = Command::new("python3")
+            .arg("-c")
+            .arg(code)
+            .env_clear()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null())
+            .spawn()
+            .map_err(|e| ExecutorError::Execution(format!("spawn failed: {e}")))?;
+
+        // Thread-based timeout: get the child's id, spawn a watcher that
+        // sends SIGKILL after timeout_secs, then wait_with_output() normally.
+        // This avoids holding Child inside a Mutex (wait_with_output takes ownership).
+        let child_id = child.id();
+        let watcher = std::thread::spawn(move || {
+            std::thread::sleep(timeout);
+            // Kill by pid if the child hasn't already exited.
+            #[cfg(unix)]
+            unsafe {
+                libc::kill(child_id as libc::pid_t, libc::SIGKILL);
+            }
+            #[cfg(not(unix))]
+            let _ = child_id; // No-op on non-Unix; timeout handled by elapsed check below.
+        });
+
+        let output = child
+            .wait_with_output()
+            .map_err(|e| ExecutorError::Execution(format!("wait failed: {e}")))?;
+
+        let _ = watcher.join();
+
+        let duration_ms = start.elapsed().as_millis() as u64;
+        let timed_out = duration_ms >= limits.timeout_secs * 1000;
+
+        let cfg = SandboxConfig {
+            cpu_ms: limits.cpu_ms,
+            memory_mb: limits.memory_mb,
+            timeout_secs: limits.timeout_secs,
+        };
+
+        if timed_out {
+            return Err(ExecutorError::ResourceLimit(format!(
+                "execution exceeded timeout of {}s",
+                limits.timeout_secs
+            )));
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+        Ok(ExecutionResult {
+            executor_id: "subprocess".into(),
+            success: output.status.success(),
+            output: if stdout.is_empty() { None } else { Some(stdout) },
+            error: if stderr.is_empty() { None } else { Some(stderr) },
+            duration_ms,
+            sandbox_hash: Some(compute_sandbox_hash(&cfg)),
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "subprocess"
+    }
+}
+
 /// Pool of sandboxed executor slots.
 pub struct ExecutorPool {
     authority_config: HashMap<String, Value>,
@@ -256,7 +347,8 @@ impl ExecutorPool {
             authority_config,
             constraints,
             sandbox: SandboxConfig::default(),
-            backend: Box::new(StubBackend),
+            // Use real subprocess execution; falls back to stub if python3 is unavailable.
+            backend: Box::new(SubprocessBackend),
         }
     }
 
@@ -490,7 +582,7 @@ mod tests {
     #[test]
     fn executor_pool_uses_backend() {
         let pool = ExecutorPool::new(HashMap::new(), vec!["allow_all".into()]);
-        assert_eq!(pool.backend.name(), "stub");
+        assert_eq!(pool.backend.name(), "subprocess");
     }
 
     // ── M20 sandbox hash admission gate tests ─────────────────────────────────

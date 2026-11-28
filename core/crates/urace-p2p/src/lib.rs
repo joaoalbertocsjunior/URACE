@@ -30,6 +30,7 @@ pub mod freeform_routing;
 pub mod gossip_integrity;
 pub mod kademlia;
 pub mod p2p_capabilities;
+pub mod transport;
 pub mod peer_address_book;
 pub mod peer_discovery;
 pub mod peer_exchange;
@@ -53,6 +54,10 @@ pub use consensus::{
 };
 pub use federation::{validate_authority_proof, FederationError, FederationStore, NetworkAnnounce};
 pub use kademlia::{KBucket, KademliaTable, NodeInfo};
+pub use transport::{
+    new_txid, InboundMessage, KademliaMessage, NodeContact, TransportError, UdpTransport,
+    MAX_UDP_PAYLOAD, RPC_TIMEOUT_SECS,
+};
 pub use p2p_capabilities::{CapabilityRegistry, PeerCapabilities};
 pub use peer_address_book::{PeerAddressBook, PeerAddrs};
 pub use peer_discovery::{

@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+/// Minimum number of independent evaluators required for a valid consensus round.
+pub const MIN_EVALUATOR_COUNT: usize = 3;
+
 #[derive(Debug, Error)]
 pub enum EvaluatorError {
     #[error("evaluator '{0}' already voted for work_id '{1}'")]

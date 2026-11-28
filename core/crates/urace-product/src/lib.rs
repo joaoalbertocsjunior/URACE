@@ -1,3 +1,4 @@
+pub mod improvement_loop;
 pub mod portfolio;
 pub mod portfolio_runner;
 pub mod product;
@@ -6,6 +7,10 @@ pub mod product_profile;
 pub mod product_similarity;
 pub mod product_store;
 
+pub use improvement_loop::{
+    autonomy_rate, improvement_count, CycleOutcome, ImprovementLoop, LoopConfig, LoopError,
+    MetricSampler, TaskGenerator,
+};
 pub use portfolio::{Portfolio, PortfolioEntry, PortfolioError, PortfolioStore};
 pub use portfolio_runner::{CycleResult, PortfolioRunner, RunOptions, RunPhase, RunnerError};
 // ProductProfile from product.rs (name/tags/type) — legacy API.

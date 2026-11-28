@@ -20,6 +20,12 @@ pub const NODE_ID_BITS: usize = 256;
 /// M22: Subnet diversity — max peers per /24 IPv4 subnet per bucket = floor(K / D).
 pub const SUBNET_DIVERSITY_D: usize = 4;
 
+/// Target number of active peers for a healthy network.
+pub const TARGET_PEER_COUNT: usize = 500;
+
+/// Minimum fraction of routing table buckets that must be non-empty (70%).
+pub const MIN_ROUTING_TABLE_FILL_FRACTION: f64 = 0.70;
+
 /// First 3 octets of an IPv4 address, representing a /24 subnet.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Subnet24(pub [u8; 3]);

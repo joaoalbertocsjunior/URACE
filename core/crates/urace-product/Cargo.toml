@@ -19,6 +19,9 @@ uuid       = { workspace = true }
 urace-artifacts = { path = "../urace-artifacts" }
 urace-authority = { path = "../urace-authority" }
 urace-ledger    = { path = "../urace-ledger" }
+urace-goals     = { path = "../urace-goals" }
+urace-executor  = { path = "../urace-executor" }
+urace-types     = { path = "../urace-types" }
 
 [dev-dependencies]
 tempfile = "3"

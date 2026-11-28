@@ -5,7 +5,7 @@ pub mod hmac_signing;
 pub mod pq_migration;
 pub mod shamir;
 
-pub use aes_gcm::{decrypt as aes_decrypt, encrypt as aes_encrypt};
+pub use aes_gcm::{decrypt as aes_decrypt, encrypt as aes_encrypt, EncryptingKey, MAX_ENCRYPTIONS_PER_KEY};
 pub use ed25519::{verify as ed25519_verify, Keypair};
 pub use gf256::GF;
 pub use hmac_signing::{sign, verify, SignedRecord, SigningError};

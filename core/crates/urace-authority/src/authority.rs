@@ -22,6 +22,15 @@ pub struct Objective {
     pub lower_impact_route_sufficient: Option<bool>,
 }
 
+/// Default maximum operations allowed per autonomous session before re-authorisation is required.
+pub const DEFAULT_SESSION_BUDGET_MAX_OPS: u32 = 100;
+
+/// Minimum age a governance proposal must reach before it can be voted on (24 h).
+pub const MIN_PROPOSAL_AGE_SECS: u64 = 86_400;
+
+/// Maximum number of governance actions a single peer may take per day.
+pub const MAX_GOVERNANCE_ACTIONS_PER_DAY: u32 = 10;
+
 static RESERVED_SIGNAL_PHRASES: &[&str] = &[
     "change retained purpose",
     "weaken normative invariants",

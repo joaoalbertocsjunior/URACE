@@ -41,6 +41,18 @@ pub enum ContinuityError {
 /// Maximum age of a migration claim before it is rejected.
 pub const MIGRATION_CLAIM_MAX_AGE_SECS: u64 = 300;
 
+/// Maximum key age before mandatory rotation (90 days).
+pub const MAX_KEY_AGE_SECS: u64 = 7_776_000;
+
+/// Minimum key age before rotation is permitted (1 day — prevents rotation storms).
+pub const MIN_KEY_AGE_BEFORE_ROTATION_SECS: u64 = 86_400;
+
+/// HSM attestation freshness window — attestations older than this are considered stale (7 days).
+pub const HSM_ATTESTATION_MAX_AGE_SECS: u64 = 604_800;
+
+/// Recommended key rotation interval (30 days).
+pub const KEY_ROTATION_RECOMMENDED_INTERVAL_SECS: u64 = 2_592_000;
+
 fn now_secs() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now()

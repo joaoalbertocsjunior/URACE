@@ -19,3 +19,4 @@ regex-lite.workspace  = true
 parking_lot.workspace = true
 urace-types           = { path = "../urace-types" }
 urace-authority       = { path = "../urace-authority" }
+libc                  = "0.2"
