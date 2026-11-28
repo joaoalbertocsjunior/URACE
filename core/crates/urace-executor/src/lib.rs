@@ -268,7 +268,7 @@ impl SandboxBackend for SubprocessBackend {
         let timeout = Duration::from_secs(limits.timeout_secs.max(1));
 
         // Spawn child with environment cleared.
-        let mut child = Command::new("python3")
+        let child = Command::new("python3")
             .arg("-c")
             .arg(code)
             .env_clear()
@@ -297,7 +297,9 @@ impl SandboxBackend for SubprocessBackend {
             .wait_with_output()
             .map_err(|e| ExecutorError::Execution(format!("wait failed: {e}")))?;
 
-        let _ = watcher.join();
+        // Drop watcher handle — detaches the thread. The SIGKILL fires after
+        // timeout_secs but the child has already exited; kill() on a dead pid is harmless.
+        drop(watcher);
 
         let duration_ms = start.elapsed().as_millis() as u64;
         let timed_out = duration_ms >= limits.timeout_secs * 1000;
